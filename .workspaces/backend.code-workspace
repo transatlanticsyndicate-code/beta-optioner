@@ -1,0 +1,8 @@
+{
+  "folders": [
+    {"name": "Server", "path": "../server"},
+    {"name": "Docs", "path": "../docs"},
+    {"name": "Windsurf", "path": "../.windsurf"}
+  ],
+  "settings": {}
+}
