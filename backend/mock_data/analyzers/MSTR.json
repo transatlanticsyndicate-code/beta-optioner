@@ -1,0 +1,36 @@
+{
+  "ticker": "MSTR",
+  "step1_stock_price": {
+    "ticker": "MSTR",
+    "price": 350.0,
+    "bid": 349.95,
+    "ask": 350.05,
+    "high": 352.0,
+    "low": 348.0,
+    "volume": 1000000,
+    "previous_close": 349.0,
+    "open": 349.5,
+    "change": 1.0,
+    "change_percent": 1.0,
+    "market_cap": null,
+    "pe_ratio": null,
+    "dividend_yield": null,
+    "_source": "Mock template",
+    "_captured_at": "2025-11-03T14:48:35.597244Z",
+    "_notes": "Template mock data for MSTR. Please update with real values."
+  },
+  "step2_metrics": {
+    "iv_rank": 50,
+    "iv_percentile": 55,
+    "put_call_ratio": 0.95,
+    "skew": -0.1,
+    "atm_iv": 0.25,
+    "implied_move": 5.0,
+    "vix_level": 18.0
+  },
+  "step3_recommendation": "NEUTRAL",
+  "step4_ai_analysis": "Автоматически сгенерированный анализ для MSTR. Требуется обновление с реальными данными.",
+  "_source": "Mock template",
+  "_captured_at": "2025-11-03T14:48:35.597247Z",
+  "_notes": "Template mock data for MSTR analyzer. Please update with real values."
+}

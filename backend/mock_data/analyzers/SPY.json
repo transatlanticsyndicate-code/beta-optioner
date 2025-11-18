@@ -1,0 +1,30 @@
+{
+  "ticker": "SPY",
+  "step1_stock_price": {
+    "ticker": "SPY",
+    "price": 684.64,
+    "bid": 684.63,
+    "ask": 684.67,
+    "high": 684.67,
+    "low": 177.0,
+    "volume": 800,
+    "previous_close": 682.06,
+    "open": 682.06,
+    "change": 2.58,
+    "change_percent": 0.38
+  },
+  "step2_metrics": {
+    "iv_rank": 45,
+    "iv_percentile": 52,
+    "put_call_ratio": 0.92,
+    "skew": -0.08,
+    "atm_iv": 0.175,
+    "implied_move": 6.20,
+    "vix_level": 18.5
+  },
+  "step3_recommendation": "NEUTRAL",
+  "step4_ai_analysis": "Текущий уровень волатильности находится в среднем диапазоне (IV Rank 45). Put/Call Ratio 0.92 указывает на сбалансированный интерес к опционам. Отрицательный skew -0.08 является нормальным для широкого рынка. Рекомендуется нейтральные стратегии: Iron Condor или Short Strangle с защитой.",
+  "_source": "Mock data for demo",
+  "_captured_at": "2025-11-03T14:30:00Z",
+  "_notes": "Metrics are estimated for demo purposes. Real metrics require historical data and IV calculations."
+}

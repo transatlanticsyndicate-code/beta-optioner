@@ -1,0 +1,19 @@
+{
+  "ticker": "MSTR",
+  "price": 350.0,
+  "bid": 349.95,
+  "ask": 350.05,
+  "high": 352.0,
+  "low": 348.0,
+  "volume": 1000000,
+  "previous_close": 349.0,
+  "open": 349.5,
+  "change": 1.0,
+  "change_percent": 1.0,
+  "market_cap": null,
+  "pe_ratio": null,
+  "dividend_yield": null,
+  "_source": "Mock template",
+  "_captured_at": "2025-11-03T14:48:35.596867Z",
+  "_notes": "Template mock data for MSTR. Please update with real values."
+}

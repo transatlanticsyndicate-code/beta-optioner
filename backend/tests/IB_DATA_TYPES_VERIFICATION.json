@@ -1,0 +1,56 @@
+{
+  "timestamp": "2025-11-03T11:05:01.371850",
+  "tests": [
+    {
+      "name": "Stock Price Data (SPY)",
+      "status": "FAILED",
+      "timestamp": "2025-11-03T11:05:02.420747",
+      "details": {
+        "missing_fields": [
+          "bid",
+          "ask",
+          "previous_close"
+        ]
+      }
+    },
+    {
+      "name": "Options Chain Data (SPY)",
+      "status": "FAILED",
+      "timestamp": "2025-11-03T11:05:02.689850",
+      "details": {
+        "missing_fields": [
+          "type",
+          "iv",
+          "rho"
+        ]
+      }
+    },
+    {
+      "name": "Expiration Dates (SPY)",
+      "status": "PASSED",
+      "timestamp": "2025-11-03T11:05:02.700622",
+      "details": {
+        "total_expirations": 1,
+        "first_5": [
+          "2025-11-03"
+        ]
+      }
+    },
+    {
+      "name": "Historical Data (SPY)",
+      "status": "FAILED",
+      "timestamp": "2025-11-03T11:05:02.700670",
+      "details": {
+        "error": "'YahooClient' object has no attribute 'get_historical_data'"
+      }
+    }
+  ],
+  "summary": {
+    "total": 4,
+    "passed": 1,
+    "failed": 3,
+    "errors": [
+      "'YahooClient' object has no attribute 'get_historical_data'"
+    ]
+  }
+}
