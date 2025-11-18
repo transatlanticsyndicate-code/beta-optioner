@@ -409,8 +409,6 @@ const GradualStrategyCalculator = () => {
       <div className="space-y-6 mb-6">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold tracking-tight">Градуальный калькулятор</h2>
-            <p className="text-muted-foreground mt-1">Расчет градуальных стратегий входа и выхода</p>
           </div>
           <TooltipProvider>
             <Tooltip>

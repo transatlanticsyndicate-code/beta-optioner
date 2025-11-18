@@ -6,8 +6,6 @@ function HomePageNew() {
   return (
     <div className="max-w-6xl mx-auto">
       <div className="mb-6">
-        <h1 className="mb-2 text-center text-4xl font-extralight" style={{ color: 'rgb(27, 186, 207)' }}>optioner.online</h1>
-        <p className="text-muted-foreground text-center">Профессиональные финансовые инструменты для членов команды</p>
       </div>
 
       <div className="grid gap-6 md:grid-cols-3">

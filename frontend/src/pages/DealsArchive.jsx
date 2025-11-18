@@ -166,13 +166,6 @@ function DealsArchive() {
       <div className="mb-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <Archive className="h-6 w-6" />
-              Архив сделок
-            </h1>
-            <p className="text-muted-foreground mt-2">
-              История всех сохраненных сделок
-            </p>
           </div>
           <Button
             onClick={() => window.open('/tools/new-deal?new=true', '_blank')}

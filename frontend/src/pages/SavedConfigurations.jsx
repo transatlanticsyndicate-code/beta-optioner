@@ -129,12 +129,6 @@ function SavedConfigurations() {
 
   return (
     <div className="w-full max-w-full py-6 px-4">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Save className="h-6 w-6" />
-          Сохраненные конфигурации
-        </h1>
-      </div>
       {/* Фильтры */}
       <div className="mb-4 p-4 border border-cyan-500 rounded-lg bg-card">
         <div className="flex items-end gap-4">

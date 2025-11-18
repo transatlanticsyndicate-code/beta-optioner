@@ -141,10 +141,6 @@ function OptionsAnalyzer() {
       </div>
 
       <div className="page-header">
-        <h1 className="page-title">Options AI</h1>
-        <p className="page-description">
-          Мгновенный анализ опционного рынка
-        </p>
       </div>
 
       <div className="analyzer-form">

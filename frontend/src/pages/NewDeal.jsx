@@ -933,9 +933,6 @@ function NewDeal() {
         <div className="mb-6">
           <div className="flex items-start justify-between w-full">
             <div className="flex items-start gap-2 flex-1">
-              <h1 className="text-2xl font-bold mr-4">
-                {existingDealId ? 'Редактирование сделки' : 'Сделка'}
-              </h1>
               {existingDealId && (
                 <span className="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded">
                   ID: {existingDealId}
