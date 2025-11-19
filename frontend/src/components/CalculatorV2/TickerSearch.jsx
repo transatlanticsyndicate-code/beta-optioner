@@ -3,6 +3,12 @@ import { Search, Trash2 } from 'lucide-react';
 import { Input } from '../ui/input';
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from '../ui/command';
 
+/**
+ * Компонент поиска и выбора тикера акций
+ * ЗАЧЕМ: Обеспечивает удобный интерфейс для ввода тикеров с автодополнением
+ * Затрагивает: калькулятор опционов, форма новой сделки, отображение цен
+ */
+
 const defaultTickers = [
   { symbol: "AAPL", name: "Apple Inc." },
   { symbol: "GOOGL", name: "Alphabet Inc." },
@@ -14,7 +20,9 @@ const defaultTickers = [
   { symbol: "SPY", name: "SPDR S&P 500 ETF Trust" },
 ];
 
-// Загрузить историю тикеров из localStorage
+// Работа с историей тикеров в localStorage
+// ЗАЧЕМ: Улучшает UX, сохраняя недавно использованные тикеры
+
 const getTickerHistory = () => {
   try {
     const history = localStorage.getItem('ticker_history');
@@ -113,7 +121,7 @@ function TickerSearch({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [setSearchOpen]);
 
-  // Обработчик выбора тикера
+  // Обработка выбора тикера с загрузкой данных
   const handleSelectTicker = (ticker) => {
     setLocalTicker(ticker);
     setSearchValue("");
@@ -158,12 +166,13 @@ function TickerSearch({
     }, 0);
   };
 
+  // Фильтрация тикеров по поисковому запросу
   const filteredTickers = tickerSuggestions.filter((ticker) =>
     ticker.name.toLowerCase().includes(searchValue.toLowerCase()) ||
     ticker.symbol.toLowerCase().includes(searchValue.toLowerCase())
   );
 
-  // Обработчик удаления тикера из истории
+  // Обработка удаления тикера из истории
   const handleRemoveTicker = (e, tickerSymbol) => {
     e.stopPropagation(); // Предотвратить выбор тикера при клике на корзину
     const updatedHistory = removeTickerFromHistory(tickerSymbol);
@@ -181,6 +190,7 @@ function TickerSearch({
     return history.some(t => t.symbol === tickerSymbol);
   };
 
+  // Рендер компонента
   return (
     <div className="flex items-start gap-4">
       <div className="flex-1 min-w-0 relative" ref={wrapperRef}>
@@ -217,7 +227,7 @@ function TickerSearch({
                 setSearchOpen(false);
               }
             }}
-            className={`w-32 ${!localTicker ? "pl-9" : ""} ${localTicker ? "font-bold" : ""}`}
+            className={`w-64 ${!localTicker ? "pl-9" : ""} ${localTicker ? "font-bold" : ""}`}
             style={!localTicker ? {
               borderWidth: '2px',
               borderStyle: 'solid',
@@ -228,7 +238,7 @@ function TickerSearch({
         </div>
 
         {searchOpen && (
-          <div className="absolute top-full left-0 right-0 mt-1 w-32 rounded-md border bg-popover p-0 z-50">
+          <div className="absolute top-full left-0 right-0 mt-1 w-64 rounded-md border bg-popover p-0 z-50">
             <Command>
               <CommandList>
                 {filteredTickers.length === 0 ? (
