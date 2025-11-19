@@ -274,6 +274,10 @@ function NewDeal() {
       setSearchValue("");
       setSearchOpen(false);
       
+      // Сбрасываем цену перед загрузкой новой
+      setTickerCurrentPrice(0);
+      setPriceChange({ value: 0, percent: 0 });
+      
       // Загружаем цену тикера
       try {
         const response = await fetch(`/api/polygon/ticker/${ticker}`);

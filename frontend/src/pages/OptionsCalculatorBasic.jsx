@@ -317,6 +317,9 @@ function OptionsCalculatorV3() {
         setPositions([]);
         setExpirationDates({});
         setOptions([]);
+        // Сбрасываем цену сразу при смене тикера
+        setCurrentPrice(0);
+        setPriceChange({ value: 0, percent: 0 });
       });
       setSelectedTicker(ticker);
       setIsDataCleared(true);
