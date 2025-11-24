@@ -20,6 +20,7 @@ import {
   parseExitScheme,
   validateExitScheme,
 } from '../utils/gradualStrategyCalculations';
+import { detectInstrumentType } from '../utils/instrumentTypeDetector';
 
 // Функция форматирования денежных значений с разделением на тысячи (пробел)
 const formatMoney = (value, isPrice = false) => {
@@ -277,6 +278,10 @@ function NewDeal() {
       // Сбрасываем цену перед загрузкой новой
       setTickerCurrentPrice(0);
       setPriceChange({ value: 0, percent: 0 });
+      
+      // Автоматически определяем тип инструмента
+      const detectedType = detectInstrumentType(ticker);
+      handleInputChange('type', detectedType);
       
       // Загружаем цену тикера
       try {

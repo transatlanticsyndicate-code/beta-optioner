@@ -7,6 +7,7 @@ import { getActiveBlocks, isBlockEnabled } from '../config/calculatorV3Blocks';
 import { applyStrategy, getAllStrategies } from '../config/optionsStrategies';
 import { saveCustomStrategy, getCustomStrategies, deleteCustomStrategy, applyCustomStrategy } from '../utils/customStrategies';
 import { cacheManager } from '../utils/cacheManager';
+import { detectInstrumentType } from '../utils/instrumentTypeDetector';
 import { Card, CardContent } from '../components/ui/card';
 import {
   Dialog,
@@ -320,6 +321,13 @@ function OptionsCalculatorV3() {
         // Сбрасываем цену сразу при смене тикера
         setCurrentPrice(0);
         setPriceChange({ value: 0, percent: 0 });
+        
+        // Автоматически определяем тип инструмента
+        const detectedType = detectInstrumentType(ticker);
+        setDealForm(prev => ({
+          ...prev,
+          type: detectedType
+        }));
       });
       setSelectedTicker(ticker);
       setIsDataCleared(true);
