@@ -52,13 +52,17 @@ export const calculateOptionValueWithTimeDecay = (
 
   const intrinsicValue = calculateIntrinsicValue(option, price);
 
+  // На экспирации остается только внутренняя стоимость
   if (clampedDaysRemaining <= 0) {
     return intrinsicValue;
   }
 
-  const denominator = Math.abs(strikeValue) > 0 ? Math.abs(strikeValue) : Math.max(1, currentPrice);
-  const moneyness = denominator === 0 ? 0 : Math.abs(price - strikeValue) / denominator;
-  const timeValue = premiumValue * Math.sqrt(timeDecayFactor) * Math.exp(-moneyness * 2);
+  // Временная стоимость в момент покупки (при currentPrice) = премия - внутренняя стоимость при покупке
+  const intrinsicValueAtPurchase = calculateIntrinsicValue(option, currentPrice);
+  const initialTimeValue = Math.max(0, premiumValue - intrinsicValueAtPurchase);
+  
+  // Временная стоимость затухает нелинейно (быстрее к экспирации)
+  const timeValue = initialTimeValue * Math.sqrt(timeDecayFactor);
 
   return intrinsicValue + timeValue;
 };
