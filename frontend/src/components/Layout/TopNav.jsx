@@ -27,6 +27,8 @@ function TopNav() {
         return 'Анализ опционов';
       case '/reports-archive':
         return 'Архив отчетов';
+      case '/tools/crypto-rating':
+        return 'Рейтинг криптовалют';
       case '/tools/test-chart':
         return 'Тестовый график';
       case '/settings':

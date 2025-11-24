@@ -177,7 +177,7 @@ function PLTableInteractive({ options = [], currentPrice = 0 }) {
                 <td className="border border-border px-2 py-2 font-semibold">${row.strike.toFixed(2)}</td>
                 <td className="border border-border px-2 py-2">{row.type.toUpperCase()}</td>
                 <td className="border border-border px-2 py-2">{row.action}</td>
-                <td className="border border-border px-2 py-2 text-right">${row.premium.toFixed(2)}</td>
+                <td className="border border-border px-2 py-2 text-right">{row.premium >= 0 ? `$${row.premium.toFixed(2)}` : `-$${Math.abs(row.premium).toFixed(2)}`}</td>
                 <td className="border border-border px-2 py-2 text-xs">{row.date}</td>
                 <td className={`border border-border px-2 py-2 text-right font-semibold ${getColorClass(row.pl)}`}>
                   {row.pl > 0 ? '+' : ''}{(row.pl / 1000).toFixed(2)}k

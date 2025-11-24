@@ -132,7 +132,7 @@ function PLHeatmapTable({ options = [], currentPrice = 0 }) {
                     key={`${strike}-${date}`}
                     className="border border-border px-2 py-3 text-center font-semibold text-white"
                     style={{ backgroundColor: bgColor }}
-                    title={`P&L: $${pl.toFixed(2)}`}
+                    title={`P&L: ${pl >= 0 ? `$${pl.toFixed(2)}` : `-$${Math.abs(pl).toFixed(2)}`}`}
                   >
                     {pl > 0 ? '+' : ''}{(pl / 1000).toFixed(1)}k
                   </td>

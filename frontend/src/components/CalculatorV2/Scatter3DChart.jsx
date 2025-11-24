@@ -122,7 +122,10 @@ function Scatter3DChart({ options = [], currentPrice = 0, daysRemaining = 0 }) {
           color: 'rgba(0,0,0,0.2)'
         }
       },
-      text: zData.map((pl, i) => `Price: $${xData[i].toFixed(2)}<br>Days: ${yData[i].toFixed(0)}<br>P&L: $${pl.toFixed(2)}`),
+      text: zData.map((pl, i) => {
+        const plFormatted = pl >= 0 ? `$${pl.toFixed(2)}` : `-$${Math.abs(pl).toFixed(2)}`;
+        return `Price: $${xData[i].toFixed(2)}<br>Days: ${yData[i].toFixed(0)}<br>P&L: ${plFormatted}`;
+      }),
       hovertemplate: '%{text}<extra></extra>'
     };
 

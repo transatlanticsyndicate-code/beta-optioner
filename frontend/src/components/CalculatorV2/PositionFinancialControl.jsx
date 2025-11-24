@@ -152,7 +152,7 @@ function PositionFinancialControl({
       <div className="space-y-2 pt-2">
         <div className="flex justify-between text-sm font-semibold">
           <span>MAX убыток</span>
-          <span className="text-red-600">$ -{formatNumber(maxLoss)}</span>
+          <span className="text-red-600">-$ {formatNumber(maxLoss)}</span>
         </div>
       </div>
 

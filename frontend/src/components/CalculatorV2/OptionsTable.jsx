@@ -601,7 +601,7 @@ function OptionsTable({
               {option.isLoadingDetails ? (
                 <Loader2 className="h-3 w-3 animate-spin inline" />
               ) : option.premium !== null ? (
-                `$${option.premium.toFixed(2)}`
+                option.premium >= 0 ? `$${option.premium.toFixed(2)}` : `-$${Math.abs(option.premium).toFixed(2)}`
               ) : (
                 <span className="text-muted-foreground">—</span>
               )}
@@ -667,11 +667,13 @@ function OptionsTable({
                 );
                 
                 const plColor = pl > 0 ? 'text-green-600' : pl < 0 ? 'text-red-600' : 'text-muted-foreground';
-                const plSign = pl > 0 ? '+' : '';
+                const formattedPL = pl >= 0 
+                  ? `+$${pl.toFixed(2)}` 
+                  : `-$${Math.abs(pl).toFixed(2)}`;
                 
                 return (
                   <span className={plColor}>
-                    {plSign}${pl.toFixed(2)}
+                    {formattedPL}
                   </span>
                 );
               })()}
@@ -707,11 +709,13 @@ function OptionsTable({
                   }, 0);
                 
                 const premiumColor = totalPremium > 0 ? 'text-green-600' : totalPremium < 0 ? 'text-red-600' : '';
-                const premiumSign = totalPremium > 0 ? '+' : '';
+                const formattedPremium = totalPremium >= 0 
+                  ? `+$${totalPremium.toFixed(2)}` 
+                  : `-$${Math.abs(totalPremium).toFixed(2)}`;
                 
                 return (
                   <span className={premiumColor}>
-                    {totalPremium !== 0 ? `${premiumSign}$${totalPremium.toFixed(2)}` : '—'}
+                    {totalPremium !== 0 ? formattedPremium : '—'}
                   </span>
                 );
               })()}
@@ -733,11 +737,13 @@ function OptionsTable({
                   }, 0);
                 
                 const plColor = totalPL > 0 ? 'text-green-600' : totalPL < 0 ? 'text-red-600' : 'text-muted-foreground';
-                const plSign = totalPL > 0 ? '+' : '';
+                const formattedPL = totalPL >= 0 
+                  ? `+$${totalPL.toFixed(2)}` 
+                  : `-$${Math.abs(totalPL).toFixed(2)}`;
                 
                 return (
                   <span className={plColor}>
-                    {plSign}${totalPL.toFixed(2)}
+                    {formattedPL}
                   </span>
                 );
               })()}

@@ -17,6 +17,7 @@ import {
   TrendingUp,
   Activity,
   Plus,
+  TrendingDown,
 } from 'lucide-react';
 
 function Sidebar() {
@@ -158,6 +159,9 @@ function Sidebar() {
                   </NavItem>
                   <NavItem to="/reports-archive" icon={Archive}>
                     Архив отчетов
+                  </NavItem>
+                  <NavItem to="/tools/crypto-rating" icon={TrendingDown}>
+                    Рейтинг криптовалют
                   </NavItem>
                 </div>
               </div>

@@ -130,8 +130,9 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
           },
           hovertemplate: `<b>${positionType} ${positionQty} ${position.ticker || 'SHARES'}</b><br>` +
                         `Entry: $${(Number(position.price) || 0).toFixed(2)}<br>` +
-                        'P&L: $%{y:.2f}<br>' +
-                        '<extra></extra>'
+                        'P&L: %{text}<br>' +
+                        '<extra></extra>',
+          text: positionPLArray.map(pl => pl >= 0 ? `$${pl.toFixed(2)}` : `-$${Math.abs(pl).toFixed(2)}`)
         });
       }
     });
@@ -175,8 +176,9 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
             dash: 'solid'
           },
           hovertemplate: '<b>%{fullData.name}</b><br>' +
-                        'P&L: $%{y:.2f}<br>' +
-                        '<extra></extra>'
+                        'P&L: %{text}<br>' +
+                        '<extra></extra>',
+          text: plArray.map(pl => pl >= 0 ? `$${pl.toFixed(2)}` : `-$${Math.abs(pl).toFixed(2)}`)
         });
       }
     });

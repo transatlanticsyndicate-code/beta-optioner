@@ -20,7 +20,7 @@ import re
 from app.database import get_db, init_db
 from app.models.analysis_history import AnalysisHistory
 from app.models.user import Base as UserBase
-from app.routers import options, ai_chat, polygon, auth, admin, telegram_webhook, data_source_info, ib_monitoring, yahoo_proxy
+from app.routers import options, ai_chat, polygon, auth, admin, telegram_webhook, data_source_info, ib_monitoring, yahoo_proxy, crypto_rating
 
 # Load environment variables from .env file
 env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
@@ -73,6 +73,7 @@ app.include_router(polygon.router)
 app.include_router(data_source_info.router)
 app.include_router(ib_monitoring.router)
 app.include_router(yahoo_proxy.router)
+app.include_router(crypto_rating.router)
 
 # Простой in-memory кэш (fallback если Redis недоступен)
 _data_cache: Dict = {}
@@ -100,7 +101,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],  # Только необходимые методы
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Добавлен DELETE для удаления снимков/анализов
     allow_headers=["Content-Type", "Authorization", "Accept"],  # Только необходимые заголовки
 )
 
@@ -108,7 +109,7 @@ app.add_middleware(
 # Telegram polling events
 @app.on_event("startup")
 async def startup_event():
-    """Запуск Telegram polling при старте приложения"""
+    """Запуск Telegram polling и планировщика криптовалют при старте приложения"""
     print("🚀 Startup event вызван")
     # Запускаем polling в фоне (не блокируем startup)
     try:
@@ -118,12 +119,32 @@ async def startup_event():
         print(f"❌ Ошибка при запуске polling: {e}")
         import traceback
         traceback.print_exc()
+    
+    # Планировщик больше не используется (ручное создание снимков)
+    # try:
+    #     from app.services.crypto_scheduler import crypto_scheduler
+    #     crypto_scheduler.restore_tasks_from_db()
+    #     print("✅ Crypto scheduler задачи восстановлены")
+    # except Exception as e:
+    #     print(f"❌ Ошибка при восстановлении crypto scheduler: {e}")
+    #     import traceback
+    #     traceback.print_exc()
+    print("ℹ️ Crypto scheduler отключен (используется ручное создание снимков)")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Остановка Telegram polling при остановке приложения"""
+    """Остановка Telegram polling и планировщика при остановке приложения"""
     await telegram_webhook.stop_polling()
+    
+    # Планировщик отключен
+    # try:
+    #     from app.services.crypto_scheduler import crypto_scheduler
+    #     crypto_scheduler.shutdown()
+    #     print("✅ Crypto scheduler остановлен")
+    # except Exception as e:
+    #     print(f"❌ Ошибка при остановке crypto scheduler: {e}")
+    print("ℹ️ Crypto scheduler был отключен")
 
 
 def validate_ticker(ticker: str) -> str:

@@ -279,8 +279,8 @@ function TickerSearch({
       {localTicker && (
         <div className="flex flex-col items-end flex-shrink-0">
           <span className="text-2xl font-bold whitespace-nowrap">${currentPrice.toFixed(2)}</span>
-          <span className="text-sm text-green-600 font-medium whitespace-nowrap">
-            +{priceChange.value.toFixed(2)} {priceChange.percent.toFixed(2)}%
+          <span className={`text-sm font-medium whitespace-nowrap ${priceChange.value >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            {priceChange.value >= 0 ? '+' : ''}{priceChange.value.toFixed(2)} {priceChange.value >= 0 ? '+' : ''}{priceChange.percent.toFixed(2)}%
           </span>
         </div>
       )}

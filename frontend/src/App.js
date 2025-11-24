@@ -15,6 +15,7 @@ import Settings from './pages/Settings/Settings';
 import TestChart from './pages/TestChart';
 import NewDeal from './pages/NewDeal';
 import DealsArchive from './pages/DealsArchive';
+import CryptoRating from './pages/CryptoRating';
 
 function App() {
   return (
@@ -29,6 +30,7 @@ function App() {
           <Route path="/tools/test-chart" element={<TestChart />} />
           <Route path="/tools/new-deal" element={<NewDeal />} />
           <Route path="/tools/deals-archive" element={<DealsArchive />} />
+          <Route path="/tools/crypto-rating" element={<CryptoRating />} />
           <Route path="/components" element={<Navigate to="/settings?section=components" replace />} />
           <Route path="/analysis/:id" element={<AnalysisView />} />
           <Route path="/admin/ib-monitoring" element={<IBMonitoring />} />
