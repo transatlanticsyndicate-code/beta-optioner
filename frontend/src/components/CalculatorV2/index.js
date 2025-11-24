@@ -12,3 +12,4 @@ export { default as CalculatorSettings } from './CalculatorSettings';
 export { default as OptionsBoard } from './OptionsBoard';
 export { default as PositionFinancialControl } from './PositionFinancialControl';
 export { default as SaveConfigurationDialog } from './SaveConfigurationDialog';
+export { default as PriceAndTimeSettings } from './PriceAndTimeSettings';

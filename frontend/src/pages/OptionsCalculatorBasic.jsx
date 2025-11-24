@@ -47,7 +47,8 @@ import {
   CalculatorSettings,
   OptionsBoard,
   PositionFinancialControl,
-  SaveConfigurationDialog
+  SaveConfigurationDialog,
+  PriceAndTimeSettings
 } from '../components/CalculatorV2';
 import FinancialControl from '../components/CalculatorV2/FinancialControl';
 import ExitCalculator from '../components/CalculatorV2/ExitCalculator';
@@ -106,6 +107,10 @@ function OptionsCalculatorV3() {
     return saved !== null ? JSON.parse(saved) : true; // По умолчанию true
   });
 
+  // State для синхронизированных настроек цены и волатильности
+  const [targetPrice, setTargetPrice] = useState(currentPrice);
+  const [volatility, setVolatility] = useState(25);
+
   // State для формы новой сделки
   const [dealForm, setDealForm] = useState({
     type: 'futures',
@@ -131,6 +136,17 @@ function OptionsCalculatorV3() {
 
   // State для позиций
   const [positions, setPositions] = useState([]); // Убрано демо-данные AAPL
+
+  // State для сворачивания блока симуляции
+  const [isMarketSimulationCollapsed, setIsMarketSimulationCollapsed] = useState(() => {
+    const saved = localStorage.getItem('isMarketSimulationCollapsed');
+    return saved ? JSON.parse(saved) : false;
+  });
+
+  // Сохраняем состояние сворачивания блока симуляции
+  useEffect(() => {
+    localStorage.setItem('isMarketSimulationCollapsed', JSON.stringify(isMarketSimulationCollapsed));
+  }, [isMarketSimulationCollapsed]);
 
   // State для загрузки дат экспирации
   const [isLoadingDates, setIsLoadingDates] = useState(false);
@@ -349,6 +365,7 @@ function OptionsCalculatorV3() {
             const priceData = await priceResponse.json();
             if (priceData.price) {
               setCurrentPrice(priceData.price);
+              setTargetPrice(priceData.price); // Синхронизируем targetPrice
               setPriceChange({
                 value: priceData.change || 0,
                 percent: priceData.changePercent || 0
@@ -393,6 +410,8 @@ function OptionsCalculatorV3() {
   const resetCalculator = useCallback(() => {
     setSelectedTicker('');
     setCurrentPrice(245);
+    setTargetPrice(245);
+    setVolatility(25);
     setPriceChange({ value: -0.80, percent: -0.32 });
     setOptions([]);
     setPositions([]);
@@ -1237,6 +1256,51 @@ function OptionsCalculatorV3() {
                 </CardContent>
               </Card>
 
+              {/* Синхронизированный блок настроек цены и времени */}
+              {selectedTicker && (
+                <Card 
+                  className={`w-full relative overflow-hidden ${
+                    displayOptions.length === 0 ? 'opacity-20 pointer-events-none' : ''
+                  }`} 
+                  style={{ borderColor: '#b8b8b8' }}
+                >
+                  <div className="flex items-center justify-between px-6 py-3 border-b border-border">
+                    <h3 className="text-sm font-medium">Симуляция изменения рынка</h3>
+                    <button
+                      onClick={() => setIsMarketSimulationCollapsed(!isMarketSimulationCollapsed)}
+                      className="p-1 hover:bg-muted rounded transition-colors"
+                      title={isMarketSimulationCollapsed ? 'Развернуть' : 'Свернуть'}
+                    >
+                      {isMarketSimulationCollapsed ? (
+                        <ChevronDown size={20} />
+                      ) : (
+                        <ChevronUp size={20} />
+                      )}
+                    </button>
+                  </div>
+                  {!isMarketSimulationCollapsed && (
+                    <CardContent className="pt-[20px] pb-[20px]">
+                      <PriceAndTimeSettings
+                        currentPrice={currentPrice}
+                        targetPrice={targetPrice}
+                        setTargetPrice={setTargetPrice}
+                        daysRemaining={daysRemaining}
+                        setDaysRemaining={(value) => {
+                          setDaysRemaining(value);
+                          setUserAdjustedDays(true);
+                        }}
+                        volatility={volatility}
+                        setVolatility={setVolatility}
+                        options={displayOptions}
+                        minPrice={currentPrice * 0.5}
+                        maxPrice={currentPrice * 1.5}
+                        compact={true}
+                      />
+                    </CardContent>
+                  )}
+                </Card>
+              )}
+
               {shouldShowBlock('tradingview-widget') && (
                 <Card className="overflow-hidden" style={{ borderColor: '#b8b8b8' }}>
                   <div className="flex items-center justify-between px-6 py-3 border-b border-border">
@@ -1267,16 +1331,10 @@ function OptionsCalculatorV3() {
                   style={{ borderColor: '#b8b8b8' }}
                 >
                   <CalculatorSettings
-                    daysRemaining={daysRemaining}
-                    setDaysRemaining={(value) => {
-                      setDaysRemaining(value);
-                      setUserAdjustedDays(true);
-                    }}
                     showOptionLines={showOptionLines}
                     setShowOptionLines={setShowOptionLines}
                     showProbabilityZones={showProbabilityZones}
                     setShowProbabilityZones={setShowProbabilityZones}
-                    options={displayOptions}
                     cacheTTLMinutes={cacheTTLMinutes}
                     onCacheTTLChange={setCacheTTLMinutes}
                   />
@@ -1360,6 +1418,7 @@ function OptionsCalculatorV3() {
                       selectedStrategyName={selectedStrategyName}
                       onSaveConfiguration={() => setSaveConfigDialogOpen(true)}
                       onResetCalculator={resetCalculator}
+                      daysRemaining={daysRemaining}
                     />
                   ) : (
                     <div className="w-full h-[80px] flex items-center justify-center text-muted-foreground text-sm">
@@ -1489,6 +1548,10 @@ function OptionsCalculatorV3() {
                 }}
                 selectedExpirationDate={selectedExpirationDate}
                 showOptionLines={showOptionLines}
+                targetPrice={targetPrice}
+                setTargetPrice={setTargetPrice}
+                volatility={volatility}
+                setVolatility={setVolatility}
               />
             </div>
           </div>

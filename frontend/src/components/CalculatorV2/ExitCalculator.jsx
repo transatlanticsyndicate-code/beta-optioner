@@ -32,7 +32,11 @@ function ExitCalculator({
   daysRemaining = 0,
   setDaysRemaining,
   selectedExpirationDate = null,
-  showOptionLines = true
+  showOptionLines = true,
+  targetPrice = 0,
+  setTargetPrice,
+  volatility = 25,
+  setVolatility
 }) {
   // State для UI
   const [isCollapsed, setIsCollapsed] = useState(() => {
@@ -40,17 +44,10 @@ function ExitCalculator({
     return saved ? JSON.parse(saved) : false;
   });
 
-  // State для параметров расчета
-  const [targetPrice, setTargetPrice] = useState(currentPrice);
-  const [priceInput, setPriceInput] = useState(currentPrice.toFixed(2));
-  const [volatility, setVolatility] = useState(25); // Волатильность в %
+  // State для UI
+  const [priceInput, setPriceInput] = useState(targetPrice.toFixed(2));
   const [volatilityManual, setVolatilityManual] = useState(false);
   const priceInputFocusedRef = React.useRef(false);
-
-  // Обновляем targetPrice при изменении currentPrice
-  useEffect(() => {
-    setTargetPrice(currentPrice);
-  }, [currentPrice]);
 
   useEffect(() => {
     if (!priceInputFocusedRef.current) {

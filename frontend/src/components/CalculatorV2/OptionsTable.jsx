@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import { getAllStrategies } from '../../config/optionsStrategies';
+import { calculateOptionPLValue } from '../../utils/optionPricing';
 
 // Helper: format ISO date (YYYY-MM-DD) to display format (DD.MM.YY)
 const formatDateForDisplay = (isoDate) => {
@@ -37,7 +38,8 @@ function OptionsTable({
   isLoadingDates = false,
   selectedStrategyName = '',
   onSaveConfiguration,
-  onResetCalculator
+  onResetCalculator,
+  daysRemaining = 0
 }) {
   // console.log('📋 OptionsTable render:', { 
   //   optionsCount: options.length, 
@@ -340,7 +342,7 @@ function OptionsTable({
 
       {hasOptions && (
         <div className="space-y-2">
-          <div className="grid grid-cols-[40px_1fr_1fr_1fr_100px_1fr_1fr_1fr_80px_100px_40px] items-center text-xs font-medium text-muted-foreground px-2" style={{ gap: '8px' }}>
+          <div className="grid grid-cols-[40px_120px_90px_90px_100px_80px_80px_80px_80px_100px_100px_40px] items-center text-xs font-medium text-muted-foreground px-2" style={{ gap: '8px' }}>
             <div></div>
             <div className="text-left ml-2">Тип</div>
             <div className="text-right ml-2">Дата</div>
@@ -351,13 +353,14 @@ function OptionsTable({
             <div className="text-right ml-2">ASK</div>
             <div className="text-right ml-2">OI</div>
             <div className="text-right ml-2">VOL</div>
+            <div className="text-right ml-2">P/L</div>
             <div></div>
           </div>
 
           {options.map((option) => (
           <div
             key={option.id}
-            className={`grid grid-cols-[40px_1fr_1fr_1fr_100px_1fr_1fr_1fr_80px_100px_40px] items-center text-sm border rounded-md p-2 ${
+            className={`grid grid-cols-[40px_120px_90px_90px_100px_80px_80px_80px_80px_100px_100px_40px] items-center text-sm border rounded-md p-2 ${
               !option.visible ? "[&>*]:text-[#AAAAAA]" : ""
             }`}
             style={{ gap: '8px' }}
@@ -646,6 +649,33 @@ function OptionsTable({
                 "—"
               )}
             </span>
+            
+            {/* P/L (Прибыль/Убыток) */}
+            <span className="text-right ml-2 font-bold">
+              {(() => {
+                // Рассчитываем P/L только если есть все необходимые данные
+                if (!option.premium || option.premium === null || !option.strike || !currentPrice) {
+                  return <span className="text-muted-foreground">—</span>;
+                }
+                
+                const pl = calculateOptionPLValue(
+                  option,
+                  currentPrice,
+                  currentPrice,
+                  daysRemaining
+                );
+                
+                const plColor = pl > 0 ? 'text-green-600' : pl < 0 ? 'text-red-600' : 'text-muted-foreground';
+                const plSign = pl > 0 ? '+' : '';
+                
+                return (
+                  <span className={plColor}>
+                    {plSign}${pl.toFixed(2)}
+                  </span>
+                );
+              })()}
+            </span>
+            
             <button
               onClick={() => deleteOption(option.id)}
               className="text-muted-foreground hover:text-destructive w-[30px] flex justify-center"
@@ -654,6 +684,54 @@ function OptionsTable({
             </button>
           </div>
           ))}
+          
+          {/* Итоговая строка */}
+          <div className="grid grid-cols-[40px_120px_90px_90px_100px_80px_80px_80px_80px_100px_100px_40px] items-center text-sm border-t-2 border-cyan-500 bg-cyan-50/50 rounded-md p-2 font-bold" style={{ gap: '8px' }}>
+            <div></div>
+            <div className="text-left ml-2 col-span-4">ИТОГО:</div>
+            <div className="text-right ml-2">
+              {(() => {
+                // Рассчитываем общую премию (только для видимых опционов с данными)
+                const totalPremium = options
+                  .filter(opt => opt.visible !== false && opt.premium !== null)
+                  .reduce((sum, opt) => {
+                    const premium = opt.premium || 0;
+                    const quantity = Math.abs(opt.quantity || 0);
+                    const multiplier = 100; // Стандартный мультипликатор опционов
+                    return sum + (premium * quantity * multiplier);
+                  }, 0);
+                
+                return totalPremium > 0 ? `$${totalPremium.toFixed(2)}` : '—';
+              })()}
+            </div>
+            <div className="col-span-4"></div>
+            <div className="text-right ml-2">
+              {(() => {
+                // Рассчитываем общий P/L (только для видимых опционов с данными)
+                const totalPL = options
+                  .filter(opt => opt.visible !== false && opt.premium !== null && opt.strike && currentPrice)
+                  .reduce((sum, opt) => {
+                    const pl = calculateOptionPLValue(
+                      opt,
+                      currentPrice,
+                      currentPrice,
+                      daysRemaining
+                    );
+                    return sum + pl;
+                  }, 0);
+                
+                const plColor = totalPL > 0 ? 'text-green-600' : totalPL < 0 ? 'text-red-600' : 'text-muted-foreground';
+                const plSign = totalPL > 0 ? '+' : '';
+                
+                return (
+                  <span className={plColor}>
+                    {plSign}${totalPL.toFixed(2)}
+                  </span>
+                );
+              })()}
+            </div>
+            <div></div>
+          </div>
         </div>
       )}
 
