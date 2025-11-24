@@ -2,9 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { ChevronUp, ChevronDown, Calculator as CalculatorIcon, HelpCircle } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
-import { Label } from '../ui/label';
-import { Slider } from '../ui/slider';
-import { Input } from '../ui/input';
 import {
   Tooltip,
   TooltipContent,
@@ -13,6 +10,7 @@ import {
 } from '../ui/tooltip';
 import { usePositionExitCalculator } from '../../hooks/usePositionExitCalculator';
 import ExitTimeDecayChart from './ExitTimeDecayChart';
+import PriceAndTimeSettings from './PriceAndTimeSettings';
 
 /**
  * Компонент для расчета P&L при выходе из позиции
@@ -45,15 +43,7 @@ function ExitCalculator({
   });
 
   // State для UI
-  const [priceInput, setPriceInput] = useState(targetPrice.toFixed(2));
   const [volatilityManual, setVolatilityManual] = useState(false);
-  const priceInputFocusedRef = React.useRef(false);
-
-  useEffect(() => {
-    if (!priceInputFocusedRef.current) {
-      setPriceInput(targetPrice.toFixed(2));
-    }
-  }, [targetPrice]);
 
   // Сохранение состояния сворачивания
   useEffect(() => {
@@ -200,101 +190,24 @@ function ExitCalculator({
             <>
               {/* Layout: бегунки слева, блоки справа */}
               <div className="flex gap-6">
-                {/* Левая колонка: бегунки */}
-                <div className="flex-shrink-0 w-64 space-y-6">
-                {/* Ввод цены */}
-                <div className="space-y-3">
-                  <div className="flex flex-col gap-1">
-                    <Label className="text-sm font-medium">Цена базового актива</Label>
-                    <span className="text-xs text-muted-foreground">допустимый диапазон: ${minPrice.toFixed(2)} – ${maxPrice.toFixed(2)}</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm text-muted-foreground">$</span>
-                    <Input
-                      type="number"
-                      value={priceInput}
-                      step="0.01"
-                      min={minPrice}
-                      max={maxPrice}
-                      className="flex-1"
-                      onChange={(e) => {
-                        const value = parseFloat(e.target.value);
-                        setPriceInput(e.target.value);
-                        if (!isNaN(value)) {
-                          const clampedValue = Math.min(Math.max(value, minPrice), maxPrice);
-                          setTargetPrice(clampedValue);
-                        }
-                      }}
-                      onBlur={(e) => {
-                        priceInputFocusedRef.current = false;
-                        const value = parseFloat(e.target.value);
-                        if (isNaN(value)) {
-                          setTargetPrice(minPrice);
-                          setPriceInput(minPrice.toFixed(2));
-                          return;
-                        }
-                        const clampedValue = Math.min(Math.max(value, minPrice), maxPrice);
-                        setTargetPrice(clampedValue);
-                        setPriceInput(clampedValue.toFixed(2));
-                      }}
-                      onFocus={() => {
-                        priceInputFocusedRef.current = true;
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {/* Слайдер дней до экспирации */}
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <Label className="text-sm font-medium">Дней до экспирации</Label>
-                    <span className="text-sm font-semibold text-cyan-600">
-                      {options.length === 0 ? '—' : `${daysRemaining} дн.`}
-                    </span>
-                  </div>
-                  <Slider
-                    value={[maxDaysToExpiration - daysRemaining]}
-                    onValueChange={(value) => {
-                      if (setDaysRemaining) {
-                        setDaysRemaining(maxDaysToExpiration - value[0]);
-                      }
-                    }}
-                    min={0}
-                    max={maxDaysToExpiration}
-                    step={1}
-                    className="w-full [&_[role=slider]]:bg-cyan-500 [&_[role=slider]]:border-cyan-500"
-                    disabled={options.length === 0}
-                  />
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>0 дн.</span>
-                    <span>{options.length === 0 ? '—' : `${maxDaysToExpiration} дн.`}</span>
-                  </div>
-                </div>
-
-                {/* Слайдер волатильности */}
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <Label className="text-sm font-medium">Волатильность</Label>
-                    <span className="text-sm font-semibold text-cyan-600">
-                      {volatility}%
-                    </span>
-                  </div>
-                  <Slider
-                    value={[volatility]}
-                    onValueChange={(value) => {
-                      setVolatility(value[0]);
+                {/* Левая колонка: настройки симуляции */}
+                <div className="flex-shrink-0 w-64">
+                  <PriceAndTimeSettings
+                    currentPrice={currentPrice}
+                    targetPrice={targetPrice}
+                    setTargetPrice={setTargetPrice}
+                    daysRemaining={daysRemaining}
+                    setDaysRemaining={setDaysRemaining}
+                    volatility={volatility}
+                    setVolatility={(value) => {
+                      setVolatility(value);
                       setVolatilityManual(true);
                     }}
-                    min={1}
-                    max={100}
-                    step={1}
-                    className="w-full"
+                    options={options}
+                    minPrice={minPrice}
+                    maxPrice={maxPrice}
+                    compact={true}
                   />
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>1%</span>
-                    <span>100%</span>
-                  </div>
-                </div>
                 </div>
 
                 {/* Правая колонка: блоки сценариев */}

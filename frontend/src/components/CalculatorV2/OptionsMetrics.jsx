@@ -98,7 +98,10 @@ function OptionsMetrics({ options = [], currentPrice = 0, positions = [], daysRe
       value: calculatedMetrics.hasCompleteOptions && calculatedMetrics.plMetrics.breakevens.length > 0
         ? calculatedMetrics.plMetrics.breakevens.length === 1 
           ? `$${calculatedMetrics.plMetrics.breakevens[0].toFixed(2)}`
-          : `${calculatedMetrics.plMetrics.breakevens.length} точек`
+          : `${calculatedMetrics.plMetrics.breakevens.length} ${
+              calculatedMetrics.plMetrics.breakevens.length === 2 ? 'точки' : 
+              calculatedMetrics.plMetrics.breakevens.length >= 5 ? 'точек' : 'точки'
+            }`
         : '—',
       color: 'orange',
       tooltip: calculatedMetrics.plMetrics?.breakevens?.length > 1 

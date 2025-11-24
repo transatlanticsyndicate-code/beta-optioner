@@ -5,9 +5,11 @@
  */
 
 import React from 'react';
+import { RotateCcw } from 'lucide-react';
 import { Label } from '../ui/label';
 import { Slider } from '../ui/slider';
 import { Input } from '../ui/input';
+import { Button } from '../ui/button';
 
 function PriceAndTimeSettings({ 
   currentPrice = 0,
@@ -95,7 +97,7 @@ function PriceAndTimeSettings({
             </span>
           )}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground min-w-[20px]">$</span>
           <Input
             type="number"
@@ -111,6 +113,16 @@ function PriceAndTimeSettings({
             min={calculatedMinPrice}
             max={calculatedMaxPrice}
           />
+          <Button
+            onClick={() => {
+              setTargetPrice(currentPrice);
+              setPriceInput(currentPrice.toFixed(2));
+            }}
+            className={`${compact ? 'h-8 w-8' : 'h-9 w-9'} p-0 bg-gray-500 hover:bg-gray-600`}
+            title="Сбросить на текущую цену"
+          >
+            <RotateCcw className="h-4 w-4 text-white" />
+          </Button>
         </div>
         <Slider
           value={[targetPrice]}

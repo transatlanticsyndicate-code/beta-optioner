@@ -1419,6 +1419,7 @@ function OptionsCalculatorV3() {
                       onSaveConfiguration={() => setSaveConfigDialogOpen(true)}
                       onResetCalculator={resetCalculator}
                       daysRemaining={daysRemaining}
+                      targetPrice={targetPrice}
                     />
                   ) : (
                     <div className="w-full h-[80px] flex items-center justify-center text-muted-foreground text-sm">
@@ -1494,6 +1495,7 @@ function OptionsCalculatorV3() {
                         showOptionLines={showOptionLines}
                         daysRemaining={daysRemaining}
                         showProbabilityZones={showProbabilityZones}
+                        targetPrice={targetPrice}
                       />
                     </CardContent>
                   </Card>

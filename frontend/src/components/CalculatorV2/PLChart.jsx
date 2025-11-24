@@ -9,7 +9,7 @@ import {
  * Компонент графика прибыли/убытка (P&L Chart) с использованием Plotly.js
  * Адаптирован из V1 для работы с V2
  */
-function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLines = true, daysRemaining = 0, showProbabilityZones = true }) {
+function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLines = true, daysRemaining = 0, showProbabilityZones = true, targetPrice = 0 }) {
   // Отслеживание темы
   const [isDarkMode, setIsDarkMode] = useState(
     document.documentElement.classList.contains('dark')
@@ -425,6 +425,23 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
       }
     ];
 
+    // Добавляем вертикальную линию симулированной цены (если отличается от текущей)
+    if (targetPrice && targetPrice !== currentPrice && targetPrice >= minPrice && targetPrice <= maxPrice) {
+      shapes.push({
+        type: 'line',
+        x0: targetPrice,
+        x1: targetPrice,
+        yref: 'paper',
+        y0: 0,
+        y1: 1,
+        line: {
+          color: '#6b7280', // gray-500
+          width: 1,
+          dash: 'solid'
+        }
+      });
+    }
+
     // Добавляем зоны вероятности (прямоугольники) - только если включено
     if (showProbabilityZones) {
       // 3σ зона (99.7%) - самая светлая
@@ -536,6 +553,28 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
         borderwidth: 1
       }
     ];
+
+    // Добавляем метку симулированной цены (если отличается от текущей)
+    if (targetPrice && targetPrice !== currentPrice && targetPrice >= minPrice && targetPrice <= maxPrice) {
+      annotations.push({
+        x: targetPrice,
+        y: 0.95,
+        yref: 'paper',
+        text: `Target: $${targetPrice.toFixed(2)}`,
+        showarrow: false,
+        xanchor: 'center',
+        yanchor: 'bottom',
+        font: {
+          color: '#6b7280', // gray-500
+          size: 12,
+          weight: 'bold'
+        },
+        bgcolor: themeColors.annotationBg,
+        borderpad: 6,
+        bordercolor: '#6b7280', // gray-500
+        borderwidth: 1
+      });
+    }
 
     // Метки для зон вероятности (размещаем внизу) - только если включено
     if (showProbabilityZones) {
@@ -712,7 +751,7 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
       layout,
       config
     };
-  }, [options, currentPrice, positions, isDarkMode, showOptionLines, daysRemaining, showProbabilityZones, xAxisRange, calculateUnderlyingPL]);
+  }, [options, currentPrice, positions, isDarkMode, showOptionLines, daysRemaining, showProbabilityZones, xAxisRange, calculateUnderlyingPL, targetPrice]);
 
   if (!chartData) {
     return (

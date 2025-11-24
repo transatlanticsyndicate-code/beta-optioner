@@ -39,7 +39,8 @@ function OptionsTable({
   selectedStrategyName = '',
   onSaveConfiguration,
   onResetCalculator,
-  daysRemaining = 0
+  daysRemaining = 0,
+  targetPrice = 0
 }) {
   // console.log('📋 OptionsTable render:', { 
   //   optionsCount: options.length, 
@@ -353,7 +354,7 @@ function OptionsTable({
             <div className="text-right ml-2">ASK</div>
             <div className="text-right ml-2">OI</div>
             <div className="text-right ml-2">VOL</div>
-            <div className="text-right ml-2">P/L</div>
+            <div className="text-right ml-2">P&L</div>
             <div></div>
           </div>
 
@@ -660,7 +661,7 @@ function OptionsTable({
                 
                 const pl = calculateOptionPLValue(
                   option,
-                  currentPrice,
+                  targetPrice || currentPrice,
                   currentPrice,
                   daysRemaining
                 );
@@ -691,17 +692,28 @@ function OptionsTable({
             <div className="text-left ml-2 col-span-4">ИТОГО:</div>
             <div className="text-right ml-2">
               {(() => {
-                // Рассчитываем общую премию (только для видимых опционов с данными)
+                // Рассчитываем общую премию с учетом направления сделки
+                // Sell (продажа) - получаем премию (+)
+                // Buy (покупка) - тратим премию (-)
                 const totalPremium = options
                   .filter(opt => opt.visible !== false && opt.premium !== null)
                   .reduce((sum, opt) => {
                     const premium = opt.premium || 0;
                     const quantity = Math.abs(opt.quantity || 0);
                     const multiplier = 100; // Стандартный мультипликатор опционов
-                    return sum + (premium * quantity * multiplier);
+                    const isSell = (opt.action || 'Buy').toLowerCase() === 'sell';
+                    const sign = isSell ? 1 : -1; // Sell = +премия, Buy = -премия
+                    return sum + (sign * premium * quantity * multiplier);
                   }, 0);
                 
-                return totalPremium > 0 ? `$${totalPremium.toFixed(2)}` : '—';
+                const premiumColor = totalPremium > 0 ? 'text-green-600' : totalPremium < 0 ? 'text-red-600' : '';
+                const premiumSign = totalPremium > 0 ? '+' : '';
+                
+                return (
+                  <span className={premiumColor}>
+                    {totalPremium !== 0 ? `${premiumSign}$${totalPremium.toFixed(2)}` : '—'}
+                  </span>
+                );
               })()}
             </div>
             <div className="col-span-4"></div>
@@ -713,7 +725,7 @@ function OptionsTable({
                   .reduce((sum, opt) => {
                     const pl = calculateOptionPLValue(
                       opt,
-                      currentPrice,
+                      targetPrice || currentPrice,
                       currentPrice,
                       daysRemaining
                     );
