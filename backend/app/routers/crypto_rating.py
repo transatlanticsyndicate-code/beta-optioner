@@ -19,7 +19,7 @@ from app.services.email_service import email_service
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/crypto-rating", tags=["crypto-rating"])
+router = APIRouter(prefix="/api/crypto-rating", tags=["crypto-rating"])
 
 
 # Pydantic модели для запросов/ответов
