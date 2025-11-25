@@ -1,8 +1,6 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { Camera, ChevronDown, ChevronUp, Calendar, TrendingDown, TrendingUp, Trash2 } from 'lucide-react';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
-
 function CryptoRating() {
   const [snapshots, setSnapshots] = useState([]);
   const [analyses, setAnalyses] = useState([]);
@@ -27,10 +25,10 @@ function CryptoRating() {
   
   const fetchData = async () => {
     try {
-      const snapshotsRes = await fetch(`${API_BASE_URL}/crypto-rating/snapshots`);
+      const snapshotsRes = await fetch(`/api/crypto-rating/snapshots`);
       if (snapshotsRes.ok) setSnapshots(await snapshotsRes.json());
       
-      const analysesRes = await fetch(`${API_BASE_URL}/crypto-rating/analyses`);
+      const analysesRes = await fetch(`/api/crypto-rating/analyses`);
       if (analysesRes.ok) setAnalyses(await analysesRes.json());
     } catch (err) {
       console.error('Error:', err);
@@ -42,7 +40,7 @@ function CryptoRating() {
     setError(null);
     setSuccess(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/crypto-rating/create-snapshot`, { method: 'POST' });
+      const response = await fetch(`/api/crypto-rating/create-snapshot`, { method: 'POST' });
       if (!response.ok) throw new Error('Failed');
       const data = await response.json();
       setSuccess(data.analysis_created ? 'Снимок и анализ созданы!' : 'Первый снимок создан!');
@@ -60,7 +58,7 @@ function CryptoRating() {
       return;
     }
     try {
-      const response = await fetch(`${API_BASE_URL}/crypto-rating/analyses/${analysisId}`);
+      const response = await fetch(`/api/crypto-rating/analyses/${analysisId}`);
       if (response.ok) setSelectedAnalysis(await response.json());
     } catch (err) {
       console.error('Error:', err);
@@ -71,7 +69,7 @@ function CryptoRating() {
     e.stopPropagation();
     if (!window.confirm('Удалить?')) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/crypto-rating/snapshots/${snapshotId}`, { method: 'DELETE' });
+      const response = await fetch(`/api/crypto-rating/snapshots/${snapshotId}`, { method: 'DELETE' });
       if (response.ok) {
         setSuccess('Удалено');
         await fetchData();
@@ -85,7 +83,7 @@ function CryptoRating() {
     e.stopPropagation();
     if (!window.confirm('Удалить?')) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/crypto-rating/analyses/${analysisId}`, { method: 'DELETE' });
+      const response = await fetch(`/api/crypto-rating/analyses/${analysisId}`, { method: 'DELETE' });
       if (response.ok) {
         setSuccess('Удалено');
         if (selectedAnalysis?.id === analysisId) setSelectedAnalysis(null);
