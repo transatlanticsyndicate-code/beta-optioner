@@ -30,8 +30,7 @@ class DatabentoClient:
     def __init__(self):
         self.api_key = os.getenv('DATABENTO_API_KEY')
         if not self.api_key:
-             # Fallback for dev/test
-             self.api_key = 'db-cSsKVen5t58CtD9Ab3VFT6rVrh3Vv'
+            raise ValueError("DATABENTO_API_KEY not found in environment variables. Databento is not currently used in the project.")
              
         self.client = db.Historical(self.api_key)
         self.dataset = 'GLBX.MDP3'  # CME Globex MDP 3.0
