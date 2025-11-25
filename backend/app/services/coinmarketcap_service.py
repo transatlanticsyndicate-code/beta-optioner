@@ -4,6 +4,7 @@
 Затрагивает: API CoinMarketCap, модели БД
 """
 
+import os
 import requests
 import logging
 from typing import List, Dict
@@ -11,8 +12,8 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-# API ключ CoinMarketCap
-CMC_API_KEY = "REMOVED_API_KEY"
+# API ключ CoinMarketCap из переменной окружения
+CMC_API_KEY = os.getenv("CMC_API_KEY", "")
 CMC_BASE_URL = "https://pro-api.coinmarketcap.com/v1"
 
 
@@ -38,6 +39,10 @@ class CoinMarketCapService:
             Пример: [{"symbol": "BTC", "name": "Bitcoin"}, ...]
         """
         try:
+            # Проверка наличия API ключа
+            if not self.api_key:
+                raise ValueError("CMC_API_KEY не установлен. Добавьте его в .env файл")
+            
             logger.info("Fetching top 400 cryptocurrencies from CoinMarketCap...")
             
             # CoinMarketCap API endpoint для получения списка криптовалют

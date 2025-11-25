@@ -13,6 +13,14 @@ function CryptoRating() {
   const [isAnalysesExpanded, setIsAnalysesExpanded] = useState(true);
   const [isSnapshotsExpanded, setIsSnapshotsExpanded] = useState(true);
   
+  // Установка заголовка страницы
+  useEffect(() => {
+    document.title = 'Рейтинг криптовалют | SYNDICATE Platform';
+    return () => {
+      document.title = 'SYNDICATE Platform';
+    };
+  }, []);
+
   useEffect(() => {
     fetchData();
   }, []);
