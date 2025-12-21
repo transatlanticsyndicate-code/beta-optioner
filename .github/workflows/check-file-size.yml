@@ -1,0 +1,67 @@
+name: Check File Size Limit
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+  push:
+    branches: [ main, develop ]
+
+jobs:
+  check-file-size:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+      
+    - name: Check file line count
+      run: |
+        echo "🔍 Проверка размера файлов (макс 300 строк)..."
+        
+        # Находим все JS/JSX/TS/TSX файлы
+        FILES=$(find . -type f \( -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx" \) \
+          ! -path "*/node_modules/*" \
+          ! -path "*/build/*" \
+          ! -path "*/dist/*" \
+          ! -path "*/.next/*" \
+          ! -path "*/venv/*" \
+          ! -path "*/.venv/*" \
+          ! -name "*.config.js" \
+          ! -name "*.config.ts" \
+          ! -name "tailwind.config.js" \
+          ! -name "postcss.config.js")
+        
+        VIOLATIONS=0
+        
+        for file in $FILES; do
+          LINES=$(wc -l < "$file")
+          if [ $LINES -gt 300 ]; then
+            EXCESS=$((LINES - 300))
+            PERCENT=$(( (EXCESS * 100) / 300 ))
+            echo "❌ $file: $LINES строк (превышение: +$EXCESS строк, +$PERCENT%)"
+            VIOLATIONS=$((VIOLATIONS + 1))
+          fi
+        done
+        
+        if [ $VIOLATIONS -gt 0 ]; then
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "❌ Найдено $VIOLATIONS файл(ов) превышающих 300 строк"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "📖 Инструкция по рефакторингу:"
+          echo "   См. docs/MODULAR_CODE_METHODOLOGY.md"
+          exit 1
+        fi
+        
+        echo "✅ Все файлы соответствуют лимиту 300 строк"
+
+    - name: Report results
+      if: failure()
+      run: |
+        echo "::error::Некоторые файлы превышают лимит в 300 строк. Пожалуйста, проведите рефакторинг."

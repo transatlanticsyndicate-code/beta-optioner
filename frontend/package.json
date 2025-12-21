@@ -52,7 +52,12 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "check-file-size": "node ../scripts/check-file-size.js",
+    "check-file-size:all": "node ../scripts/check-file-size.js --all",
+    "check-forbidden": "node ../scripts/check-forbidden-patterns.js",
+    "check-forbidden:all": "node ../scripts/check-forbidden-patterns.js --all",
+    "check-all": "npm run check-file-size:all && npm run check-forbidden:all"
   },
   "eslintConfig": {
     "extends": [
@@ -73,6 +78,7 @@
   },
   "proxy": "http://localhost:8000",
   "devDependencies": {
-    "http-proxy-middleware": "^3.0.5"
+    "http-proxy-middleware": "^3.0.5",
+    "husky": "^9.1.7"
   }
 }

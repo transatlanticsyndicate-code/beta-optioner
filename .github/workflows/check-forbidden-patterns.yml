@@ -1,0 +1,30 @@
+name: Check Forbidden Patterns
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+  push:
+    branches: [ main, develop ]
+
+jobs:
+  check-patterns:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+      
+    - name: Check forbidden patterns
+      run: |
+        cd frontend
+        npm run check-forbidden:all || exit 1
+
+    - name: Report results
+      if: failure()
+      run: |
+        echo "::error::Найдены запрещенные практики в коде. См. docs/MODULAR_CODE_METHODOLOGY.md"
