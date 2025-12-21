@@ -11,7 +11,6 @@ import SavedConfigurations from './pages/SavedConfigurations';
 import ComponentsShowcase from './pages/ComponentsShowcase';
 import FloatingAIChat from './components/FloatingAIChat/FloatingAIChat';
 import GradualStrategyCalculator from './components/GradualStrategyCalculator/GradualStrategyCalculator';
-import IBMonitoring from './pages/IBMonitoring';
 import Settings from './pages/Settings/Settings';
 import TestChart from './pages/TestChart';
 import NewDeal from './pages/NewDeal';
@@ -35,7 +34,6 @@ function App() {
           <Route path="/tools/crypto-rating" element={<CryptoRating />} />
           <Route path="/components" element={<Navigate to="/settings?section=components" replace />} />
           <Route path="/analysis/:id" element={<AnalysisView />} />
-          <Route path="/admin/ib-monitoring" element={<IBMonitoring />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
       </LayoutWithSidebar>

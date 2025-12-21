@@ -35,8 +35,6 @@ function TopNav() {
         return 'Настройки';
       case '/help':
         return 'Помощь';
-      case '/admin/ib-monitoring':
-        return 'IB Gateway';
       case '/tools/calculator-ml':
         return 'AI Калькулятор опционов';
       default:

@@ -204,12 +204,6 @@ function Sidebar() {
               <NavItem to="/settings" icon={Settings}>
                 Настройки
               </NavItem>
-              {/* IB Gateway Monitoring - только на production */}
-              {process.env.REACT_APP_ENV === 'production' && (
-                <NavItem to="/admin/ib-monitoring" icon={Activity}>
-                  IB Gateway
-                </NavItem>
-              )}
               <NavItem to="/help" icon={HelpCircle} title="Крайний коммит: 8d5d182 / Ветка: CalcOptionsMassive-paid-11.11.25 / Дата-время: 17.11.2025 09:10">
                 Помощь
               </NavItem>
