@@ -1,0 +1,42 @@
+/**
+ * Стили для блока метрик опционов с горизонтальным скроллом
+ * Согласно ТЗ: TZ_METRICS_BLOCK.md
+ */
+
+/* Скрытие scrollbar для Chrome, Safari, Edge */
+.metrics-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* Скрытие scrollbar для Firefox */
+.metrics-scroll {
+  scrollbar-width: none;
+}
+
+/* Скрытие scrollbar для IE/Edge */
+.metrics-scroll {
+  -ms-overflow-style: none;
+}
+
+/* Snap scroll для карточек метрик */
+.metric-card {
+  scroll-snap-align: start;
+}
+
+/* Плавная анимация для индикаторов */
+.scroll-indicator {
+  transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
+}
+
+.scroll-indicator:hover {
+  transform: scale(1.05);
+}
+
+.scroll-indicator:active {
+  transform: scale(0.95);
+}
+
+/* Кастомный размер шрифта для виджетов */
+.text-xl {
+  font-size: 1.15rem;
+}

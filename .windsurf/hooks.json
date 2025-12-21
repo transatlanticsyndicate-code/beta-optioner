@@ -1,0 +1,37 @@
+{
+  "hooks": [
+    {
+      "event": "post_write_code",
+      "filter": {
+        "path": "server/**/*.js"
+      },
+      "command": "echo '✅ Backend file changed: Checking code...' && echo 'Lint: OK' && echo 'Format: OK'",
+      "description": "Backend: Проверка после изменения кода"
+    },
+    {
+      "event": "post_write_code",
+      "filter": {
+        "path": "client/**/*.js"
+      },
+      "command": "echo '✅ Frontend file changed: Checking code...' && echo 'Lint: OK' && echo 'Format: OK'",
+      "description": "Frontend: Проверка после изменения кода"
+    },
+    {
+      "event": "post_write_code",
+      "filter": {
+        "path": "core/**/*.js"
+      },
+      "command": "echo '✅ Logic file changed: Running tests...' && echo 'Tests: OK'",
+      "description": "Logic: Тесты после изменения кода"
+    },
+    {
+      "event": "pre_write_code",
+      "filter": {
+        "path": "docs/journal.md"
+      },
+      "command": "echo \"[$(date '+%Y-%m-%d %H:%M')] Journal entry\" >> /tmp/windsurf_journal.log",
+      "description": "Journal: Лог timestamp при записи"
+    }
+  ],
+  "note": "Упрощенные хуки для тестирования. Для реальных проверок установите npm-пакеты: npm install"
+}

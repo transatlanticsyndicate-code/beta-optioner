@@ -1,0 +1,19 @@
+{
+  "ticker": "COIN",
+  "price": 100.0,
+  "bid": 99.95,
+  "ask": 100.05,
+  "high": 102.0,
+  "low": 98.0,
+  "volume": 1000000,
+  "previous_close": 99.0,
+  "open": 99.5,
+  "change": 1.0,
+  "change_percent": 1.0,
+  "market_cap": null,
+  "pe_ratio": null,
+  "dividend_yield": null,
+  "_source": "Auto-generated template",
+  "_captured_at": "2025-11-03T15:03:33.608825Z",
+  "_notes": "Auto-generated mock data for COIN. Replace with real values if needed."
+}

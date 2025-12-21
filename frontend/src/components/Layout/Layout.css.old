@@ -1,0 +1,23 @@
+.layout {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+}
+
+.main-content {
+  flex: 1;
+  padding: 2rem 0;
+}
+
+.footer {
+  padding: 2rem 0;
+  border-top: 1px solid var(--border);
+  margin-top: auto;
+}
+
+.footer p {
+  color: var(--text-muted);
+  font-weight: 300;
+  font-size: 0.875rem;
+}

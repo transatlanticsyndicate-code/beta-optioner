@@ -1,0 +1,35 @@
+{
+  "ticker": "COIN",
+  "step1_stock_price": {
+    "ticker": "COIN",
+    "price": 100.0,
+    "bid": 99.95,
+    "ask": 100.05,
+    "high": 102.0,
+    "low": 98.0,
+    "volume": 1000000,
+    "previous_close": 99.0,
+    "open": 99.5,
+    "change": 1.0,
+    "change_percent": 1.0,
+    "market_cap": null,
+    "pe_ratio": null,
+    "dividend_yield": null,
+    "_source": "Auto-generated template",
+    "_captured_at": "2025-11-03T15:03:33.608825Z",
+    "_notes": "Auto-generated mock data for COIN. Replace with real values if needed."
+  },
+  "step2_metrics": {
+    "iv_rank": 50,
+    "iv_percentile": 55,
+    "put_call_ratio": 0.95,
+    "skew": -0.1,
+    "atm_iv": 0.25,
+    "implied_move": 5.0,
+    "vix_level": 18.0
+  },
+  "step3_recommendation": "NEUTRAL",
+  "step4_ai_analysis": "Auto-generated analysis for COIN. Replace with real analysis.",
+  "_source": "Auto-generated template",
+  "_captured_at": "2025-11-03T15:03:33.609172Z"
+}

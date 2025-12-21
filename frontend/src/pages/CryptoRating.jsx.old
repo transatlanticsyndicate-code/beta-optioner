@@ -1,0 +1,401 @@
+/**
+ * Страница "Рейтинг криптовалют"
+ * ЗАЧЕМ: Предоставляет пользователям аналитику и рейтинг криптовалют
+ * Затрагивает: раздел Аналитика, навигация приложения
+ */
+
+import React, { useState, useEffect } from 'react';
+import { Play, ChevronDown, ChevronUp, Calendar, Clock, TrendingDown, TrendingUp } from 'lucide-react';
+
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
+function CryptoRating() {
+  // Состояния для данных
+  const [snapshots, setSnapshots] = useState([]);
+  const [analyses, setAnalyses] = useState([]);
+  const [selectedAnalysis, setSelectedAnalysis] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
+  
+  // Загрузка данных при монтировании компонента
+  useEffect(() => {
+    fetchData();
+  }, []);
+  
+  // Функция загрузки всех данных
+  const fetchData = async () => {
+    try {
+      // Загружаем снимки
+      const snapshotsRes = await fetch(`${API_BASE_URL}/api/crypto-rating/snapshots`);
+      if (snapshotsRes.ok) {
+        const snapshotsData = await snapshotsRes.json();
+        setSnapshots(snapshotsData);
+      }
+      
+      // Загружаем анализы
+      const analysesRes = await fetch(`${API_BASE_URL}/api/crypto-rating/analyses`);
+      if (analysesRes.ok) {
+        const analysesData = await analysesRes.json();
+        setAnalyses(analysesData);
+      }
+    } catch (err) {
+      console.error('Error fetching data:', err);
+    }
+  };
+  
+  // Функция создания снимка
+  const handleCreateSnapshot = async () => {
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/crypto-rating/create-snapshot`, {
+        method: 'POST'
+      });
+      
+      if (!response.ok) throw new Error('Failed to create snapshot');
+      
+      const data = await response.json();
+      
+      if (data.analysis_created) {
+        setSuccess(`Снимок создан! Анализ выполнен: ${data.crypto_count} криптовалют проверено.`);
+      } else {
+        setSuccess(`Первый снимок создан! ${data.crypto_count} криптовалют сохранено. Создайте еще один снимок для анализа.`);
+      }
+      
+      // Обновляем данные
+      await fetchData();
+      
+    } catch (err) {
+      setError('Ошибка при создании снимка: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Функция загрузки деталей анализа
+  const handleAnalysisClick = async (analysisId) => {
+    if (selectedAnalysis?.id === analysisId) {
+      setSelectedAnalysis(null);
+      return;
+    }
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/crypto-rating/analyses/${analysisId}`);
+      if (!response.ok) throw new Error('Failed to fetch analysis details');
+      const data = await response.json();
+      setSelectedAnalysis(data);
+    } catch (err) {
+      console.error('Error fetching analysis details:', err);
+      setError('Ошибка при загрузке деталей анализа');
+    }
+  };
+  
+  // Форматирование даты
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleString('ru-RU', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+  
+  // Форматирование дня недели
+  const formatDayOfWeek = (day) => {
+    const days = {
+      'monday': 'Понедельник',
+      'tuesday': 'Вторник',
+      'wednesday': 'Среда',
+      'thursday': 'Четверг',
+      'friday': 'Пятница',
+      'saturday': 'Суббота',
+      'sunday': 'Воскресенье'
+    };
+    return days[day] || day;
+  };
+  
+  // Форматирование интервала
+  const formatInterval = (value, unit) => {
+    const units = {
+      'hours': value === 1 ? 'час' : value < 5 ? 'часа' : 'часов',
+      'days': value === 1 ? 'день' : value < 5 ? 'дня' : 'дней'
+    };
+    return `${value} ${units[unit]}`;
+  };
+
+  return (
+    <div className="w-full">
+      {/* Заголовок страницы */}
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-foreground mb-2">
+          Рейтинг криптовалют
+        </h1>
+        <p className="text-muted-foreground">
+          Еженедельный анализ Топ 400 криптовалют - выбывшие/новые
+        </p>
+      </div>
+
+      {/* Уведомления */}
+      {error && (
+        <div className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-500">
+          {error}
+        </div>
+      )}
+      
+      {success && (
+        <div className="mb-4 p-4 bg-green-500/10 border border-green-500/20 rounded-lg text-green-500">
+          {success}
+        </div>
+      )}
+
+      {/* Панель параметров */}
+      <div className="bg-card rounded-lg border border-border p-6 mb-6">
+        <h2 className="text-lg font-semibold text-foreground mb-4">Настройка мониторинга</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          Задайте расписание для автоматического мониторинга топ-400 криптовалют
+        </p>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          {/* День недели */}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">
+              День недели
+            </label>
+            <select
+              value={dayOfWeek}
+              onChange={(e) => setDayOfWeek(e.target.value)}
+              className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              <option value="">Выберите день</option>
+              <option value="monday">Понедельник</option>
+              <option value="tuesday">Вторник</option>
+              <option value="wednesday">Среда</option>
+              <option value="thursday">Четверг</option>
+              <option value="friday">Пятница</option>
+              <option value="saturday">Суббота</option>
+              <option value="sunday">Воскресенье</option>
+            </select>
+          </div>
+
+          {/* Время */}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">
+              Время (New York)
+            </label>
+            <input
+              type="time"
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+              className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+
+          {/* Интервал */}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">
+              Интервал между снимками
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                value={intervalValue}
+                onChange={(e) => setIntervalValue(e.target.value)}
+                placeholder="Значение"
+                min="1"
+                className="flex-1 px-3 py-2 bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              <select
+                value={intervalUnit}
+                onChange={(e) => setIntervalUnit(e.target.value)}
+                className="w-28 px-3 py-2 bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="hours">Часов</option>
+                <option value="days">Дней</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        
+        <div className="flex items-start gap-4">
+          <button
+            onClick={() => {
+              console.log('🔘 Кнопка нажата!');
+              handleStartMonitoring();
+            }}
+            disabled={loading}
+            className="flex items-center gap-2 px-6 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Play className="h-4 w-4" />
+            {loading ? 'Запуск...' : 'Запустить мониторинг'}
+          </button>
+          
+          {/* Информация об активной задаче */}
+          {activeTask && (
+            <div className="flex-1 p-3 bg-blue-500/10 border border-blue-500/20 rounded-md">
+              <div className="flex items-start gap-2">
+                <Clock className="h-5 w-5 text-blue-500 mt-0.5 flex-shrink-0" />
+                <div className="text-sm flex-1">
+                  <p className="text-foreground font-medium mb-1">
+                    Активный мониторинг
+                  </p>
+                  <p className="text-muted-foreground">
+                    <span className="font-semibold">{formatDayOfWeek(activeTask.day_of_week)}</span> в <span className="font-semibold">{activeTask.time}</span> (New York), 
+                    интервал: <span className="font-semibold">{formatInterval(activeTask.interval_value, activeTask.interval_unit)}</span>
+                  </p>
+                  {activeTask.next_run_at && (
+                    <p className="text-muted-foreground text-xs mt-1">
+                      Следующий снимок: {formatDate(activeTask.next_run_at)}
+                    </p>
+                  )}
+                  
+                  {/* Статус выполнения */}
+                  <div className="mt-3 pt-3 border-t border-blue-500/20">
+                    <p className="text-xs font-medium text-foreground mb-2">Статус операций:</p>
+                    <div className="space-y-1.5">
+                      {activeTask.last_run_at ? (
+                        <>
+                          <div className="flex items-center gap-2 text-xs">
+                            <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                            <span className="text-muted-foreground">
+                              Первый снимок создан: {formatDate(activeTask.last_run_at)}
+                            </span>
+                          </div>
+                          {activeTask.next_run_at && (
+                            <div className="flex items-center gap-2 text-xs">
+                              <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></div>
+                              <span className="text-muted-foreground">
+                                Ожидается второй снимок: {formatDate(activeTask.next_run_at)}
+                              </span>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="flex items-center gap-2 text-xs">
+                          <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></div>
+                          <span className="text-muted-foreground">
+                            Ожидается первый снимок: {activeTask.next_run_at ? formatDate(activeTask.next_run_at) : 'по расписанию'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Список анализов */}
+      <div className="bg-card rounded-lg border border-border p-6">
+        <h2 className="text-lg font-semibold text-foreground mb-4">История анализов</h2>
+        
+        {analyses.length === 0 ? (
+          <div className="text-center text-muted-foreground py-8">
+            <p>Пока нет завершенных анализов</p>
+            <p className="text-sm mt-2">Запустите мониторинг, чтобы увидеть результаты</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {analyses.map((analysis) => (
+              <div key={analysis.id} className="border border-border rounded-lg overflow-hidden">
+                {/* Заголовок анализа */}
+                <button
+                  onClick={() => handleAnalysisClick(analysis.id)}
+                  className="w-full p-4 flex items-center justify-between hover:bg-accent transition-colors text-left"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Calendar className="h-4 w-4" />
+                      {formatDate(analysis.created_at)}
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-1 text-red-500">
+                        <TrendingDown className="h-4 w-4" />
+                        <span className="font-semibold">{analysis.dropped_count}</span>
+                        <span className="text-xs">выпали</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-green-500">
+                        <TrendingUp className="h-4 w-4" />
+                        <span className="font-semibold">{analysis.added_count}</span>
+                        <span className="text-xs">вошли</span>
+                      </div>
+                    </div>
+                  </div>
+                  {selectedAnalysis?.id === analysis.id ? (
+                    <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                  )}
+                </button>
+                
+                {/* Детали анализа */}
+                {selectedAnalysis?.id === analysis.id && (
+                  <div className="p-4 bg-muted/30 border-t border-border">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Выпавшие из топа */}
+                      <div>
+                        <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                          <TrendingDown className="h-5 w-5 text-red-500" />
+                          Выпали из топ-400 ({selectedAnalysis.dropped_cryptos.length})
+                        </h3>
+                        <div className="space-y-2 max-h-96 overflow-y-auto">
+                          {selectedAnalysis.dropped_cryptos.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">Нет изменений</p>
+                          ) : (
+                            selectedAnalysis.dropped_cryptos.map((crypto, index) => (
+                              <div key={index} className="flex items-center gap-2 p-2 bg-background rounded text-sm">
+                                <span className="font-mono font-semibold text-foreground">{crypto.symbol}</span>
+                                <span className="text-muted-foreground">{crypto.name}</span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Вошли в топ */}
+                      <div>
+                        <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                          <TrendingUp className="h-5 w-5 text-green-500" />
+                          Вошли в топ-400 ({selectedAnalysis.added_cryptos.length})
+                        </h3>
+                        <div className="space-y-2 max-h-96 overflow-y-auto">
+                          {selectedAnalysis.added_cryptos.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">Нет изменений</p>
+                          ) : (
+                            selectedAnalysis.added_cryptos.map((crypto, index) => (
+                              <div key={index} className="flex items-center gap-2 p-2 bg-background rounded text-sm">
+                                <span className="font-mono font-semibold text-foreground">{crypto.symbol}</span>
+                                <span className="text-muted-foreground">{crypto.name}</span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Информация о снимках */}
+                    <div className="mt-4 pt-4 border-t border-border text-xs text-muted-foreground">
+                      <div className="flex items-center gap-4">
+                        <span>Первый снимок: {formatDate(selectedAnalysis.first_snapshot_date)}</span>
+                        <span>•</span>
+                        <span>Второй снимок: {formatDate(selectedAnalysis.second_snapshot_date)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default CryptoRating;

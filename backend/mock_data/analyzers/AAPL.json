@@ -1,0 +1,30 @@
+{
+  "ticker": "AAPL",
+  "step1_stock_price": {
+    "ticker": "AAPL",
+    "price": 270.87,
+    "bid": 270.85,
+    "ask": 271.10,
+    "high": 271.10,
+    "low": 82.80,
+    "volume": 900,
+    "previous_close": 270.37,
+    "open": 270.37,
+    "change": 0.50,
+    "change_percent": 0.18
+  },
+  "step2_metrics": {
+    "iv_rank": 62,
+    "iv_percentile": 68,
+    "put_call_ratio": 0.78,
+    "skew": -0.12,
+    "atm_iv": 0.215,
+    "implied_move": 8.50,
+    "vix_level": 18.5
+  },
+  "step3_recommendation": "SHORT_PREMIUM",
+  "step4_ai_analysis": "Повышенный уровень волатильности (IV Rank 62) создает благоприятные условия для продажи опционов. Низкий Put/Call Ratio 0.78 указывает на преобладание колов, что может быть признаком перекупленности. Отрицательный skew -0.12 является нормальным. Рекомендуется стратегии продажи премии: Credit Spread или Iron Condor с широкими крыльями.",
+  "_source": "Mock data for demo",
+  "_captured_at": "2025-11-03T14:25:00Z",
+  "_notes": "Metrics are estimated for demo purposes. Real metrics require historical data and IV calculations."
+}

@@ -1,0 +1,108 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+
+# Environment variables (ВАЖНО! API ключи)
+.env
+#.env.local
+.env.production
+#.env.*.local
+
+# API Keys (дополнительная защита)
+*_api_key.txt
+secrets/
+*.key
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Database
+*.db
+*.sqlite3
+db.sqlite3
+
+# Logs
+*.log
+logs/
+
+# Cache
+.pytest_cache/
+.cache/
+*.pyc
+
+# Node.js (для frontend)
+node_modules/
+npm-debug.log
+yarn-error.log
+.next/
+out/
+build/
+dist/
+
+# React
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Deployment
+.vercel
+.netlify
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+
+# Cache files
+__pycache__/
+.mypy_cache/
+
+# Personal notes and tasks (НЕ коммитить!)
+__Levon_tasks/
+*_NOTES_*.md
+key_*
+key_
+*.pem
+*.key

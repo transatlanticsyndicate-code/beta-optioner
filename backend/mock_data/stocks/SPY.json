@@ -1,0 +1,19 @@
+{
+  "ticker": "SPY",
+  "price": 684.64,
+  "bid": 684.63,
+  "ask": 684.67,
+  "high": 684.67,
+  "low": 177.0,
+  "volume": 800,
+  "previous_close": 682.06,
+  "open": 682.06,
+  "change": 2.58,
+  "change_percent": 0.38,
+  "market_cap": null,
+  "pe_ratio": null,
+  "dividend_yield": null,
+  "_source": "IB Client Portal Gateway",
+  "_captured_at": "2025-11-03T14:30:00Z",
+  "_notes": "Real data from IB Gateway testing. Low value may be anomaly from field 87_raw."
+}

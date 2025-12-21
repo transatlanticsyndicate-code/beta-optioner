@@ -1,0 +1,77 @@
+{
+  "version": "1.0",
+  "description": "Windsurf configuration for AI-Driven Development",
+  "workspaceContextMapping": {
+    "teamlead": {
+      "name": "ИИ-Тимлид",
+      "description": "Планирование, координация, управление фичами",
+      "workspaceFile": "teamlead.code-workspace",
+      "contextFiles": [
+        ".windsurf/rules/project_rules.md",
+        ".windsurf/rules/teamlead-init.md",
+        ".windsurf/rules/roles/teamlead.md",
+        ".windsurf/workflows/teamleadplanfeature.md"
+      ],
+      "autoLoad": true
+    },
+    "backend": {
+      "name": "ИИ-Бэкендер",
+      "description": "API, база данных, серверная логика",
+      "workspaceFile": "backend.code-workspace",
+      "contextFiles": [
+        ".windsurf/rules/project_rules.md",
+        ".windsurf/rules/backend-init.md",
+        ".windsurf/rules/roles/backend.md",
+        ".windsurf/workflows/backendimplement.md",
+        "docs/architecture/api_contracts.md"
+      ],
+      "autoLoad": true
+    },
+    "frontend": {
+      "name": "ИИ-Фронтендер",
+      "description": "UI-компоненты, стили, интерфейс",
+      "workspaceFile": "frontend.code-workspace",
+      "contextFiles": [
+        ".windsurf/rules/project_rules.md",
+        ".windsurf/rules/frontend-init.md",
+        ".windsurf/rules/roles/frontend.md",
+        ".windsurf/workflows/frontendimplement.md",
+        "docs/architecture/api_contracts.md"
+      ],
+      "autoLoad": true
+    },
+    "logic": {
+      "name": "ИИ-Логик",
+      "description": "Чистая бизнес-логика, валидация, преобразования",
+      "workspaceFile": "logic.code-workspace",
+      "contextFiles": [
+        ".windsurf/rules/project_rules.md",
+        ".windsurf/rules/logic-init.md",
+        ".windsurf/rules/roles/logic.md",
+        ".windsurf/workflows/logicimplement.md"
+      ],
+      "autoLoad": true
+    },
+    "tester": {
+      "name": "ИИ-Тестировщик",
+      "description": "Автоматизированный контроль качества",
+      "workspaceFile": "tester.code-workspace",
+      "contextFiles": [
+        ".windsurf/rules/project_rules.md",
+        ".windsurf/rules/tester-init.md",
+        ".windsurf/rules/roles/tester.md",
+        ".windsurf/workflows/testercheck.md"
+      ],
+      "autoLoad": true
+    }
+  },
+  "globalRules": {
+    "source": ".windsurf/rules/project_rules.md",
+    "alwaysLoad": true
+  },
+  "documentation": {
+    "manifest": "docs/MANIFEST.md",
+    "readme": "README.md",
+    "vision": "docs/vision.md"
+  }
+}
