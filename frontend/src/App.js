@@ -9,7 +9,7 @@ import OptionsCalculatorBasic from './pages/OptionsCalculatorBasic';
 import OptionsCalculatorML from './pages/OptionsCalculatorML';
 import SavedConfigurations from './pages/SavedConfigurations';
 import ComponentsShowcase from './pages/ComponentsShowcase';
-import FloatingAIChat from './components/FloatingAIChat/FloatingAIChat';
+import FloatingAIChat from './components/FloatingAIChat';
 import GradualStrategyCalculator from './components/GradualStrategyCalculator/GradualStrategyCalculator';
 import Settings from './pages/Settings/Settings';
 import TestChart from './pages/TestChart';
