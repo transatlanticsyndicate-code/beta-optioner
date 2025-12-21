@@ -117,32 +117,26 @@ export function ExitCalculator({
                   {/* Предупреждение о низкой ликвидности */}
                   <LiquidityWarning warnings={liquidityWarnings} />
 
-                  {/* Сценарий 1: Исполнение опционов */}
-                  <ScenarioCard
-                    title="1. Исполнить опционы"
-                    pl={plExercise}
-                    details={details.exercise}
-                    headerBgColor="#06b6d4"
-                    tooltip="Исполнение всех ITM опционов и закрытие позиций базового актива по целевой цене"
-                  />
+                  {/* Два сценария рядом */}
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Сценарий 1: Исполнение опционов */}
+                    <ScenarioCard
+                      title="Исполнить опционы в дату экспирации"
+                      pl={plExercise}
+                      details={details.exercise}
+                      headerBgColor="#06b6d4"
+                      tooltip="Исполнение всех ITM опционов и закрытие позиций базового актива по целевой цене"
+                    />
 
-                  {/* Сценарий 2: Закрытие опционов */}
-                  <ScenarioCard
-                    title="2. Закрыть опционы"
-                    pl={plCloseOptions}
-                    details={details.closeOptions}
-                    headerBgColor="#8b5cf6"
-                    tooltip="Закрытие всех опционов по рыночной цене (Black-Scholes) и сохранение позиций базового актива"
-                  />
-
-                  {/* Сценарий 3: Закрытие всего */}
-                  <ScenarioCard
-                    title="3. Закрыть всё"
-                    pl={plCloseAll}
-                    details={details.closeAll}
-                    headerBgColor="#10b981"
-                    tooltip="Закрытие всех опционов по рыночной цене и всех позиций базового актива по целевой цене"
-                  />
+                    {/* Сценарий 2: Закрытие всего */}
+                    <ScenarioCard
+                      title="Закрыть всё в выбранную дату"
+                      pl={plCloseAll}
+                      details={details.closeAll}
+                      headerBgColor="#10b981"
+                      tooltip="Закрытие всех опционов по рыночной цене и всех позиций базового актива по целевой цене"
+                    />
+                  </div>
                 </div>
               </div>
 
