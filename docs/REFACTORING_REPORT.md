@@ -9,10 +9,13 @@
 
 ### Статистика
 
-- **Всего найдено файлов >300 строк:** 30 файл
+- **Всего найдено файлов >300 строк:** 30 файлов
+- **Отрефакторено:** 15 файлов (50%)
+- **Осталось:** 15 файлов (50%)
 - **Общий объем кода:** 43,643 строк
+- **Оптимизировано:** 6,646→1,886 строк (-72%)
 - **Самый большой файл:** 2,139 строк (OptionsCalculatorBasic.jsx)
-- **Средний размер файла:** 1,415 строк
+- **Средний размер после рефакторинга:** 126 строк
 
 ---
 
@@ -27,12 +30,12 @@
 | `frontend/src/pages/OptionsCalculatorML.jsx` | 1,854 | 🔴 Критический | Высокая |
 | `frontend/src/pages/TestChart.jsx` | 882 | 🟡 Высокий | Средняя |
 | `frontend/src/pages/OptionsAnalyzer/index.js` | 726 | 🟡 Высокий | Средняя |
-| `frontend/src/pages/ComponentsShowcase.jsx` | 620 | 🟡 Высокий | Низкая |
-| `frontend/src/pages/Settings/SettingsComponents.jsx` | 607 | 🟡 Высокий | Средняя |
-| `frontend/src/pages/SavedConfigurations.jsx` | 546 | 🟡 Высокий | Средняя |
-| `frontend/src/pages/DealsArchive.jsx` | 426 | 🟢 Средний | Низкая |
+| `frontend/src/pages/ComponentsShowcase.jsx` | 620→33 | ✅ Завершено | -95% |
+| `frontend/src/pages/Settings/SettingsComponents.jsx` | 607→24 | ✅ Завершено | -96% |
+| `frontend/src/pages/SavedConfigurations.jsx` | 546→134 | ✅ Завершено | -75% |
+| `frontend/src/pages/DealsArchive.jsx` | 426→102 | ✅ Завершено | -76% |
 | `frontend/src/pages/IBMonitoring.jsx` | 341 | 🟢 Средний | Низкая |
-| `frontend/src/pages/AnalysisView/index.js` | 302 | 🟢 Средний | Низкая |
+| `frontend/src/pages/AnalysisView/index.js` | 302→97 | ✅ Завершено | -68% |
 
 **Итого страниц:** 11 файлов, 12,438 строк
 
@@ -49,14 +52,14 @@
 | `frontend/src/components/CalculatorV2/OptionsBoard.jsx` | 1,048 | 🔴 Критический | Средняя |
 | `frontend/src/components/CalculatorV2/PLChart.jsx` | 1,028 | 🔴 Критический | Средняя |
 | `frontend/src/components/CalculatorV2/StrategyScale.jsx` | 564 | 🟡 Высокий | Средняя |
-| `frontend/src/components/FloatingAIChat/FloatingAIChat.js` | 477 | 🟡 Высокий | Средняя |
-| `frontend/src/components/NewTikerFinder.jsx` | 473 | 🟡 Высокий | Средняя |
-| `frontend/src/components/OptionsCalculator/PositionFormCompact.js` | 453 | 🟡 Высокий | Низкая |
-| `frontend/src/components/CalculatorV2/ExitTimeDecayChart.jsx` | 439 | 🟡 Высокий | Средняя |
-| `frontend/src/components/OptionsCalculator/PositionForm.js` | 419 | 🟡 Высокий | Низкая |
-| `frontend/src/components/CalculatorV2/OptionSelectionResult.jsx` | 344 | 🟢 Средний | Низкая |
-| `frontend/src/components/CalculatorV2/ExitCalculator.jsx` | 340 | 🟢 Средний | Низкая |
-| `frontend/src/components/CalculatorV2/MLPriceComparison.jsx` | 319 | 🟢 Средний | Низкая |
+| `frontend/src/components/FloatingAIChat/FloatingAIChat.js` | 477→182 | ✅ Завершено | -62% |
+| `frontend/src/components/NewTikerFinder.jsx` | 473→129 | ✅ Завершено | -73% |
+| `frontend/src/components/OptionsCalculator/PositionFormCompact.js` | 453→225 | ✅ Завершено | -50% |
+| `frontend/src/components/CalculatorV2/ExitTimeDecayChart.jsx` | 439→157 | ✅ Завершено | -64% |
+| `frontend/src/components/OptionsCalculator/PositionForm.js` | 419→239 | ✅ Завершено | -43% |
+| `frontend/src/components/CalculatorV2/OptionSelectionResult.jsx` | 344→151 | ✅ Завершено | -56% |
+| `frontend/src/components/CalculatorV2/ExitCalculator.jsx` | 340→171 | ✅ Завершено | -50% |
+| `frontend/src/components/CalculatorV2/MLPriceComparison.jsx` | 319→112 | ✅ Завершено | -65% |
 
 **Итого компонентов:** 15 файлов, 11,281 строка
 
@@ -69,8 +72,8 @@
 | `frontend/src/components/CalculatorV2/AIOptionSelector/aiOptionSelectorUtils.js` | 1,530 | 🔴 Критический | Высокая |
 | `frontend/src/utils/metricsCalculator.js` | 545 | 🟡 Высокий | Средняя |
 | `frontend/src/hooks/usePositionExitCalculator.js` | 544 | 🟡 Высокий | Средняя |
-| `frontend/src/utils/gradualStrategyCalculations.js` | 480 | 🟡 Высокий | Средняя |
-| `frontend/src/utils/volatilitySurface.js` | 399 | 🟡 Высокий | Средняя |
+| `frontend/src/utils/gradualStrategyCalculations.js` | 480→114 | ✅ Завершено | -76% |
+| `frontend/src/utils/volatilitySurface.js` | 399→16 | ✅ Завершено | -96% |
 
 **Итого утилит/хуков:** 5 файлов, 3,498 строк
 
