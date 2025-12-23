@@ -75,7 +75,7 @@ function AIOptionSelectorDialog({
   const [targetDownPercent, setTargetDownPercent] = useState(5); // Цель вниз, %
   const [targetDownPrice, setTargetDownPrice] = useState(0); // Цель вниз, цена
   const [daysAfterEntry, setDaysAfterEntry] = useState(5); // Дней после входа (общий для обоих табов)
-  const [findBestDay, setFindBestDay] = useState(true); // Подобрать лучший день для BuyPUT (по умолчанию включен)
+  const [findBestDay, setFindBestDay] = useState(false); // Подобрать лучший день для BuyPUT (по умолчанию выключен)
   const [filterByLiquidity, setFilterByLiquidity] = useState(true); // Учитывать ликвидность (OI)
   const [minOpenInterest, setMinOpenInterest] = useState(100); // Минимальный OI
   const [showTotalPL, setShowTotalPL] = useState(false); // Показывать Общий P&L
@@ -89,7 +89,7 @@ function AIOptionSelectorDialog({
   const [callTargetDownPrice, setCallTargetDownPrice] = useState(0); // Цель вниз, цена
   const [callBreakevenAtDown, setCallBreakevenAtDown] = useState(false); // Безубыток опциона по низу
   const [callDaysAfterEntry, setCallDaysAfterEntry] = useState(5); // Дней после входа для BuyCALL
-  const [callFindBestDay, setCallFindBestDay] = useState(true); // Подобрать лучший день для BuyCALL (по умолчанию включен)
+  const [callFindBestDay, setCallFindBestDay] = useState(false); // Подобрать лучший день для BuyCALL (по умолчанию выключен)
   const [callFilterByLiquidity, setCallFilterByLiquidity] = useState(true); // Ликвидность для BuyCALL
   const [callMinOpenInterest, setCallMinOpenInterest] = useState(100); // Минимальный OI для BuyCALL
   
@@ -100,7 +100,7 @@ function AIOptionSelectorDialog({
   const [sellPutTargetDownPrice, setSellPutTargetDownPrice] = useState(0); // Цель вниз, цена
   const [sellPutBreakevenAtDown, setSellPutBreakevenAtDown] = useState(false); // Безубыток опциона по низу
   const [sellPutDaysAfterEntry, setSellPutDaysAfterEntry] = useState(5); // Дней после входа для SellPUT
-  const [sellPutFindBestDay, setSellPutFindBestDay] = useState(true); // Подобрать лучший день для SellPUT (по умолчанию включен)
+  const [sellPutFindBestDay, setSellPutFindBestDay] = useState(false); // Подобрать лучший день для SellPUT (по умолчанию выключен)
   const [sellPutFilterByLiquidity, setSellPutFilterByLiquidity] = useState(true); // Ликвидность для SellPUT
   const [sellPutMinOpenInterest, setSellPutMinOpenInterest] = useState(100); // Минимальный OI для SellPUT
   
