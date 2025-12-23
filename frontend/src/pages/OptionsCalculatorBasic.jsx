@@ -2039,6 +2039,8 @@ function OptionsCalculatorV3() {
                 options={displayOptions}
                 positions={positions}
                 currentPrice={currentPrice}
+                ivSurface={ivSurface}
+                dividendYield={useDividends ? dividendYield : 0}
               />
 
               {/* Калькулятор выхода из позиции */}

@@ -15,7 +15,9 @@ export function OptionSelectionResult({
   selectionParams = null,
   options = [],
   positions = [],
-  currentPrice = 0
+  currentPrice = 0,
+  ivSurface = null,
+  dividendYield = 0
 }) {
   // State для сворачивания блока
   // ЗАЧЕМ: Сохранение состояния сворачивания в localStorage
@@ -58,7 +60,9 @@ export function OptionSelectionResult({
     daysPassed: daysAfterEntry,
     options,
     positions,
-    currentPrice
+    currentPrice,
+    ivSurface,
+    dividendYield
   });
 
   // Расчёт P&L для сценария ВВЕРХ (targetUpPrice)
@@ -67,7 +71,9 @@ export function OptionSelectionResult({
     daysPassed: daysAfterEntry,
     options,
     positions,
-    currentPrice
+    currentPrice,
+    ivSurface,
+    dividendYield
   });
 
   // Если нет параметров подбора — не отображаем компонент

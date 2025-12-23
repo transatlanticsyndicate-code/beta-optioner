@@ -236,6 +236,11 @@ export const calculateOptionPLValue = (
     overrideVolatility,
     dividendYield
   );
+  
+  // ЛОГИРОВАНИЕ: Диагностика расхождения цены
+  if (overrideVolatility !== null) {
+    console.log(`[optionPricing] 💰 ${option.action} ${option.type} Strike $${option.strike}: targetPrice=$${targetPrice}, daysRemaining=${daysRemaining}, IV=${overrideVolatility.toFixed(1)}%, theoreticalPrice=$${theoreticalPrice.toFixed(2)}, dividendYield=${dividendYield}`);
+  }
 
   // P&L зависит от направления сделки
   if (isBuyAction(option)) {

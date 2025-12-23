@@ -299,6 +299,7 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
 
   // P&L от закрытия опционов (Сценарий 2: Закрыть опционы)
   // ВАЖНО: Каждый опцион имеет свою дату экспирации и IV из API
+  console.log(`[Расчёт выхода] 🔍 Сценарий 2: underlyingPrice=$${underlyingPrice}, daysPassed=${daysPassed}, currentPrice=$${currentPrice}`);
   options.forEach(option => {
     // ВАЖНО: При ручной премии обнуляем ask/bid, чтобы getEntryPrice() использовал premium
     const tempOption = { 

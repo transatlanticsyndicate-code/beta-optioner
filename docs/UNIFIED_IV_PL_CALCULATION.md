@@ -214,6 +214,82 @@ results.push({
 
 ---
 
+## Использование цен BID и ASK для расчёта P/L
+
+### Критически важно!
+
+Для корректного расчёта P/L **обязательно** должны быть доступны цены BID и ASK в подборе опционов.
+
+### Правило использования цен:
+
+| Действие | Цена входа | Обоснование |
+|----------|------------|-------------|
+| **Buy** (покупка) | **ASK** | Покупаем по цене продавца (ask) |
+| **Sell** (продажа) | **BID** | Продаём по цене покупателя (bid) |
+
+### Реализация в коде:
+
+**Файл:** `utils/optionPricing.js`
+
+```javascript
+const getEntryPrice = (option = {}) => {
+  const isBuy = isBuyAction(option);
+  
+  if (isBuy) {
+    // Покупка: входим по ASK (цена продавца)
+    const ask = toNumber(option.ask);
+    if (ask > 0) return ask;
+  } else {
+    // Продажа: входим по BID (цена покупателя)
+    const bid = toNumber(option.bid);
+    if (bid > 0) return bid;
+  }
+  
+  // Fallback на premium если bid/ask недоступны
+  return Math.max(0, toNumber(option.premium));
+};
+```
+
+### Проверка наличия BID/ASK в подборе:
+
+**Файл:** `components/CalculatorV2/AIOptionSelector/aiOptionSelectorUtils.js`
+
+```javascript
+// При нормализации данных из API
+const normalizedPuts = filteredPuts.map(opt => {
+  const bid = opt.bid || 0;
+  const ask = opt.ask || 0;
+  // ...
+  return {
+    strike,
+    premium,
+    bid,  // ✅ ОБЯЗАТЕЛЬНО передаём BID
+    ask,  // ✅ ОБЯЗАТЕЛЬНО передаём ASK
+    // ...
+  };
+});
+
+// Логирование для проверки
+const withBidAsk = normalizedPuts.filter(p => p.bid > 0 && p.ask > 0).length;
+if (withBidAsk < normalizedPuts.length) {
+  console.warn(`⚠️ Некоторые опционы БЕЗ bid/ask данных!`);
+}
+```
+
+### Передача BID/ASK при добавлении опциона:
+
+```javascript
+const newOption = {
+  // ...
+  bid: option.bid || 0,  // ✅ Передаём BID
+  ask: option.ask || 0,  // ✅ Передаём ASK
+  premium: option.premium || 0,  // Fallback
+  // ...
+};
+```
+
+---
+
 ## Формат данных IV
 
 ### API возвращает IV в десятичном формате:
@@ -254,12 +330,92 @@ console.log(`[Таблица] 📈 Strike $${option.strike}: rawIV=${rawIV}, IV=
 
 ## Чек-лист проверки
 
+- [ ] **BID и ASK** передаются из подбора в `newOption`
+- [ ] Функция `getEntryPrice` использует ASK для Buy и BID для Sell
 - [ ] IV передаётся из подбора в `newOption.impliedVolatility`
 - [ ] `loadOptionDetails` не перезаписывает существующую IV
 - [ ] Функции расчёта P/L используют `getOptionVolatility`
 - [ ] IV передаётся в результатах `filterAndRankPutOptions`
-- [ ] Логирование показывает одинаковые значения IV в подборе и таблице
+- [ ] **ivSurface** передаётся в `OptionSelectionResult` и далее в `usePositionExitCalculator`
+- [ ] **dividendYield** передаётся в `OptionSelectionResult` и далее в `usePositionExitCalculator`
+- [ ] Логирование показывает одинаковые значения BID/ASK/IV в подборе и таблице
+- [ ] Цены закрытия опциона совпадают в блоках "Результат подбора" и "Расчёт выхода"
 - [ ] P/L в подборе совпадает с P/L в таблице после добавления опциона
+
+---
+
+## 6. Передача ivSurface и dividendYield в компонент результатов подбора
+
+**Файл:** `components/CalculatorV2/OptionSelectionResult/index.jsx`
+
+**Проблема:** Компонент `OptionSelectionResult` не получал параметры `ivSurface` и `dividendYield`, что приводило к расхождению в расчёте теоретической цены опциона между блоком "Результат подбора" и блоком "Расчёт выхода".
+
+**Симптом:** Цена закрытия опциона в блоке "Результат подбора BuyPUT" отличается от цены в блоке "Расчёт выхода из позиции" при одинаковых условиях (IV, дни до экспирации, цена актива).
+
+**Было:**
+```javascript
+export function OptionSelectionResult({
+  selectionParams = null,
+  options = [],
+  positions = [],
+  currentPrice = 0
+}) {
+  // ...
+  const plDown = usePositionExitCalculator({
+    underlyingPrice: targetDownPrice,
+    daysPassed: daysAfterEntry,
+    options,
+    positions,
+    currentPrice
+    // ❌ ivSurface и dividendYield не передаются
+  });
+}
+```
+
+**Стало:**
+```javascript
+export function OptionSelectionResult({
+  selectionParams = null,
+  options = [],
+  positions = [],
+  currentPrice = 0,
+  ivSurface = null,        // ✅ Добавлен параметр
+  dividendYield = 0        // ✅ Добавлен параметр
+}) {
+  // ...
+  const plDown = usePositionExitCalculator({
+    underlyingPrice: targetDownPrice,
+    daysPassed: daysAfterEntry,
+    options,
+    positions,
+    currentPrice,
+    ivSurface,              // ✅ Передаём ivSurface
+    dividendYield           // ✅ Передаём dividendYield
+  });
+}
+```
+
+**Передача параметров из главного компонента:**
+
+**Файл:** `pages/OptionsCalculatorBasic.jsx`
+
+```javascript
+<OptionSelectionResult
+  selectionParams={optionSelectionParams}
+  options={displayOptions}
+  positions={positions}
+  currentPrice={currentPrice}
+  ivSurface={ivSurface}                              // ✅ Передаём IV Surface
+  dividendYield={useDividends ? dividendYield : 0}   // ✅ Передаём dividend yield
+/>
+```
+
+**Почему это критично:**
+
+1. **ivSurface** используется в `getOptionVolatility` для точной интерполяции волатильности между датами экспирации
+2. Без `ivSurface` используется упрощённая модель роста IV, которая даёт другой результат
+3. **dividendYield** влияет на расчёт теоретической цены опциона по модели Black-Scholes-Merton
+4. Разные значения этих параметров приводят к расхождению в теоретической цене опциона и P/L
 
 ---
 
@@ -271,8 +427,10 @@ console.log(`[Таблица] 📈 Strike $${option.strike}: rawIV=${rawIV}, IV=
 | `components/CalculatorV2/AIOptionSelector/aiOptionSelectorUtils.js` | Логика подбора опционов, расчёт P/L |
 | `components/CalculatorV2/AIOptionSelector/AIOptionSelectorDialog.jsx` | UI подбора, передача опциона в `onAddOption` |
 | `components/CalculatorV2/OptionsTable.jsx` | Таблица опционов, отображение P/L |
-| `utils/volatilitySurface/projection.js` | Функция `getOptionVolatility` |
-| `utils/optionPricing.js` | Функция `calculateOptionPLValue` |
+| `components/CalculatorV2/OptionSelectionResult/index.jsx` | Блок результатов подбора, использует `usePositionExitCalculator` |
+| `hooks/usePositionExitCalculator.js` | Хук расчёта P/L при выходе, использует `ivSurface` и `dividendYield` |
+| `utils/volatilitySurface/projection.js` | Функция `getOptionVolatility`, использует `ivSurface` для интерполяции |
+| `utils/optionPricing.js` | Функция `calculateOptionPLValue`, использует `dividendYield` |
 
 ---
 
