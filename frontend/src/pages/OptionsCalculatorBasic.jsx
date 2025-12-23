@@ -330,7 +330,9 @@ function OptionsCalculatorV3() {
                 gamma: details.gamma || 0,
                 theta: details.theta || 0,
                 vega: details.vega || 0,
-                impliedVolatility: details.implied_volatility || 0,
+                // ВАЖНО: Сохраняем IV из подбора если она уже есть
+                // ЗАЧЕМ: Согласованность P/L между подбором и таблицей
+                impliedVolatility: opt.impliedVolatility || details.implied_volatility || 0,
                 isLoadingDetails: false,
                 // ВАЖНО: Сохраняем bestExitDay при обновлении деталей
                 bestExitDay: opt.bestExitDay
@@ -1674,6 +1676,9 @@ function OptionsCalculatorV3() {
                             volume: option.volume || 0,
                             oi: option.openInterest || 0,
                             delta: option.delta || 0,
+                            // ВАЖНО: Передаём IV из подбора для согласованности P/L
+                            // ЗАЧЕМ: IV из подбора должна совпадать с IV в таблице
+                            impliedVolatility: option.iv || option.impliedVolatility || 0,
                             visible: true,
                             isLoadingDetails: true, // Показываем что загружаем детали
                             bestExitDay: bestExitDay, // Индивидуальный лучший день выхода для этого опциона

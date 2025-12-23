@@ -163,15 +163,17 @@ export async function getPutOptionsForExpiration(ticker, expirationDate, current
     console.log(`[AISelector] После фильтрации по диапазону: ${filteredPuts.length} PUT опционов`);
     
     // Нормализуем формат данных
-    return filteredPuts.map(opt => {
+    // ЛОГИРОВАНИЕ: Проверяем наличие bid/ask в данных API
+    const normalizedPuts = filteredPuts.map(opt => {
       // Премия: приоритет last > close > mid(bid,ask)
       const bid = opt.bid || 0;
       const ask = opt.ask || 0;
       const mid = (bid && ask) ? (bid + ask) / 2 : 0;
       const premium = opt.last || opt.lastPrice || opt.close || mid || 0;
+      const strike = opt.strike || opt.strikePrice;
       
       return {
-        strike: opt.strike || opt.strikePrice,
+        strike,
         premium,
         bid,
         ask,
@@ -184,6 +186,24 @@ export async function getPutOptionsForExpiration(ticker, expirationDate, current
         vega: opt.vega || 0
       };
     });
+    
+    // ЛОГИРОВАНИЕ: Выводим первые 3 опциона с bid/ask/iv для диагностики
+    const samplePuts = normalizedPuts.slice(0, 3);
+    console.log(`[AISelector] 📊 BID/ASK/IV данные для ${expirationDate} (первые ${samplePuts.length} PUT):`);
+    samplePuts.forEach(p => {
+      console.log(`  Strike $${p.strike}: BID=$${p.bid.toFixed(2)}, ASK=$${p.ask.toFixed(2)}, Premium=$${p.premium.toFixed(2)}, IV=${p.iv} (raw)`);
+    });
+    
+    // Проверяем сколько опционов имеют bid/ask
+    const withBidAsk = normalizedPuts.filter(p => p.bid > 0 && p.ask > 0).length;
+    const withoutBidAsk = normalizedPuts.length - withBidAsk;
+    if (withoutBidAsk > 0) {
+      console.warn(`[AISelector] ⚠️ ${withoutBidAsk} из ${normalizedPuts.length} PUT опционов БЕЗ bid/ask данных!`);
+    } else {
+      console.log(`[AISelector] ✅ Все ${normalizedPuts.length} PUT опционов имеют bid/ask данные`);
+    }
+    
+    return normalizedPuts;
     
   } catch (error) {
     console.error(`[AISelector] Ошибка получения опционов для ${expirationDate}:`, error);
@@ -258,15 +278,28 @@ export function calculatePositionPL(entryPrice, targetPrice, quantity) {
 /**
  * Рассчитывает P&L BuyPUT опциона используя Black-Scholes (как в калькуляторе)
  * ЗАЧЕМ: Согласованность расчётов между ИИ подбором и калькулятором
+ * ВАЖНО: Использует getOptionVolatility для единого источника волатильности с таблицей
  * 
  * @param {Object} putOption - Объект опциона в формате калькулятора
  * @param {number} targetPrice - Целевая цена базового актива
  * @param {number} daysRemaining - Дней до экспирации на момент выхода
+ * @param {number} currentDaysToExpiration - Текущее кол-во дней до экспирации (для расчёта IV)
  * @returns {number} P&L в долларах
  */
-export function calculatePutPLBlackScholes(putOption, targetPrice, daysRemaining) {
-  // Используем ту же функцию что и калькулятор
-  return calculateOptionPLValue(putOption, targetPrice, targetPrice, daysRemaining);
+export function calculatePutPLBlackScholes(putOption, targetPrice, daysRemaining, currentDaysToExpiration = null) {
+  // Используем getOptionVolatility как в таблице опционов
+  // ЗАЧЕМ: Единый источник волатильности для согласованности P/L
+  const currentDays = currentDaysToExpiration !== null ? currentDaysToExpiration : daysRemaining;
+  const optionVolatility = getOptionVolatility(putOption, currentDays, daysRemaining);
+  
+  // ЛОГИРОВАНИЕ: Выводим волатильность для диагностики
+  const rawIV = putOption.impliedVolatility || putOption.implied_volatility || putOption.iv;
+  console.log(`[AISelector] 📈 calculatePutPLBlackScholes: Strike $${putOption.strike}, rawIV=${rawIV}, IV=${optionVolatility.toFixed(1)}%, currentDays=${currentDays}, daysRemaining=${daysRemaining}, targetPrice=$${targetPrice}`);
+  
+  // Используем ту же функцию что и калькулятор, передавая волатильности явно
+  const pl = calculateOptionPLValue(putOption, targetPrice, targetPrice, daysRemaining, optionVolatility);
+  console.log(`[AISelector] 📈 calculatePutPLBlackScholes: P/L=$${pl.toFixed(2)}`);
+  return pl;
 }
 
 /**
@@ -280,13 +313,14 @@ export function calculateCombinedPL({
   targetPrice,
   positionQuantity,
   putOption,
-  daysRemaining = 0
+  daysRemaining = 0,
+  currentDaysToExpiration = null // Текущее кол-во дней до экспирации для расчёта IV
 }) {
   // P&L позиции базового актива
   const positionPL = calculatePositionPL(entryPrice, targetPrice, positionQuantity);
   
   // P&L опциона через Black-Scholes (как в калькуляторе)
-  const putPL = calculatePutPLBlackScholes(putOption, targetPrice, daysRemaining);
+  const putPL = calculatePutPLBlackScholes(putOption, targetPrice, daysRemaining, currentDaysToExpiration);
   
   return positionPL + putPL;
 }
@@ -321,6 +355,10 @@ export function checkRiskCriteria({
   const entryPriceOption = putData.ask > 0 ? putData.ask : putData.premium;
   const premiumCost = entryPriceOption * 100 * putContracts;
   
+  // ЛОГИРОВАНИЕ: Проверяем bid/ask при расчёте риска
+  // ЗАЧЕМ: Диагностика расхождений P/L между подбором и таблицей
+  console.log(`[AISelector] 💰 checkRiskCriteria Strike $${putData.strike}: BID=$${putData.bid?.toFixed(2) || 'N/A'}, ASK=$${putData.ask?.toFixed(2) || 'N/A'}, Premium=$${putData.premium?.toFixed(2) || 'N/A'}, EntryPrice=$${entryPriceOption.toFixed(2)}`);
+  
   // Общая стоимость (позиция + премия) — для расчёта общего риска по низу
   const totalValue = positionValue + premiumCost;
   
@@ -342,12 +380,14 @@ export function checkRiskCriteria({
   
   // P&L при цене "Цель вниз" на дату выхода (через Black-Scholes)
   // ЗАЧЕМ: Оценка защиты при падении цены — учитываем позицию + опцион
+  // ВАЖНО: Передаём daysUntilExpiration как currentDaysToExpiration для корректного расчёта IV
   const plAtTargetDown = calculateCombinedPL({
     entryPrice,
     targetPrice: targetDownPrice,
     positionQuantity,
     putOption,
-    daysRemaining
+    daysRemaining,
+    currentDaysToExpiration: daysUntilExpiration
   });
   
   // P&L при цене "Цель вверх" на дату выхода (через Black-Scholes)
@@ -357,13 +397,14 @@ export function checkRiskCriteria({
     targetPrice: targetUpPrice,
     positionQuantity,
     putOption,
-    daysRemaining
+    daysRemaining,
+    currentDaysToExpiration: daysUntilExpiration
   });
   
   // P&L только опциона (без позиции базового актива)
   // ЗАЧЕМ: Показать отдельно прибыль/убыток от опциона
-  const optionOnlyPLDown = calculatePutPLBlackScholes(putOption, targetDownPrice, daysRemaining);
-  const optionOnlyPLUp = calculatePutPLBlackScholes(putOption, targetUpPrice, daysRemaining);
+  const optionOnlyPLDown = calculatePutPLBlackScholes(putOption, targetDownPrice, daysRemaining, daysUntilExpiration);
+  const optionOnlyPLUp = calculatePutPLBlackScholes(putOption, targetUpPrice, daysRemaining, daysUntilExpiration);
   
   // === КРИТЕРИЙ 1: Общий риск по низу ===
   // Максимально допустимый убыток от общей стоимости (позиция + премия)
@@ -546,14 +587,16 @@ export async function getCallOptionsForExpiration(ticker, expirationDate, curren
     });
     
     // Нормализуем формат данных
-    return filteredCalls.map(opt => {
+    // ЛОГИРОВАНИЕ: Проверяем наличие bid/ask в данных API
+    const normalizedCalls = filteredCalls.map(opt => {
       const bid = opt.bid || 0;
       const ask = opt.ask || 0;
       const mid = (bid && ask) ? (bid + ask) / 2 : 0;
       const premium = opt.last || opt.lastPrice || opt.close || mid || 0;
+      const strike = opt.strike || opt.strikePrice;
       
       return {
-        strike: opt.strike || opt.strikePrice,
+        strike,
         premium,
         bid,
         ask,
@@ -566,6 +609,24 @@ export async function getCallOptionsForExpiration(ticker, expirationDate, curren
         vega: opt.vega || 0
       };
     });
+    
+    // ЛОГИРОВАНИЕ: Выводим первые 3 опциона с bid/ask для диагностики
+    const sampleCalls = normalizedCalls.slice(0, 3);
+    console.log(`[AISelector] 📊 BID/ASK данные для ${expirationDate} (первые ${sampleCalls.length} CALL):`);
+    sampleCalls.forEach(c => {
+      console.log(`  Strike $${c.strike}: BID=$${c.bid.toFixed(2)}, ASK=$${c.ask.toFixed(2)}, Premium=$${c.premium.toFixed(2)}`);
+    });
+    
+    // Проверяем сколько опционов имеют bid/ask
+    const withBidAsk = normalizedCalls.filter(c => c.bid > 0 && c.ask > 0).length;
+    const withoutBidAsk = normalizedCalls.length - withBidAsk;
+    if (withoutBidAsk > 0) {
+      console.warn(`[AISelector] ⚠️ ${withoutBidAsk} из ${normalizedCalls.length} CALL опционов БЕЗ bid/ask данных!`);
+    } else {
+      console.log(`[AISelector] ✅ Все ${normalizedCalls.length} CALL опционов имеют bid/ask данные`);
+    }
+    
+    return normalizedCalls;
     
   } catch (error) {
     console.error(`[AISelector] Ошибка получения CALL опционов для ${expirationDate}:`, error);
@@ -614,14 +675,27 @@ export async function getAllCallOptionsForAnalysis(ticker, currentPrice, daysAft
 /**
  * Рассчитывает P&L BuyCALL опциона используя Black-Scholes
  * ЗАЧЕМ: Согласованность расчётов с калькулятором
+ * ВАЖНО: Использует getOptionVolatility для единого источника волатильности с таблицей
  * @param {Object} callOption - Объект опциона в формате калькулятора
  * @param {number} targetPrice - Целевая цена базового актива
  * @param {number} daysRemaining - Дней до экспирации на момент выхода
+ * @param {number} currentDaysToExpiration - Текущее кол-во дней до экспирации (для расчёта IV)
  * @returns {number} P&L в долларах
  */
-export function calculateCallPLBlackScholes(callOption, targetPrice, daysRemaining) {
-  const result = calculateOptionPLValue(callOption, targetPrice, targetPrice, daysRemaining);
-  return typeof result === 'number' && !isNaN(result) ? result : 0;
+export function calculateCallPLBlackScholes(callOption, targetPrice, daysRemaining, currentDaysToExpiration = null) {
+  // Используем getOptionVolatility как в таблице опционов
+  // ЗАЧЕМ: Единый источник волатильности для согласованности P/L
+  const currentDays = currentDaysToExpiration !== null ? currentDaysToExpiration : daysRemaining;
+  const optionVolatility = getOptionVolatility(callOption, currentDays, daysRemaining);
+  
+  // ЛОГИРОВАНИЕ: Выводим волатильность для диагностики
+  console.log(`[AISelector] 📈 calculateCallPLBlackScholes: Strike $${callOption.strike}, IV=${optionVolatility.toFixed(1)}%, daysRemaining=${daysRemaining}, currentDays=${currentDays}, targetPrice=$${targetPrice}`);
+  
+  // Используем ту же функцию что и калькулятор, передавая волатильность явно
+  const result = calculateOptionPLValue(callOption, targetPrice, targetPrice, daysRemaining, optionVolatility);
+  const pl = typeof result === 'number' && !isNaN(result) ? result : 0;
+  console.log(`[AISelector] 📈 calculateCallPLBlackScholes: P/L=$${pl.toFixed(2)}`);
+  return pl;
 }
 
 /**
@@ -668,10 +742,11 @@ export function checkCallCompensationCriteria({
   };
   
   // P&L CALL опциона при росте цены
-  const callPLAtUp = calculateCallPLBlackScholes(callOption, targetUpPrice, daysRemaining);
+  // ВАЖНО: Передаём daysUntilExpiration как currentDaysToExpiration для корректного расчёта IV
+  const callPLAtUp = calculateCallPLBlackScholes(callOption, targetUpPrice, daysRemaining, daysUntilExpiration);
   
   // P&L CALL опциона при падении цены
-  const callPLAtDown = calculateCallPLBlackScholes(callOption, targetDownPrice, daysRemaining);
+  const callPLAtDown = calculateCallPLBlackScholes(callOption, targetDownPrice, daysRemaining, daysUntilExpiration);
   
   // === КРИТЕРИЙ 1: При росте прибыль CALL ≥ |убыток PUT| ===
   // putPLAtUp обычно отрицательный (убыток PUT при росте)

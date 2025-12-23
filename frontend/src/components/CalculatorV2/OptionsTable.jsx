@@ -953,6 +953,13 @@ function OptionsTable({
                   ask: option.isPremiumModified ? 0 : option.ask,
                   bid: option.isPremiumModified ? 0 : option.bid
                 };
+                
+                // ЛОГИРОВАНИЕ: Выводим bid/ask и IV для сравнения с подбором
+                // ЗАЧЕМ: Диагностика расхождений P/L между подбором и таблицей
+                const rawIV = option.impliedVolatility || option.implied_volatility;
+                console.log(`[Таблица] 💰 P/L расчёт ${option.type} Strike $${option.strike}: BID=$${option.bid?.toFixed(2) || 'N/A'}, ASK=$${option.ask?.toFixed(2) || 'N/A'}, Premium=$${effectivePremium?.toFixed(2) || 'N/A'}, EntryPrice=${option.action === 'Buy' ? (option.ask || effectivePremium) : (option.bid || effectivePremium)}`);
+                console.log(`[Таблица] 📈 IV расчёт ${option.type} Strike $${option.strike}: rawIV=${rawIV}, IV=${(optionVolatility * 100).toFixed(1)}%, currentDays=${currentDaysToExpiration}, daysRemaining=${optionDaysRemaining}, targetPrice=$${targetPrice || currentPrice}`);
+                
                 const pl = calculateOptionPLValue(
                   tempOpt,
                   targetPrice || currentPrice,
