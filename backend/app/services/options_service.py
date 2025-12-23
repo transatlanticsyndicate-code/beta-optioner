@@ -130,10 +130,20 @@ class OptionsService:
             
             # Извлекаем полные данные из snapshot
             options_list = []
-            for contract in contracts:
+            
+            # Логирование первых 3 контрактов для отладки real-time данных
+            print(f"\n{'='*80}")
+            print(f"📊 BACKEND: Обработка опционов для {ticker} {expiration_date}")
+            print(f"{'='*80}")
+            
+            for idx, contract in enumerate(contracts):
                 details = contract.get("details", {})
                 day_data = contract.get("day", {})
                 greeks = contract.get("greeks", {})
+                
+                # ✅ ПРАВИЛЬНО: Real-time данные из contract.last_quote (не day_data!)
+                last_quote = contract.get("last_quote", {}) or {}
+                last_trade = contract.get("last_trade", {}) or {}
                 
                 strike = details.get("strike_price")
                 contract_type = details.get("contract_type", "").lower()
@@ -141,17 +151,40 @@ class OptionsService:
                 if not strike:
                     continue
                 
-                # Полные данные опциона
+                # Real-time цены из last_quote и last_trade
+                bid = last_quote.get("bid", 0) or 0
+                ask = last_quote.get("ask", 0) or 0
+                last_price = last_trade.get("price", 0) or day_data.get("close", 0) or 0
+                mid = (bid + ask) / 2 if bid > 0 and ask > 0 else last_price
+                
+                # Определяем is_realtime флаг
+                is_realtime = (
+                    last_quote is not None and 
+                    bid > 0 and ask > 0
+                )
+                
+                # Логируем первые 3 контракта
+                if idx < 3:
+                    print(f"\n🔹 CONTRACT #{idx + 1}: {contract_type.upper()} Strike ${strike}")
+                    print(f"   - bid: {bid}")
+                    print(f"   - ask: {ask}")
+                    print(f"   - last: {last_price}")
+                    print(f"   - is_realtime: {is_realtime}")
+                    print(f"   - volume: {day_data.get('volume', 0)}")
+                    print(f"   - open_interest: {contract.get('open_interest', 0)}")
+                
+                # Полные данные опциона с real-time ценами
                 option_data = {
                     "strike": strike,
                     "type": contract_type,
                     "expiration": details.get("expiration_date"),
                     "ticker": contract.get("ticker"),
                     
-                    # Цены
-                    "last": day_data.get("last_quote", {}).get("midpoint"),
-                    "bid": day_data.get("last_quote", {}).get("bid"),
-                    "ask": day_data.get("last_quote", {}).get("ask"),
+                    # ✅ Real-time цены из last_quote и last_trade
+                    "last": last_price,
+                    "bid": bid,
+                    "ask": ask,
+                    "mid": mid,
                     "close": day_data.get("close"),
                     "open": day_data.get("open"),
                     "high": day_data.get("high"),
@@ -159,7 +192,7 @@ class OptionsService:
                     
                     # Volume и Open Interest
                     "volume": day_data.get("volume", 0),
-                    "open_interest": contract.get("open_interest", 0),  # ПРАВИЛЬНО: в contract напрямую!
+                    "open_interest": contract.get("open_interest", 0),
                     
                     # Greeks
                     "delta": greeks.get("delta"),
@@ -168,10 +201,15 @@ class OptionsService:
                     "vega": greeks.get("vega"),
                     
                     # Implied Volatility
-                    "implied_volatility": contract.get("implied_volatility")
+                    "implied_volatility": contract.get("implied_volatility"),
+                    
+                    # ✅ Флаг real-time данных
+                    "is_realtime": is_realtime
                 }
                 
                 options_list.append(option_data)
+            
+            print(f"{'='*80}\n")
             
             return options_list
             
@@ -364,12 +402,28 @@ class OptionsService:
                 
                 day_data = results.get('day', {})
                 
-                # Используем close как premium (последняя цена)
-                premium = day_data.get('close', 0)
+                # ✅ ПРАВИЛЬНО: Real-time данные из results.last_quote (не day_data!)
+                last_quote = results.get('last_quote', {}) or {}
+                last_trade = results.get('last_trade', {}) or {}
+                
+                # Real-time цены
+                bid = last_quote.get('bid', 0) or 0
+                ask = last_quote.get('ask', 0) or 0
+                premium = last_trade.get('price', 0) or day_data.get('close', 0) or 0
                 
                 # Если нет bid/ask, используем close ± спред (примерно 2%)
-                bid = day_data.get('bid', premium * 0.98 if premium > 0 else 0)
-                ask = day_data.get('ask', premium * 1.02 if premium > 0 else 0)
+                if bid == 0 and premium > 0:
+                    bid = premium * 0.98
+                if ask == 0 and premium > 0:
+                    ask = premium * 1.02
+                
+                # Логирование для отладки
+                print(f"\n{'='*80}")
+                print(f"📊 BACKEND: Детали опциона {option_ticker}")
+                print(f"   - bid: {bid}")
+                print(f"   - ask: {ask}")
+                print(f"   - last: {premium}")
+                print(f"{'='*80}\n")
                 
                 # Получаем Greeks из snapshot данных
                 greeks = results.get('greeks', {})

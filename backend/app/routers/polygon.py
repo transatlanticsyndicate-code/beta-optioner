@@ -146,3 +146,78 @@ async def get_dividend_yield(ticker: str):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# REAL-TIME STATUS ENDPOINTS
+# ЗАЧЕМ: Проверка статуса real-time доступа для индикаторов на фронтенде
+# ============================================================================
+
+@router.get("/realtime-status")
+async def get_realtime_status_stocks():
+    """
+    Проверка статуса real-time доступа для АКЦИЙ
+    ЗАЧЕМ: Отображение индикатора статуса на фронтенде
+    
+    Returns:
+    - status: success/error
+    - has_realtime: true если есть доступ к real-time данным (Stocks Advanced)
+    - tier: stocks_advanced или developer
+    - data_type: prev_day_close для бесплатного тарифа
+    - market_status: информация о статусе рынка
+    """
+    try:
+        # Проверяем доступ к real-time акциям
+        status = polygon_client.check_realtime_access_stocks()
+        
+        # Проверяем статус рынка
+        market_status = polygon_client.get_market_status()
+        
+        return {
+            **status,
+            "market_status": market_status
+        }
+        
+    except Exception as e:
+        print(f"❌ Ошибка проверки статуса акций: {e}")
+        return {
+            "status": "error",
+            "has_realtime": False,
+            "tier": "unknown",
+            "message": str(e)
+        }
+
+
+@router.get("/realtime-status-options")
+async def get_realtime_status_options():
+    """
+    Проверка статуса real-time доступа для ОПЦИОНОВ
+    ЗАЧЕМ: Отображение индикатора статуса на фронтенде
+    
+    Returns:
+    - status: success/error
+    - has_realtime: true если есть доступ к real-time данным
+    - tier: options_advanced или developer
+    - delay_minutes: 0 для real-time, 15 для delayed
+    - market_status: информация о статусе рынка
+    """
+    try:
+        # Проверяем доступ к real-time опционам
+        status = polygon_client.check_realtime_access_options()
+        
+        # Проверяем статус рынка
+        market_status = polygon_client.get_market_status()
+        
+        return {
+            **status,
+            "market_status": market_status
+        }
+        
+    except Exception as e:
+        print(f"❌ Ошибка проверки статуса опционов: {e}")
+        return {
+            "status": "error",
+            "has_realtime": False,
+            "tier": "unknown",
+            "message": str(e)
+        }

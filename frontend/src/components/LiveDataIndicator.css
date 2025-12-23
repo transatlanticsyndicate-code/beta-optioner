@@ -1,0 +1,178 @@
+/**
+ * Стили для индикаторов статуса данных (Real-time / Delayed)
+ * ЗАЧЕМ: Визуальное отображение статуса подключения к Massive API
+ * Затрагивает: OptionsDataIndicator, TopNav
+ */
+
+/* Основной контейнер индикатора */
+.live-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  user-select: none;
+}
+
+/* Статус LIVE (зеленый) — Real-time данные */
+.live-indicator.live {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+}
+
+.live-indicator.live:hover {
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+  transform: translateY(-1px);
+}
+
+/* Статус DELAYED (оранжевый) — Задержка 15 минут */
+.live-indicator.delayed {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+}
+
+.live-indicator.delayed:hover {
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+  transform: translateY(-1px);
+}
+
+/* Статус OFFLINE (серый) — Рынок закрыт или нет данных */
+.live-indicator.offline {
+  background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(107, 114, 128, 0.3);
+}
+
+.live-indicator.offline:hover {
+  box-shadow: 0 4px 12px rgba(107, 114, 128, 0.4);
+  transform: translateY(-1px);
+}
+
+/* Статус LOADING (синий) — Загрузка */
+.live-indicator.loading {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+}
+
+/* Логотип Massive — контейнер с белой подложкой */
+.indicator-logo-wrapper {
+  background: white;
+  border-radius: 3px;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Логотип Massive — изображение с анимацией */
+.indicator-logo {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  display: block;
+  animation: pulse-logo 2s ease-in-out infinite;
+}
+
+/* Анимация для LIVE статуса — пульсация с увеличением */
+.live-indicator.live .indicator-logo {
+  animation: pulse-logo-live 2s ease-in-out infinite;
+}
+
+/* Анимация для DELAYED статуса — медленное мигание */
+.live-indicator.delayed .indicator-logo {
+  animation: pulse-logo-delayed 2s ease-in-out infinite;
+}
+
+/* Анимация для LOADING статуса — быстрое мигание */
+.live-indicator.loading .indicator-logo {
+  animation: pulse-logo-loading 1.5s ease-in-out infinite;
+}
+
+/* Анимация мигания LIVE (с увеличением) */
+@keyframes pulse-logo-live {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.1);
+  }
+}
+
+/* Анимация мигания DELAYED */
+@keyframes pulse-logo-delayed {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Анимация мигания LOADING */
+@keyframes pulse-logo-loading {
+  0%, 100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Базовая анимация мигания */
+@keyframes pulse-logo {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+/* Текст индикатора */
+.indicator-text {
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+/* Адаптивные стили для мобильных устройств */
+@media (max-width: 768px) {
+  .live-indicator {
+    padding: 4px 10px;
+    font-size: 11px;
+  }
+  
+  .indicator-logo-wrapper {
+    padding: 1.5px;
+  }
+  
+  .indicator-logo {
+    width: 14px;
+    height: 14px;
+  }
+  
+  .indicator-text {
+    font-size: 10px;
+  }
+}
+
+/* Скрытие текста на очень маленьких экранах */
+@media (max-width: 480px) {
+  .indicator-text {
+    display: none;
+  }
+  
+  .live-indicator {
+    padding: 6px;
+    border-radius: 50%;
+  }
+}

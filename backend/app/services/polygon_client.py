@@ -698,3 +698,188 @@ class PolygonClient:
                 "frequency": 0,
                 "ex_dividend_date": None
             }
+    
+    def check_realtime_access_stocks(self) -> Dict:
+        """
+        Проверка доступа к real-time данным для акций
+        ЗАЧЕМ: Определить тариф пользователя (Developer vs Stocks Advanced)
+        
+        Returns:
+            Dict с информацией о доступе к real-time данным акций
+        """
+        try:
+            # Для бесплатного тарифа акции доступны только с ценой закрытия предыдущего дня
+            # Real-time акции требуют Stocks Advanced ($199/мес)
+            # Проверяем через запрос последней сделки
+            
+            test_ticker = "SPY"
+            url = f"{self.base_url}/v2/last/trade/{test_ticker}"
+            params = {"apiKey": self.api_key}
+            
+            response = requests.get(url, params=params, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                # Проверяем наличие real-time данных
+                if data.get("status") == "OK" and data.get("results"):
+                    result = data["results"]
+                    # Если есть цена и timestamp близкий к текущему времени - real-time
+                    has_realtime = result.get("p") is not None and result.get("p") > 0
+                    
+                    # Для бесплатного тарифа has_realtime будет False
+                    # так как данные только prev day close
+                    return {
+                        "status": "success",
+                        "has_realtime": False,  # Бесплатный тариф - только prev day close
+                        "tier": "developer",
+                        "delay_minutes": 0,  # Не задержка, а prev day close
+                        "data_type": "prev_day_close"
+                    }
+            
+            elif response.status_code == 403:
+                return {
+                    "status": "success",
+                    "has_realtime": False,
+                    "tier": "developer",
+                    "delay_minutes": 0,
+                    "data_type": "prev_day_close",
+                    "message": "Stocks Advanced subscription required for real-time"
+                }
+            
+            return {
+                "status": "error",
+                "has_realtime": False,
+                "tier": "unknown",
+                "message": f"HTTP {response.status_code}"
+            }
+                    
+        except Exception as e:
+            print(f"⚠️ Ошибка проверки real-time доступа для акций: {e}")
+            return {
+                "status": "error",
+                "has_realtime": False,
+                "tier": "unknown",
+                "message": str(e)
+            }
+    
+    def check_realtime_access_options(self) -> Dict:
+        """
+        Проверка доступа к real-time данным для опционов
+        ЗАЧЕМ: Определить тариф пользователя (Developer vs Options Advanced)
+        
+        Returns:
+            Dict с информацией о доступе к real-time данным
+        """
+        try:
+            # Тестовый запрос опционного контракта SPY
+            test_ticker = "SPY"
+            
+            url = f"{self.base_url}/v3/snapshot/options/{test_ticker}"
+            params = {
+                "apiKey": self.api_key,
+                "limit": 1
+            }
+            
+            response = requests.get(url, params=params, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                # Проверка наличия real-time полей
+                if data.get("status") == "OK" and data.get("results"):
+                    result = data["results"][0]
+                    
+                    # Real-time данные содержат last_quote с актуальными bid/ask
+                    last_quote = result.get("last_quote", {})
+                    has_realtime = (
+                        last_quote is not None and 
+                        last_quote.get("bid") is not None and
+                        last_quote.get("bid") > 0
+                    )
+                    
+                    return {
+                        "status": "success",
+                        "has_realtime": has_realtime,
+                        "tier": "options_advanced" if has_realtime else "developer",
+                        "delay_minutes": 0 if has_realtime else 15
+                    }
+            
+            elif response.status_code == 403:
+                # 403 = нет доступа к Options Advanced
+                return {
+                    "status": "success",
+                    "has_realtime": False,
+                    "tier": "developer",
+                    "delay_minutes": 15,
+                    "message": "Options Advanced subscription required"
+                }
+            
+            return {
+                "status": "error",
+                "has_realtime": False,
+                "tier": "unknown",
+                "message": f"HTTP {response.status_code}"
+            }
+                    
+        except Exception as e:
+            print(f"⚠️ Ошибка проверки real-time доступа для опционов: {e}")
+            return {
+                "status": "error",
+                "has_realtime": False,
+                "tier": "unknown",
+                "message": str(e)
+            }
+    
+    def get_market_status(self) -> Dict:
+        """
+        Получить текущий статус рынка (открыт/закрыт)
+        ЗАЧЕМ: Для отображения корректного статуса в индикаторе
+        
+        Returns:
+            Dict с информацией о статусе рынка
+        """
+        try:
+            url = f"{self.base_url}/v1/marketstatus/now"
+            params = {"apiKey": self.api_key}
+            
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            # Определяем статус рынка
+            market = data.get("market", "closed")
+            exchanges = data.get("exchanges", {})
+            
+            is_open = market == "open"
+            
+            # Определяем причину закрытия
+            reason = None
+            if not is_open:
+                # Проверяем день недели
+                now = datetime.now()
+                if now.weekday() >= 5:  # Суббота или воскресенье
+                    reason = "weekend"
+                elif data.get("earlyHours", False):
+                    reason = "pre_market"
+                elif data.get("afterHours", False):
+                    reason = "after_hours"
+                else:
+                    reason = "closed"
+            
+            return {
+                "is_open": is_open,
+                "market": market,
+                "reason": reason,
+                "exchanges": exchanges
+            }
+            
+        except Exception as e:
+            print(f"⚠️ Ошибка получения статуса рынка: {e}")
+            return {
+                "is_open": False,
+                "market": "unknown",
+                "reason": "error",
+                "message": str(e)
+            }
