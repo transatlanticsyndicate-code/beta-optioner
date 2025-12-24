@@ -388,11 +388,12 @@ export const findBestBuyPut = async ({
       });
       stats.afterStrikeFilter += filteredByStrike.length;
       
-      // Фильтруем по ликвидности (OI > 0 обязательно, плюс минимальный порог)
+      // Фильтруем по ликвидности
+      // ЗАЧЕМ: Если minOpenInterest = 0, принимаем все опционы. Иначе требуем OI >= minOpenInterest
       const liquidOptions = filteredByStrike.filter(opt => {
         const oi = opt.open_interest || opt.oi || opt.openInterest || 0;
-        // OI должен быть > 0 и >= minOpenInterest
-        return oi > 0 && oi >= minOpenInterest;
+        // Если минимум = 0, принимаем все опционы. Иначе проверяем OI >= minOpenInterest
+        return minOpenInterest === 0 ? true : oi >= minOpenInterest;
       });
       stats.afterLiquidityFilter += liquidOptions.length;
       stats.rejectedByLiquidity += (filteredByStrike.length - liquidOptions.length);
@@ -407,7 +408,7 @@ export const findBestBuyPut = async ({
         return oi > 0 && (ask > 0 || bid > 0 || last > 0);
       });
       
-      console.log(`📊 ${date}: ${putOptions.length} PUT → ${validPriceOptions.length} с ценой → ${filteredByStrike.length} по страйкам → ${liquidOptions.length} ликвидных (OI≥${minOpenInterest})`);
+      console.log(`📊 ${date}: ${putOptions.length} PUT → ${validPriceOptions.length} с ценой → ${filteredByStrike.length} по страйкам → ${liquidOptions.length} ликвидных (OI${minOpenInterest === 0 ? '≥0' : '≥' + minOpenInterest})`);
       
       // Добавляем в общий список (с фильтром ликвидности)
       allCandidates.push(...liquidOptions);
@@ -579,6 +580,7 @@ export const findBestBuyPut = async ({
  * @param {number} params.minOpenInterest - Минимальный OI
  * @param {number} params.maxDaysToExpiration - Макс. дней до экспирации
  * @param {number} params.evaluationDay - День оценки P/L
+ * @param {number} params.baseAssetLossDown - Убыток базового актива при цене НИЗ (для расчёта % покрытия в предложении)
  * @returns {object|null} - Лучший опцион или null
  */
 export const findBestBuyCall = async ({
@@ -594,7 +596,8 @@ export const findBestBuyCall = async ({
   strikeRangePercent = 0.20,
   minOpenInterest = 100,
   maxDaysToExpiration = 100,
-  evaluationDay = 5
+  evaluationDay = 5,
+  baseAssetLossDown = 0
 }) => {
   console.log('🔮 Начинаем подбор BuyCALL...');
   console.log(`📊 Параметры: ticker=${ticker}, currentPrice=${currentPrice}, priceUp=${priceUp}, priceDown=${priceDown}`);
@@ -690,11 +693,12 @@ export const findBestBuyCall = async ({
       });
       stats.afterStrikeFilter += filteredByStrike.length;
       
-      // Фильтруем по ликвидности (OI > 0 обязательно, плюс минимальный порог)
+      // Фильтруем по ликвидности
+      // ЗАЧЕМ: Если minOpenInterest = 0, принимаем все опционы. Иначе требуем OI >= minOpenInterest
       const liquidOptions = filteredByStrike.filter(opt => {
         const oi = opt.open_interest || opt.oi || opt.openInterest || 0;
-        // OI должен быть > 0 и >= minOpenInterest
-        return oi > 0 && oi >= minOpenInterest;
+        // Если минимум = 0, принимаем все опционы. Иначе проверяем OI >= minOpenInterest
+        return minOpenInterest === 0 ? true : oi >= minOpenInterest;
       });
       stats.afterLiquidityFilter += liquidOptions.length;
       stats.rejectedByLiquidity += (filteredByStrike.length - liquidOptions.length);
@@ -709,7 +713,7 @@ export const findBestBuyCall = async ({
         return oi > 0 && (ask > 0 || bid > 0 || last > 0);
       });
       
-      console.log(`📊 ${date}: ${callOptions.length} CALL → ${validPriceOptions.length} с ценой → ${filteredByStrike.length} по страйкам → ${liquidOptions.length} ликвидных (OI≥${minOpenInterest})`);
+      console.log(`📊 ${date}: ${callOptions.length} CALL → ${validPriceOptions.length} с ценой → ${filteredByStrike.length} по страйкам → ${liquidOptions.length} ликвидных (OI${minOpenInterest === 0 ? '≥0' : '≥' + minOpenInterest})`);
       
       // Добавляем в общий список
       allCandidates.push(...liquidOptions);
@@ -806,7 +810,10 @@ export const findBestBuyCall = async ({
       const bestNoLiquidity = sortedNoLiquidity[0];
       
       if (bestNoLiquidity && bestNoLiquidity.plUp > 0) {
-        const suggestionCoverage = ((bestNoLiquidity.plUp / putLossAtUp) * 100).toFixed(1);
+        // Рассчитываем процент покрытия относительно убытка базового актива (если передан)
+        // ЗАЧЕМ: Показываем реальное покрытие убытка базового актива, а не убытка PUT
+        const coverageBase = baseAssetLossDown > 0 ? baseAssetLossDown : putLossAtUp;
+        const suggestionCoverage = ((bestNoLiquidity.plUp / coverageBase) * 100).toFixed(1);
         const suggestionOI = bestNoLiquidity.candidate.open_interest || bestNoLiquidity.candidate.oi || 0;
         
         suggestion = {

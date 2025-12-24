@@ -20,7 +20,7 @@ import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
 import { Loader2, Sparkles, AlertCircle, CheckCircle, ChevronDown, ChevronUp, Wand2 } from 'lucide-react';
-import { findBestBuyPut, findBestBuyCall, formatOptionForTable } from './magicSelectionLogic';
+import { findBestBuyPut, findBestBuyCall, formatOptionForTable, calculateBaseAssetPL } from './magicSelectionLogic';
 
 /**
  * Компонент модального окна волшебного подбора
@@ -325,6 +325,10 @@ function MagicSelectionModal({
     setSuggestionWithRef(null);
     
     try {
+      // Рассчитываем убыток базового актива при цене НИЗ для правильного расчёта % покрытия в предложении
+      const baseAssetPlDown = calculateBaseAssetPL(firstPosition, callDownPrice);
+      const baseAssetLossDown = Math.abs(Math.min(0, baseAssetPlDown));
+      
       const result = await findBestBuyCall({
         ticker: selectedTicker,
         currentPrice,
@@ -338,7 +342,8 @@ function MagicSelectionModal({
         strikeRangePercent: callStrikeRangePercent / 100,
         minOpenInterest: callMinOpenInterest,
         maxDaysToExpiration: callMaxDaysToExpiration,
-        evaluationDay: callEvaluationDay
+        evaluationDay: callEvaluationDay,
+        baseAssetLossDown: baseAssetLossDown
       });
       
       // Проверяем, вернулась ли ошибка с детальной информацией
