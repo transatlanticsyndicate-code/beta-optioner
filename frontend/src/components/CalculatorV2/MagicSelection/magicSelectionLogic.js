@@ -788,7 +788,10 @@ export const findBestBuyCall = async ({
     const sortedByPlUp = [...candidatesWithPL].sort((a, b) => b.plUp - a.plUp);
     const bestByPlUp = sortedByPlUp[0];
     const bestPlUp = bestByPlUp ? bestByPlUp.plUp : 0;
-    const coverage = bestPlUp > 0 ? ((bestPlUp / putLossAtUp) * 100).toFixed(0) : 0;
+    // Рассчитываем процент покрытия относительно убытка базового актива (если передан)
+    // ЗАЧЕМ: Показываем реальное покрытие убытка базового актива, а не убытка PUT
+    const coverageBase = baseAssetLossDown > 0 ? baseAssetLossDown : putLossAtUp;
+    const coverage = bestPlUp > 0 ? ((bestPlUp / coverageBase) * 100).toFixed(1) : 0;
     
     // ПРЕДЛОЖЕНИЕ: Ищем лучший CALL без фильтра ликвидности
     let suggestion = null;
@@ -834,7 +837,7 @@ export const findBestBuyCall = async ({
     let message = `Проверено ${candidatesWithPL.length} CALL опционов.\n`;
     message += `Убыток BuyPUT при ВЕРХ: $${putLossAtUp.toFixed(0)}\n`;
     message += `Требуется: прибыль CALL > $${putLossAtUp.toFixed(0)}\n`;
-    message += `Лучший CALL покрывает только ${coverage}% ($${bestPlUp.toFixed(0)})\n`;
+    message += `Лучший CALL покрывает только ${coverage}%\n`;
     message += `• Ни один CALL не компенсирует убыток PUT`;
     
     return { error: 'NO_RISK_MATCH', stats, message, suggestion };

@@ -752,8 +752,8 @@ function MagicSelectionModal({
                     </p>
                     <p className="mt-1">
                       {suggestion.optionType === 'CALL' 
-                        ? <>Прибыль при ВЕРХ: <span className="font-semibold text-amber-900">${suggestion.coverageAmount?.toFixed(0)}</span> ({suggestion.coveragePercent}% от убытка PUT)</>
-                        : <>Покрытие: <span className="font-semibold text-amber-900">{suggestion.coveragePercent}%</span> (${suggestion.coverageAmount?.toFixed(0)})</>}
+                        ? <>Покрытие убытка PUT: <span className="font-semibold text-amber-900">{suggestion.coveragePercent}%</span></>
+                        : <>Покрытие убытка: <span className="font-semibold text-amber-900">{suggestion.coveragePercent}%</span></>}
                     </p>
                     <p className="text-xs text-amber-600 mt-1">
                       Open Interest: {suggestion.openInterest}
@@ -948,7 +948,7 @@ function MagicSelectionModal({
                       CALL ${suggestion.option?.strike} exp {suggestion.option?.expiration || suggestion.option?.expiration_date}
                     </p>
                     <p className="mt-1">
-                      Прибыль при ВЕРХ: <span className="font-semibold text-amber-900">${suggestion.coverageAmount?.toFixed(0)}</span> ({suggestion.coveragePercent}% от убытка PUT)
+                      Покрытие убытка PUT: <span className="font-semibold text-amber-900">{suggestion.coveragePercent}%</span>
                     </p>
                     <p className="text-xs text-amber-600 mt-1">
                       Open Interest: {suggestion.openInterest}
