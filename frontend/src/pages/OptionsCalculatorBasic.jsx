@@ -1910,6 +1910,41 @@ function OptionsCalculatorV3() {
                       isEditMode={isEditMode}
                       hasChanges={hasChanges}
                       onSaveEditedConfiguration={handleSaveEditedConfiguration}
+                      positions={positions}
+                      onAddMagicOption={(option) => {
+                        // Добавляем опцион из волшебного подбора
+                        const newOptionId = Date.now().toString();
+                        const newOption = {
+                          id: newOptionId,
+                          action: option.action || 'Buy',
+                          type: option.type || 'PUT',
+                          strike: option.strike,
+                          date: option.expirationDate,
+                          quantity: 1,
+                          premium: option.premium || 0,
+                          bid: option.bid || 0,
+                          ask: option.ask || 0,
+                          volume: option.volume || 0,
+                          oi: option.openInterest || 0,
+                          delta: option.delta || 0,
+                          impliedVolatility: option.iv || option.impliedVolatility || 0,
+                          visible: true,
+                          isLoadingDetails: true,
+                        };
+                        setOptions(prevOptions => [...prevOptions, newOption]);
+                        
+                        // Загружаем детали опциона
+                        if (option.strike && option.expirationDate && selectedTicker) {
+                          setTimeout(() => {
+                            loadOptionDetails(newOptionId, selectedTicker, option.expirationDate, option.strike, option.type || 'PUT');
+                          }, 100);
+                        }
+                      }}
+                      onMagicSelectionComplete={(params) => {
+                        // Сохраняем параметры волшебного подбора для OptionSelectionResult
+                        setOptionSelectionParams(params);
+                        console.log('🔮 Волшебный подбор завершён, параметры сохранены:', params);
+                      }}
                     />
                   ) : (
                     <div className="w-full h-[80px] flex items-center justify-center text-muted-foreground text-sm">
@@ -2041,6 +2076,8 @@ function OptionsCalculatorV3() {
                 currentPrice={currentPrice}
                 ivSurface={ivSurface}
                 dividendYield={useDividends ? dividendYield : 0}
+                targetPrice={targetPrice}
+                daysPassed={daysPassed}
               />
 
               {/* Калькулятор выхода из позиции */}

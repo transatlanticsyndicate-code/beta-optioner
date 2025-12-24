@@ -162,58 +162,6 @@ function OptionSelectionResult({
                   {daysAfterEntry} дней после входа
                 </div>
               )}
-              
-              {/* Разделитель */}
-              <div className="border-t" style={{ borderColor: isCallSelection ? '#22c55e' : '#14b8a6' }}></div>
-              
-              {/* Параметры ВВЕРХ */}
-              <div className="flex justify-between">
-                <span className="px-1.5 py-0.5 rounded bg-green-100 text-green-700 text-xs">
-                  Вверх {targetUpPercent}%
-                </span>
-                <span className="font-medium">${targetUpPrice.toFixed(2)}</span>
-              </div>
-              {isCallSelection ? (
-                // Для CALL: показываем актуальный P&L CALL при росте из калькулятора
-                <div className="flex justify-between text-muted-foreground text-xs">
-                  <span>CALL P&L при росте</span>
-                  <span className={actualCallPLAtUp >= 0 ? 'text-green-600' : 'text-red-600'}>
-                    {actualCallPLAtUp >= 0 ? `+$${actualCallPLAtUp.toFixed(0)}` : `-$${Math.abs(actualCallPLAtUp).toFixed(0)}`}
-                  </span>
-                </div>
-              ) : (
-                // Для PUT: показываем риск опциона
-                <div className="flex justify-between text-muted-foreground text-xs">
-                  <span>Риск опциона {optionRiskPercent}%</span>
-                  <span>${optionRiskAmount}</span>
-                </div>
-              )}
-              
-              {/* Разделитель */}
-              <div className="border-t" style={{ borderColor: isCallSelection ? '#22c55e' : '#14b8a6' }}></div>
-              
-              {/* Параметры ВНИЗ */}
-              <div className="flex justify-between">
-                <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-xs">
-                  Вниз {targetDownPercent}%
-                </span>
-                <span className="font-medium">${targetDownPrice.toFixed(2)}</span>
-              </div>
-              {isCallSelection ? (
-                // Для CALL: показываем актуальный P&L CALL при падении из калькулятора
-                <div className="flex justify-between text-muted-foreground text-xs">
-                  <span>CALL P&L при падении</span>
-                  <span className={actualCallPLAtDown >= 0 ? 'text-green-600' : 'text-red-600'}>
-                    {actualCallPLAtDown >= 0 ? `+$${actualCallPLAtDown.toFixed(0)}` : `-$${Math.abs(actualCallPLAtDown).toFixed(0)}`}
-                  </span>
-                </div>
-              ) : (
-                // Для PUT: показываем общий риск
-                <div className="flex justify-between text-muted-foreground text-xs">
-                  <span>Общий риск {riskPercent}%</span>
-                  <span>${totalRiskAmount}</span>
-                </div>
-              )}
             </div>
 
             {/* Правая часть: два блока сценариев (как в ExitCalculator) */}

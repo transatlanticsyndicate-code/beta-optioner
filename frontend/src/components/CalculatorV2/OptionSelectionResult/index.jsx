@@ -17,7 +17,9 @@ export function OptionSelectionResult({
   positions = [],
   currentPrice = 0,
   ivSurface = null,
-  dividendYield = 0
+  dividendYield = 0,
+  targetPrice = 0,
+  daysPassed = 0
 }) {
   // State для сворачивания блока
   // ЗАЧЕМ: Сохранение состояния сворачивания в localStorage
@@ -38,9 +40,9 @@ export function OptionSelectionResult({
     daysAfterEntry = 5,
     bestExitDay = null,
     targetUpPercent = 5,
-    targetUpPrice = 0,
+    targetUpPrice: savedTargetUpPrice = 0,
     targetDownPercent = 5,
-    targetDownPrice = 0,
+    targetDownPrice: savedTargetDownPrice = 0,
     optionRiskPercent = 2,
     riskPercent = 5,
     entryPrice = 0,
@@ -52,12 +54,31 @@ export function OptionSelectionResult({
   } = selectionParams || {};
   
   const isCallSelection = optionType === 'CALL';
+  
+  // Используем текущий targetPrice и daysPassed из калькулятора для синхронизации с ExitCalculator
+  // ЗАЧЕМ: Расчёты должны совпадать с блоком "Закрыть всё в выбранную дату"
+  // ВАЖНО: targetPrice > 0 проверяем явно, чтобы избежать fallback на savedTargetUpPrice
+  const actualDaysPassed = daysPassed > 0 ? daysPassed : daysAfterEntry;
+  const actualTargetPrice = targetPrice > 0 ? targetPrice : (savedTargetUpPrice || currentPrice);
+  
+  // Для сценария ВНИЗ используем сохранённую цену из selectionParams
+  // ЗАЧЕМ: Цена ВНИЗ фиксируется в момент подбора и не меняется от слайдера
+  const actualTargetDownPrice = savedTargetDownPrice > 0 ? savedTargetDownPrice : currentPrice * 0.95;
 
-  // Расчёт P&L для сценария ВНИЗ (targetDownPrice)
+  // Пересчитываем проценты на основе актуальных цен относительно currentPrice
+  // ЗАЧЕМ: Проценты должны отражать реальное отклонение от текущей цены базового актива
+  const actualTargetUpPercent = currentPrice > 0 
+    ? ((actualTargetPrice - currentPrice) / currentPrice * 100).toFixed(1)
+    : targetUpPercent;
+  const actualTargetDownPercent = currentPrice > 0 
+    ? ((currentPrice - actualTargetDownPrice) / currentPrice * 100).toFixed(1)
+    : targetDownPercent;
+
+  // Расчёт P&L для сценария ВНИЗ
   // ВАЖНО: Хуки вызываются безусловно для соблюдения правил React
   const plDown = usePositionExitCalculator({
-    underlyingPrice: targetDownPrice,
-    daysPassed: daysAfterEntry,
+    underlyingPrice: actualTargetDownPrice,
+    daysPassed: actualDaysPassed,
     options,
     positions,
     currentPrice,
@@ -65,16 +86,20 @@ export function OptionSelectionResult({
     dividendYield
   });
 
-  // Расчёт P&L для сценария ВВЕРХ (targetUpPrice)
+  // Расчёт P&L для сценария ВВЕРХ (используем текущий targetPrice из слайдера)
+  // ВАЖНО: Должен совпадать с ExitCalculator при одинаковых параметрах
   const plUp = usePositionExitCalculator({
-    underlyingPrice: targetUpPrice,
-    daysPassed: daysAfterEntry,
+    underlyingPrice: actualTargetPrice,
+    daysPassed: actualDaysPassed,
     options,
     positions,
     currentPrice,
     ivSurface,
     dividendYield
   });
+  
+  // Логирование для отладки синхронизации
+  console.log('📊 OptionSelectionResult: targetPrice=', targetPrice, 'actualTargetPrice=', actualTargetPrice, 'daysPassed=', daysPassed, 'actualDaysPassed=', actualDaysPassed);
 
   // Если нет параметров подбора — не отображаем компонент
   // ЗАЧЕМ: Компонент появляется только после выбора опциона в диалоге подбора
@@ -113,15 +138,15 @@ export function OptionSelectionResult({
       {!isCollapsed && (
         <CardContent className="p-6 space-y-6">
           <div className="flex gap-6">
-            {/* Левая колонка: параметры подбора */}
+            {/* Левая колонка: только дни после входа */}
             <ParametersPanel
               isCallSelection={isCallSelection}
               bestExitDay={bestExitDay}
-              daysAfterEntry={daysAfterEntry}
-              targetUpPercent={targetUpPercent}
-              targetUpPrice={targetUpPrice}
-              targetDownPercent={targetDownPercent}
-              targetDownPrice={targetDownPrice}
+              daysAfterEntry={actualDaysPassed}
+              targetUpPercent={actualTargetUpPercent}
+              targetUpPrice={actualTargetPrice}
+              targetDownPercent={actualTargetDownPercent}
+              targetDownPrice={actualTargetDownPrice}
               optionRiskPercent={optionRiskPercent}
               optionRiskAmount={optionRiskAmount}
               riskPercent={riskPercent}
@@ -134,13 +159,13 @@ export function OptionSelectionResult({
             <div className="flex-1">
               <div className="grid grid-cols-2 gap-4">
                 <ScenarioCard
-                  title={`Закрытие по НИЗУ $${targetDownPrice.toFixed(2)}`}
+                  title={`Закрытие по НИЗУ $${actualTargetDownPrice.toFixed(2)}`}
                   pl={plDown.plCloseAll}
                   details={plDown.details.closeAll}
                   headerBgColor="#fb8997"
                 />
                 <ScenarioCard
-                  title={`Закрытие по ВЕРХУ $${targetUpPrice.toFixed(2)}`}
+                  title={`Закрытие по ВЕРХУ $${actualTargetPrice.toFixed(2)}`}
                   pl={plUp.plCloseAll}
                   details={plUp.details.closeAll}
                   headerBgColor="#59c35d"

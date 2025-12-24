@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Eye, EyeOff, ChevronDown, Trash2, Loader2, Save, RotateCcw, AlertTriangle, RefreshCw } from 'lucide-react';
+import { MagicButton, MagicSelectionModal } from '../MagicSelection';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -46,7 +47,10 @@ function OptionsTable({
   dividendYield = 0, // Дивидендная доходность для модели BSM
   isEditMode = false, // Режим редактирования конфигурации
   hasChanges = false, // Есть ли изменения в режиме редактирования
-  onSaveEditedConfiguration = null // Функция сохранения изменений
+  onSaveEditedConfiguration = null, // Функция сохранения изменений
+  positions = [], // Позиции базового актива для волшебного подбора
+  onAddMagicOption = null, // Функция добавления опциона из волшебного подбора
+  onMagicSelectionComplete = null // Callback для передачи параметров подбора в OptionSelectionResult
 }) {
   // console.log('📋 OptionsTable render:', { 
   //   optionsCount: options.length, 
@@ -54,6 +58,20 @@ function OptionsTable({
   
   const [customStrategyName, setCustomStrategyName] = React.useState('');
   const [saveDialogOpen, setSaveDialogOpenLocal] = React.useState(false);
+  const [magicModalOpen, setMagicModalOpen] = useState(false); // Состояние модального окна волшебного подбора
+  
+  // Проверяем наличие BuyPUT и BuyCALL для деактивации волшебной кнопки
+  const hasBuyPut = options.some(opt => 
+    opt.type?.toUpperCase() === 'PUT' && 
+    opt.action?.toLowerCase() === 'buy' &&
+    opt.visible !== false
+  );
+  const hasBuyCall = options.some(opt => 
+    opt.type?.toUpperCase() === 'CALL' && 
+    opt.action?.toLowerCase() === 'buy' &&
+    opt.visible !== false
+  );
+  const isMagicButtonDisabled = hasBuyPut && hasBuyCall;
   const [showAllStrikesForOption, setShowAllStrikesForOption] = React.useState({}); // { optionId: true/false }
   const [editingPremium, setEditingPremium] = React.useState(null); // optionId для редактирования премии
   const [editingEntryDate, setEditingEntryDate] = React.useState(null); // optionId для редактирования даты входа
@@ -224,6 +242,13 @@ function OptionsTable({
           )}
         </h3>
         <div className="flex items-center gap-2">
+          {/* Волшебная кнопка для автоматического подбора опционов */}
+          {/* Деактивирована, если уже есть BuyPUT и BuyCALL */}
+          <MagicButton 
+            onClick={() => setMagicModalOpen(true)} 
+            disabled={isMagicButtonDisabled}
+          />
+          
           {/* Кнопка добавления опционов доступна всегда (даже для зафиксированных позиций) */}
           {/* ЗАЧЕМ: Позволяет добавлять новые опционы к зафиксированным */}
           <DropdownMenu>
@@ -1078,6 +1103,30 @@ function OptionsTable({
         </div>
       )}
 
+      {/* Модальное окно волшебного подбора опционов */}
+      <MagicSelectionModal
+        isOpen={magicModalOpen}
+        onClose={() => {
+          console.log('🔮 OptionsTable: onClose вызван, закрываем окно');
+          setMagicModalOpen(false);
+        }}
+        positions={positions}
+        options={options}
+        currentPrice={currentPrice}
+        targetPrice={targetPrice}
+        selectedTicker={selectedTicker}
+        availableDates={availableDates}
+        ivSurface={ivSurface}
+        dividendYield={dividendYield}
+        onAddOption={(option) => {
+          if (onAddMagicOption) {
+            onAddMagicOption(option);
+          }
+          // НЕ закрываем окно здесь — закрытие управляется из MagicSelectionModal
+          // ЗАЧЕМ: При автоподборе BuyCALL после BuyPUT окно должно оставаться открытым
+        }}
+        onSelectionComplete={onMagicSelectionComplete}
+      />
     </div>
   );
 }
