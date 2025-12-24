@@ -15,9 +15,6 @@ export { default as PositionFinancialControl } from './PositionFinancialControl'
 export { default as SaveConfigurationDialog } from './SaveConfigurationDialog';
 export { default as PriceAndTimeSettings } from './PriceAndTimeSettings';
 
-// ИИ подбор опциона
-export { AIOptionSelectorButton, AIOptionSelectorDialog } from './AIOptionSelector';
-
 // Результат подбора опционов
 export { default as OptionSelectionResult } from './OptionSelectionResult';
 

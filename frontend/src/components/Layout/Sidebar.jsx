@@ -105,7 +105,7 @@ function Sidebar() {
                 className="flex-shrink-0"
               />
               <span className={`text-lg hover:cursor-pointer text-foreground font-bold ${isSidebarCollapsed ? 'lg:hidden' : ''}`}>OPTIONER</span>
-              <span className={`text-sm text-cyan-500 font-medium ${isSidebarCollapsed ? 'lg:hidden' : ''}`}>v21</span>
+              <span className={`text-sm text-cyan-500 font-medium ${isSidebarCollapsed ? 'lg:hidden' : ''}`}>v26</span>
             </div>
           </Link>
 
@@ -146,9 +146,6 @@ function Sidebar() {
                   </NavItem>
                   <NavItem to="/tools/gradual-strategy-calculator" icon={TrendingUp} title="Калькулятор градуальных стратегий">
                     Градуальный калькулятор
-                  </NavItem>
-                  <NavItem to="/tools/calculator-ml" icon={Brain} title="AI Калькулятор опционов с ML-моделью">
-                    AI Калькулятор опционов
                   </NavItem>
                 </div>
               </div>

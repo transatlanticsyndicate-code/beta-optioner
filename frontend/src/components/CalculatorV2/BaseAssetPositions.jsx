@@ -1,10 +1,9 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Eye, EyeOff, ChevronDown, Trash2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { Input } from '../ui/input';
 import { addPosition as savePosition } from '../../utils/portfolioStorage';
-import { AIOptionSelectorButton, AIOptionSelectorDialog } from './AIOptionSelector';
 import LockIcon from './LockIcon';
 
 function BaseAssetPositions({ 
@@ -19,10 +18,6 @@ function BaseAssetPositions({
   isLocked = false,
   options = [] // Опционы из калькулятора для проверки наличия BuyPUT
 }) {
-  
-  // Состояние для диалога ИИ подбора опциона
-  const [aiSelectorDialogOpen, setAiSelectorDialogOpen] = useState(false);
-  
   // Проверяем, есть ли позиции базового актива
   const hasPositions = positions && positions.length > 0;
 
@@ -74,11 +69,6 @@ function BaseAssetPositions({
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-            {/* Кнопка ИИ подбора опциона - активна только при наличии позиций */}
-            <AIOptionSelectorButton 
-              onClick={() => setAiSelectorDialogOpen(true)}
-              disabled={!hasPositions}
-            />
           </>
         </div>
       </div>
@@ -89,7 +79,7 @@ function BaseAssetPositions({
             key={position.id}
             className={`grid grid-cols-[30px_50px_60px_72px_100px_30px] items-center text-sm border rounded-md p-2 ${
               !position.visible ? "[&>*]:text-[#AAAAAA]" : ""
-            } ${aiSelectorDialogOpen ? "relative z-[10000] bg-white" : ""}`}
+            }`}
             style={{ gap: 0 }}
           >
             {/* Иконка видимости: Lock для зафиксированных позиций, Eye/EyeOff для обычных */}
@@ -166,21 +156,6 @@ function BaseAssetPositions({
           </div>
         ))}
       </div>
-      {/* Диалог ИИ подбора опциона */}
-      <AIOptionSelectorDialog
-        isOpen={aiSelectorDialogOpen}
-        onClose={() => setAiSelectorDialogOpen(false)}
-        selectedTicker={selectedTicker}
-        currentPrice={currentPrice}
-        positions={positions}
-        options={options}
-        onAddOption={(option) => {
-          if (onAddOption) {
-            onAddOption(option);
-            setAiSelectorDialogOpen(false); // Закрываем диалог после добавления
-          }
-        }}
-      />
     </div>
   );
 }

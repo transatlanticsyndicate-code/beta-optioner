@@ -37,8 +37,6 @@ function TopNav() {
         return 'Настройки';
       case '/help':
         return 'Помощь';
-      case '/tools/calculator-ml':
-        return 'AI Калькулятор опционов';
       default:
         return 'Опционные Стратегии';
     }
