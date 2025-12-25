@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="%PUBLIC_URL%/images/logoOp.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0a0e1a" media="(prefers-color-scheme: dark)" />
+    <meta name="description" content="SYNDICATE Platform - Финансовые инструменты" />
+    <title>SYNDICATE Platform</title>
+    
+    <!-- Подавление CORS ошибок от внешних виджетов (TradingView) -->
+    <script>
+      // Глобальный обработчик ошибок для подавления "Script error."
+      window.addEventListener('error', function(e) {
+        if (e.message === 'Script error.') {
+          e.stopImmediatePropagation();
+          e.preventDefault();
+          console.warn('[Suppressed] Cross-origin script error from external widget');
+          return true;
+        }
+      }, true);
+      
+      // Патчим console.error чтобы не показывать модалку в dev mode
+      const originalConsoleError = console.error;
+      console.error = function(...args) {
+        const firstArg = args[0];
+        if (typeof firstArg === 'string' && firstArg.includes('Script error')) {
+          console.warn('[Suppressed Console Error]', ...args);
+          return;
+        }
+        originalConsoleError.apply(console, args);
+      };
+    </script>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+  </body>
+</html>
