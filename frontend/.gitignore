@@ -69,6 +69,8 @@ dist
 # Gatsby files
 .cache/
 public
+!public/index.html
+!public/options-cache-sw.js
 
 # Storybook build outputs
 .out
