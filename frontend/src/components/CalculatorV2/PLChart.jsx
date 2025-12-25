@@ -467,45 +467,7 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
       }
     }
 
-    // Расчет зон вероятности (стандартные отклонения)
-    // Используем упрощенную модель: σ = цена × волатильность × √(дни/365)
-    // Предполагаем годовую волатильность 25% (типичная для акций)
-    // ВАЖНО: Используем UTC для консистентности между часовыми поясами
-    const annualVolatility = 0.25;
-    let maxDaysRemaining = 30; // По умолчанию 30 дней
-    visibleOptions.forEach(option => {
-      const optionDaysRemaining = calculateDaysRemainingUTC(option, daysPassed);
-      if (optionDaysRemaining > maxDaysRemaining) {
-        maxDaysRemaining = optionDaysRemaining;
-      }
-    });
-    const sigma = currentPrice * annualVolatility * Math.sqrt(maxDaysRemaining / 365);
-    
-    // Зоны: 1σ ≈ 68%, 2σ ≈ 95%, 3σ ≈ 99.7%
-    const sigma1Lower = currentPrice - sigma;
-    const sigma1Upper = currentPrice + sigma;
-    const sigma2Lower = currentPrice - 2 * sigma;
-    const sigma2Upper = currentPrice + 2 * sigma;
-    const sigma3Lower = currentPrice - 3 * sigma;
-    const sigma3Upper = currentPrice + 3 * sigma;
-
-    // Расчет вероятности прибыли (POP)
-    // Считаем процент точек где P&L > 0 в пределах 1σ
-    let profitablePoints = 0;
-    let totalPointsInSigma = 0;
-    
-    prices.forEach((price, i) => {
-      if (price >= sigma1Lower && price <= sigma1Upper) {
-        totalPointsInSigma++;
-        if (totalPLArray[i] > 0) {
-          profitablePoints++;
-        }
-      }
-    });
-    
-    const probabilityOfProfit = totalPointsInSigma > 0 
-      ? ((profitablePoints / totalPointsInSigma) * 100).toFixed(1)
-      : 0;
+    // Расчет зон вероятности удален - больше не используется
 
     // Цвета темы
     const themeColors = {
@@ -567,76 +529,7 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
       });
     }
 
-    // Добавляем зоны вероятности (прямоугольники) - только если включено
-    if (showProbabilityZones) {
-      // 3σ зона (99.7%) - самая светлая
-      shapes.push({
-      type: 'rect',
-      x0: sigma3Lower,
-      x1: sigma3Upper,
-      yref: 'paper',
-      y0: 0,
-      y1: 1,
-      fillcolor: 'rgba(147, 51, 234, 0.03)', // фиолетовый, очень прозрачный
-      line: { width: 0 },
-      layer: 'below'
-    });
-
-    // 2σ зона (95%)
-    shapes.push({
-      type: 'rect',
-      x0: sigma2Lower,
-      x1: sigma2Upper,
-      yref: 'paper',
-      y0: 0,
-      y1: 1,
-      fillcolor: 'rgba(147, 51, 234, 0.05)', // фиолетовый, прозрачный
-      line: { width: 0 },
-      layer: 'below'
-    });
-
-    // 1σ зона (68%) - самая темная
-    shapes.push({
-      type: 'rect',
-      x0: sigma1Lower,
-      x1: sigma1Upper,
-      yref: 'paper',
-      y0: 0,
-      y1: 1,
-      fillcolor: 'rgba(147, 51, 234, 0.08)', // фиолетовый, полупрозрачный
-      line: { width: 0 },
-      layer: 'below'
-    });
-
-    // Вертикальные линии границ 1σ
-    shapes.push({
-      type: 'line',
-      x0: sigma1Lower,
-      x1: sigma1Lower,
-      yref: 'paper',
-      y0: 0,
-      y1: 1,
-      line: {
-        color: 'rgba(147, 51, 234, 0.4)',
-        width: 1,
-        dash: 'dot'
-      }
-    });
-
-    shapes.push({
-      type: 'line',
-      x0: sigma1Upper,
-      x1: sigma1Upper,
-      yref: 'paper',
-      y0: 0,
-      y1: 1,
-      line: {
-        color: 'rgba(147, 51, 234, 0.4)',
-        width: 1,
-        dash: 'dot'
-      }
-    });
-    } // Конец if (showProbabilityZones)
+    // Розовые зоны вероятности удалены - больше не используются
 
     // Добавляем вертикальные линии для breakeven points
     breakevenPoints.forEach(point => {
@@ -701,64 +594,7 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
       });
     }
 
-    // Метки для зон вероятности (размещаем внизу) - только если включено
-    if (showProbabilityZones) {
-      annotations.push({
-      x: sigma1Lower,
-      y: 0,
-      yref: 'paper',
-      text: '1σ (68%)',
-      showarrow: false,
-      xanchor: 'center',
-      yanchor: 'top',
-      font: {
-        color: 'rgba(147, 51, 234, 0.7)',
-        size: 9
-      },
-      bgcolor: 'rgba(147, 51, 234, 0.1)',
-      borderpad: 3,
-      bordercolor: 'rgba(147, 51, 234, 0.3)',
-      borderwidth: 1
-    });
-
-    annotations.push({
-      x: sigma1Upper,
-      y: 0,
-      yref: 'paper',
-      text: '1σ',
-      showarrow: false,
-      xanchor: 'center',
-      yanchor: 'top',
-      font: {
-        color: 'rgba(147, 51, 234, 0.7)',
-        size: 9
-      },
-      bgcolor: 'rgba(147, 51, 234, 0.1)',
-      borderpad: 3,
-      bordercolor: 'rgba(147, 51, 234, 0.3)',
-      borderwidth: 1
-    });
-
-    // Метка POP (вероятность прибыли) в центре 1σ зоны
-    annotations.push({
-      x: currentPrice,
-      y: 0.05,
-      yref: 'paper',
-      text: `POP: ${probabilityOfProfit}%`,
-      showarrow: false,
-      xanchor: 'center',
-      yanchor: 'bottom',
-      font: {
-        color: probabilityOfProfit > 50 ? '#10B981' : '#EF4444',
-        size: 12,
-        weight: 'bold'
-      },
-      bgcolor: themeColors.annotationBg,
-      borderpad: 6,
-      bordercolor: probabilityOfProfit > 50 ? '#10B981' : '#EF4444',
-      borderwidth: 2
-    });
-    } // Конец if (showProbabilityZones) для аннотаций
+    // Метки зон вероятности и POP удалены - больше не используются
 
     // Метки для breakeven points (размещаем вверху графика)
     const maxPL = Math.max(...totalPLArray);
