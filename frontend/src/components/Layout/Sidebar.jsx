@@ -98,7 +98,7 @@ function Sidebar() {
           >
             <div className="flex items-center gap-3">
               <img 
-                src="/images/logoOp.png" 
+                src="/images/logoOp.svg" 
                 alt="OPTIONER" 
                 width="32" 
                 height="32" 

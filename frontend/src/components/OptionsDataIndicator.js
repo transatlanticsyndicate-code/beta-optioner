@@ -6,7 +6,6 @@
 
 import React, { useState, useEffect } from 'react';
 import './LiveDataIndicator.css';
-import massiveLogo from '../massive.png';
 
 const OptionsDataIndicator = () => {
   const [status, setStatus] = useState(null);
@@ -40,7 +39,7 @@ const OptionsDataIndicator = () => {
     return (
       <div className="live-indicator loading">
         <div className="indicator-logo-wrapper">
-          <img src={massiveLogo} alt="Massive" className="indicator-logo" />
+          <img src="/images/massive.svg" alt="Massive" className="indicator-logo" />
         </div>
         <span className="indicator-text">Проверка...</span>
       </div>
@@ -124,7 +123,7 @@ const OptionsDataIndicator = () => {
     >
       <div className="indicator-logo-wrapper">
         <img 
-          src={massiveLogo} 
+          src="/images/massive.svg" 
           alt="Massive" 
           className="indicator-logo"
         />

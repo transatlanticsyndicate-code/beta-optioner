@@ -9,7 +9,6 @@
 
 import React, { useState, useEffect } from 'react';
 import './LiveDataIndicator.css';
-import massiveLogo from '../massive.png';
 
 const StocksDataIndicator = () => {
   const [status, setStatus] = useState(null);
@@ -43,7 +42,7 @@ const StocksDataIndicator = () => {
     return (
       <div className="live-indicator loading">
         <div className="indicator-logo-wrapper">
-          <img src={massiveLogo} alt="Massive" className="indicator-logo" />
+          <img src="/images/massive.svg" alt="Massive" className="indicator-logo" />
         </div>
         <span className="indicator-text">Проверка...</span>
       </div>
@@ -127,7 +126,7 @@ const StocksDataIndicator = () => {
     >
       <div className="indicator-logo-wrapper">
         <img 
-          src={massiveLogo} 
+          src="/images/massive.svg" 
           alt="Massive" 
           className="indicator-logo"
         />
