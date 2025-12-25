@@ -56,6 +56,8 @@ kill -9 <PID_frontend>
 ```
 
 ## Проверка работы
-- Backend: http://localhost:8000/health
-- Frontend: http://localhost:3000
-- API Docs: http://localhost:8000/docs
+- Backend (локально): http://localhost:8000/health
+- Frontend (локально): http://localhost:3000
+- API Docs (локально): http://localhost:8000/docs
+- Beta сервер: https://beta.optioner.online
+- Тестовый сервер: https://test.optioner.online

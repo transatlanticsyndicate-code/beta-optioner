@@ -1,10 +1,10 @@
 ---
-description: Сделать коммит, пуш и деплой на тестовый сервер
+description: Сделать коммит, пуш и деплой на beta сервер
 ---
 
-# Коммит, Пуш и Деплой
+# Коммит, Пуш и Деплой на Beta
 
-Этот workflow выполняет полный цикл: коммит изменений, пуш на GitHub и деплой на тестовый сервер.
+Этот workflow выполняет полный цикл: коммит изменений, пуш на GitHub и деплой на beta сервер.
 
 ## Шаги выполнения
 
@@ -18,16 +18,18 @@ git add -A && git commit -m "update"
 git push origin main
 ```
 
-### 3. Деплой на тестовый сервер
+### 3. Деплой на beta сервер
 ```bash
-ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_optioner_deploy root@89.117.52.143 "cd /var/www/test && git pull origin main && cd frontend && npm run build && pm2 restart optioner-backend-test && echo 'Deploy completed!'"
+ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_optioner_deploy root@89.117.52.143 "cd /var/www/beta && git pull origin main && cd frontend && npm run build && pm2 restart optioner-backend-beta && echo 'Deploy completed!'"
 ```
 
 ## Проверка
+- Beta сервер: https://beta.optioner.online
 - Тестовый сервер: https://test.optioner.online
 - Продакшн сервер: https://optioner.online
 
 ## Примечания
 - SSH ключ: `~/.ssh/id_optioner_deploy`
 - IP сервера: `89.117.52.143`
-- PM2 процесс: `optioner-backend-test`
+- PM2 процесс: `optioner-backend-beta`
+- Папка на сервере: `/var/www/beta`
