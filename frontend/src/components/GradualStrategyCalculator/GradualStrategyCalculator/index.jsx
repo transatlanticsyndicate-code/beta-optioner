@@ -1,19 +1,19 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import './GradualStrategyCalculator.css';
+import '../GradualStrategyCalculator.css';
 import {
   parseExitScheme,
   validateExitScheme,
-} from '../../utils/gradualStrategyCalculations';
-import OwnDataChart from './OwnDataChart';
-import { Card, CardContent } from '../ui/card';
-import { Input } from '../ui/input';
-import { Label } from '../ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
-import { Button } from '../ui/button';
+} from './utils/calculations';
+import OwnDataChart from '../OwnDataChart';
+import { Card, CardContent } from '../../ui/card';
+import { Input } from '../../ui/input';
+import { Label } from '../../ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../ui/tooltip';
+import { Button } from '../../ui/button';
 import { RotateCcw } from 'lucide-react';
-import { TickerSearch } from '../CalculatorV2';
-import FinancialControl from '../CalculatorV2/FinancialControl';
+import { TickerSearch } from '../../CalculatorV2';
+import FinancialControl from '../../CalculatorV2/FinancialControl';
 
 // Функция форматирования денежных значений с разделением на тысячи (пробел)
 const formatMoney = (value, isPrice = false) => {
