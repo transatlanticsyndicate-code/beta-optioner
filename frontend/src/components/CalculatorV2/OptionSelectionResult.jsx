@@ -71,10 +71,22 @@ function OptionSelectionResult({
 
   // Расчёт P&L для сценария ВНИЗ (targetDownPrice)
   // ВАЖНО: Хуки вызываются безусловно для соблюдения правил React
+  // ФИЛЬТР: Исключаем Buy CALL опционы из сценария ВНИЗ
+  // ЗАЧЕМ: Buy CALL работает только при росте цены (сценарий ВВЕРХ)
+  const optionsForDown = options.filter(opt => {
+    const isBuyCall = opt.action === 'Buy' && opt.type === 'CALL';
+    if (isBuyCall) {
+      console.log('🔴 Фильтруем Buy CALL из сценария ВНИЗ:', opt.action, opt.type, opt.strike);
+    }
+    return !isBuyCall; // Исключаем Buy CALL
+  });
+  
+  console.log('📊 OptionSelectionResult ВНИЗ: всего опционов =', options.length, ', после фильтрации =', optionsForDown.length);
+  
   const plDown = usePositionExitCalculator({
     underlyingPrice: targetDownPrice,
     daysPassed: daysAfterEntry,
-    options,
+    options: optionsForDown,
     positions,
     currentPrice
   });
