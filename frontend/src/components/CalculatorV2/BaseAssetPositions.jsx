@@ -16,7 +16,9 @@ function BaseAssetPositions({
   updatePosition,
   onAddOption,
   isLocked = false,
-  options = [] // Опционы из калькулятора для проверки наличия BuyPUT
+  options = [], // Опционы из калькулятора для проверки наличия BuyPUT
+  isAIEnabled = false,
+  isTickerSupported = false
 }) {
   // Проверяем, есть ли позиции базового актива
   const hasPositions = positions && positions.length > 0;
@@ -46,7 +48,14 @@ function BaseAssetPositions({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium">Базовый актив</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-medium">Базовый актив</h3>
+          {selectedTicker && (
+            <span className="text-lg" title={isAIEnabled && isTickerSupported ? 'AI модель активна' : 'AI модель неактивна'}>
+              {isAIEnabled && isTickerSupported ? '🟣' : '⚫️'}
+            </span>
+          )}
+        </div>
         <div className="flex gap-2">
           {/* Кнопки добавления доступны всегда (даже для зафиксированных позиций) */}
           {/* ЗАЧЕМ: Позволяет добавлять новые позиции к зафиксированным */}

@@ -15,7 +15,9 @@ function CalculatorSettings({
   useDividends = false,
   setUseDividends,
   dividendYield = 0,
-  dividendLoading = false
+  dividendLoading = false,
+  isAIEnabled = true,
+  setIsAIEnabled
 }) {
   // Получаем актуальную безрисковую ставку от FRED API
   const { ratePercent, loading: rateLoading } = useRiskFreeRate();
@@ -60,6 +62,24 @@ function CalculatorSettings({
               checked={showOptionLines}
               onCheckedChange={setShowOptionLines}
               className="data-[state=checked]:bg-cyan-500"
+            />
+          </div>
+
+          {/* Переключатель AI модели прогнозирования волатильности */}
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col">
+              <Label htmlFor="use-ai-model" className="text-sm font-normal cursor-pointer">
+                Использовать ИИ модель
+              </Label>
+              <span className="text-xs text-muted-foreground mt-0.5">
+                Прогнозирование волатильности
+              </span>
+            </div>
+            <Switch
+              id="use-ai-model"
+              checked={isAIEnabled}
+              onCheckedChange={setIsAIEnabled}
+              className="data-[state=checked]:bg-purple-500"
             />
           </div>
 

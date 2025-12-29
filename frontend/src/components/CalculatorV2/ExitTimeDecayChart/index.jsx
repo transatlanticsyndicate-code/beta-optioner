@@ -18,7 +18,11 @@ function ExitTimeDecayChart({
   daysPassed = 0,
   showOptionLines = true,
   selectedExpirationDate = null,
-  ivSurface = null
+  ivSurface = null,
+  dividendYield = 0,
+  isAIEnabled = false,
+  aiVolatilityMap = {},
+  selectedTicker = ''
 }) {
   const [isDarkMode, setIsDarkMode] = useState(
     document.documentElement.classList.contains('dark')
@@ -42,6 +46,14 @@ function ExitTimeDecayChart({
   }, []);
 
   const chartData = useMemo(() => {
+    console.log('🤖 [ExitTimeDecayChart] Перерисовка графика:', {
+      isAIEnabled,
+      selectedTicker,
+      aiVolatilityMapSize: Object.keys(aiVolatilityMap || {}).length,
+      targetPrice,
+      optionsCount: options.length
+    });
+    
     const visibleOptions = options.filter(opt => opt.visible !== false);
     const visiblePositions = positions.filter(pos => pos.visible !== false);
     
@@ -65,7 +77,7 @@ function ExitTimeDecayChart({
         const plValues = daysRange.map(days => {
           const daysRemaining = calculateDaysRemainingForOption(option, daysPassed);
           if (days > daysRemaining) return null;
-          return calculateOptionPL(option, days, targetPrice, currentPrice, ivSurface);
+          return calculateOptionPL(option, days, targetPrice, currentPrice, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap, selectedTicker);
         });
 
         traces.push({
@@ -91,7 +103,7 @@ function ExitTimeDecayChart({
       visibleOptions.forEach(option => {
         const daysRemaining = calculateDaysRemainingForOption(option, daysPassed);
         if (days <= daysRemaining) {
-          total += calculateOptionPL(option, days, targetPrice, currentPrice, ivSurface);
+          total += calculateOptionPL(option, days, targetPrice, currentPrice, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap, selectedTicker);
         }
       });
       
@@ -131,7 +143,7 @@ function ExitTimeDecayChart({
       layout: getChartLayout(isDarkMode, maxDays),
       config: getChartConfig()
     };
-  }, [options, positions, targetPrice, currentPrice, daysPassed, showOptionLines, selectedExpirationDate, ivSurface, isDarkMode]);
+  }, [options, positions, targetPrice, currentPrice, daysPassed, showOptionLines, selectedExpirationDate, ivSurface, isDarkMode, dividendYield, isAIEnabled, JSON.stringify(aiVolatilityMap), selectedTicker]);
 
   if (!chartData.traces || chartData.traces.length === 0) {
     return (

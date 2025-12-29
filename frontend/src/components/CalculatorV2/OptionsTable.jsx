@@ -65,11 +65,20 @@ function OptionsTable({
   onSaveEditedConfiguration = null, // Функция сохранения изменений
   positions = [], // Позиции базового актива для волшебного подбора
   onAddMagicOption = null, // Функция добавления опциона из волшебного подбора
-  onMagicSelectionComplete = null // Callback для передачи параметров подбора в OptionSelectionResult
+  onMagicSelectionComplete = null, // Callback для передачи параметров подбора в OptionSelectionResult
+  isAIEnabled = false, // Включен ли AI для прогнозирования волатильности
+  aiVolatilityMap = {}, // Кэш AI предсказаний волатильности
+  fetchAIVolatility = null // Функция для запроса AI волатильности
 }) {
-  // console.log('📋 OptionsTable render:', { 
-  //   optionsCount: options.length, 
-  // });
+  // Логирование полученных AI пропсов
+  console.log('🤖 [OptionsTable] Получены пропсы:', {
+    isAIEnabled,
+    targetPrice,
+    currentPrice,
+    aiVolatilityMapKeys: Object.keys(aiVolatilityMap || {}),
+    aiVolatilityMapSize: Object.keys(aiVolatilityMap || {}).length,
+    aiVolatilityMap
+  });
   
   const [customStrategyName, setCustomStrategyName] = React.useState('');
   const [saveDialogOpen, setSaveDialogOpenLocal] = React.useState(false);
@@ -945,12 +954,30 @@ function OptionsTable({
                 
                 // Определяем волатильность для этого опциона
                 // ЗАЧЕМ: Используем единую функцию getOptionVolatility с IV Surface для точной интерполяции
-                const optionVolatility = getOptionVolatility(
+                let optionVolatility = getOptionVolatility(
                   option,
                   currentDaysToExpiration,
                   optionDaysRemaining,
                   ivSurface
                 );
+                
+                // Проверяем наличие AI волатильности в кэше
+                // ЗАЧЕМ: Если AI включен и есть прогноз, используем его вместо стандартной IV
+                if (isAIEnabled && aiVolatilityMap && selectedTicker && targetPrice) {
+                  const cacheKey = `${selectedTicker}_${option.strike}_${option.date}_${targetPrice.toFixed(2)}_${optionDaysRemaining}`;
+                  const aiVolatility = aiVolatilityMap[cacheKey];
+                  if (aiVolatility) {
+                    console.log('🤖 [OptionsTable] Используем AI волатильность:', {
+                      strike: option.strike,
+                      standardIV: optionVolatility,
+                      aiIV: aiVolatility,
+                      cacheKey
+                    });
+                    optionVolatility = aiVolatility;
+                  } else {
+                    console.log('🤖 [OptionsTable] AI волатильность не найдена в кэше:', cacheKey);
+                  }
+                }
                 
                 // Используем customPremium если премия была изменена вручную
                 // ВАЖНО: При ручной премии обнуляем ask/bid, чтобы getEntryPrice() использовал premium
@@ -1068,12 +1095,21 @@ function OptionsTable({
                     
                     // Определяем волатильность для этого опциона
                     // ЗАЧЕМ: Используем единую функцию getOptionVolatility с IV Surface для точной интерполяции
-                    const optVolatility = getOptionVolatility(
+                    let optVolatility = getOptionVolatility(
                       opt,
                       currentDaysToExp,
                       optDaysRemaining,
                       ivSurface
                     );
+                    
+                    // Проверяем наличие AI волатильности в кэше
+                    if (isAIEnabled && aiVolatilityMap && selectedTicker && targetPrice) {
+                      const cacheKey = `${selectedTicker}_${opt.strike}_${opt.date}_${targetPrice.toFixed(2)}_${optDaysRemaining}`;
+                      const aiVolatility = aiVolatilityMap[cacheKey];
+                      if (aiVolatility) {
+                        optVolatility = aiVolatility;
+                      }
+                    }
                     
                     // ВАЖНО: При ручной премии обнуляем ask/bid, чтобы getEntryPrice() использовал premium
                     const effectivePremium = opt.isPremiumModified ? opt.customPremium : opt.premium;

@@ -29,9 +29,25 @@ export const calculateDaysRemainingForOption = (option, currentDaysPassed) => {
 };
 
 // Расчет P&L для опциона
-export const calculateOptionPL = (option, daysToExpiration, targetPrice, currentPrice, ivSurface) => {
+export const calculateOptionPL = (option, daysToExpiration, targetPrice, currentPrice, ivSurface, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, selectedTicker = '') => {
   const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0);
-  const optionVolatility = getOptionVolatility(option, currentDaysToExpiration, daysToExpiration, ivSurface);
+  let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, daysToExpiration, ivSurface);
+  
+  // Используем AI волатильность если доступна
+  if (isAIEnabled && aiVolatilityMap && selectedTicker) {
+    const cacheKey = `${selectedTicker}_${option.strike}_${option.date}_${targetPrice.toFixed(2)}_${daysToExpiration}`;
+    const aiVolatility = aiVolatilityMap[cacheKey];
+    if (aiVolatility) {
+      console.log('🤖 [ExitTimeDecayChart] Используем AI волатильность:', {
+        strike: option.strike,
+        days: daysToExpiration,
+        standardIV: optionVolatility,
+        aiIV: aiVolatility,
+        cacheKey
+      });
+      optionVolatility = aiVolatility;
+    }
+  }
   
   const effectivePremium = option.isPremiumModified ? option.customPremium : option.premium;
   const tempOpt = { 
@@ -41,5 +57,5 @@ export const calculateOptionPL = (option, daysToExpiration, targetPrice, current
     bid: option.isPremiumModified ? 0 : option.bid
   };
   
-  return calculateOptionPLValue(tempOpt, targetPrice, currentPrice, daysToExpiration, optionVolatility);
+  return calculateOptionPLValue(tempOpt, targetPrice, currentPrice, daysToExpiration, optionVolatility, dividendYield);
 };

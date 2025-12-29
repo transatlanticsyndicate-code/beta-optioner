@@ -17,7 +17,11 @@ function ExitTimeDecayChart({
   daysPassed = 0,   // Прошедшие дни от сегодня
   showOptionLines = true,
   selectedExpirationDate = null,  // Выбранная дата экспирации для расчета maxDays
-  ivSurface = null  // IV Surface для точной интерполяции волатильности
+  ivSurface = null,  // IV Surface для точной интерполяции волатильности
+  dividendYield = 0,
+  isAIEnabled = false,
+  aiVolatilityMap = {},
+  selectedTicker = ''
 }) {
   const [isDarkMode, setIsDarkMode] = useState(
     document.documentElement.classList.contains('dark')
@@ -70,7 +74,23 @@ function ExitTimeDecayChart({
       // Получаем IV из API через единую функцию (как в usePositionExitCalculator и PLChart)
       // ivSurface используется для точной интерполяции IV между датами экспирации
       const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0);
-      const optionVolatility = getOptionVolatility(option, currentDaysToExpiration, daysToExpiration, ivSurface);
+      let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, daysToExpiration, ivSurface);
+      
+      // Используем AI волатильность если доступна
+      if (isAIEnabled && aiVolatilityMap && selectedTicker) {
+        const cacheKey = `${selectedTicker}_${option.strike}_${option.date}_${targetPrice.toFixed(2)}_${daysToExpiration}`;
+        const aiVolatility = aiVolatilityMap[cacheKey];
+        if (aiVolatility) {
+          console.log('🤖 [ExitTimeDecayChart] Используем AI волатильность:', {
+            strike: option.strike,
+            days: daysToExpiration,
+            standardIV: optionVolatility,
+            aiIV: aiVolatility,
+            cacheKey
+          });
+          optionVolatility = aiVolatility;
+        }
+      }
       
       // ВАЖНО: При ручной премии обнуляем ask/bid, чтобы getEntryPrice() использовал premium
       const effectivePremium = option.isPremiumModified ? option.customPremium : option.premium;
@@ -81,9 +101,9 @@ function ExitTimeDecayChart({
         bid: option.isPremiumModified ? 0 : option.bid
       };
       
-      return calculateOptionPLValue(tempOpt, targetPrice, currentPrice, daysToExpiration, optionVolatility);
+      return calculateOptionPLValue(tempOpt, targetPrice, currentPrice, daysToExpiration, optionVolatility, dividendYield);
     },
-    [targetPrice, currentPrice, ivSurface]
+    [targetPrice, currentPrice, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap, selectedTicker]
   );
 
   // Генерируем данные для графика
@@ -397,7 +417,7 @@ function ExitTimeDecayChart({
     };
 
     return { traces, layout, config };
-  }, [options, positions, currentPrice, targetPrice, daysPassed, showOptionLines, selectedExpirationDate, calculateUnderlyingPL, calculateOptionPL, calculateDaysRemainingForOption, isDarkMode]);
+  }, [options, positions, currentPrice, targetPrice, daysPassed, showOptionLines, selectedExpirationDate, calculateUnderlyingPL, calculateOptionPL, calculateDaysRemainingForOption, isDarkMode, isAIEnabled, aiVolatilityMap, selectedTicker]);
 
   if (!options.length && !positions.length) {
     return (

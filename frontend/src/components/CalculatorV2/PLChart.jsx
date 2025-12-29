@@ -19,7 +19,16 @@ import { getOptionVolatility } from '../../utils/volatilitySurface';
  * 
  * Адаптирован из V1 для работы с V2
  */
-function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLines = true, daysPassed = 0, showProbabilityZones = true, targetPrice = 0, ivSurface = null, dividendYield = 0 }) {
+function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLines = true, daysPassed = 0, showProbabilityZones = true, targetPrice = 0, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, fetchAIVolatility = null, selectedTicker = '' }) {
+  // Логирование полученных AI пропсов
+  console.log('🤖 [PLChart] Получены пропсы:', {
+    isAIEnabled,
+    targetPrice,
+    selectedTicker,
+    aiVolatilityMapKeys: Object.keys(aiVolatilityMap || {}),
+    aiVolatilityMapSize: Object.keys(aiVolatilityMap || {}).length
+  });
+  
   // Отслеживание темы
   const [isDarkMode, setIsDarkMode] = useState(
     document.documentElement.classList.contains('dark')
@@ -177,7 +186,26 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
       // currentDays = daysRemaining без daysPassed, simulatedDays = с учётом daysPassed
       // ivSurface используется для точной интерполяции IV между датами экспирации
       const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0);
-      const optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface);
+      let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface);
+      
+      // Используем AI волатильность если доступна
+      if (isAIEnabled && aiVolatilityMap && selectedTicker && targetPrice) {
+        const cacheKey = `${selectedTicker}_${option.strike}_${option.date}_${targetPrice.toFixed(2)}_${optionDaysRemaining}`;
+        const aiVolatility = aiVolatilityMap[cacheKey];
+        
+        if (aiVolatility) {
+          console.log('🤖 [PLChart/chartData] Используем AI волатильность:', {
+            strike: option.strike,
+            standardIV: optionVolatility,
+            aiIV: aiVolatility,
+            cacheKey
+          });
+          optionVolatility = aiVolatility;
+        }
+      }
+      
+      // Логируем волатильность перед расчетом P&L
+      console.log(`🤖 [PLChart/plArray] Strike ${option.strike}: optionVolatility=${optionVolatility}, isAIEnabled=${isAIEnabled}`);
       
       const plArray = prices.map((price) =>
         calculateOptionPLValue(tempOption, price, currentPrice, optionDaysRemaining, optionVolatility, dividendYield)
@@ -229,7 +257,19 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
         };
         const optionDaysRemaining = calculateDaysRemainingUTC(option, daysPassed);
         const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0);
-        const optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface);
+        let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface);
+        
+        // Используем AI волатильность если доступна
+        if (isAIEnabled && aiVolatilityMap && options.length > 0 && targetPrice) {
+          const ticker = options[0]?.ticker || '';
+          if (ticker) {
+            const cacheKey = `${ticker}_${option.strike}_${option.date}_${targetPrice.toFixed(2)}_${optionDaysRemaining}`;
+            const aiVolatility = aiVolatilityMap[cacheKey];
+            if (aiVolatility) {
+              optionVolatility = aiVolatility;
+            }
+          }
+        }
         
         return prices.map(price => 
           calculateOptionPLValue(tempOption, price, currentPrice, optionDaysRemaining, optionVolatility, dividendYield)
@@ -717,7 +757,7 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
       layout,
       config
     };
-  }, [options, currentPrice, positions, isDarkMode, showOptionLines, daysPassed, showProbabilityZones, xAxisRange, calculateUnderlyingPL, targetPrice, ivSurface, dividendYield]);
+  }, [options, currentPrice, positions, isDarkMode, showOptionLines, daysPassed, showProbabilityZones, xAxisRange, calculateUnderlyingPL, targetPrice, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap]);
 
   if (!chartData) {
     return (
@@ -787,9 +827,12 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
  * @param {Array} positions - массив позиций базового актива
  * @param {number} daysPassed - прошедшие дни от сегодня (слайдер)
  * @param {Object} ivSurface - IV Surface для интерполяции (опционально)
+ * @param {number} dividendYield - дивидендная доходность
+ * @param {boolean} isAIEnabled - включен ли AI
+ * @param {Object} aiVolatilityMap - кэш AI волатильности
  * @returns {Object} - { prices, totalPLArray } для расчета метрик
  */
-export function calculatePLDataForMetrics(options = [], currentPrice = 0, positions = [], daysPassed = 0, ivSurface = null, dividendYield = 0) {
+export function calculatePLDataForMetrics(options = [], currentPrice = 0, positions = [], daysPassed = 0, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, targetPrice = 0, selectedTicker = '') {
   if (!currentPrice || (options.length === 0 && positions.length === 0)) {
     return { prices: [], totalPLArray: [] };
   }
@@ -841,7 +884,22 @@ export function calculatePLDataForMetrics(options = [], currentPrice = 0, positi
     // Получаем IV из API через единую функцию (как в usePositionExitCalculator)
     // ivSurface используется для точной интерполяции IV между датами экспирации
     const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0);
-    const optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface);
+    let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface);
+    
+    // Используем AI волатильность если доступна
+    if (isAIEnabled && aiVolatilityMap && selectedTicker && targetPrice) {
+      const cacheKey = `${selectedTicker}_${option.strike}_${option.date}_${targetPrice.toFixed(2)}_${optionDaysRemaining}`;
+      const aiVolatility = aiVolatilityMap[cacheKey];
+      if (aiVolatility) {
+        console.log('🤖 [PLChart/calculatePLDataForMetrics] Используем AI волатильность:', {
+          strike: option.strike,
+          standardIV: optionVolatility,
+          aiIV: aiVolatility,
+          cacheKey
+        });
+        optionVolatility = aiVolatility;
+      }
+    }
     
     prices.forEach((price, i) => {
       // ВАЖНО: При ручной премии обнуляем ask/bid, чтобы getEntryPrice() использовал premium

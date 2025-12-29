@@ -52,9 +52,19 @@ import {
 import FinancialControl from '../components/CalculatorV2/FinancialControl';
 import ExitCalculator from '../components/CalculatorV2/ExitCalculator';
 import OptionSelectionResult from '../components/CalculatorV2/OptionSelectionResult';
-import { getDaysUntilExpirationUTC } from '../utils/dateUtils';
+import { getDaysUntilExpirationUTC, calculateDaysRemainingUTC } from '../utils/dateUtils';
 import { WhatsNewModal, shouldShowModal } from '../components/WhatsNewModal';
 import { useIVSurface } from '../hooks/useIVSurface';
+import aiPredictionService from '../services/aiPredictionService';
+
+// Список тикеров, поддерживаемых AI моделью прогнозирования волатильности
+const AI_SUPPORTED_TICKERS = [
+  'AAPL', 'ABBV', 'ABNB', 'ADBE', 'AMD', 'AMZN', 'BA', 'BAC', 'CAT', 'CMCSA', 
+  'COP', 'COST', 'CVX', 'DIA', 'DIS', 'GE', 'GOOGL', 'GS', 'HD', 'HON', 
+  'IWM', 'JNJ', 'JPM', 'KO', 'LLY', 'LOW', 'MA', 'META', 'MMM', 'MRK', 
+  'MS', 'MSFT', 'NFLX', 'NVDA', 'PEP', 'PFE', 'PG', 'PM', 'QQQ', 'SLB', 
+  'SPY', 'T', 'TGT', 'TSLA', 'UBER', 'UNH', 'V', 'VZ', 'WFC', 'WMT', 'XOM'
+];
 
 // Демо-данные для опционов (вынесены за пределы компонента для оптимизации)
 const demoOptions = [
@@ -149,6 +159,17 @@ function OptionsCalculatorV3() {
   // ЗАЧЕМ: Хранит параметры для отображения компонента OptionSelectionResult
   const [optionSelectionParams, setOptionSelectionParams] = useState(null);
 
+  // State для AI прогнозирования волатильности
+  // ЗАЧЕМ: Включение/выключение AI модели для прогнозирования IV
+  const [isAIEnabled, setIsAIEnabled] = useState(() => {
+    const saved = localStorage.getItem('isAIEnabled');
+    return saved !== null ? JSON.parse(saved) : true; // По умолчанию включено
+  });
+  
+  // State для кэша AI предсказаний волатильности
+  // ЗАЧЕМ: Избежать повторных запросов к API для одних и тех же параметров
+  const [aiVolatilityMap, setAiVolatilityMap] = useState({});
+
   // Синхронизируем targetPrice с currentPrice при первой загрузке цены
   useEffect(() => {
     if (currentPrice > 0 && targetPrice === 0) {
@@ -183,6 +204,17 @@ function OptionsCalculatorV3() {
   useEffect(() => {
     localStorage.setItem('useDividends', JSON.stringify(useDividends));
   }, [useDividends]);
+
+  // Сохраняем isAIEnabled в localStorage при изменении
+  // ЗАЧЕМ: При переключении AI принудительно обновляем aiVolatilityMap для перерисовки компонентов
+  useEffect(() => {
+    console.log('🤖 [AI] isAIEnabled изменен на:', isAIEnabled);
+    localStorage.setItem('isAIEnabled', JSON.stringify(isAIEnabled));
+    
+    // Принудительно обновляем aiVolatilityMap для перерисовки компонентов
+    // ВАЖНО: Создаем новый объект, чтобы React увидел изменение
+    setAiVolatilityMap(prev => ({ ...prev }));
+  }, [isAIEnabled]);
 
   // Загрузка дивидендной доходности при выборе тикера
   // ЗАЧЕМ: Для модели Black-Scholes-Merton нужна dividend yield
@@ -418,6 +450,74 @@ function OptionsCalculatorV3() {
     }
   };
 
+  // Функция для запроса AI волатильности
+  // ЗАЧЕМ: Получает прогноз IV от AI модели для конкретного опциона
+  const fetchAIVolatility = useCallback(async (option, targetStockPrice, daysToExpiration) => {
+    console.log('🤖 [AI] fetchAIVolatility вызвана:', { 
+      isAIEnabled, 
+      selectedTicker, 
+      strike: option.strike, 
+      targetStockPrice, 
+      daysToExpiration 
+    });
+
+    // Проверяем, включен ли AI и поддерживается ли тикер
+    if (!isAIEnabled || !selectedTicker || !AI_SUPPORTED_TICKERS.includes(selectedTicker.toUpperCase())) {
+      console.log('🤖 [AI] Пропуск: AI выключен или тикер не поддерживается');
+      return null;
+    }
+
+    // Создаем ключ для кэша
+    const cacheKey = `${selectedTicker}_${option.strike}_${option.date}_${targetStockPrice.toFixed(2)}_${daysToExpiration}`;
+    
+    // Проверяем кэш
+    if (aiVolatilityMap[cacheKey]) {
+      console.log('🤖 [AI] Используем кэш:', cacheKey, '→', aiVolatilityMap[cacheKey]);
+      return aiVolatilityMap[cacheKey];
+    }
+
+    try {
+      // Вычисляем TTM (время до экспирации в годах)
+      const ttm = daysToExpiration / 365;
+      
+      console.log('🤖 [AI] Запрос к API:', {
+        ticker: selectedTicker,
+        type: option.type,
+        stockPrice: targetStockPrice,
+        strike: option.strike,
+        ttm: ttm,
+        currentIv: option.impliedVolatility || 0.3
+      });
+
+      // Запрашиваем AI прогноз
+      const predictedIV = await aiPredictionService.predictIV({
+        ticker: selectedTicker,
+        type: option.type, // 'CALL' или 'PUT'
+        stockPrice: targetStockPrice,
+        strike: option.strike,
+        ttm: ttm,
+        currentIv: option.impliedVolatility || 0.3 // Используем текущую IV или дефолтное значение
+      });
+
+      console.log('🤖 [AI] Получен прогноз:', predictedIV, 'для ключа:', cacheKey);
+
+      // Сохраняем в кэш
+      setAiVolatilityMap(prev => {
+        const newMap = {
+          ...prev,
+          [cacheKey]: predictedIV
+        };
+        console.log('🤖 [AI] Обновлен кэш aiVolatilityMap:', newMap);
+        return newMap;
+      });
+
+      return predictedIV;
+    } catch (error) {
+      console.error('🤖 [AI] ❌ Ошибка запроса AI волатильности:', error);
+      return null;
+    }
+  }, [isAIEnabled, selectedTicker]);
+
   // Обработчик выбора тикера из NewTikerFinder
   // ЗАЧЕМ: Единая точка входа для выбора тикера с автоматическим определением типа
   // ВАЖНО: Используем priceData из NewTikerFinder, чтобы избежать дублирующего запроса к API
@@ -599,6 +699,35 @@ function OptionsCalculatorV3() {
     if (!isInitialized) return;
     saveCalculatorState();
   }, [isInitialized, saveCalculatorState]);
+
+  // Автоматический запрос AI прогнозов для всех опционов
+  // ЗАЧЕМ: Заполняем кэш aiVolatilityMap при изменении параметров
+  useEffect(() => {
+    const fetchAllAIVolatility = async () => {
+      // Проверяем условия для запроса
+      if (!isAIEnabled || !selectedTicker || !AI_SUPPORTED_TICKERS.includes(selectedTicker.toUpperCase())) {
+        return;
+      }
+      
+      if (!targetPrice || targetPrice <= 0 || options.length === 0) {
+        return;
+      }
+
+      // Запрашиваем AI прогнозы для всех опционов
+      for (const option of options) {
+        if (!option.visible || !option.strike || !option.date) continue;
+        
+        // Вычисляем дни до экспирации
+        const daysToExpiration = calculateDaysRemainingUTC(option, daysPassed);
+        if (daysToExpiration < 0) continue;
+
+        // Запрашиваем прогноз (функция сама проверит кэш)
+        await fetchAIVolatility(option, targetPrice, daysToExpiration);
+      }
+    };
+
+    fetchAllAIVolatility();
+  }, [isAIEnabled, selectedTicker, targetPrice, daysPassed, options, fetchAIVolatility]);
   
   // Автоматически устанавливаем daysPassed в максимум (день экспирации) при изменении опционов
   // Это означает, что слайдер по умолчанию в крайнем правом положении
@@ -1657,6 +1786,8 @@ function OptionsCalculatorV3() {
                         currentPrice={currentPrice}
                         updatePosition={updatePosition}
                         options={options}
+                        isAIEnabled={isAIEnabled}
+                        isTickerSupported={AI_SUPPORTED_TICKERS.includes(selectedTicker?.toUpperCase())}
                         onAddOption={(option) => {
                           // Добавляем опцион из ИИ подбора (PUT или CALL)
                           const newOptionId = Date.now().toString();
@@ -1732,6 +1863,10 @@ function OptionsCalculatorV3() {
                         instrumentCount={instrumentCount}
                         maxLossPercent={maxLossPercent}
                         ivSurface={ivSurface}
+                        isAIEnabled={isAIEnabled}
+                        aiVolatilityMap={aiVolatilityMap}
+                        fetchAIVolatility={fetchAIVolatility}
+                        targetPrice={targetPrice}
                       />
                     </>
                   )}
@@ -1819,6 +1954,8 @@ function OptionsCalculatorV3() {
                     setUseDividends={setUseDividends}
                     dividendYield={dividendYield}
                     dividendLoading={dividendLoading}
+                    isAIEnabled={isAIEnabled}
+                    setIsAIEnabled={setIsAIEnabled}
                   />
                 </Card>
               )}
@@ -1911,6 +2048,9 @@ function OptionsCalculatorV3() {
                       hasChanges={hasChanges}
                       onSaveEditedConfiguration={handleSaveEditedConfiguration}
                       positions={positions}
+                      isAIEnabled={isAIEnabled}
+                      aiVolatilityMap={aiVolatilityMap}
+                      fetchAIVolatility={fetchAIVolatility}
                       onAddMagicOption={(option) => {
                         // Добавляем опцион из волшебного подбора
                         const newOptionId = Date.now().toString();
@@ -2003,6 +2143,11 @@ function OptionsCalculatorV3() {
                     daysPassed={daysPassed}
                     ivSurface={ivSurface}
                     dividendYield={useDividends ? dividendYield : 0}
+                    isAIEnabled={isAIEnabled}
+                    aiVolatilityMap={aiVolatilityMap}
+                    fetchAIVolatility={fetchAIVolatility}
+                    targetPrice={targetPrice}
+                    selectedTicker={selectedTicker}
                   />
                 </Card>
               )}
@@ -2026,6 +2171,10 @@ function OptionsCalculatorV3() {
                         targetPrice={targetPrice}
                         ivSurface={ivSurface}
                         dividendYield={useDividends ? dividendYield : 0}
+                        isAIEnabled={isAIEnabled}
+                        aiVolatilityMap={aiVolatilityMap}
+                        fetchAIVolatility={fetchAIVolatility}
+                        selectedTicker={selectedTicker}
                       />
                     </CardContent>
                   </Card>
@@ -2097,6 +2246,10 @@ function OptionsCalculatorV3() {
                 savedConfigDate={savedConfigDate}
                 ivSurface={ivSurface}
                 dividendYield={useDividends ? dividendYield : 0}
+                isAIEnabled={isAIEnabled}
+                aiVolatilityMap={aiVolatilityMap}
+                fetchAIVolatility={fetchAIVolatility}
+                selectedTicker={selectedTicker}
               />
             </div>
           </div>

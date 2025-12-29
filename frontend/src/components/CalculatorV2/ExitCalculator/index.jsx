@@ -26,7 +26,11 @@ export function ExitCalculator({
   setTargetPrice,
   savedConfigDate = null,
   ivSurface = null,
-  dividendYield = 0
+  dividendYield = 0,
+  isAIEnabled = false,
+  aiVolatilityMap = {},
+  fetchAIVolatility = null,
+  selectedTicker = ''
 }) {
   // State для UI
   // ЗАЧЕМ: Сохранение состояния сворачивания в localStorage
@@ -52,7 +56,10 @@ export function ExitCalculator({
     positions,
     currentPrice,
     ivSurface,
-    dividendYield
+    dividendYield,
+    isAIEnabled,
+    aiVolatilityMap,
+    selectedTicker
   });
 
   // Проверяем, есть ли данные для расчета
@@ -152,6 +159,9 @@ export function ExitCalculator({
                   showOptionLines={showOptionLines}
                   ivSurface={ivSurface}
                   dividendYield={dividendYield}
+                  isAIEnabled={isAIEnabled}
+                  aiVolatilityMap={aiVolatilityMap}
+                  selectedTicker={selectedTicker}
                 />
               </div>
             </>

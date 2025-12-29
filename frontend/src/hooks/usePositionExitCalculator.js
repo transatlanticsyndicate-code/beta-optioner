@@ -95,7 +95,11 @@ export const usePositionExitCalculator = ({
   positions = [],
   currentPrice = 0,
   ivSurface = null,
-  dividendYield = 0
+  dividendYield = 0,
+  isAIEnabled = false,
+  aiVolatilityMap = {},
+  fetchAIVolatility = null,
+  selectedTicker = ''
 }) => {
   return useMemo(() => {
     // Фильтруем видимые опционы и позиции
@@ -135,7 +139,10 @@ export const usePositionExitCalculator = ({
       daysPassed,
       currentPrice,
       ivSurface,
-      dividendYield
+      dividendYield,
+      isAIEnabled,
+      aiVolatilityMap,
+      selectedTicker
     });
 
     // Сценарий 3: Закрыть всё (Close everything)
@@ -146,7 +153,10 @@ export const usePositionExitCalculator = ({
       daysPassed,
       currentPrice,
       ivSurface,
-      dividendYield
+      dividendYield,
+      isAIEnabled,
+      aiVolatilityMap,
+      selectedTicker
     });
 
     // Проверяем ликвидность всех опционов
@@ -177,7 +187,7 @@ export const usePositionExitCalculator = ({
       },
       liquidityWarnings // Предупреждения о низкой ликвидности
     };
-  }, [underlyingPrice, daysPassed, options, positions, currentPrice, ivSurface, dividendYield]);
+  }, [underlyingPrice, daysPassed, options, positions, currentPrice, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap]);
 };
 
 /**
@@ -281,7 +291,7 @@ const calculateExerciseScenario = ({ options, positions, underlyingPrice, curren
  * - Закрываем опционы по текущей цене (intrinsic + time value)
  * - P&L от изменения цены акций
  */
-const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, daysPassed, currentPrice, ivSurface = null, dividendYield = 0 }) => {
+const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, daysPassed, currentPrice, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, selectedTicker = '' }) => {
   const details = [];
   let totalPL = 0;
 
@@ -319,12 +329,27 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
     
     // Получаем прогнозируемую IV с учётом временной структуры (Volatility Surface)
     // ВАЖНО: ivSurface используется для точной интерполяции IV между датами экспирации
-    const optionVolatility = getOptionVolatility(
+    let optionVolatility = getOptionVolatility(
       option, 
       currentDaysToExpiration, 
       simulatedDaysToExpiration,
       ivSurface
     );
+    
+    // Используем AI волатильность если доступна
+    if (isAIEnabled && aiVolatilityMap && selectedTicker) {
+      const cacheKey = `${selectedTicker}_${option.strike}_${option.date}_${underlyingPrice.toFixed(2)}_${simulatedDaysToExpiration}`;
+      const aiVolatility = aiVolatilityMap[cacheKey];
+      if (aiVolatility) {
+        console.log('🤖 [ExitCalculator/closeOptions] Используем AI волатильность:', {
+          strike: option.strike,
+          standardIV: optionVolatility,
+          aiIV: aiVolatility,
+          cacheKey
+        });
+        optionVolatility = aiVolatility;
+      }
+    }
     
     const currentValue = calculateOptionTheoreticalPrice(
       tempOption,
@@ -339,7 +364,9 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
     // Показываем текущую IV и прогнозируемую если они отличаются
     const currentIV = (option.impliedVolatility || option.implied_volatility || 0);
     const currentIVPercent = currentIV < 1 ? currentIV * 100 : currentIV;
-    const ivDisplay = optionVolatility.toFixed(1);
+    // ВАЖНО: AI волатильность приходит в десятичном формате (0.188), нужно умножить на 100
+    const ivDisplayPercent = optionVolatility < 1 ? optionVolatility * 100 : optionVolatility;
+    const ivDisplay = ivDisplayPercent.toFixed(1);
     // Показываем первоначальную IV в скобках если прошло время (daysPassed > 0)
     // ЗАЧЕМ: Пользователь должен видеть как изменилась IV даже при небольших изменениях
     const showOriginalIV = daysPassed > 0 && currentIVPercent > 0;
@@ -408,7 +435,7 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
  * - Закрываем опционы по текущей цене (intrinsic + time value)
  * - Продаем акции по текущей цене
  */
-const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPassed, currentPrice, ivSurface = null, dividendYield = 0 }) => {
+const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPassed, currentPrice, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, selectedTicker = '' }) => {
   const details = [];
   let totalPL = 0;
 
@@ -445,12 +472,27 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
     
     // Получаем прогнозируемую IV с учётом временной структуры (Volatility Surface)
     // ВАЖНО: ivSurface используется для точной интерполяции IV между датами экспирации
-    const optionVolatility = getOptionVolatility(
+    let optionVolatility = getOptionVolatility(
       option, 
       currentDaysToExpiration, 
       simulatedDaysToExpiration,
       ivSurface
     );
+    
+    // Используем AI волатильность если доступна
+    if (isAIEnabled && aiVolatilityMap && selectedTicker) {
+      const cacheKey = `${selectedTicker}_${option.strike}_${option.date}_${underlyingPrice.toFixed(2)}_${simulatedDaysToExpiration}`;
+      const aiVolatility = aiVolatilityMap[cacheKey];
+      if (aiVolatility) {
+        console.log('🤖 [ExitCalculator/closeAll] Используем AI волатильность:', {
+          strike: option.strike,
+          standardIV: optionVolatility,
+          aiIV: aiVolatility,
+          cacheKey
+        });
+        optionVolatility = aiVolatility;
+      }
+    }
     
     const currentValue = calculateOptionTheoreticalPrice(
       tempOption,
@@ -465,7 +507,9 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
     // Показываем текущую IV и прогнозируемую если они отличаются
     const currentIV = (option.impliedVolatility || option.implied_volatility || 0);
     const currentIVPercent = currentIV < 1 ? currentIV * 100 : currentIV;
-    const ivDisplay = optionVolatility.toFixed(1);
+    // ВАЖНО: AI волатильность приходит в десятичном формате (0.188), нужно умножить на 100
+    const ivDisplayPercent = optionVolatility < 1 ? optionVolatility * 100 : optionVolatility;
+    const ivDisplay = ivDisplayPercent.toFixed(1);
     // Показываем первоначальную IV в скобках если прошло время (daysPassed > 0)
     // ЗАЧЕМ: Пользователь должен видеть как изменилась IV даже при небольших изменениях
     const showOriginalIV = daysPassed > 0 && currentIVPercent > 0;
