@@ -72,6 +72,10 @@ public
 !public/index.html
 !public/options-cache-sw.js
 !public/images/
+<<<<<<< HEAD
+=======
+!public/images/**
+>>>>>>> 736ebe620606005dccbd6f1b7f44102bd74078b7
 
 # Storybook build outputs
 .out
