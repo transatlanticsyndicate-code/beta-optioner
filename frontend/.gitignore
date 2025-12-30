@@ -71,7 +71,6 @@ dist
 public
 !public/index.html
 !public/options-cache-sw.js
-!public/images/
 
 # Storybook build outputs
 .out
