@@ -99,6 +99,10 @@ function OptionSelectionResult({
   const actualCallPLAtUp = isCallSelection ? getCallPLFromDetails(plUp.details?.closeAll) : callPLAtUp;
   const actualCallPLAtDown = isCallSelection ? getCallPLFromDetails(plDown.details?.closeAll) : callPLAtDown;
 
+  // Скорректированный P&L для колонки "Закрытие по НИЗУ" (без байкол опционов)
+  // ЗАЧЕМ: Байкол опционы не должны влиять на итоговый P&L этой колонки
+  const filteredPLDown = plDown.plCloseAll - actualCallPLAtDown;
+
   // Рассчитываем суммы риска
   const optionRiskAmount = ((entryPrice * positionQuantity) * optionRiskPercent / 100).toFixed(0);
   const totalRiskAmount = ((entryPrice * positionQuantity) * riskPercent / 100).toFixed(0);
@@ -170,8 +174,10 @@ function OptionSelectionResult({
                 {/* Закрытие по НИЗУ */}
                 <ScenarioCard
                   title={`Закрытие по НИЗУ $${targetDownPrice.toFixed(2)}`}
-                  pl={plDown.plCloseAll}
-                  details={plDown.details.closeAll}
+                  pl={filteredPLDown}
+                  details={plDown.details.closeAll?.filter(detail => 
+                    !(detail.type === 'option' && detail.label?.includes('CALL'))
+                  ) || []}
                   formatCurrency={formatCurrency}
                   getPLColor={getPLColor}
                   headerBgColor="#fb8997"

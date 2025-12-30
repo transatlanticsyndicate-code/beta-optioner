@@ -210,6 +210,7 @@ const NewTikerFinder = ({
             status,
             change,
             changePercent,
+            timestamp: data.t,
           };
           
           setPriceData(newPriceData);
@@ -218,6 +219,10 @@ const NewTikerFinder = ({
             price: newPriceData.price,
             change: newPriceData.change,
             changePercent: newPriceData.changePercent,
+            timestamp: data.t,
+            timestampReadable: new Date(data.t * 1000).toLocaleString(),
+            timeDiff: timeDiff,
+            status: status,
             source: 'Finnhub API'
           });
           
@@ -477,20 +482,23 @@ const NewTikerFinder = ({
           {isLoading ? (
             <span className="text-muted-foreground text-sm">Загрузка...</span>
           ) : priceData ? (
-            <div className="flex items-center gap-1">
-              <span className="text-xl font-bold">${priceData.price.toFixed(2)}</span>
-              <img
-                src="https://finnhub.io/static/img/webp/finnhub-logo.webp"
-                alt="Finnhub"
-                className="w-6 h-6 cursor-pointer"
-                style={{
-                  filter: priceData.status === 'closed' ? 'grayscale(100%)' :
-                          priceData.status === 'delayed' ? 'sepia(100%) hue-rotate(45deg)' :
-                          'hue-rotate(90deg) saturate(1.5)' // realtime - зеленый
-                }}
-                onClick={() => window.open('https://finnhub.io', '_blank')}
-                title="Finnhub - источник данных"
-              />
+            <div className="flex flex-col">
+              <div className="flex items-center gap-1">
+                <span className="text-xl font-bold">${priceData.price.toFixed(2)}</span>
+                <img
+                  src="https://finnhub.io/static/img/webp/finnhub-logo.webp"
+                  alt="Finnhub"
+                  className="w-6 h-6 cursor-pointer"
+                  style={{
+                    filter: priceData.status === 'closed' ? 'grayscale(100%)' :
+                            priceData.status === 'delayed' ? 'sepia(100%) hue-rotate(45deg)' :
+                            'hue-rotate(90deg) saturate(1.5)' // realtime - зеленый
+                  }}
+                  onClick={() => window.open('https://finnhub.io', '_blank')}
+                  title="Finnhub - источник данных"
+                />
+              </div>
+              <span className="text-xs text-gray-500">{new Date(priceData.timestamp * 1000).toLocaleString()}</span>
             </div>
           ) : confirmedTicker ? (
             <span className="text-muted-foreground text-sm">Нет данных</span>
