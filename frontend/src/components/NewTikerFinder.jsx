@@ -492,7 +492,7 @@ const NewTikerFinder = ({
                   style={{
                     filter: priceData.status === 'closed' ? 'grayscale(100%)' :
                             priceData.status === 'delayed' ? 'sepia(100%) hue-rotate(45deg)' :
-                            'hue-rotate(90deg) saturate(1.5)' // realtime - зеленый
+                            'invert(21%) sepia(96%) saturate(748%) hue-rotate(94deg) brightness(102%) contrast(105%)' // realtime - яркий зеленый
                   }}
                   onClick={() => window.open('https://finnhub.io', '_blank')}
                   title="Finnhub - источник данных"
