@@ -182,9 +182,9 @@ const NewTikerFinder = ({
         }
       }
 
-      // Пока реализован только Polygon API для акций
+      // Пока реализован только Finnhub API для акций
       if (type === 'stock') {
-        const response = await fetch(`/api/polygon/ticker/${ticker}`);
+        const response = await fetch(`/api/finnhub/quote?symbol=${ticker}`);
         
         if (response.ok) {
           const data = await response.json();
@@ -192,17 +192,28 @@ const NewTikerFinder = ({
           // Определяем статус цены на основе ответа API
           // ЗАЧЕМ: Показываем пользователю актуальность данных
           let status = 'realtime';
-          if (data.delayed) status = 'delayed';
-          if (data.marketClosed || data.market_closed) status = 'closed';
+          
+          // Finnhub не предоставляет статус задержки/закрытия, по умолчанию realtime
+          const price = data.c || 0;
+          const previousClose = data.pc || price;
+          const change = price - previousClose;
+          const changePercent = previousClose ? (change / previousClose) * 100 : 0;
           
           const newPriceData = {
-            price: data.price || data.c || 0,
+            price,
             status,
-            change: data.change || data.d || 0,
-            changePercent: data.changePercent || data.dp || 0,
+            change,
+            changePercent,
           };
           
           setPriceData(newPriceData);
+          
+          console.log(`💰 Цена для ${ticker} получена из Finnhub:`, {
+            price: newPriceData.price,
+            change: newPriceData.change,
+            changePercent: newPriceData.changePercent,
+            source: 'Finnhub API'
+          });
           
           // Сохраняем в кеш
           localStorage.setItem(cacheKey, JSON.stringify({

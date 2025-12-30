@@ -20,7 +20,7 @@ import re
 from app.database import get_db, init_db
 from app.models.analysis_history import AnalysisHistory
 from app.models.user import Base as UserBase
-from app.routers import options, ai_chat, polygon, auth, admin, telegram_webhook, data_source_info, ib_monitoring, yahoo_proxy, crypto_rating, ml_api, ai_prediction
+from app.routers import options, ai_chat, polygon, auth, admin, telegram_webhook, data_source_info, ib_monitoring, yahoo_proxy, crypto_rating, ml_api, ai_prediction, finnhub_proxy
 
 # Load environment variables from .env file
 env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
@@ -74,6 +74,7 @@ app.include_router(polygon.router)
 app.include_router(data_source_info.router)
 app.include_router(ib_monitoring.router)
 app.include_router(yahoo_proxy.router)
+app.include_router(finnhub_proxy.router)
 app.include_router(crypto_rating.router)
 app.include_router(ml_api.router)
 
