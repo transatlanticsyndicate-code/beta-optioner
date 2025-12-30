@@ -4,7 +4,6 @@ import { Bell } from 'lucide-react';
 import ThemeToggle from '../ThemeToggle';
 import { Badge } from '../ui/badge';
 import UserMenu from '../UserMenu';
-import StocksDataIndicator from '../StocksDataIndicator';
 import OptionsDataIndicator from '../OptionsDataIndicator';
 
 function TopNav() {
@@ -51,7 +50,6 @@ function TopNav() {
 
       <div className="flex items-center gap-2 sm:gap-4 ml-auto sm:ml-0">
         {/* Индикаторы статуса данных Massive API */}
-        <StocksDataIndicator />
         <OptionsDataIndicator />
 
         {/* Notifications */}
