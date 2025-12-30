@@ -189,11 +189,17 @@ const NewTikerFinder = ({
         if (response.ok) {
           const data = await response.json();
           
-          // Определяем статус цены на основе ответа API
-          // ЗАЧЕМ: Показываем пользователю актуальность данных
-          let status = 'realtime';
+          // Определяем статус цены на основе timestamp
+          // ЗАЧЕМ: Показываем актуальность данных - realtime/delayed/closed
+          const now = Date.now() / 1000; // timestamp в секундах
+          const timeDiff = now - data.t;
           
-          // Finnhub не предоставляет статус задержки/закрытия, по умолчанию realtime
+          let status = 'realtime';
+          if (timeDiff > 3600 || timeDiff < -3600) { // более 1 часа в прошлое или будущее - закрыт
+            status = 'closed';
+          } else if (timeDiff > 300) { // более 5 минут - задержка
+            status = 'delayed';
+          }
           const price = data.c || 0;
           const previousClose = data.pc || price;
           const change = price - previousClose;
@@ -471,7 +477,21 @@ const NewTikerFinder = ({
           {isLoading ? (
             <span className="text-muted-foreground text-sm">Загрузка...</span>
           ) : priceData ? (
-            <span className="text-xl font-bold">${priceData.price.toFixed(2)}</span>
+            <div className="flex items-center gap-1">
+              <span className="text-xl font-bold">${priceData.price.toFixed(2)}</span>
+              <img
+                src="https://finnhub.io/static/img/webp/finnhub-logo.webp"
+                alt="Finnhub"
+                className="w-6 h-6 cursor-pointer"
+                style={{
+                  filter: priceData.status === 'closed' ? 'grayscale(100%)' :
+                          priceData.status === 'delayed' ? 'sepia(100%) hue-rotate(45deg)' :
+                          'hue-rotate(90deg) saturate(1.5)' // realtime - зеленый
+                }}
+                onClick={() => window.open('https://finnhub.io', '_blank')}
+                title="Finnhub - источник данных"
+              />
+            </div>
           ) : confirmedTicker ? (
             <span className="text-muted-foreground text-sm">Нет данных</span>
           ) : null}
