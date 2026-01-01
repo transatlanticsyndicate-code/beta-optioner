@@ -19,6 +19,8 @@ import {
   Activity,
   Plus,
   TrendingDown,
+  Coins,
+  ExternalLink,
 } from 'lucide-react';
 
 function Sidebar() {
@@ -59,6 +61,24 @@ function Sidebar() {
         <Icon className="h-4 w-4 mr-3 flex-shrink-0" />
         <span className={isSidebarCollapsed ? 'lg:hidden' : ''}>{children}</span>
       </Link>
+    );
+  }
+
+  function ExternalNavItem({ href, icon: Icon, children, title }) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        title={title}
+        className="flex items-center px-3 py-2 text-sm rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-accent/50"
+      >
+        <Icon className="h-4 w-4 mr-3 flex-shrink-0" />
+        <span className={isSidebarCollapsed ? 'lg:hidden' : 'flex items-center gap-1'}>
+          {children}
+          <ExternalLink className="h-3 w-3" />
+        </span>
+      </a>
     );
   }
 
@@ -147,6 +167,9 @@ function Sidebar() {
                   <NavItem to="/tools/gradual-strategy-calculator" icon={TrendingUp} title="Калькулятор градуальных стратегий">
                     Градуальный калькулятор
                   </NavItem>
+                  <ExternalNavItem href="https://crypto.optioner.online" icon={Coins} title="Крипто Менеджер - управление криптовалютными активами">
+                    Крипто Менеджер
+                  </ExternalNavItem>
                 </div>
               </div>
 
