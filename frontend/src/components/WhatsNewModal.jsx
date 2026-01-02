@@ -8,20 +8,17 @@ import React, { useState, useEffect } from 'react';
 import { X, Sparkles, Check } from 'lucide-react';
 
 // Текущая версия приложения
-const CURRENT_VERSION = '27';
+const CURRENT_VERSION = '28';
 
 // Список нововведений для текущей версии
 // ЗАЧЕМ: Централизованное хранение информации о новых функциях
 const WHATS_NEW_ITEMS = [
   {
-    title: '📊 Живая цена базового актива',
-    description: 'Интеграция с Finnhub API для получения актуальных рыночных данных в режиме реального времени. Отслеживайте текущую стоимость базового актива прямо в интерфейсе калькулятора для более точного анализа опционных стратегий.',
-    icon: '📈'
-  },
-  {
-    title: '🤖 ИИ-прогнозирование волатильности',
-    description: 'Внедрение искусственного интеллекта на базе нейронных сетей для прогнозирования будущей волатильности. Модель анализирует исторические данные и рыночные паттерны, предоставляя более точные оценки для расчета стоимости опционов.',
-    icon: '🧠'
+    title: 'Crypto Position Manager',
+    description: 'Запущено новое приложение для профессионального мониторинга и управления криптовалютными позициями. Отслеживайте портфель, анализируйте прибыль/убыток и принимайте взвешенные решения на основе актуальных данных рынка.',
+    iconUrl: 'https://crypto.optioner.online/cryptoW.png',
+    link: 'https://crypto.optioner.online',
+    linkText: 'Открыть приложение'
   }
 ];
 
@@ -97,7 +94,7 @@ const WhatsNewModal = ({ onClose }) => {
         onClick={(e) => e.stopPropagation()}
       >
         {/* Заголовок */}
-        <div className="relative bg-gradient-to-r from-cyan-500 to-teal-500 rounded-t-2xl p-6 text-white">
+        <div className="relative bg-gradient-to-r from-gray-900 via-yellow-600 to-gray-900 rounded-t-2xl p-6 text-white">
           <button
             onClick={handleClose}
             className="absolute top-4 right-4 p-1 rounded-full hover:bg-white/20 transition-colors"
@@ -123,12 +120,44 @@ const WhatsNewModal = ({ onClose }) => {
             {WHATS_NEW_ITEMS.map((item, index) => (
               <div 
                 key={index}
-                className="flex gap-4 p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
+                className="flex flex-col gap-3 p-5 bg-gradient-to-br from-gray-50 to-yellow-50 rounded-xl border border-yellow-200 hover:shadow-md transition-all"
               >
-                <div className="text-2xl flex-shrink-0">{item.icon}</div>
-                <div>
-                  <h3 className="font-semibold text-gray-900">{item.title}</h3>
-                  <p className="text-sm text-gray-600 mt-1">{item.description}</p>
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0">
+                    {item.iconUrl ? (
+                      <img 
+                        src={item.iconUrl} 
+                        alt={item.title}
+                        className="w-12 h-12 object-contain"
+                      />
+                    ) : (
+                      <div className="text-3xl">{item.icon}</div>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-bold text-gray-900 text-lg">{item.title}</h3>
+                    <p className="text-sm text-gray-700 mt-2 leading-relaxed">{item.description}</p>
+                  </div>
+                </div>
+                {item.link && (
+                  <div className="flex items-center gap-2 mt-2">
+                    <div className="flex-1 border-t border-yellow-300"></div>
+                    <a
+                      href={item.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white rounded-lg font-medium hover:from-yellow-600 hover:to-yellow-700 transition-all shadow-sm hover:shadow-md"
+                    >
+                      <span>{item.linkText}</span>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </a>
+                    <div className="flex-1 border-t border-yellow-300"></div>
+                  </div>
+                )}
+                <div className="text-xs text-gray-500 mt-1">
+                  📍 Доступ: <span className="font-medium">Боковое меню → Калькуляторы → Крипто Менеджер</span>
                 </div>
               </div>
             ))}

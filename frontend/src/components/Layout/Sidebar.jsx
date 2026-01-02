@@ -125,7 +125,7 @@ function Sidebar() {
                 className="flex-shrink-0"
               />
               <span className={`text-lg hover:cursor-pointer text-foreground font-bold ${isSidebarCollapsed ? 'lg:hidden' : ''}`}>OPTIONER</span>
-              <span className={`text-sm text-cyan-500 font-medium ${isSidebarCollapsed ? 'lg:hidden' : ''}`}>v27</span>
+              <span className={`text-sm text-cyan-500 font-medium ${isSidebarCollapsed ? 'lg:hidden' : ''}`}>v28</span>
             </div>
           </Link>
 
