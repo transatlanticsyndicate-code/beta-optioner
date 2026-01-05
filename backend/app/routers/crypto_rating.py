@@ -70,6 +70,14 @@ class TaskInfo(BaseModel):
     next_run_at: datetime = None
 
 
+class SnapshotDetail(BaseModel):
+    """Детальная информация о снимке"""
+    id: int
+    created_at: datetime
+    crypto_count: int
+    crypto_list: List[CryptoItem]
+
+
 @router.post("/create-snapshot")
 async def create_snapshot(db: Session = Depends(get_db)):
     """
@@ -121,6 +129,37 @@ async def create_snapshot(db: Session = Depends(get_db)):
             "analysis_id": analysis.id if analysis else None
         }
         
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/snapshots/{snapshot_id}", response_model=SnapshotDetail)
+async def get_snapshot_detail(
+    snapshot_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Получить детальную информацию о снимке (список 400 валют)
+    """
+    try:
+        from app.models.crypto_rating import CryptoSnapshot
+        
+        snapshot = db.query(CryptoSnapshot).filter(
+            CryptoSnapshot.id == snapshot_id
+        ).first()
+        
+        if not snapshot:
+            raise HTTPException(status_code=404, detail="Snapshot not found")
+        
+        return SnapshotDetail(
+            id=snapshot.id,
+            created_at=snapshot.created_at,
+            crypto_count=len(snapshot.crypto_list),
+            crypto_list=[CryptoItem(**crypto) for crypto in snapshot.crypto_list]
+        )
+        
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

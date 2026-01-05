@@ -1,18 +1,21 @@
 ﻿import React, { useState, useEffect, useRef } from 'react';
-import { Camera, ChevronDown, ChevronUp, Calendar, TrendingDown, TrendingUp, Trash2, FileDown } from 'lucide-react';
+import { Camera, ChevronDown, ChevronUp, Calendar, TrendingDown, TrendingUp, Trash2, FileDown, Eye, Copy, X, Check } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
+
 import AnalysisPrintView from '../components/CryptoRating/AnalysisPrintView';
 
 function CryptoRating() {
   const [snapshots, setSnapshots] = useState([]);
   const [analyses, setAnalyses] = useState([]);
   const [selectedAnalysis, setSelectedAnalysis] = useState(null);
+  const [selectedSnapshot, setSelectedSnapshot] = useState(null);
   const [loading, setLoading] = useState(false);
+
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [isAnalysesExpanded, setIsAnalysesExpanded] = useState(true);
   const [isSnapshotsExpanded, setIsSnapshotsExpanded] = useState(true);
-  
+
   // Установка заголовка страницы
   useEffect(() => {
     document.title = 'Рейтинг криптовалют | SYNDICATE Platform';
@@ -24,19 +27,19 @@ function CryptoRating() {
   useEffect(() => {
     fetchData();
   }, []);
-  
+
   const fetchData = async () => {
     try {
       const snapshotsRes = await fetch(`/api/crypto-rating/snapshots`);
       if (snapshotsRes.ok) setSnapshots(await snapshotsRes.json());
-      
+
       const analysesRes = await fetch(`/api/crypto-rating/analyses`);
       if (analysesRes.ok) setAnalyses(await analysesRes.json());
     } catch (err) {
       console.error('Error:', err);
     }
   };
-  
+
   const handleCreateSnapshot = async () => {
     setLoading(true);
     setError(null);
@@ -53,7 +56,7 @@ function CryptoRating() {
       setLoading(false);
     }
   };
-  
+
   const handleAnalysisClick = async (analysisId) => {
     if (selectedAnalysis?.id === analysisId) {
       setSelectedAnalysis(null);
@@ -66,7 +69,38 @@ function CryptoRating() {
       console.error('Error:', err);
     }
   };
-  
+
+  const handleSnapshotView = async (snapshotId) => {
+    if (selectedSnapshot?.id === snapshotId) {
+      setSelectedSnapshot(null);
+      return;
+    }
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/crypto-rating/snapshots/${snapshotId}`);
+      if (response.ok) {
+        setSelectedSnapshot(await response.json());
+      }
+    } catch (err) {
+      console.error('Error fetching snapshot:', err);
+      setError('Ошибка загрузки данных снимка');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const [copied, setCopied] = useState(false);
+  const handleCopyList = () => {
+    if (!selectedSnapshot) return;
+    const listText = selectedSnapshot.crypto_list
+      .map((c, i) => `${i + 1}. ${c.symbol} - ${c.name}`)
+      .join('\n');
+    navigator.clipboard.writeText(listText).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
   const handleDeleteSnapshot = async (snapshotId, e) => {
     e.stopPropagation();
     if (!window.confirm('Удалить?')) return;
@@ -80,7 +114,7 @@ function CryptoRating() {
       setError('Ошибка');
     }
   };
-  
+
   const handleDeleteAnalysis = async (analysisId, e) => {
     e.stopPropagation();
     if (!window.confirm('Удалить?')) return;
@@ -95,7 +129,7 @@ function CryptoRating() {
       setError('Ошибка');
     }
   };
-  
+
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleString('ru-RU', {
       day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
@@ -111,7 +145,7 @@ function CryptoRating() {
   const handleExportPdf = async (analysis, e) => {
     e.stopPropagation();
     setExportingPdf(true);
-    
+
     try {
       // Загружаем полные данные анализа если нужно
       let fullAnalysis = analysis;
@@ -132,7 +166,7 @@ function CryptoRating() {
       // Рендерим React компонент в контейнер
       const { createRoot } = await import('react-dom/client');
       const root = createRoot(container);
-      
+
       await new Promise((resolve) => {
         root.render(
           <AnalysisPrintView analysis={fullAnalysis} ref={() => setTimeout(resolve, 100)} />
@@ -157,7 +191,7 @@ function CryptoRating() {
       // Очищаем
       root.unmount();
       document.body.removeChild(container);
-      
+
       setSuccess('PDF успешно сохранён!');
     } catch (err) {
       console.error('PDF export error:', err);
@@ -277,9 +311,18 @@ function CryptoRating() {
                         </td>
                         <td className="px-4 py-3"><span className="text-sm">{snapshot.crypto_count} криптовалют</span></td>
                         <td className="px-4 py-3 text-right">
-                          <button onClick={(e) => handleDeleteSnapshot(snapshot.id, e)} className="p-2 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 rounded" title="Удалить">
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          <div className="flex justify-end gap-2">
+                            <button 
+                              onClick={() => handleSnapshotView(snapshot.id)} 
+                              className="p-2 text-muted-foreground hover:text-cyan-500 hover:bg-cyan-500/10 rounded" 
+                              title="Просмотреть список"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </button>
+                            <button onClick={(e) => handleDeleteSnapshot(snapshot.id, e)} className="p-2 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 rounded" title="Удалить">
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -290,6 +333,49 @@ function CryptoRating() {
           )}
         </div>
       </div>
+
+      {/* Модальное окно просмотра снимка */}
+      {selectedSnapshot && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-card border border-border rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl">
+            <div className="p-4 border-b border-border flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold">Снимок Топ-400</h3>
+                <p className="text-xs text-muted-foreground">{formatDate(selectedSnapshot.created_at)}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={handleCopyList}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-muted hover:bg-muted/80 rounded-md text-sm transition-colors"
+                >
+                  {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                  {copied ? 'Скопировано' : 'Копировать список'}
+                </button>
+                <button 
+                  onClick={() => setSelectedSnapshot(null)}
+                  className="p-1.5 hover:bg-muted rounded-md transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {selectedSnapshot.crypto_list.map((c, i) => (
+                  <div key={i} className="flex items-center gap-3 p-2 bg-muted/30 rounded-lg text-sm">
+                    <span className="text-muted-foreground font-mono w-8">{i + 1}.</span>
+                    <span className="font-bold w-12">{c.symbol}</span>
+                    <span className="text-muted-foreground truncate">{c.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="p-4 border-t border-border bg-muted/20 text-center text-xs text-muted-foreground">
+              Всего {selectedSnapshot.crypto_count} криптовалют
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
