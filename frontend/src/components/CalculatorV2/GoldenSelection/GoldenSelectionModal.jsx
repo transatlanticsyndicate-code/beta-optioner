@@ -13,8 +13,8 @@ import {
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
-import { Crown, AlertCircle, CheckCircle, Loader2, ArrowRight } from 'lucide-react';
-import { findBestGoldenBuyCall } from './goldenSelectionLogic';
+import { Crown, AlertCircle, CheckCircle, Loader2, Link, ChevronDown, ChevronUp } from 'lucide-react';
+import { findBestGoldenBuyCall, findBestGoldenBuyPut } from './goldenSelectionLogic';
 
 /**
  * Компонент модального окна золотого подбора
@@ -36,10 +36,47 @@ function GoldenSelectionModal({
     const [growthPercent, setGrowthPercent] = React.useState(50);
     const [searchResult, setSearchResult] = React.useState(null);
     const [error, setError] = React.useState(null);
+    // Состояния для Сценария 3 (Buy Put)
+    const [minDaysPut, setMinDaysPut] = React.useState(5);
+    const [maxDaysPut, setMaxDaysPut] = React.useState(10);
+    const [dropPercent, setDropPercent] = React.useState(-2.5);
+    const [exitDay, setExitDay] = React.useState(5);
+    const [strikeRangePercent, setStrikeRangePercent] = React.useState(20);
+    const [minOI, setMinOI] = React.useState(100);
     const [progress, setProgress] = React.useState('');
+    const [isParamsCollapsed, setIsParamsCollapsed] = React.useState(true);
 
     // Проверка условия Сценария 1: Калькулятор должен быть пуст
     const isEmptyState = positions.length === 0 && options.length === 0;
+
+    // Проверка условия Сценария 3: Есть ровно один Buy CALL опцион
+    // Используем более гибкую проверку типов и стейта
+    const hasOneCall = options.length === 1 && (
+        (options[0].type && options[0].type.toUpperCase() === 'CALL') ||
+        (options[0].optionType && options[0].optionType.toUpperCase() === 'CALL')
+    );
+    const isBuy = options.length === 1 && (
+        (options[0].side && options[0].side.toLowerCase() === 'long') ||
+        (options[0].action && options[0].action.toUpperCase() === 'BUY')
+    );
+    const isScenario3 = hasOneCall && isBuy && positions.length === 0;
+
+    // TODO: Удалить логи после отладки
+    React.useEffect(() => {
+        if (isOpen) {
+            console.log('🔍 GoldenModal Debug:', {
+                isOpen,
+                optionsCount: options.length,
+                positionsCount: positions.length,
+                firstOption: options[0],
+                isScenario3,
+                check: { hasOneCall, isBuy }
+            });
+        }
+    }, [isOpen, options, positions, isScenario3, hasOneCall, isBuy]);
+
+    // Активный сценарий
+    const activeScenario = isEmptyState ? 'SCENARIO_2' : (isScenario3 ? 'SCENARIO_3' : 'INVALID');
 
     // Сброс шагов при открытии/закрытии
     React.useEffect(() => {
@@ -56,18 +93,37 @@ function GoldenSelectionModal({
         setProgress('Начинаем поиск...');
 
         try {
-            const result = await findBestGoldenBuyCall({
-                ticker: selectedTicker,
-                currentPrice,
-                availableDates,
-                minDays: Number(minDays),
-                maxDays: Number(maxDays),
-                growthPercent: Number(growthPercent),
-                onProgress: (p) => {
-                    if (p.stage === 'loading') setProgress(`Загрузка даты ${p.current}/${p.total}...`);
-                    if (p.stage === 'calculating') setProgress('Расчет прибыли...');
-                }
-            });
+            let result;
+
+            if (activeScenario === 'SCENARIO_2') {
+                result = await findBestGoldenBuyCall({
+                    ticker: selectedTicker,
+                    currentPrice,
+                    availableDates,
+                    minDays: Number(minDays),
+                    maxDays: Number(maxDays),
+                    growthPercent: Number(growthPercent),
+                    onProgress: (p) => {
+                        if (p.stage === 'loading') setProgress(`Загрузка даты ${p.current}/${p.total}...`);
+                        if (p.stage === 'calculating') setProgress('Расчет прибыли...');
+                    }
+                });
+            } else if (activeScenario === 'SCENARIO_3') {
+                result = await findBestGoldenBuyPut({
+                    ticker: selectedTicker,
+                    currentPrice,
+                    availableDates,
+                    minDays: Number(minDaysPut),
+                    maxDays: Number(maxDaysPut),
+                    dropPercent: Number(dropPercent),
+                    exitDay: Number(exitDay),
+                    strikeRangePercent: Number(strikeRangePercent),
+                    minOI: Number(minOI),
+                    onProgress: (p) => {
+                        if (p.stage === 'not_implemented') setProgress('Функционал в разработке...');
+                    }
+                });
+            }
 
             if (result && !result.error) {
                 // СРАЗУ добавляем опцион в таблицу и закрываем окно
@@ -125,15 +181,15 @@ function GoldenSelectionModal({
                 </DialogHeader>
 
                 <div className="space-y-4 py-4">
-                    {!isEmptyState && (
-                        // Условия НЕ выполнены (Сценарий 1 не прошел)
+                    {activeScenario === 'INVALID' && (
+                        // Условия НЕ выполнены (Сценарий 1 не прошел и не Сценарий 3)
                         <div className="space-y-4 text-center">
                             <div className="flex justify-center text-amber-500 mb-2">
                                 <AlertCircle className="h-12 w-12" />
                             </div>
                             <h3 className="text-lg font-medium text-foreground">Внимание</h3>
                             <p className="text-muted-foreground">
-                                Для работы "Золотой кнопки" необходимо очистить калькулятор!
+                                Для работы "Золотой кнопки" необходимо очистить калькулятор или иметь ровно один Buy CALL опцион!
                             </p>
 
                             <div className="bg-muted/50 p-4 rounded-md text-left text-sm space-y-2">
@@ -146,12 +202,13 @@ function GoldenSelectionModal({
                                     <span>Позиции базового актива: {positions.length} (должно быть 0)</span>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    {options.length === 0 ? (
+                                    {/* Сложная логика для галочки опционов */}
+                                    {options.length === 0 || (options.length === 1 && options[0].type === 'CALL' && options[0].side === 'long') ? (
                                         <CheckCircle className="h-4 w-4 text-green-500" />
                                     ) : (
                                         <AlertCircle className="h-4 w-4 text-red-500" />
                                     )}
-                                    <span>Опционы: {options.length} (должно быть 0)</span>
+                                    <span>Опционы: {options.length} (0 или 1 Buy CALL)</span>
                                 </div>
                             </div>
 
@@ -161,51 +218,186 @@ function GoldenSelectionModal({
                         </div>
                     )}
 
-                    {isEmptyState && (
+                    {activeScenario !== 'INVALID' && (
                         <>
                             {/* ШАГ: Ввод параметров (Показываем сразу, если step='check' или 'input') */}
                             {(step === 'check' || step === 'input') && (
                                 <div className="space-y-4">
-                                    <div className="space-y-2">
-                                        <Label>Смотреть даты экспирации в диапазоне от сегодняшнего дня (от - до)</Label>
-                                        <div className="flex gap-2">
-                                            <Input
-                                                type="number"
-                                                value={minDays}
-                                                onChange={(e) => setMinDays(e.target.value)}
-                                                placeholder="Min"
-                                            />
-                                            <Input
-                                                type="number"
-                                                value={maxDays}
-                                                onChange={(e) => setMaxDays(e.target.value)}
-                                                placeholder="Max"
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label>Ориентируемся на рост цены актива (%)</Label>
-                                        <Input
-                                            type="number"
-                                            value={growthPercent}
-                                            onChange={(e) => setGrowthPercent(e.target.value)}
-                                            placeholder="50"
-                                        />
-                                    </div>
+                                    {activeScenario === 'SCENARIO_2' && (
+                                        <>
+                                            <div className="space-y-2">
+                                                <Label>Смотреть даты экспирации в диапазоне от сегодняшнего дня (от - до)</Label>
+                                                <div className="flex gap-2">
+                                                    <Input
+                                                        type="number"
+                                                        value={minDays}
+                                                        onChange={(e) => setMinDays(e.target.value)}
+                                                        placeholder="Min"
+                                                    />
+                                                    <Input
+                                                        type="number"
+                                                        value={maxDays}
+                                                        onChange={(e) => setMaxDays(e.target.value)}
+                                                        placeholder="Max"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label>Ориентируемся на рост цены актива (%)</Label>
+                                                <Input
+                                                    type="number"
+                                                    value={growthPercent}
+                                                    onChange={(e) => setGrowthPercent(e.target.value)}
+                                                    placeholder="50"
+                                                />
+                                            </div>
+                                        </>
+                                    )}
+
+                                    {activeScenario === 'SCENARIO_3' && (
+                                        <>
+                                            <p className="text-sm text-muted-foreground mb-4">
+                                                Готов подобрать самый оптимальный опцион <span className="font-semibold text-red-600">BuyPUT</span> для компенсации убытков при выходе по низу.
+                                            </p>
+
+                                            {/* Сворачиваемый блок параметров */}
+                                            <div className="border border-gray-200 rounded-md overflow-hidden mb-4">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIsParamsCollapsed(!isParamsCollapsed)}
+                                                    className="w-full flex items-center justify-between px-4 py-2 bg-gray-50 hover:bg-gray-100 transition-colors"
+                                                >
+                                                    <span className="text-sm text-muted-foreground">Параметры подбора</span>
+                                                    {isParamsCollapsed ? (
+                                                        <ChevronDown size={16} className="text-muted-foreground" />
+                                                    ) : (
+                                                        <ChevronUp size={16} className="text-muted-foreground" />
+                                                    )}
+                                                </button>
+
+                                                {!isParamsCollapsed && (
+                                                    <div className="p-3 space-y-3 border-t border-gray-200">
+                                                        {/* Строка 1: Экспирации */}
+                                                        <div className="space-y-1">
+                                                            <Label className="text-sm font-medium">
+                                                                Диапазон дат экспирации <span className="text-muted-foreground text-xs">(дней от сегодня)</span>
+                                                            </Label>
+                                                            <div className="grid grid-cols-2 gap-3">
+                                                                <Input
+                                                                    type="number"
+                                                                    value={minDaysPut}
+                                                                    onChange={(e) => setMinDaysPut(e.target.value)}
+                                                                    placeholder="Min"
+                                                                    className="h-9"
+                                                                />
+                                                                <Input
+                                                                    type="number"
+                                                                    value={maxDaysPut}
+                                                                    onChange={(e) => setMaxDaysPut(e.target.value)}
+                                                                    placeholder="Max"
+                                                                    className="h-9"
+                                                                />
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Разделитель */}
+                                                        <div className="h-px bg-amber-400" />
+
+                                                        {/* Строка 2: Падение и Выход */}
+                                                        <div className="grid grid-cols-2 gap-3">
+                                                            <div className="space-y-1">
+                                                                <Label className="text-sm font-medium">
+                                                                    Падение цены актива <span className="text-muted-foreground text-xs">(%)</span>
+                                                                </Label>
+                                                                <Input
+                                                                    type="number"
+                                                                    value={dropPercent}
+                                                                    onChange={(e) => setDropPercent(e.target.value)}
+                                                                    placeholder="-2.5"
+                                                                    className="h-9"
+                                                                />
+                                                            </div>
+                                                            <div className="space-y-1">
+                                                                <Label className="text-sm font-medium">
+                                                                    Выход на <span className="text-muted-foreground text-xs">(день)</span>
+                                                                </Label>
+                                                                <Input
+                                                                    type="number"
+                                                                    value={exitDay}
+                                                                    onChange={(e) => setExitDay(e.target.value)}
+                                                                    placeholder="5"
+                                                                    className="h-9"
+                                                                />
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Разделитель */}
+                                                        <div className="h-px bg-amber-400" />
+
+                                                        {/* Строка 3: Страйки и Мин. OI */}
+                                                        <div className="grid grid-cols-2 gap-3">
+                                                            <div className="space-y-1">
+                                                                <Label className="text-sm font-medium">
+                                                                    Страйки <span className="text-muted-foreground text-xs">(±%)</span>
+                                                                </Label>
+                                                                <Input
+                                                                    type="number"
+                                                                    value={strikeRangePercent}
+                                                                    onChange={(e) => setStrikeRangePercent(e.target.value)}
+                                                                    placeholder="20"
+                                                                    className="h-9"
+                                                                />
+                                                            </div>
+                                                            <div className="space-y-1">
+                                                                <Label className="text-sm font-medium">
+                                                                    Мин. OI <span className="text-muted-foreground text-xs">(ликв.)</span>
+                                                                </Label>
+                                                                <Input
+                                                                    type="number"
+                                                                    value={minOI}
+                                                                    onChange={(e) => setMinOI(e.target.value)}
+                                                                    placeholder="100"
+                                                                    className="h-9"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </>
+                                    )}
 
                                     {error && (
-                                        <div className="text-red-500 text-sm bg-red-50 p-2 rounded flex items-center gap-2">
-                                            <AlertCircle className="h-4 w-4" />
-                                            {error}
+                                        <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
+                                            <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                                            <span className="whitespace-pre-line">{error}</span>
                                         </div>
                                     )}
 
                                     <Button
                                         onClick={handleSearch}
-                                        className="bg-amber-500 hover:bg-amber-600 text-white w-full"
-                                        disabled={!minDays || !maxDays || !growthPercent}
+                                        className="w-full text-white border-0 transition-all duration-200 hover:opacity-90"
+                                        style={{
+                                            background: 'linear-gradient(135deg, #facc15 0%, #eab308 50%, #ca8a04 100%)',
+                                            boxShadow: '0 2px 8px rgba(234, 179, 8, 0.4)',
+                                        }}
+                                        disabled={
+                                            activeScenario === 'SCENARIO_2'
+                                                ? (!minDays || !maxDays || !growthPercent)
+                                                : (!minDaysPut || !maxDaysPut || !dropPercent || !exitDay || !strikeRangePercent || !minOI)
+                                        }
                                     >
-                                        Найти самый прибыльный опцион
+                                        {activeScenario === 'SCENARIO_2' ? (
+                                            <>
+                                                <Crown className="h-4 w-4 mr-2" />
+                                                Найти самый прибыльный опцион
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Crown className="h-4 w-4 mr-2" />
+                                                Подобрать хеджирующий BuyPUT
+                                            </>
+                                        )}
                                     </Button>
                                 </div>
                             )}

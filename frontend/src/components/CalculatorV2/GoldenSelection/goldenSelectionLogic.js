@@ -250,3 +250,44 @@ export const findBestGoldenBuyCall = async ({
 
     return { error: 'NO_PROFITABLE_OPTIONS', message: 'Не найдено прибыльных опционов при заданном росте' };
 };
+
+/**
+ * Найти лучший Buy PUT опцион (Золотой подбор - Сценарий 3)
+ * Хеджирование рисков
+ */
+export const findBestGoldenBuyPut = async ({
+    ticker,
+    currentPrice,
+    availableDates = [],
+    minDays = 5,
+    maxDays = 10,
+    dropPercent = 2.5,
+    exitDay = 5,
+    strikeRangePercent = 20,
+    minOI = 100,
+    onProgress = () => { }
+}) => {
+    console.log('🛡️ Начинаем золотой подбор BuyPUT (Hedge)...', {
+        ticker,
+        currentPrice,
+        minDays,
+        maxDays,
+        dropPercent,
+        exitDay,
+        strikeRangePercent,
+        minOI
+    });
+
+    onProgress({ stage: 'not_implemented', total: 1, current: 1 });
+
+    // TODO: Реализовать логику подбора
+    // 1. Фильтр дат (ближние)
+    // 2. Сбор путов с нужными страйками
+    // 3. Выбор по ликвидности (OI)
+    // 4. Оценка эффективности хеджа при падении на dropPercent
+
+    return {
+        error: 'NOT_IMPLEMENTED',
+        message: 'Логика подбора BuyPUT еще не реализована (Сценарий 3)'
+    };
+};
