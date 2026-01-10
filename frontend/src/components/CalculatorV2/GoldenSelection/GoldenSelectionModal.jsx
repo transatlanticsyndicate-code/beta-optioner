@@ -225,31 +225,68 @@ function GoldenSelectionModal({
                                 <div className="space-y-4">
                                     {activeScenario === 'SCENARIO_2' && (
                                         <>
-                                            <div className="space-y-2">
-                                                <Label>Смотреть даты экспирации в диапазоне от сегодняшнего дня (от - до)</Label>
-                                                <div className="flex gap-2">
-                                                    <Input
-                                                        type="number"
-                                                        value={minDays}
-                                                        onChange={(e) => setMinDays(e.target.value)}
-                                                        placeholder="Min"
-                                                    />
-                                                    <Input
-                                                        type="number"
-                                                        value={maxDays}
-                                                        onChange={(e) => setMaxDays(e.target.value)}
-                                                        placeholder="Max"
-                                                    />
-                                                </div>
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label>Ориентируемся на рост цены актива (%)</Label>
-                                                <Input
-                                                    type="number"
-                                                    value={growthPercent}
-                                                    onChange={(e) => setGrowthPercent(e.target.value)}
-                                                    placeholder="50"
-                                                />
+                                            <p className="text-sm text-muted-foreground mb-4">
+                                                Готов подобрать самый оптимальный <span className="font-semibold text-green-600">BuyCALL</span> опцион для получения максимальной прибыли на росте.
+                                            </p>
+
+                                            {/* Сворачиваемый блок параметров */}
+                                            <div className="border border-gray-200 rounded-md overflow-hidden mb-4">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIsParamsCollapsed(!isParamsCollapsed)}
+                                                    className="w-full flex items-center justify-between px-4 py-2 bg-gray-50 hover:bg-gray-100 transition-colors"
+                                                >
+                                                    <span className="text-sm text-muted-foreground">Параметры подбора</span>
+                                                    {isParamsCollapsed ? (
+                                                        <ChevronDown size={16} className="text-muted-foreground" />
+                                                    ) : (
+                                                        <ChevronUp size={16} className="text-muted-foreground" />
+                                                    )}
+                                                </button>
+
+                                                {!isParamsCollapsed && (
+                                                    <div className="p-3 space-y-3 border-t border-gray-200">
+                                                        {/* Строка 1: Экспирации */}
+                                                        <div className="space-y-1">
+                                                            <Label className="text-sm font-medium">
+                                                                Диапазон дат экспирации <span className="text-muted-foreground text-xs">(дней от сегодня)</span>
+                                                            </Label>
+                                                            <div className="grid grid-cols-2 gap-3">
+                                                                <Input
+                                                                    type="number"
+                                                                    value={minDays}
+                                                                    onChange={(e) => setMinDays(e.target.value)}
+                                                                    placeholder="Min"
+                                                                    className="h-9"
+                                                                />
+                                                                <Input
+                                                                    type="number"
+                                                                    value={maxDays}
+                                                                    onChange={(e) => setMaxDays(e.target.value)}
+                                                                    placeholder="Max"
+                                                                    className="h-9"
+                                                                />
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Разделитель */}
+                                                        <div className="h-px bg-amber-400" />
+
+                                                        {/* Строка 2: Рост */}
+                                                        <div className="space-y-1">
+                                                            <Label className="text-sm font-medium">
+                                                                Ориентируемся на рост цены актива <span className="text-muted-foreground text-xs">(%)</span>
+                                                            </Label>
+                                                            <Input
+                                                                type="number"
+                                                                value={growthPercent}
+                                                                onChange={(e) => setGrowthPercent(e.target.value)}
+                                                                placeholder="50"
+                                                                className="h-9"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
                                         </>
                                     )}
