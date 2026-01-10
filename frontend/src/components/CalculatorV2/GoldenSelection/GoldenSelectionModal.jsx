@@ -27,13 +27,16 @@ function GoldenSelectionModal({
     selectedTicker = '',
     availableDates = [],
     onAddOption,
-    onClose
+    onClose,
+    onSetSimulationParams
 }) {
     // Состояния для Сценария 2
     const [step, setStep] = React.useState('check'); // 'check', 'input', 'searching', 'result'
     const [minDays, setMinDays] = React.useState(60);
     const [maxDays, setMaxDays] = React.useState(100);
     const [growthPercent, setGrowthPercent] = React.useState(50);
+    const [strikeRangePercentCall, setStrikeRangePercentCall] = React.useState(20);
+    const [profitTolerancePercentCall, setProfitTolerancePercentCall] = React.useState(5);
     const [searchResult, setSearchResult] = React.useState(null);
     const [error, setError] = React.useState(null);
     // Состояния для Сценария 3 (Buy Put)
@@ -43,6 +46,7 @@ function GoldenSelectionModal({
     const [exitDay, setExitDay] = React.useState(5);
     const [strikeRangePercent, setStrikeRangePercent] = React.useState(20);
     const [minOI, setMinOI] = React.useState(100);
+    const [profitTolerancePercentPut, setProfitTolerancePercentPut] = React.useState(5);
     const [progress, setProgress] = React.useState('');
     const [isParamsCollapsed, setIsParamsCollapsed] = React.useState(true);
 
@@ -103,6 +107,8 @@ function GoldenSelectionModal({
                     minDays: Number(minDays),
                     maxDays: Number(maxDays),
                     growthPercent: Number(growthPercent),
+                    strikeRangePercent: Number(strikeRangePercentCall),
+                    profitTolerancePercent: Number(profitTolerancePercentCall),
                     onProgress: (p) => {
                         if (p.stage === 'loading') setProgress(`Загрузка даты ${p.current}/${p.total}...`);
                         if (p.stage === 'calculating') setProgress('Расчет прибыли...');
@@ -119,8 +125,11 @@ function GoldenSelectionModal({
                     exitDay: Number(exitDay),
                     strikeRangePercent: Number(strikeRangePercent),
                     minOI: Number(minOI),
+                    profitTolerancePercent: Number(profitTolerancePercentPut),
+                    existingCallOption: options[0], // Передаем существующий CALL опцион
                     onProgress: (p) => {
-                        if (p.stage === 'not_implemented') setProgress('Функционал в разработке...');
+                        if (p.stage === 'loading') setProgress(`Загрузка даты ${p.current}/${p.total}...`);
+                        if (p.stage === 'calculating') setProgress('Расчет прибыли PUT опционов...');
                     }
                 });
             }
@@ -141,10 +150,13 @@ function GoldenSelectionModal({
 
     const addOptionToTable = (result) => {
         if (result && onAddOption) {
+            // Определяем тип опциона по сценарию
+            const optionType = activeScenario === 'SCENARIO_2' ? 'CALL' : 'PUT';
+            
             // Форматируем для добавления в таблицу
             const optionToAdd = {
                 ...result,
-                type: 'CALL', // Принудительно CALL
+                type: optionType,
                 side: 'long', // Buy
                 strike: result.strike,
                 premium: result.premium || result.ask || result.last_price,
@@ -155,6 +167,15 @@ function GoldenSelectionModal({
                 action: 'Buy' // Явно указываем action
             };
             onAddOption(optionToAdd);
+            
+            // Для Сценария 3: устанавливаем параметры симуляции
+            if (activeScenario === 'SCENARIO_3' && result.dropPrice && result.exitDay && onSetSimulationParams) {
+                onSetSimulationParams({
+                    targetPrice: result.dropPrice,
+                    daysPassed: result.exitDay
+                });
+            }
+            
             onClose();
         }
     };
@@ -285,6 +306,40 @@ function GoldenSelectionModal({
                                                                 className="h-9"
                                                             />
                                                         </div>
+
+                                                        {/* Разделитель */}
+                                                        <div className="h-px bg-amber-400" />
+
+                                                        {/* Строка 3: Диапазон страйков */}
+                                                        <div className="space-y-1">
+                                                            <Label className="text-sm font-medium">
+                                                                Страйки <span className="text-muted-foreground text-xs">(±%)</span>
+                                                            </Label>
+                                                            <Input
+                                                                type="number"
+                                                                value={strikeRangePercentCall}
+                                                                onChange={(e) => setStrikeRangePercentCall(e.target.value)}
+                                                                placeholder="20"
+                                                                className="h-9"
+                                                            />
+                                                        </div>
+
+                                                        {/* Разделитель */}
+                                                        <div className="h-px bg-amber-400" />
+
+                                                        {/* Строка 4: Погрешность равной прибыли */}
+                                                        <div className="space-y-1">
+                                                            <Label className="text-sm font-medium">
+                                                                Погрешность равной прибыли <span className="text-muted-foreground text-xs">(%)</span>
+                                                            </Label>
+                                                            <Input
+                                                                type="number"
+                                                                value={profitTolerancePercentCall}
+                                                                onChange={(e) => setProfitTolerancePercentCall(e.target.value)}
+                                                                placeholder="5"
+                                                                className="h-9"
+                                                            />
+                                                        </div>
                                                     </div>
                                                 )}
                                             </div>
@@ -397,6 +452,23 @@ function GoldenSelectionModal({
                                                                     className="h-9"
                                                                 />
                                                             </div>
+                                                        </div>
+
+                                                        {/* Разделитель */}
+                                                        <div className="h-px bg-amber-400" />
+
+                                                        {/* Строка 4: Погрешность равной прибыли */}
+                                                        <div className="space-y-1">
+                                                            <Label className="text-sm font-medium">
+                                                                Погрешность равной прибыли <span className="text-muted-foreground text-xs">(%)</span>
+                                                            </Label>
+                                                            <Input
+                                                                type="number"
+                                                                value={profitTolerancePercentPut}
+                                                                onChange={(e) => setProfitTolerancePercentPut(e.target.value)}
+                                                                placeholder="5"
+                                                                className="h-9"
+                                                            />
                                                         </div>
                                                     </div>
                                                 )}

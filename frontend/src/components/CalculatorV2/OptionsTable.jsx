@@ -68,6 +68,7 @@ function OptionsTable({
   positions = [], // Позиции базового актива для волшебного подбора
   onAddMagicOption = null, // Функция добавления опциона из волшебного подбора
   onMagicSelectionComplete = null, // Callback для передачи параметров подбора в OptionSelectionResult
+  onSetSimulationParams = null, // Callback для установки параметров симуляции (targetPrice, daysPassed)
   isAIEnabled = false, // Включен ли AI для прогнозирования волатильности
   aiVolatilityMap = {}, // Кэш AI предсказаний волатильности
   fetchAIVolatility = null // Функция для запроса AI волатильности
@@ -1178,6 +1179,7 @@ function OptionsTable({
             }
             setGoldenModalOpen(false);
           }}
+          onSetSimulationParams={onSetSimulationParams}
         />
       )}
     </div>

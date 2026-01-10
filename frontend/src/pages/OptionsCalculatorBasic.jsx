@@ -2085,6 +2085,18 @@ function OptionsCalculatorV3() {
                         setOptionSelectionParams(params);
                         console.log('🔮 Волшебный подбор завершён, параметры сохранены:', params);
                       }}
+                      onSetSimulationParams={(params) => {
+                        // Устанавливаем параметры симуляции из Золотой кнопки (Сценарий 3)
+                        if (params.targetPrice) {
+                          setTargetPrice(params.targetPrice);
+                          console.log('👑 Золотая кнопка: установлена targetPrice =', params.targetPrice);
+                        }
+                        if (params.daysPassed !== undefined) {
+                          setDaysPassed(params.daysPassed);
+                          setUserAdjustedDays(true);
+                          console.log('👑 Золотая кнопка: установлено daysPassed =', params.daysPassed);
+                        }
+                      }}
                     />
                   ) : (
                     <div className="w-full h-[80px] flex items-center justify-center text-muted-foreground text-sm">
