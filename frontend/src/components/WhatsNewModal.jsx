@@ -5,20 +5,18 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { X, Sparkles, Check } from 'lucide-react';
+import { X, Sparkles, Check, Crown } from 'lucide-react';
 
 // Текущая версия приложения
-const CURRENT_VERSION = '28';
+const CURRENT_VERSION = '29';
 
 // Список нововведений для текущей версии
 // ЗАЧЕМ: Централизованное хранение информации о новых функциях
 const WHATS_NEW_ITEMS = [
   {
-    title: 'Crypto Position Manager',
-    description: 'Запущено новое приложение для профессионального мониторинга и управления криптовалютными позициями. Отслеживайте портфель, анализируйте прибыль/убыток и принимайте взвешенные решения на основе актуальных данных рынка.',
-    iconUrl: 'https://crypto.optioner.online/cryptoW.png',
-    link: 'https://crypto.optioner.online',
-    linkText: 'Открыть приложение'
+    icon: '👑',
+    title: 'Новый функционал: Золотая кнопка',
+    description: 'Представляем умный автоматический подбор опционов! Золотая кнопка анализирует все доступные опционы и выбирает оптимальный вариант с учетом прибыльности и стоимости. Новый параметр "Погрешность равной прибыли" (по умолчанию 5%) позволяет системе группировать опционы с близкой прибылью и автоматически выбирать самый дешевый из них. Это экономит сотни долларов на каждой сделке при сохранении максимальной прибыльности.'
   }
 ];
 
@@ -94,7 +92,7 @@ const WhatsNewModal = ({ onClose }) => {
         onClick={(e) => e.stopPropagation()}
       >
         {/* Заголовок */}
-        <div className="relative bg-gradient-to-r from-gray-900 via-yellow-600 to-gray-900 rounded-t-2xl p-6 text-white">
+        <div className="relative bg-gradient-to-r from-yellow-400 via-yellow-500 to-yellow-600 rounded-t-2xl p-6 text-white shadow-lg">
           <button
             onClick={handleClose}
             className="absolute top-4 right-4 p-1 rounded-full hover:bg-white/20 transition-colors"
@@ -104,12 +102,12 @@ const WhatsNewModal = ({ onClose }) => {
           </button>
           
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-white/20 rounded-xl">
-              <Sparkles size={28} />
+            <div className="p-2 bg-white/20 rounded-xl backdrop-blur-sm">
+              <Crown className="h-7 w-7" />
             </div>
             <div>
-              <h2 className="text-2xl font-bold">Что нового?</h2>
-              <p className="text-white/80 text-sm">Версия {CURRENT_VERSION}</p>
+              <h2 className="text-2xl font-bold drop-shadow-md">Что нового?</h2>
+              <p className="text-white/90 text-sm font-medium">Версия {CURRENT_VERSION}</p>
             </div>
           </div>
         </div>
@@ -156,9 +154,6 @@ const WhatsNewModal = ({ onClose }) => {
                     <div className="flex-1 border-t border-yellow-300"></div>
                   </div>
                 )}
-                <div className="text-xs text-gray-500 mt-1">
-                  📍 Доступ: <span className="font-medium">Боковое меню → Калькуляторы → Крипто Менеджер</span>
-                </div>
               </div>
             ))}
           </div>
