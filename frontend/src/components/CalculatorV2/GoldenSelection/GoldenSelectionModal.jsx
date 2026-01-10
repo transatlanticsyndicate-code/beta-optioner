@@ -31,8 +31,8 @@ function GoldenSelectionModal({
 }) {
     // Состояния для Сценария 2
     const [step, setStep] = React.useState('check'); // 'check', 'input', 'searching', 'result'
-    const [minDays, setMinDays] = React.useState(20);
-    const [maxDays, setMaxDays] = React.useState(45);
+    const [minDays, setMinDays] = React.useState(60);
+    const [maxDays, setMaxDays] = React.useState(100);
     const [growthPercent, setGrowthPercent] = React.useState(50);
     const [searchResult, setSearchResult] = React.useState(null);
     const [error, setError] = React.useState(null);
@@ -113,7 +113,10 @@ function GoldenSelectionModal({
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="sm:max-w-[450px] border-0 [&>button]:text-white [&>button]:hover:text-white/80">
+            <DialogContent
+                className="sm:max-w-[450px] border-0 [&>button]:text-white [&>button]:hover:text-white/80"
+                onOpenAutoFocus={(e) => e.preventDefault()}
+            >
                 <DialogHeader style={headerStyle}>
                     <DialogTitle className="text-white text-lg font-semibold flex items-center gap-2">
                         <Crown className="h-5 w-5" />
@@ -164,7 +167,7 @@ function GoldenSelectionModal({
                             {(step === 'check' || step === 'input') && (
                                 <div className="space-y-4">
                                     <div className="space-y-2">
-                                        <Label>Дней до экспирации (от - до)</Label>
+                                        <Label>Смотреть даты экспирации в диапазоне от сегодняшнего дня (от - до)</Label>
                                         <div className="flex gap-2">
                                             <Input
                                                 type="number"
@@ -181,7 +184,7 @@ function GoldenSelectionModal({
                                         </div>
                                     </div>
                                     <div className="space-y-2">
-                                        <Label>Рост цены актива (%) к дате экспирации</Label>
+                                        <Label>Ориентируемся на рост цены актива (%)</Label>
                                         <Input
                                             type="number"
                                             value={growthPercent}
@@ -202,7 +205,7 @@ function GoldenSelectionModal({
                                         className="bg-amber-500 hover:bg-amber-600 text-white w-full"
                                         disabled={!minDays || !maxDays || !growthPercent}
                                     >
-                                        Найти лучший вариант
+                                        Найти самый прибыльный опцион
                                     </Button>
                                 </div>
                             )}

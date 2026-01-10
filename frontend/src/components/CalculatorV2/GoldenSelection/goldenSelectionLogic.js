@@ -7,7 +7,7 @@ import { calculateOptionPLValue } from '../../../utils/optionPricing';
  * @param {number} maxDays - Максимальное количество дней
  * @returns {array} - Отфильтрованные даты
  */
-export const filterDatesByRange = (availableDates, minDays = 20, maxDays = 40) => {
+export const filterDatesByRange = (availableDates, minDays = 60, maxDays = 100) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -53,8 +53,8 @@ export const findBestGoldenBuyCall = async ({
     ticker,
     currentPrice,
     availableDates = [],
-    minDays = 20,
-    maxDays = 40,
+    minDays = 60,
+    maxDays = 100,
     growthPercent = 50,
     onProgress = () => { }
 }) => {
