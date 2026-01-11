@@ -51,7 +51,7 @@ function BaseAssetPositions({
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-medium">Базовый актив</h3>
           {selectedTicker && (
-            <span className="text-lg" title={isAIEnabled && isTickerSupported ? 'AI модель активна' : 'AI модель неактивна'}>
+            <span className="text-[0.5rem]" title={isAIEnabled && isTickerSupported ? 'AI модель активна' : 'AI модель неактивна'}>
               {isAIEnabled && isTickerSupported ? '🟣' : '⚫️'}
             </span>
           )}
