@@ -97,11 +97,12 @@ class OptionsService:
             List опционных контрактов с ценами, volume, OI и греками
         """
         try:
+
             # Используем snapshot API - возвращает ВСЕ данные сразу!
             url = f"{self.base_url}/v3/snapshot/options/{ticker}"
             params = {
                 "apiKey": self.api_key,
-                "limit": 250  # Максимальное количество контрактов
+                "limit": 250  # Максимальное количество контрактов на одну страницу
             }
             
             # Если указана дата экспирации, фильтруем по ней
@@ -110,23 +111,47 @@ class OptionsService:
                 params["expiration_date.lte"] = expiration_date
             
             print(f"🔍 Fetching options chain for {ticker}, date: {expiration_date}")
-            response = requests.get(url, params=params, timeout=15)
-            response.raise_for_status()
             
-            data = response.json()
+            all_contracts = []
+            page = 0
+            max_pages = 20 # Защита от бесконечного цикла (до 5000 контрактов)
+            
+            while url and page < max_pages:
+                if page == 0:
+                    response = requests.get(url, params=params, timeout=15)
+                else:
+                    # Next URL уже содержит ключ и параметры
+                    if "apiKey" not in url:
+                        url = f"{url}&apiKey={self.api_key}"
+                    response = requests.get(url, timeout=15)
+                
+                response.raise_for_status()
+                data = response.json()
+                
+                results = data.get("results", [])
+                if not results and page == 0:
+                     # Если на первой странице пусто
+                     break
+                     
+                all_contracts.extend(results)
+                
+                # Проверяем наличие следующей страницы
+                url = data.get("next_url")
+                if not url:
+                    break
+                    
+                page += 1
+                if page > 0:
+                    print(f"   Fetching page {page + 1}...")
+
             print(f"📦 Snapshot API response status: {data.get('status')}")
             
-            if data.get("status") != "OK":
-                print(f"⚠️ Snapshot API returned status: {data.get('status')}")
-                return []
-            
-            contracts = data.get("results", [])
-            print(f"📊 Found {len(contracts)} contracts")
-            
-            # Если нет контрактов (бесплатный план), генерируем mock данные
-            if not contracts:
+            if not all_contracts:
                 print(f"⚠️ No contracts found, generating mock data for {ticker}")
                 return self._generate_mock_options(ticker, expiration_date)
+                
+            contracts = all_contracts
+            print(f"📊 Found {len(contracts)} contracts total")
             
             # Извлекаем полные данные из snapshot
             options_list = []
@@ -155,19 +180,30 @@ class OptionsService:
                 bid = last_quote.get("bid", 0) or 0
                 ask = last_quote.get("ask", 0) or 0
                 last_price = last_trade.get("price", 0) or day_data.get("close", 0) or 0
+                
+                # FALLBACK: Если рынок закрыт или нет ликвидности (bid/ask = 0),
+                # оцениваем bid/ask на основе last_price с разумным спредом (например, ±2%)
+                # Это позволяет "Золотому подбору" работать даже на закрытом рынке
+                if last_price > 0:
+                    if bid == 0:
+                        bid = last_price * 0.98  # -2%
+                    if ask == 0:
+                        ask = last_price * 1.02  # +2%
+                
                 mid = (bid + ask) / 2 if bid > 0 and ask > 0 else last_price
                 
-                # Определяем is_realtime флаг
+                # Определяем is_realtime флаг (true только если были реальные биды/аски)
                 is_realtime = (
                     last_quote is not None and 
-                    bid > 0 and ask > 0
+                    last_quote.get("bid", 0) > 0 and 
+                    last_quote.get("ask", 0) > 0
                 )
                 
                 # Логируем первые 3 контракта
                 if idx < 3:
                     print(f"\n🔹 CONTRACT #{idx + 1}: {contract_type.upper()} Strike ${strike}")
-                    print(f"   - bid: {bid}")
-                    print(f"   - ask: {ask}")
+                    print(f"   - bid: {bid:.2f} (orig: {last_quote.get('bid', 0)})")
+                    print(f"   - ask: {ask:.2f} (orig: {last_quote.get('ask', 0)})")
                     print(f"   - last: {last_price}")
                     print(f"   - is_realtime: {is_realtime}")
                     print(f"   - volume: {day_data.get('volume', 0)}")
@@ -180,7 +216,7 @@ class OptionsService:
                     "expiration": details.get("expiration_date"),
                     "ticker": contract.get("ticker"),
                     
-                    # ✅ Real-time цены из last_quote и last_trade
+                    # ✅ Real-time цены из last_quote и last_trade (или fallback)
                     "last": last_price,
                     "bid": bid,
                     "ask": ask,

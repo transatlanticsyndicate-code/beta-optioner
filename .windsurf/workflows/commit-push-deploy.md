@@ -13,9 +13,9 @@ description: Сделать коммит, пуш и деплой на beta се�
 git add -A && git commit -m "update"
 ```
 
-### 2. Пуш на GitHub
+### 2. Пуш на GitHub (beta remote)
 ```bash
-git push origin main
+git push beta main
 ```
 
 ### 3. Деплой на beta сервер
