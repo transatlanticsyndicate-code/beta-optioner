@@ -47,6 +47,7 @@ function GoldenSelectionModal({
     const [strikeRangePercent, setStrikeRangePercent] = React.useState(20);
     const [minOI, setMinOI] = React.useState(100);
     const [profitTolerancePercentPut, setProfitTolerancePercentPut] = React.useState(5);
+    const [targetPriceInput, setTargetPriceInput] = React.useState(''); // State for direct price input
     const [progress, setProgress] = React.useState('');
     const [isParamsCollapsed, setIsParamsCollapsed] = React.useState(true);
 
@@ -79,6 +80,14 @@ function GoldenSelectionModal({
         }
     }, [isOpen, options, positions, isScenario3, hasOneCall, isBuy]);
 
+    // Initialize targetPriceInput when modal opens or defaults change
+    React.useEffect(() => {
+        if (isOpen && currentPrice && dropPercent) {
+            const price = currentPrice * (1 + Number(dropPercent) / 100);
+            setTargetPriceInput(price.toFixed(2));
+        }
+    }, [isOpen, currentPrice]); // Only on open to avoid overriding user input during typing if we added dropPercent dependency carelessly
+
     // Активный сценарий
     const activeScenario = isEmptyState ? 'SCENARIO_2' : (isScenario3 ? 'SCENARIO_3' : 'INVALID');
 
@@ -90,6 +99,31 @@ function GoldenSelectionModal({
             setError(null);
         }
     }, [isOpen]);
+
+    // Handlers for two-way binding
+    const handleDropPercentChange = (e) => {
+        const val = e.target.value;
+        setDropPercent(val);
+        if (currentPrice && !isNaN(parseFloat(val))) {
+            const price = currentPrice * (1 + parseFloat(val) / 100);
+            setTargetPriceInput(price.toFixed(2));
+        } else {
+            setTargetPriceInput('');
+        }
+    };
+
+    const handleTargetPriceChange = (e) => {
+        const val = e.target.value;
+        setTargetPriceInput(val);
+        if (currentPrice && !isNaN(parseFloat(val)) && parseFloat(val) > 0) {
+            const percent = ((parseFloat(val) - currentPrice) / currentPrice) * 100;
+            setDropPercent(percent.toFixed(2));
+        } else {
+            // If empty or invalid, maybe don't update percent immediately or set to 0?
+            // Let's keep percent as is or set to 0 if cleared? 
+            // Better to let it be flexible.
+        }
+    };
 
     const handleSearch = async () => {
         setStep('searching');
@@ -152,7 +186,7 @@ function GoldenSelectionModal({
         if (result && onAddOption) {
             // Определяем тип опциона по сценарию
             const optionType = activeScenario === 'SCENARIO_2' ? 'CALL' : 'PUT';
-            
+
             // Форматируем для добавления в таблицу
             const optionToAdd = {
                 ...result,
@@ -167,7 +201,7 @@ function GoldenSelectionModal({
                 action: 'Buy' // Явно указываем action
             };
             onAddOption(optionToAdd);
-            
+
             // Для Сценария 3: устанавливаем параметры симуляции
             if (activeScenario === 'SCENARIO_3' && result.dropPrice && result.exitDay && onSetSimulationParams) {
                 onSetSimulationParams({
@@ -175,7 +209,7 @@ function GoldenSelectionModal({
                     daysPassed: result.exitDay
                 });
             }
-            
+
             onClose();
         }
     };
@@ -397,17 +431,32 @@ function GoldenSelectionModal({
 
                                                         {/* Строка 2: Падение и Выход */}
                                                         <div className="grid grid-cols-2 gap-3">
-                                                            <div className="space-y-1">
+                                                            <div className="space-y-1 col-span-2">
                                                                 <Label className="text-sm font-medium">
-                                                                    Падение цены актива <span className="text-muted-foreground text-xs">(%)</span>
+                                                                    Цель падения <span className="text-muted-foreground text-xs">(% и Цена)</span>
                                                                 </Label>
-                                                                <Input
-                                                                    type="number"
-                                                                    value={dropPercent}
-                                                                    onChange={(e) => setDropPercent(e.target.value)}
-                                                                    placeholder="-2.5"
-                                                                    className="h-9"
-                                                                />
+                                                                <div className="grid grid-cols-2 gap-2">
+                                                                    <div className="relative">
+                                                                        <Input
+                                                                            type="number"
+                                                                            value={dropPercent}
+                                                                            onChange={handleDropPercentChange}
+                                                                            placeholder="-2.5%"
+                                                                            className="h-9 pr-8"
+                                                                        />
+                                                                        <span className="absolute right-2 top-2 text-xs text-muted-foreground">%</span>
+                                                                    </div>
+                                                                    <div className="relative">
+                                                                        <Input
+                                                                            type="number"
+                                                                            value={targetPriceInput}
+                                                                            onChange={handleTargetPriceChange}
+                                                                            placeholder="Price"
+                                                                            className="h-9 pr-4"
+                                                                        />
+                                                                        <span className="absolute right-2 top-2 text-xs text-muted-foreground">$</span>
+                                                                    </div>
+                                                                </div>
                                                             </div>
                                                             <div className="space-y-1">
                                                                 <Label className="text-sm font-medium">
