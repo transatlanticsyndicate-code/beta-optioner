@@ -895,13 +895,22 @@ function OptionsTable({
                 </span>
 
                 {/* IV (Implied Volatility) - индивидуальная волатильность опциона */}
-                <span className="text-muted-foreground text-right ml-2 font-medium" style={{ fontSize: '0.7rem' }}>
+                {/* DEBUG: Показываем daysToExp для диагностики бага с разной IV на разных устройствах */}
+                <span className="text-muted-foreground text-right ml-2 font-medium" style={{ fontSize: '0.65rem' }}>
                   {(() => {
                     const optIV = option.impliedVolatility || option.implied_volatility;
-                    if (!optIV || optIV <= 0) return "—";
+                    // DEBUG: Вычисляем дни до экспирации для отображения
+                    const debugCurrentDays = calculateDaysRemainingUTC(option, 0);
+                    const debugSimulatedDays = calculateDaysRemainingUTC(option, daysPassed);
+                    const debugVolatility = getOptionVolatility(option, debugCurrentDays, debugSimulatedDays, ivSurface);
+                    
+                    console.log('🔍 DEBUG IV:', { optIV, debugCurrentDays, debugSimulatedDays, debugVolatility, daysPassed });
+                    
+                    if (!optIV || optIV <= 0) return `—[d:${debugCurrentDays}]`;
                     // Конвертируем в проценты если в десятичном формате
                     const ivPercent = optIV < 1 ? optIV * 100 : optIV;
-                    return `${ivPercent.toFixed(1)}%`;
+                    // DEBUG: Формат "IV%[daysNow→daysSim]=projectedIV%"
+                    return `${ivPercent.toFixed(0)}%[${debugCurrentDays}→${debugSimulatedDays}]=${debugVolatility.toFixed(0)}%`;
                   })()}
                 </span>
 
