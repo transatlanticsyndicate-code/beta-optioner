@@ -2,7 +2,13 @@
 Yahoo Finance Client
 Получение опционных данных через yfinance
 """
-import yfinance as yf
+try:
+    import yfinance as yf
+    YFINANCE_AVAILABLE = True
+except ImportError:
+    YFINANCE_AVAILABLE = False
+    yf = None
+
 import pandas as pd
 from typing import Dict, List
 from datetime import datetime, timedelta

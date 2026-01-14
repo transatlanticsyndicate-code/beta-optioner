@@ -9,7 +9,7 @@ try:
     print("SSH connected successfully")
 
     # Execute deploy script on server
-    stdin, stdout, stderr = client.exec_command('cd /var/www/test && ./scripts/deploy_test.sh')
+    stdin, stdout, stderr = client.exec_command('cd /var/www/test && chmod +x ./scripts/deploy_test.sh && ./scripts/deploy_test.sh')
     
     # Print output
     output = stdout.read().decode()
