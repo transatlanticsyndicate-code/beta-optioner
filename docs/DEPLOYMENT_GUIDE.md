@@ -1,61 +1,65 @@
 # Руководство по деплою
 
-## Структура репозиториев и серверов
+## 🎯 Архитектура
 
-| Окружение | Репозиторий | Remote | Сервер | Домен |
-|-----------|-------------|--------|--------|-------|
-| **Разработка** | modular-code-methodology | origin | localhost | localhost:3000 |
-| **Beta** | optioner-beta-deploy2 | beta | 89.117.52.143 | beta.optioner.online |
-| **Тест** | optioner-test-deploy | test | TBD | test.optioner.online |
-| **Продакшн** | optioner-prod-deploy | prod | TBD | optioner.online |
+**Один репозиторий + GitHub Actions = автоматический деплой**
 
-## Быстрый деплой на Beta
+| Окружение | Репозиторий | Сервер | Домен |
+|-----------|-------------|--------|-------|
+| **Разработка** | modular-code-methodology (main) | localhost | localhost:3000 |
+| **Beta** | modular-code-methodology (main) | 89.117.52.143 | beta.optioner.online |
+| **Тест** | modular-code-methodology (main) | TBD | test.optioner.online |
+| **Продакшн** | modular-code-methodology (main) | TBD | optioner.online |
+
+## 🚀 Быстрый деплой на Beta
 
 ```bash
-# 1. Коммит и пуш в основной репозиторий
+# Просто пуш в main — GitHub Actions сделает всё остальное!
 git add -A
 git commit -m "Описание изменений"
 git push origin main
-
-# 2. Пуш в beta репозиторий
-git push beta main
-
-# 3. Запустить скрипт деплоя (автоматический)
-./scripts/deploy-beta.sh
 ```
 
-## Что делает deploy-beta.sh
+## ⚙️ Что делает GitHub Actions
 
-1. SSH подключение к серверу (89.117.52.143)
-2. `git pull origin main` в `/var/www/beta`
-3. `npm run build` для frontend
-4. `systemctl reload nginx` для обновления статики
-5. `pm2 restart all` для перезагрузки backend
+1. Собирает frontend (`npm run build`)
+2. Копирует build на сервер (89.117.52.143:/var/www/beta)
+3. Обновляет код (`git pull origin main`)
+4. Перезагружает nginx и PM2
+5. Отправляет статус в GitHub Actions
 
-## Переменные окружения
+## 🔐 Безопасность
 
-Пароль SSH хранится в переменной `BETA_SSH_PASSWORD`:
+Пароли хранятся в GitHub Secrets (не видны в логах):
+- `BETA_DEPLOY_HOST` = 89.117.52.143
+- `BETA_DEPLOY_USER` = root
+- `BETA_DEPLOY_PASSWORD` = Z#yyJl7e34sptFij
+- `BETA_DEPLOY_PATH` = /var/www/beta
+
+Настройка: `.github/SETUP_SECRETS.md`
+
+## Проверка статуса деплоя
+
+### На GitHub Actions
+1. Перейдите на https://github.com/transatlanticsyndicate-code/modular-code-methodology
+2. Вкладка "Actions"
+3. Найдите последний workflow "Deploy to Beta Server"
+4. Посмотрите статус (✅ успех или ❌ ошибка)
+
+### На beta сервере
 ```bash
-export BETA_SSH_PASSWORD="Z#yyJl7e34sptFij"
-```
+# Проверить, что build обновлён
+https://beta.optioner.online
 
-## Проверка статуса
-
-```bash
-# Локально
-curl http://localhost:3000
-curl http://localhost:8000/health
-
-# Beta
-curl https://beta.optioner.online
-curl https://beta.optioner.online/api/health
+# Очистить кэш браузера
+Ctrl+Shift+Delete → "Все время"
 ```
 
 ## Структура папок на сервере
 
 ```
 /var/www/beta/
-├── backend/          # Python FastAPI
+├── backend/          # Python FastAPI (запущен через PM2)
 ├── frontend/         # React
 │   ├── src/
 │   └── build/        # Production build (подаётся nginx)
@@ -68,3 +72,5 @@ curl https://beta.optioner.online/api/health
 - Все изменения должны идти через git
 - Frontend кэшируется nginx (expires 1y для статики)
 - Для очистки кэша браузера: Ctrl+Shift+Delete → "Все время"
+- **Не пушьте в beta remote** — его больше нет!
+- Пушьте только в `origin main` — GitHub Actions сделает всё остальное
