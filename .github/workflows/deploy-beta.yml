@@ -36,20 +36,12 @@ jobs:
           DEPLOY_PASSWORD: ${{ secrets.BETA_DEPLOY_PASSWORD }}
           DEPLOY_PATH: ${{ secrets.BETA_DEPLOY_PATH }}
         run: |
-          # Установка sshpass
           apt-get update && apt-get install -y sshpass
-          
-          # Копирование build на сервер
           sshpass -p "$DEPLOY_PASSWORD" scp -o StrictHostKeyChecking=no -r frontend/build/* \
             "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/frontend/build/"
-          
-          # Обновление кода и перезагрузка сервисов на сервере
           sshpass -p "$DEPLOY_PASSWORD" ssh -o StrictHostKeyChecking=no \
             "$DEPLOY_USER@$DEPLOY_HOST" \
-            "cd $DEPLOY_PATH && \
-             git pull origin main && \
-             systemctl reload nginx && \
-             pm2 restart all"
+            "cd $DEPLOY_PATH && git pull origin main && systemctl reload nginx && pm2 restart all"
       
       - name: Notify on success
         if: success()
@@ -57,6 +49,4 @@ jobs:
       
       - name: Notify on failure
         if: failure()
-        run: |
-          echo "❌ Deployment failed"
-          exit 1
+        run: exit 1
