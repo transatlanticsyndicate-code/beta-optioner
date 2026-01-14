@@ -348,7 +348,13 @@ function OptionsCalculatorV3() {
         const data = await response.json();
         if (data.status === 'success' && data.details) {
           const details = data.details;
-          console.log(`✅ Loaded details for ${ticker} ${optionType} ${strike}:`, details);
+          // Логируем IV для диагностики бага с разной IV на разных устройствах
+          const oldIV = existingOption?.impliedVolatility || existingOption?.implied_volatility;
+          const newIV = details.implied_volatility;
+          console.log(`✅ Loaded details for ${ticker} ${optionType} ${strike}:`);
+          console.log(`   📊 IV: ${oldIV ? (oldIV < 1 ? (oldIV * 100).toFixed(1) : oldIV.toFixed(1)) : 'N/A'}% → ${newIV ? (newIV < 1 ? (newIV * 100).toFixed(1) : newIV.toFixed(1)) : 'N/A'}%`);
+          console.log(`   💰 Premium: ${details.premium}, Bid: ${details.bid}, Ask: ${details.ask}`);
+          
           setOptions(prevOptions => 
             prevOptions.map(opt => 
               opt.id === optionId ? {
@@ -362,9 +368,10 @@ function OptionsCalculatorV3() {
                 gamma: details.gamma || 0,
                 theta: details.theta || 0,
                 vega: details.vega || 0,
-                // ВАЖНО: Сохраняем IV из подбора если она уже есть
-                // ЗАЧЕМ: Согласованность P/L между подбором и таблицей
-                impliedVolatility: opt.impliedVolatility || details.implied_volatility || 0,
+                // ИСПРАВЛЕНО: Всегда обновляем IV из API при нажатии кнопки обновления
+                // ЗАЧЕМ: Решает проблему разной IV на разных устройствах
+                impliedVolatility: details.implied_volatility || opt.impliedVolatility || 0,
+                implied_volatility: details.implied_volatility || opt.implied_volatility || 0,
                 isLoadingDetails: false,
                 // ВАЖНО: Сохраняем bestExitDay при обновлении деталей
                 bestExitDay: opt.bestExitDay

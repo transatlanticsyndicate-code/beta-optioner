@@ -184,7 +184,17 @@ function OptionsTable({
       !opt.isLockedPosition && opt.date && opt.strike && opt.type
     );
 
-    if (optionsToRefresh.length === 0) return;
+    if (optionsToRefresh.length === 0) {
+      console.log('⚠️ Нет опционов для обновления');
+      return;
+    }
+
+    // Логируем IV ДО обновления
+    console.log('📊 IV ДО обновления:');
+    optionsToRefresh.forEach(opt => {
+      const iv = opt.impliedVolatility || opt.implied_volatility || opt.iv;
+      console.log(`   ${opt.type} ${opt.strike} ${opt.date}: IV = ${iv ? (iv < 1 ? (iv * 100).toFixed(1) : iv.toFixed(1)) : 'N/A'}%`);
+    });
 
     setIsRefreshingAll(true);
 
@@ -193,7 +203,7 @@ function OptionsTable({
       // Это решает проблему разной IV на разных устройствах из-за кэширования
       clearTickerCache(selectedTicker);
       invalidateOptionsForTicker(selectedTicker);
-      console.log(`🔄 Кэш очищен для ${selectedTicker}, обновляем ${optionsToRefresh.length} опционов...`);
+      console.log(`🔄 Кэш очищен для ${selectedTicker}, запрашиваем свежие данные для ${optionsToRefresh.length} опционов...`);
 
       // Обновляем все опционы параллельно
       await Promise.all(
@@ -201,9 +211,9 @@ function OptionsTable({
           loadOptionDetails(opt.id, selectedTicker, opt.date, opt.strike, opt.type)
         )
       );
-      console.log('✅ Все опционы обновлены с свежими данными');
+      console.log('✅ Запросы завершены. Проверьте IV в таблице.');
     } catch (error) {
-      console.error('Ошибка при обновлении опционов:', error);
+      console.error('❌ Ошибка при обновлении опционов:', error);
     } finally {
       setIsRefreshingAll(false);
     }
