@@ -7,9 +7,9 @@
 set -euo pipefail
 
 # ============== Конфигурация ==============
-PROJECT_DIR="/var/www/test"
+PROJECT_DIR="/var/www/beta"
 BRANCH="${1:-main}"
-PM2_APP_NAME="optioner-backend-test"
+PM2_APP_NAME="optioner-backend-beta"
 
 # Цвета для вывода
 GREEN='\033[0;32m'
@@ -38,7 +38,7 @@ log_warn() {
 # ============== Начало деплоя ==============
 echo ""
 echo "========================================"
-log_info "🚀 Деплой на test.optioner.online"
+log_info "🚀 Деплой на beta.optioner.online"
 log_info "📌 Ветка: $BRANCH"
 log_info "📁 Директория: $PROJECT_DIR"
 echo "========================================"
@@ -94,7 +94,7 @@ if pm2 describe "$PM2_APP_NAME" > /dev/null 2>&1; then
     pm2 restart "$PM2_APP_NAME"
 else
     log_warn "Процесс $PM2_APP_NAME не найден, запускаем..."
-    pm2 start "$PROJECT_DIR/ecosystem.test.config.js"
+    pm2 start "$PROJECT_DIR/ecosystem.beta.config.js"
 fi
 log_success "Backend перезапущен"
 
