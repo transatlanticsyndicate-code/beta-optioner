@@ -20,6 +20,42 @@ const responseCache = new Map();
 const pendingRequests = new Map();
 const CACHE_TTL = 2 * 60 * 1000; // 2 минуты
 
+/**
+ * Очистить весь кэш API
+ * ЗАЧЕМ: Принудительное обновление данных при расхождении IV между устройствами
+ */
+export function clearAllCache() {
+  responseCache.clear();
+  pendingRequests.clear();
+  console.log('[apiClient] ✅ Весь кэш очищен');
+}
+
+/**
+ * Очистить кэш для конкретного тикера
+ * @param {string} ticker - Тикер для очистки
+ */
+export function clearTickerCache(ticker) {
+  const upperTicker = ticker.toUpperCase();
+  let cleared = 0;
+  for (const key of responseCache.keys()) {
+    if (key.includes(upperTicker)) {
+      responseCache.delete(key);
+      cleared++;
+    }
+  }
+  console.log(`[apiClient] ✅ Очищен кэш для ${upperTicker}: ${cleared} записей`);
+}
+
+/**
+ * Получить timestamp последнего обновления кэша для ключа
+ * @param {string} key - Ключ кэша
+ * @returns {number|null} - Timestamp или null
+ */
+export function getCacheTimestamp(key) {
+  const cached = responseCache.get(key);
+  return cached ? cached.timestamp : null;
+}
+
 async function cachedCall(key, fn) {
   // Проверяем кеш
   const cached = responseCache.get(key);
@@ -148,6 +184,9 @@ const apiClient = {
   getHistoricalBars,
   getTickerDetails,
   getCurrentPrice,
+  clearAllCache,
+  clearTickerCache,
+  getCacheTimestamp,
 };
 
 export default apiClient;

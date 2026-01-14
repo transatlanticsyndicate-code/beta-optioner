@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Eye, EyeOff, ChevronDown, Trash2, Loader2, Save, RotateCcw, AlertTriangle, RefreshCw } from 'lucide-react';
 import { MagicButton, MagicSelectionModal } from './MagicSelection';
+import { clearTickerCache } from '../../services/apiClient';
+import { invalidateOptionsForTicker } from '../../services/OptionsDataService';
 
 import { GoldenButton, GoldenSelectionModal } from './GoldenSelection';
 import { Button } from '../ui/button';
@@ -173,6 +175,7 @@ function OptionsTable({
 
   // Обработчик обновления всех незалоченных опционов
   // ЗАЧЕМ: Позволяет пользователю быстро обновить рыночные данные для всех позиций
+  // ВАЖНО: Очищает кэш перед обновлением для получения свежих данных с API
   const handleRefreshAllOptions = async () => {
     if (!loadOptionDetails || !selectedTicker || isRefreshingAll) return;
 
@@ -186,12 +189,19 @@ function OptionsTable({
     setIsRefreshingAll(true);
 
     try {
+      // ВАЖНО: Очищаем ВСЕ кэши перед обновлением для получения свежих данных
+      // Это решает проблему разной IV на разных устройствах из-за кэширования
+      clearTickerCache(selectedTicker);
+      invalidateOptionsForTicker(selectedTicker);
+      console.log(`🔄 Кэш очищен для ${selectedTicker}, обновляем ${optionsToRefresh.length} опционов...`);
+
       // Обновляем все опционы параллельно
       await Promise.all(
         optionsToRefresh.map(opt =>
           loadOptionDetails(opt.id, selectedTicker, opt.date, opt.strike, opt.type)
         )
       );
+      console.log('✅ Все опционы обновлены с свежими данными');
     } catch (error) {
       console.error('Ошибка при обновлении опционов:', error);
     } finally {
