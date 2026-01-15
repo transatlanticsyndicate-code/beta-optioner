@@ -25,8 +25,7 @@ function GoldenButton({ onClick, disabled = false }) {
       }}
       title="Золотой подбор опционов"
     >
-      <Crown className="h-4 w-4 mr-1" />
-      Золотая кнопка
+      <Crown className="h-4 w-4" />
     </Button>
   );
 }

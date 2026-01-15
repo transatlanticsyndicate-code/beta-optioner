@@ -98,7 +98,7 @@ function NewTikerFinder({
             </button>
           )}
         </div>
-        <Select value={instrumentType} onValueChange={setInstrumentType}>
+        {/* <Select value={instrumentType} onValueChange={setInstrumentType}>
           <SelectTrigger className="w-[180px]">
             <SelectValue />
           </SelectTrigger>
@@ -112,7 +112,7 @@ function NewTikerFinder({
               </SelectItem>
             ))}
           </SelectContent>
-        </Select>
+        </Select> */}
       </div>
       
       {showHistory && (

@@ -392,7 +392,7 @@ const NewTikerFinder = ({
       {/* Основная строка: Селект - Инпут - Цена */}
       <div className="flex items-center gap-4">
         {/* Селект типа инструмента */}
-        <Select value={instrumentType} onValueChange={handleInstrumentTypeChange} disabled={disabled}>
+        {/* <Select value={instrumentType} onValueChange={handleInstrumentTypeChange} disabled={disabled}>
           <SelectTrigger className="w-[160px]">
             <SelectValue />
           </SelectTrigger>
@@ -406,7 +406,7 @@ const NewTikerFinder = ({
               </SelectItem>
             ))}
           </SelectContent>
-        </Select>
+        </Select> */}
 
         {/* Инпут тикера с выпадающим списком истории */}
         <div className="relative" ref={wrapperRef}>

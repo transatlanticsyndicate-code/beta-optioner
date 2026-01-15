@@ -19,7 +19,7 @@ function TopNav() {
       case '/tools/deals-archive':
         return 'Архив сделок';
       case '/tools/options-calculator':
-        return 'Калькулятор опционов';
+        return 'Калькулятор опционов на АКЦИИ';
       case '/tools/saved-configurations':
         return 'Сохраненные конфигурации';
       case '/tools/gradual-strategy-calculator':
@@ -44,8 +44,11 @@ function TopNav() {
   const pageTitle = getPageTitle(location.pathname);
   return (
     <nav className="px-3 sm:px-6 flex items-center justify-between border-b border-border h-full bg-muted/30">
-      <div className="font-medium text-base hidden sm:flex items-center space-x-1 truncate max-w-[600px]">
+      <div className="font-medium text-base hidden sm:flex items-center space-x-3 truncate max-w-[600px]">
         <span className="text-foreground">{pageTitle}</span>
+        {location.pathname === '/tools/options-calculator' && (
+          <span className="text-sm text-cyan-500 font-medium">v30</span>
+        )}
       </div>
 
       <div className="flex items-center gap-2 sm:gap-4 ml-auto sm:ml-0">

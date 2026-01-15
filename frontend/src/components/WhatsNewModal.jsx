@@ -8,15 +8,27 @@ import React, { useState, useEffect } from 'react';
 import { X, Sparkles, Check, Crown } from 'lucide-react';
 
 // Текущая версия приложения
-const CURRENT_VERSION = '29';
+const CURRENT_VERSION = '30';
 
 // Список нововведений для текущей версии
 // ЗАЧЕМ: Централизованное хранение информации о новых функциях
 const WHATS_NEW_ITEMS = [
   {
-    icon: '👑',
-    title: 'Новый функционал: Золотая кнопка',
-    description: 'Представляем умный автоматический подбор опционов! Золотая кнопка анализирует все доступные опционы и выбирает оптимальный вариант с учетом прибыльности и стоимости. Новый параметр "Погрешность равной прибыли" (по умолчанию 5%) позволяет системе группировать опционы с близкой прибылью и автоматически выбирать самый дешевый из них. Это экономит сотни долларов на каждой сделке при сохранении максимальной прибыльности.'
+    icon: '📊',
+    title: 'Финансовый Учет: Еженедельная статистика',
+    description: 'Разработан новый функционал для Финансового Учета с полноценной страницей Еженедельная статистика. Добавлены интерактивные виджеты финансовых показателей, автоматический расчет депозита и множество других улучшений для удобного отслеживания ваших результатов. Все данные обновляются в реальном времени и доступны в одном месте.',
+    link: 'https://crypto.optioner.online/#weekly',
+    linkText: 'Открыть статистику'
+  },
+  {
+    icon: '🎚️',
+    title: 'Исправление ползунка "Дней до экспирации"',
+    description: 'Устранено некорректное поведение ползунка для выбора количества дней до экспирации опциона. Теперь ползунок работает плавно и точно, обеспечивая корректный расчет всех метрик в зависимости от выбранного периода.'
+  },
+  {
+    icon: '🌍',
+    title: 'Исправление IV по часовым поясам',
+    description: 'Решена проблема с расхождением Implied Volatility (IV) в разных часовых поясах и зависимостью от локального кэша. Теперь значения IV рассчитываются корректно независимо от вашего местоположения и кэша браузера.'
   }
 ];
 
@@ -92,7 +104,7 @@ const WhatsNewModal = ({ onClose }) => {
         onClick={(e) => e.stopPropagation()}
       >
         {/* Заголовок */}
-        <div className="relative bg-gradient-to-r from-yellow-400 via-yellow-500 to-yellow-600 rounded-t-2xl p-6 text-white shadow-lg">
+        <div className="relative bg-gradient-to-r from-cyan-400 via-teal-500 to-teal-600 rounded-t-2xl p-6 text-white shadow-lg">
           <button
             onClick={handleClose}
             className="absolute top-4 right-4 p-1 rounded-full hover:bg-white/20 transition-colors"
@@ -118,7 +130,7 @@ const WhatsNewModal = ({ onClose }) => {
             {WHATS_NEW_ITEMS.map((item, index) => (
               <div 
                 key={index}
-                className="flex flex-col gap-3 p-5 bg-gradient-to-br from-gray-50 to-yellow-50 rounded-xl border border-yellow-200 hover:shadow-md transition-all"
+                className="flex flex-col gap-3 p-5 bg-gradient-to-br from-cyan-50 to-teal-50 rounded-xl border border-cyan-200 hover:shadow-md transition-all"
               >
                 <div className="flex gap-4">
                   <div className="flex-shrink-0">
@@ -139,19 +151,19 @@ const WhatsNewModal = ({ onClose }) => {
                 </div>
                 {item.link && (
                   <div className="flex items-center gap-2 mt-2">
-                    <div className="flex-1 border-t border-yellow-300"></div>
+                    <div className="flex-1 border-t border-cyan-300"></div>
                     <a
                       href={item.link}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white rounded-lg font-medium hover:from-yellow-600 hover:to-yellow-700 transition-all shadow-sm hover:shadow-md"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-teal-600 text-white rounded-lg font-medium hover:from-cyan-600 hover:to-teal-700 transition-all shadow-sm hover:shadow-md"
                     >
                       <span>{item.linkText}</span>
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                       </svg>
                     </a>
-                    <div className="flex-1 border-t border-yellow-300"></div>
+                    <div className="flex-1 border-t border-cyan-300"></div>
                   </div>
                 )}
               </div>

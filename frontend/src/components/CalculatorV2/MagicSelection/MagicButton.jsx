@@ -26,8 +26,7 @@ function MagicButton({ onClick, disabled = false }) {
       }}
       title="Волшебный подбор опционов"
     >
-      <Sparkles className="h-4 w-4 mr-1" />
-      Волшебная кнопка
+      <Sparkles className="h-4 w-4" />
     </Button>
   );
 }

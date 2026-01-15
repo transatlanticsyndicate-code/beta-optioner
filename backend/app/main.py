@@ -55,7 +55,7 @@ except Exception as e:
 app = FastAPI(
     title="Options Flow AI Analyzer",
     description="API для анализа опционного рынка с помощью AI",
-    version="0.1.0"
+    version="0.30.0"
 )
 
 # Rate Limiter для защиты от DoS атак

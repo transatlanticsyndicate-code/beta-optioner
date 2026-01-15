@@ -1,6 +1,6 @@
 {
   "name": "syndicate-platform-frontend",
-  "version": "0.1.0",
+  "version": "0.30.0",
   "private": true,
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
