@@ -985,6 +985,9 @@ function OptionsCalculatorV3() {
       oi: null,
       visible: true,
       isLoadingDetails: false,
+      // Дата входа в позицию (текущая дата в ISO формате YYYY-MM-DD)
+      // ЗАЧЕМ: Фиксируем момент создания опциона для отслеживания времени нахождения в позиции
+      entryDate: new Date().toISOString().split('T')[0],
     };
     console.log('✅ New option created:', newOption);
     setOptions(prevOptions => [...prevOptions, newOption]);
@@ -1093,6 +1096,9 @@ function OptionsCalculatorV3() {
         oi: null,
         visible: true,
         isLoadingDetails: false,
+        // Дата входа в позицию (текущая дата в ISO формате YYYY-MM-DD)
+        // ЗАЧЕМ: Фиксируем момент создания опциона для отслеживания времени нахождения в позиции
+        entryDate: new Date().toISOString().split('T')[0],
       };
     });
     setOptions([...options, ...newOptions]);
@@ -1825,6 +1831,9 @@ function OptionsCalculatorV3() {
                             visible: true,
                             isLoadingDetails: true, // Показываем что загружаем детали
                             bestExitDay: bestExitDay, // Индивидуальный лучший день выхода для этого опциона
+                            // Дата входа в позицию (текущая дата в ISO формате YYYY-MM-DD)
+                            // ЗАЧЕМ: Фиксируем момент создания опциона для отслеживания времени нахождения в позиции
+                            entryDate: new Date().toISOString().split('T')[0],
                           };
                           setOptions(prevOptions => [...prevOptions, newOption]);
                           
@@ -2234,6 +2243,9 @@ function OptionsCalculatorV3() {
                         vega: option.vega || 0,
                         impliedVolatility: option.implied_volatility || 0,
                         visible: true,
+                        // Дата входа в позицию (текущая дата в ISO формате YYYY-MM-DD)
+                        // ЗАЧЕМ: Фиксируем момент создания опциона для отслеживания времени нахождения в позиции
+                        entryDate: new Date().toISOString().split('T')[0],
                       };
                       setOptions(prevOptions => [...prevOptions, newOption]);
                     }}
