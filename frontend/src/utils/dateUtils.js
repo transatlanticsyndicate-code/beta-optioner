@@ -156,6 +156,30 @@ export function isOptionActiveAtDay(option, daysPassed, oldestEntryDate) {
 }
 
 /**
+ * Проверяет, истёк ли опцион на указанный день симуляции
+ * ЗАЧЕМ: Если целевая дата больше даты экспирации, опцион уже истёк
+ * 
+ * @param {Object} option - Опцион с полями date (экспирация) и entryDate
+ * @param {number} daysPassed - Прошедшие дни от самой старой даты входа
+ * @param {Date|null} oldestEntryDate - Самая старая дата входа среди всех опционов
+ * @returns {boolean} true если опцион истёк, false если ещё действует
+ */
+export function isOptionExpiredAtDay(option, daysPassed, oldestEntryDate) {
+  if (!oldestEntryDate || !option.date) return false; // Нет данных — считаем не истёкшим
+  
+  // Вычисляем целевую дату = oldestEntryDate + daysPassed
+  const targetDateUTC = new Date(oldestEntryDate);
+  targetDateUTC.setUTCDate(targetDateUTC.getUTCDate() + daysPassed);
+  
+  // Парсим дату экспирации опциона
+  const [expYear, expMonth, expDay] = option.date.split('-').map(Number);
+  const expirationDateUTC = new Date(Date.UTC(expYear, expMonth - 1, expDay));
+  
+  // Опцион истёк, если целевая дата > даты экспирации
+  return targetDateUTC > expirationDateUTC;
+}
+
+/**
  * Вычисляет самую старую дату входа среди массива опционов
  * ЗАЧЕМ: Используется как базовая дата для расчёта daysPassed
  * 

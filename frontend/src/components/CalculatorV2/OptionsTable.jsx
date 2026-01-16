@@ -14,7 +14,7 @@ import { getAllStrategies } from '../../config/optionsStrategies';
 import { calculateOptionPLValue } from '../../utils/optionPricing';
 import { getOptionVolatility } from '../../utils/volatilitySurface';
 import { assessLiquidity, getLiquidityColor, formatLiquidityTooltip, LIQUIDITY_LEVELS } from '../../utils/liquidityCheck';
-import { calculateDaysRemainingUTC, getOldestEntryDate, isOptionActiveAtDay } from '../../utils/dateUtils';
+import { calculateDaysRemainingUTC, getOldestEntryDate, isOptionActiveAtDay, isOptionExpiredAtDay } from '../../utils/dateUtils';
 import LockIcon from './LockIcon';
 
 // Helper: format ISO date (YYYY-MM-DD) to display format (DD.MM.YY)
@@ -223,6 +223,9 @@ function OptionsTable({
   const handleDateChange = async (optionId, isoDate) => {
     // Сначала обновляем дату (ISO формат)
     handleFieldChange(optionId, 'date', isoDate);
+    // Сбрасываем флаг золотой кнопки, т.к. опцион изменён
+    // ЗАЧЕМ: Если пользователь изменил дату, это уже не тот опцион, который подобрала золотая кнопка
+    handleFieldChange(optionId, 'isGoldenOption', false);
 
     // Находим опцион
     const option = options.find(opt => opt.id === optionId);
@@ -242,6 +245,9 @@ function OptionsTable({
   const handleStrikeChange = async (optionId, strike) => {
     // Сначала обновляем страйк
     handleFieldChange(optionId, 'strike', strike);
+    // Сбрасываем флаг золотой кнопки, т.к. опцион изменён
+    // ЗАЧЕМ: Если пользователь изменил страйк, это уже не тот опцион, который подобрала золотая кнопка
+    handleFieldChange(optionId, 'isGoldenOption', false);
 
     // Находим опцион
     const option = options.find(opt => opt.id === optionId);
@@ -551,11 +557,20 @@ function OptionsTable({
             // Устанавливаем дату входа по умолчанию (текущая дата в ISO формате)
             // ЗАЧЕМ: Каждая позиция должна иметь дату входа для отслеживания времени нахождения в позиции
             const entryDate = option.entryDate || new Date().toISOString().split('T')[0];
+            
+            // Проверяем, истёк ли опцион на текущий день симуляции
+            // ЗАЧЕМ: Если целевая дата больше даты экспирации, строка отображается серым
+            const oldestEntry = getOldestEntryDate(options);
+            const isExpired = isOptionExpiredAtDay(option, daysPassed, oldestEntry);
+
+            // Определяем, нужно ли применять серый цвет ко всей строке
+            // ЗАЧЕМ: Скрытые или истёкшие опционы отображаются серым
+            const isGrayedOut = !option.visible || isExpired;
 
             return (
               <div
                 key={option.id}
-                className={`items-center text-sm border rounded-md p-2 ${!option.visible ? "[&>*]:text-[#AAAAAA]" : ""
+                className={`items-center text-sm border rounded-md p-2 ${isGrayedOut ? "[&_*]:!text-[#AAAAAA] [&_span]:!bg-gray-100" : ""
                   }`}
                 style={{ display: 'grid', gridTemplateColumns: '30px 90px 80px 90px 47px 95px 95px 95px 75px 40px 37px 60px 100px 40px', gap: '8px' }}
               >
