@@ -98,9 +98,8 @@ curl http://localhost:8000/
 
 Основные:
 - `POLYGON_API_KEY` - API ключ Polygon.io
-- `AI_PROVIDER` - gemini или claude
+- `AI_PROVIDER` - gemini
 - `GEMINI_API_KEY` - API ключ Google Gemini
-- `CLAUDE_API_KEY` - API ключ Anthropic Claude (опционально)
 - `ENVIRONMENT` - development или production
 - `PORT` - порт сервера (по умолчанию 8000)
 

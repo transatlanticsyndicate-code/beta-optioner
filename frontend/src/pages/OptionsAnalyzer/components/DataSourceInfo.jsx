@@ -24,7 +24,7 @@ export function DataSourceInfo({ aiModel, isVisible }) {
           
           <h4>🤖 AI модель</h4>
           <p>
-            <strong>{aiModel === 'claude' ? 'Anthropic Claude 3.5 Haiku' : 'Google Gemini 2.5 Flash-Lite'}</strong> - 
+            <strong>Google Gemini 2.5 Flash-Lite</strong> - 
             современная языковая модель для быстрого и глубокого анализа опционного рынка.
           </p>
           

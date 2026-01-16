@@ -29,7 +29,6 @@ log_info "Копирую API ключи из production..."
 PROD_POLYGON_KEY=$(grep "^POLYGON_API_KEY=" /var/www/production/backend/.env 2>/dev/null | cut -d'=' -f2 || echo "")
 PROD_GEMINI_KEY=$(grep "^GEMINI_API_KEY=" /var/www/production/backend/.env 2>/dev/null | cut -d'=' -f2 || echo "")
 PROD_FRED_KEY=$(grep "^FRED_API_KEY=" /var/www/production/backend/.env 2>/dev/null | cut -d'=' -f2 || echo "")
-PROD_CLAUDE_KEY=$(grep "^CLAUDE_API_KEY=" /var/www/production/backend/.env 2>/dev/null | cut -d'=' -f2 || echo "")
 PROD_TELEGRAM_TOKEN=$(grep "^TELEGRAM_BOT_TOKEN=" /var/www/production/backend/.env 2>/dev/null | cut -d'=' -f2 || echo "")
 PROD_TELEGRAM_CHANNEL=$(grep "^TELEGRAM_CHANNEL_ID=" /var/www/production/backend/.env 2>/dev/null | cut -d'=' -f2 || echo "")
 
@@ -60,13 +59,6 @@ GEMINI_TEMPERATURE=0.3
 GEMINI_TOP_P=0.8
 GEMINI_TOP_K=40
 GEMINI_MAX_TOKENS=2048
-
-# Anthropic Claude
-CLAUDE_API_KEY=${PROD_CLAUDE_KEY:-}
-CLAUDE_MODEL=claude-3-5-haiku-20241022
-CLAUDE_TEMPERATURE=0.3
-CLAUDE_TOP_P=0.8
-CLAUDE_MAX_TOKENS=2048
 
 # FRED API (Treasury Rate)
 FRED_API_KEY=${PROD_FRED_KEY:-your_fred_api_key_here}

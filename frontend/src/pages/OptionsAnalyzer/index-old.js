@@ -212,7 +212,7 @@ function OptionsAnalyzer() {
               
               <h4>🤖 AI модель</h4>
               <p>
-                <strong>{aiModel === 'claude' ? 'Anthropic Claude 3.5 Haiku' : 'Google Gemini 2.5 Flash-Lite'}</strong> - 
+                <strong>Google Gemini 2.5 Flash-Lite</strong> - 
                 современная языковая модель для быстрого и глубокого анализа опционного рынка.
               </p>
               
@@ -457,7 +457,7 @@ function OptionsAnalyzer() {
                 
                 <h4>Модель искусственного интеллекта</h4>
                 <p>
-                  <strong>{aiProvider === 'gemini' ? 'Google Gemini 2.5 Flash-Lite' : 'Anthropic Claude'}</strong> - 
+                  <strong>Google Gemini 2.5 Flash-Lite</strong> - 
                   современная языковая модель для быстрого анализа финансовых данных. 
                   Генерирует детальный технический обзор на основе опционных метрик.
                 </p>
