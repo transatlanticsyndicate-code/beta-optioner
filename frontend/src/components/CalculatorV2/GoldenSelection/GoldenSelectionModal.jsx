@@ -32,20 +32,19 @@ function GoldenSelectionModal({
 }) {
     // Состояния для Сценария 2
     const [step, setStep] = React.useState('check'); // 'check', 'input', 'searching', 'result'
-    const [minDays, setMinDays] = React.useState(60);
-    const [maxDays, setMaxDays] = React.useState(100);
-    const [growthPercent, setGrowthPercent] = React.useState(50);
-    const [strikeRangePercentCall, setStrikeRangePercentCall] = React.useState(20);
+    const [minDays, setMinDays] = React.useState(90);
+    const [maxDays, setMaxDays] = React.useState(300);
+    const [growthPercent, setGrowthPercent] = React.useState(5);
+    const [strikeRangePercentCall, setStrikeRangePercentCall] = React.useState(5);
     const [profitTolerancePercentCall, setProfitTolerancePercentCall] = React.useState(5);
     const [searchResult, setSearchResult] = React.useState(null);
     const [error, setError] = React.useState(null);
     // Состояния для Сценария 3 (Buy Put)
-    const [minDaysPut, setMinDaysPut] = React.useState(5);
-    const [maxDaysPut, setMaxDaysPut] = React.useState(10);
+    const [minDaysPut, setMinDaysPut] = React.useState(8);
+    const [maxDaysPut, setMaxDaysPut] = React.useState(100);
     const [dropPercent, setDropPercent] = React.useState(-2.5);
     const [exitDay, setExitDay] = React.useState(5);
-    const [strikeRangePercent, setStrikeRangePercent] = React.useState(20);
-    const [minOI, setMinOI] = React.useState(100);
+    const [strikeRangePercent, setStrikeRangePercent] = React.useState(5);
     const [profitTolerancePercentPut, setProfitTolerancePercentPut] = React.useState(5);
     const [targetPriceInput, setTargetPriceInput] = React.useState(''); // State for direct price input
     const [progress, setProgress] = React.useState('');
@@ -94,6 +93,7 @@ function GoldenSelectionModal({
     // Сброс шагов при открытии/закрытии
     React.useEffect(() => {
         if (isOpen) {
+            console.log('👑 GoldenModal: Модальное окно открыто, activeScenario:', activeScenario, 'step:', step);
             setStep('check');
             setSearchResult(null);
             setError(null);
@@ -126,6 +126,7 @@ function GoldenSelectionModal({
     };
 
     const handleSearch = async () => {
+        console.log('👑 handleSearch: Начинаем поиск, сценарий:', activeScenario);
         setStep('searching');
         setError(null);
         setProgress('Начинаем поиск...');
@@ -134,6 +135,15 @@ function GoldenSelectionModal({
             let result;
 
             if (activeScenario === 'SCENARIO_2') {
+                console.log('👑 handleSearch: Вызываем findBestGoldenBuyCall с параметрами:', {
+                    ticker: selectedTicker,
+                    currentPrice,
+                    minDays: Number(minDays),
+                    maxDays: Number(maxDays),
+                    growthPercent: Number(growthPercent),
+                    strikeRangePercent: Number(strikeRangePercentCall),
+                    profitTolerancePercent: Number(profitTolerancePercentCall)
+                });
                 result = await findBestGoldenBuyCall({
                     ticker: selectedTicker,
                     currentPrice,
@@ -148,6 +158,7 @@ function GoldenSelectionModal({
                         if (p.stage === 'calculating') setProgress('Расчет прибыли...');
                     }
                 });
+                console.log('👑 handleSearch: Результат findBestGoldenBuyCall:', result);
             } else if (activeScenario === 'SCENARIO_3') {
                 result = await findBestGoldenBuyPut({
                     ticker: selectedTicker,
@@ -158,7 +169,6 @@ function GoldenSelectionModal({
                     dropPercent: Number(dropPercent),
                     exitDay: Number(exitDay),
                     strikeRangePercent: Number(strikeRangePercent),
-                    minOI: Number(minOI),
                     profitTolerancePercent: Number(profitTolerancePercentPut),
                     existingCallOption: options[0], // Передаем существующий CALL опцион
                     onProgress: (p) => {
@@ -168,15 +178,18 @@ function GoldenSelectionModal({
                 });
             }
 
+            console.log('👑 handleSearch: Проверяем результат - error:', result?.error, 'result:', result);
             if (result && !result.error) {
+                console.log('👑 handleSearch: Результат успешный, добавляем опцион');
                 // СРАЗУ добавляем опцион в таблицу и закрываем окно
                 addOptionToTable(result);
             } else {
+                console.log('👑 handleSearch: Ошибка или нет результата:', result?.message);
                 setError(result?.message || 'Не удалось найти опцион');
                 setStep('input');
             }
         } catch (err) {
-            console.error(err);
+            console.error('👑 handleSearch: Исключение:', err);
             setError('Произошла ошибка при поиске');
             setStep('input');
         }
@@ -198,9 +211,19 @@ function GoldenSelectionModal({
                 date: result.expiration_date || result.expiration,
                 expiration_date: result.expiration_date || result.expiration,
                 expirationDate: result.expiration_date || result.expiration, // ВАЖНО: OptionsCalculatorBasic ждет именно это поле
-                action: 'Buy' // Явно указываем action
+                action: 'Buy', // Явно указываем action
+                isGoldenOption: result.isGoldenOption || false // Флаг для визуальной индикации золотой короны
             };
+            console.log('👑 GoldenModal: Добавляем опцион с флагом isGoldenOption:', optionToAdd.isGoldenOption, optionToAdd);
             onAddOption(optionToAdd);
+
+            // Для Сценария 2: устанавливаем параметры симуляции (цена при падении, 5 дней)
+            if (activeScenario === 'SCENARIO_2' && result.dropPrice && onSetSimulationParams) {
+                onSetSimulationParams({
+                    targetPrice: result.dropPrice,
+                    daysPassed: 5
+                });
+            }
 
             // Для Сценария 3: устанавливаем параметры симуляции
             if (activeScenario === 'SCENARIO_3' && result.dropPrice && result.exitDay && onSetSimulationParams) {
@@ -281,7 +304,8 @@ function GoldenSelectionModal({
                                     {activeScenario === 'SCENARIO_2' && (
                                         <>
                                             <p className="text-sm text-muted-foreground mb-4">
-                                                Готов подобрать самый оптимальный <span className="font-semibold text-green-600">BuyCALL</span> опцион для получения максимальной прибыли на росте.
+                                                <span className="font-semibold">ШАГ 1</span><br />
+                                                Подбор опциона <span className="font-semibold text-green-600">BuyCALL</span> с минимальным убытком при падении актива.
                                             </p>
 
                                             {/* Сворачиваемый блок параметров */}
@@ -327,16 +351,16 @@ function GoldenSelectionModal({
                                                         {/* Разделитель */}
                                                         <div className="h-px bg-amber-400" />
 
-                                                        {/* Строка 2: Рост */}
+                                                        {/* Строка 2: Падение */}
                                                         <div className="space-y-1">
                                                             <Label className="text-sm font-medium">
-                                                                Ориентируемся на рост цены актива <span className="text-muted-foreground text-xs">(%)</span>
+                                                                Ищем опцион с минимальным убытком при падении актива на <span className="text-muted-foreground text-xs">(%)</span>
                                                             </Label>
                                                             <Input
                                                                 type="number"
                                                                 value={growthPercent}
                                                                 onChange={(e) => setGrowthPercent(e.target.value)}
-                                                                placeholder="50"
+                                                                placeholder="5"
                                                                 className="h-9"
                                                             />
                                                         </div>
@@ -347,13 +371,13 @@ function GoldenSelectionModal({
                                                         {/* Строка 3: Диапазон страйков */}
                                                         <div className="space-y-1">
                                                             <Label className="text-sm font-medium">
-                                                                Страйки <span className="text-muted-foreground text-xs">(±%)</span>
+                                                                Страйк <span className="text-muted-foreground text-xs">(+%)</span>
                                                             </Label>
                                                             <Input
                                                                 type="number"
                                                                 value={strikeRangePercentCall}
                                                                 onChange={(e) => setStrikeRangePercentCall(e.target.value)}
-                                                                placeholder="20"
+                                                                placeholder="5"
                                                                 className="h-9"
                                                             />
                                                         </div>
@@ -383,7 +407,8 @@ function GoldenSelectionModal({
                                     {activeScenario === 'SCENARIO_3' && (
                                         <>
                                             <p className="text-sm text-muted-foreground mb-4">
-                                                Готов подобрать самый оптимальный опцион <span className="font-semibold text-red-600">BuyPUT</span> для компенсации убытков при выходе по низу.
+                                                <span className="font-semibold">ШАГ 2</span><br />
+                                                Подбор опциона <span className="font-semibold text-red-600">BuyPUT</span> для компенсации убытков при выходе по низу.
                                             </p>
 
                                             {/* Сворачиваемый блок параметров */}
@@ -475,32 +500,18 @@ function GoldenSelectionModal({
                                                         {/* Разделитель */}
                                                         <div className="h-px bg-amber-400" />
 
-                                                        {/* Строка 3: Страйки и Мин. OI */}
-                                                        <div className="grid grid-cols-2 gap-3">
-                                                            <div className="space-y-1">
-                                                                <Label className="text-sm font-medium">
-                                                                    Страйки <span className="text-muted-foreground text-xs">(±%)</span>
-                                                                </Label>
-                                                                <Input
-                                                                    type="number"
-                                                                    value={strikeRangePercent}
-                                                                    onChange={(e) => setStrikeRangePercent(e.target.value)}
-                                                                    placeholder="20"
-                                                                    className="h-9"
-                                                                />
-                                                            </div>
-                                                            <div className="space-y-1">
-                                                                <Label className="text-sm font-medium">
-                                                                    Мин. OI <span className="text-muted-foreground text-xs">(ликв.)</span>
-                                                                </Label>
-                                                                <Input
-                                                                    type="number"
-                                                                    value={minOI}
-                                                                    onChange={(e) => setMinOI(e.target.value)}
-                                                                    placeholder="100"
-                                                                    className="h-9"
-                                                                />
-                                                            </div>
+                                                        {/* Строка 3: Страйк */}
+                                                        <div className="space-y-1">
+                                                            <Label className="text-sm font-medium">
+                                                                Страйк <span className="text-muted-foreground text-xs">(+%)</span>
+                                                            </Label>
+                                                            <Input
+                                                                type="number"
+                                                                value={strikeRangePercent}
+                                                                onChange={(e) => setStrikeRangePercent(e.target.value)}
+                                                                placeholder="5"
+                                                                className="h-9"
+                                                            />
                                                         </div>
 
                                                         {/* Разделитель */}
@@ -533,7 +544,10 @@ function GoldenSelectionModal({
                                     )}
 
                                     <Button
-                                        onClick={handleSearch}
+                                        onClick={() => {
+                                            console.log('👑 КНОПКА НАЖАТА! Вызываем handleSearch');
+                                            handleSearch();
+                                        }}
                                         className="w-full text-white border-0 transition-all duration-200 hover:opacity-90"
                                         style={{
                                             background: 'linear-gradient(135deg, #facc15 0%, #eab308 50%, #ca8a04 100%)',
@@ -542,7 +556,7 @@ function GoldenSelectionModal({
                                         disabled={
                                             activeScenario === 'SCENARIO_2'
                                                 ? (!minDays || !maxDays || !growthPercent)
-                                                : (!minDaysPut || !maxDaysPut || !dropPercent || !exitDay || !strikeRangePercent || !minOI)
+                                                : (!minDaysPut || !maxDaysPut || !dropPercent || !exitDay || !strikeRangePercent)
                                         }
                                     >
                                         {activeScenario === 'SCENARIO_2' ? (

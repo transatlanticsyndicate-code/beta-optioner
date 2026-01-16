@@ -52,14 +52,33 @@ function PriceAndTimeSettings({
     }
   }, [targetPrice]);
 
+  // Вычисляем самую старую дату входа (entryDate) среди всех опционов
+  // ЗАЧЕМ: Ползунок должен начинать отсчет от даты входа в самую старую позицию
+  const oldestEntryDate = React.useMemo(() => {
+    if (!options || options.length === 0) return null;
+    
+    let oldest = null;
+    options.forEach(option => {
+      // Используем entryDate если есть, иначе текущую дату
+      const entryDateStr = option.entryDate || new Date().toISOString().split('T')[0];
+      const entryDate = new Date(entryDateStr + 'T00:00:00');
+      
+      if (!oldest || entryDate < oldest) {
+        oldest = entryDate;
+      }
+    });
+    
+    return oldest;
+  }, [options]);
+
   // Вычисляем максимальное количество дней до экспирации
-  // ВАЖНО: Для зафиксированных позиций считаем от даты сохранения, а не от сегодня
-  // Это позволяет сохранить оригинальный диапазон ползунка
+  // ВАЖНО: Считаем от самой старой даты входа (entryDate), а не от сегодня
+  // Это позволяет ползунку показывать полный диапазон от входа до экспирации
   const maxDaysToExpiration = React.useMemo(() => {
     if (!options || options.length === 0) return 30;
     
-    // Базовая дата: дата сохранения (для зафиксированных) или сегодня
-    let baseDate = new Date();
+    // Базовая дата: самая старая дата входа или дата сохранения (для зафиксированных)
+    let baseDate = oldestEntryDate || new Date();
     if (savedConfigDate) {
       baseDate = new Date(savedConfigDate);
     }
@@ -79,7 +98,7 @@ function PriceAndTimeSettings({
     });
     
     return maxDays > 0 ? maxDays : 30;
-  }, [options, savedConfigDate]);
+  }, [options, savedConfigDate, oldestEntryDate]);
 
   // Вычисляем диапазон цен
   const calculatedMinPrice = minPrice || (currentPrice > 0 ? currentPrice * 0.5 : 0);
@@ -170,10 +189,10 @@ function PriceAndTimeSettings({
             {options.length === 0 ? '—' : `${daysPassed} д.`}
           </span>
           {/* Дата на которую попадает этот день */}
-          {/* ВАЖНО: Для зафиксированных позиций считаем от даты сохранения */}
+          {/* ВАЖНО: Считаем от самой старой даты входа (entryDate) */}
           {options.length > 0 && (() => {
-            // Базовая дата: дата сохранения (для зафиксированных) или сегодня
-            const baseDate = savedConfigDate ? new Date(savedConfigDate) : new Date();
+            // Базовая дата: дата сохранения (для зафиксированных) или самая старая дата входа
+            const baseDate = savedConfigDate ? new Date(savedConfigDate) : (oldestEntryDate || new Date());
             baseDate.setHours(0, 0, 0, 0);
             const targetDate = new Date(baseDate);
             targetDate.setDate(targetDate.getDate() + daysPassed);
@@ -222,7 +241,9 @@ function PriceAndTimeSettings({
             {savedConfigDate ? (() => {
               const date = new Date(savedConfigDate);
               return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
-            })() : '0 д.'}
+            })() : (oldestEntryDate ? (() => {
+              return oldestEntryDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
+            })() : '0 д.')}
           </span>
           <span>{options.length === 0 ? '—' : `${maxDaysToExpiration} д.`}</span>
         </div>

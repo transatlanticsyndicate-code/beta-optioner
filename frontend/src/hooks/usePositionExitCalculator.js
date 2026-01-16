@@ -7,7 +7,7 @@ import {
 } from '../utils/optionPricing';
 import { getOptionVolatility } from '../utils/volatilitySurface';
 import { assessLiquidity, LIQUIDITY_LEVELS } from '../utils/liquidityCheck';
-import { calculateDaysRemainingUTC } from '../utils/dateUtils';
+import { calculateDaysRemainingUTC, getOldestEntryDate } from '../utils/dateUtils';
 
 /**
  * Форматирует дату экспирации опциона в формат DD.MM.YY
@@ -33,13 +33,19 @@ const formatOptionDate = (dateStr) => {
  * IMPORTANT: Используем UTC для консистентности между часовыми поясами
  * actualDaysRemaining = max(0, initialDaysToExpiration - daysPassed)
  * 
+ * ЛОГИКА ИНДИВИДУАЛЬНОГО РАСЧЁТА:
+ * - daysPassed считается от самой старой даты входа (oldestEntryDate)
+ * - Для каждого опциона вычисляем actualDaysPassed на основе его entryDate
+ * 
  * @param {Object} option - опцион с полем date
- * @param {number} daysPassed - прошедшие дни от сегодня
+ * @param {number} daysPassed - прошедшие дни от самой старой даты входа
+ * @param {Date|null} oldestEntryDate - самая старая дата входа среди всех опционов
  * @returns {number} - оставшиеся дни до экспирации для этого опциона
  */
-const calculateDaysToExpirationForOption = (option, daysPassed) => {
+const calculateDaysToExpirationForOption = (option, daysPassed, oldestEntryDate = null) => {
   // Используем UTC-функцию для единообразного расчёта во всех часовых поясах
-  return calculateDaysRemainingUTC(option, daysPassed, 30);
+  // ВАЖНО: Передаём oldestEntryDate для корректного расчёта actualDaysPassed
+  return calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntryDate);
 };
 
 /**
@@ -310,6 +316,10 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
   // P&L от закрытия опционов (Сценарий 2: Закрыть опционы)
   // ВАЖНО: Каждый опцион имеет свою дату экспирации и IV из API
   console.log(`[Расчёт выхода] 🔍 Сценарий 2: underlyingPrice=$${underlyingPrice}, daysPassed=${daysPassed}, currentPrice=$${currentPrice}`);
+  
+  // Вычисляем самую старую дату входа для индивидуального расчёта daysPassed
+  const oldestEntryDate = getOldestEntryDate(options);
+  
   options.forEach(option => {
     // ВАЖНО: При ручной премии обнуляем ask/bid, чтобы getEntryPrice() использовал premium
     const tempOption = { 
@@ -324,8 +334,9 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
     // Вычисляем индивидуальные параметры для этого опциона
     // currentDays - дни до экспирации на сегодня (без симуляции)
     // simulatedDays - дни до экспирации с учётом симуляции (daysPassed)
-    const currentDaysToExpiration = calculateDaysToExpirationForOption(option, 0);
-    const simulatedDaysToExpiration = calculateDaysToExpirationForOption(option, daysPassed);
+    // ВАЖНО: Передаём oldestEntryDate для корректного расчёта actualDaysPassed
+    const currentDaysToExpiration = calculateDaysToExpirationForOption(option, 0, oldestEntryDate);
+    const simulatedDaysToExpiration = calculateDaysToExpirationForOption(option, daysPassed, oldestEntryDate);
     
     // Получаем прогнозируемую IV с учётом временной структуры (Volatility Surface)
     // ВАЖНО: ivSurface используется для точной интерполяции IV между датами экспирации
@@ -453,6 +464,9 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
 
   // P&L от закрытия опционов (Сценарий 3: Закрыть всё)
   // ВАЖНО: Каждый опцион имеет свою дату экспирации и IV из API
+  // Вычисляем самую старую дату входа для индивидуального расчёта daysPassed
+  const oldestEntryDate = getOldestEntryDate(options);
+  
   options.forEach(option => {
     // ВАЖНО: При ручной премии обнуляем ask/bid, чтобы getEntryPrice() использовал premium
     const tempOption = { 
@@ -467,8 +481,9 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
     // Вычисляем индивидуальные параметры для этого опциона
     // currentDays - дни до экспирации на сегодня (без симуляции)
     // simulatedDays - дни до экспирации с учётом симуляции (daysPassed)
-    const currentDaysToExpiration = calculateDaysToExpirationForOption(option, 0);
-    const simulatedDaysToExpiration = calculateDaysToExpirationForOption(option, daysPassed);
+    // ВАЖНО: Передаём oldestEntryDate для корректного расчёта actualDaysPassed
+    const currentDaysToExpiration = calculateDaysToExpirationForOption(option, 0, oldestEntryDate);
+    const simulatedDaysToExpiration = calculateDaysToExpirationForOption(option, daysPassed, oldestEntryDate);
     
     // Получаем прогнозируемую IV с учётом временной структуры (Volatility Surface)
     // ВАЖНО: ivSurface используется для точной интерполяции IV между датами экспирации

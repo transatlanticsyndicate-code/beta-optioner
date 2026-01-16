@@ -320,7 +320,8 @@ function OptionsCalculatorV3() {
   };
   
   // Функция загрузки деталей опциона (bid/ask/volume/oi) после выбора страйка
-  const loadOptionDetails = async (optionId, ticker, date, strike, optionType) => {
+  // extraFields - дополнительные поля для сохранения (например, isGoldenOption)
+  const loadOptionDetails = async (optionId, ticker, date, strike, optionType, extraFields = {}) => {
     // Для зафиксированных позиций — не загружаем новые данные
     // ЗАЧЕМ: Премия, BID, ASK, OI, VOL, IV должны оставаться неизменными
     // ВАЖНО: Проверяем isLockedPosition конкретного опциона, а не глобальный isLocked
@@ -354,9 +355,20 @@ function OptionsCalculatorV3() {
           console.log(`✅ Loaded details for ${ticker} ${optionType} ${strike}:`);
           console.log(`   📊 IV: ${oldIV ? (oldIV < 1 ? (oldIV * 100).toFixed(1) : oldIV.toFixed(1)) : 'N/A'}% → ${newIV ? (newIV < 1 ? (newIV * 100).toFixed(1) : newIV.toFixed(1)) : 'N/A'}%`);
           console.log(`   💰 Premium: ${details.premium}, Bid: ${details.bid}, Ask: ${details.ask}`);
+          if (existingOption?.isGoldenOption) {
+            console.log('👑 loadOptionDetails: Опцион имеет флаг isGoldenOption, сохраняем его');
+          }
           
-          setOptions(prevOptions => 
-            prevOptions.map(opt => 
+          setOptions(prevOptions => {
+            // ВАЖНО: Получаем опцион из prevOptions, а не из замыкания options
+            const currentOption = prevOptions.find(o => o.id === optionId);
+            // Определяем isGoldenOption: из extraFields (приоритет), из текущего опциона, или false
+            const isGoldenOption = extraFields.isGoldenOption || currentOption?.isGoldenOption || false;
+            if (isGoldenOption) {
+              console.log('👑 loadOptionDetails: isGoldenOption =', isGoldenOption, '(extraFields:', extraFields.isGoldenOption, ', currentOption:', currentOption?.isGoldenOption, ')');
+            }
+            
+            const updated = prevOptions.map(opt => 
               opt.id === optionId ? {
                 ...opt,
                 premium: details.premium || 0,
@@ -374,10 +386,17 @@ function OptionsCalculatorV3() {
                 implied_volatility: details.implied_volatility || opt.implied_volatility || 0,
                 isLoadingDetails: false,
                 // ВАЖНО: Сохраняем bestExitDay при обновлении деталей
-                bestExitDay: opt.bestExitDay
+                bestExitDay: opt.bestExitDay,
+                // ВАЖНО: Сохраняем isGoldenOption при обновлении деталей (из extraFields или из текущего опциона)
+                isGoldenOption: isGoldenOption
               } : opt
-            )
-          );
+            );
+            const updatedOption = updated.find(o => o.id === optionId);
+            if (updatedOption?.isGoldenOption) {
+              console.log('👑 loadOptionDetails: После обновления опцион сохранил isGoldenOption:', updatedOption.isGoldenOption);
+            }
+            return updated;
+          });
           return details;
         }
       }
@@ -750,11 +769,27 @@ function OptionsCalculatorV3() {
       return;
     }
     
-    // Вычисляем максимальное количество дней до экспирации из всех опционов
-    // ВАЖНО: Используем UTC для консистентности между часовыми поясами
+    // Вычисляем самую старую дату входа (entryDate) среди всех опционов
+    // ЗАЧЕМ: Ползунок должен начинать отсчет от даты входа в самую старую позицию
+    let oldestEntryDate = null;
+    options.forEach(opt => {
+      const entryDateStr = opt.entryDate || new Date().toISOString().split('T')[0];
+      const entryDate = new Date(entryDateStr + 'T00:00:00');
+      if (!oldestEntryDate || entryDate < oldestEntryDate) {
+        oldestEntryDate = entryDate;
+      }
+    });
+    
+    // Вычисляем максимальное количество дней от самой старой даты входа до экспирации
+    // ВАЖНО: Считаем от oldestEntryDate, а не от сегодня
+    const baseDate = oldestEntryDate || new Date();
+    baseDate.setHours(0, 0, 0, 0);
+    
     const maxDays = options.reduce((max, opt) => {
       if (!opt.date) return max;
-      const daysUntil = getDaysUntilExpirationUTC(opt.date);
+      const expirationDate = new Date(opt.date + 'T00:00:00');
+      const diffTime = expirationDate.getTime() - baseDate.getTime();
+      const daysUntil = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       return Math.max(max, daysUntil);
     }, 0);
     
@@ -771,7 +806,7 @@ function OptionsCalculatorV3() {
       // Пользователь не трогал бегунок — устанавливаем в максимум (крайнее правое положение)
       setDaysPassed(maxDays);
     }
-  }, [options.length, options.map(o => o.date).join(','), savedConfigDate]); // Добавили savedConfigDate
+  }, [options.length, options.map(o => o.date).join(','), options.map(o => o.entryDate).join(','), savedConfigDate]); // Добавили entryDate в зависимости
   
   const displayOptions = useMemo(() => {
     const result = showDemoData ? demoOptions : options;
@@ -2074,6 +2109,7 @@ function OptionsCalculatorV3() {
                       fetchAIVolatility={fetchAIVolatility}
                       onAddMagicOption={(option) => {
                         // Добавляем опцион из волшебного подбора
+                        console.log('👑 OptionsCalculatorBasic: Получен опцион в onAddMagicOption:', option.isGoldenOption, option);
                         const newOptionId = Date.now().toString();
                         const newOption = {
                           id: newOptionId,
@@ -2091,13 +2127,16 @@ function OptionsCalculatorV3() {
                           impliedVolatility: option.iv || option.impliedVolatility || 0,
                           visible: true,
                           isLoadingDetails: true,
+                          isGoldenOption: option.isGoldenOption || false, // Флаг для визуальной индикации золотой короны
                         };
+                        console.log('👑 OptionsCalculatorBasic: Создан новый опцион с isGoldenOption:', newOption.isGoldenOption, newOption);
                         setOptions(prevOptions => [...prevOptions, newOption]);
                         
                         // Загружаем детали опциона
                         if (option.strike && option.expirationDate && selectedTicker) {
                           setTimeout(() => {
-                            loadOptionDetails(newOptionId, selectedTicker, option.expirationDate, option.strike, option.type || 'PUT');
+                            // Передаем isGoldenOption через extraFields, т.к. состояние может еще не обновиться
+                            loadOptionDetails(newOptionId, selectedTicker, option.expirationDate, option.strike, option.type || 'PUT', { isGoldenOption: option.isGoldenOption || false });
                           }, 100);
                         }
                       }}

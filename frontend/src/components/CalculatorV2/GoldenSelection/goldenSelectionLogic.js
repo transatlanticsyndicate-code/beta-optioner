@@ -42,28 +42,25 @@ const calculateDaysToExpiration = (expirationDate) => {
 /**
  * Найти лучший Buy CALL опцион (Золотой подбор)
  * 
- * Параметры подбора:
- * - Дата экспирации: minDays - maxDays
- * - Страйк: все страйки в диапазоне ±strikeRangePercent% от текущей цены
- * - Ожидаемый рост: growthPercent
- * - Погрешность равной прибыли: profitTolerancePercent
- * 
- * Критерий выбора: 
- * 1. Максимальная прибыль при достижении целевой цены
- * 2. При одинаковой прибыли (разница ≤ profitTolerancePercent%) - минимальная стоимость (премия)
+ * НОВАЯ ЛОГИКА ПОДБОРА:
+ * 1. К текущей цене базового актива прибавляем значение параметра "Страйк (+%)" и ищем наиболее близкий страйк к этой цене
+ * 2. Перебираем все даты экспирации соответствующие параметру "Диапазон даты экспирации" для вычисленного страйка
+ * 3. Вычисляем убыток для всех выше найденных опционов при падении цены актива на значение из параметра "Ищем опцион с минимальным убытком при падении актива на (%)"
+ * 4. Находим опцион с самым низким убытком. При сравнении убытков используем параметр "Погрешность равной прибыли (%)"
+ * 5. Найденный опцион возвращаем с флагом isGoldenOption для визуальной индикации
  */
 export const findBestGoldenBuyCall = async ({
     ticker,
     currentPrice,
     availableDates = [],
-    minDays = 60,
-    maxDays = 100,
-    growthPercent = 50,
-    strikeRangePercent = 20,
+    minDays = 90,
+    maxDays = 300,
+    growthPercent = 5,
+    strikeRangePercent = 5,
     profitTolerancePercent = 5,
     onProgress = () => { }
 }) => {
-    console.log('👑 Начинаем золотой подбор BuyCALL...', {
+    console.log('👑 Начинаем золотой подбор BuyCALL (НОВАЯ ЛОГИКА)...', {
         ticker,
         currentPrice,
         minDays,
@@ -73,16 +70,19 @@ export const findBestGoldenBuyCall = async ({
         profitTolerancePercent
     });
 
-    // Целевая цена при росте на growthPercent%
-    const targetPrice = currentPrice * (1 + growthPercent / 100);
-    console.log(`🎯 Целевая цена: $${targetPrice.toFixed(2)} (+${growthPercent}%)`);
+    // ШАГ 1: Вычисляем целевой страйк (currentPrice + strikeRangePercent%)
+    const targetStrikePrice = currentPrice * (1 + strikeRangePercent / 100);
+    console.log(`🎯 Целевой страйк: $${targetStrikePrice.toFixed(2)} (+${strikeRangePercent}% от текущей цены $${currentPrice.toFixed(2)})`);
 
-    // Шаг 1: Фильтрация дат экспирации
+    // Цена при падении на growthPercent%
+    const dropPrice = currentPrice * (1 - growthPercent / 100);
+    console.log(`📉 Цена при падении на ${growthPercent}%: $${dropPrice.toFixed(2)}`);
+
+    // Фильтрация дат экспирации
     const filteredDates = filterDatesByRange(availableDates, minDays, maxDays);
     console.log(`📅 Подходящие даты (${minDays}-${maxDays} дней): ${filteredDates.length}`);
 
     if (filteredDates.length === 0) {
-        // Найдем ближайшую дату для информации
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const dateInfos = availableDates.map(d => {
@@ -100,7 +100,7 @@ export const findBestGoldenBuyCall = async ({
 
     const allCandidates = [];
 
-    // Шаг 2: Сбор кандидатов
+    // ШАГ 2: Перебираем даты экспирации и ищем опционы с ближайшим страйком к целевому
     for (let i = 0; i < filteredDates.length; i++) {
         const date = filteredDates[i];
         onProgress({ stage: 'loading', total: filteredDates.length, current: i + 1, date });
@@ -121,18 +121,27 @@ export const findBestGoldenBuyCall = async ({
             // Фильтр: валидная цена (ask > 0)
             const validOptions = callOptions.filter(opt => (opt.ask || 0) > 0);
 
-            // Фильтр: страйки в диапазоне ±strikeRangePercent% от текущей цены
-            const minStrike = currentPrice * (1 - strikeRangePercent / 100);
-            const maxStrike = currentPrice * (1 + strikeRangePercent / 100);
+            if (validOptions.length === 0) {
+                console.log(`📦 Дата ${date}: нет валидных CALL опционов`);
+                continue;
+            }
 
-            console.log(`🎯 Диапазон страйков для цены $${currentPrice.toFixed(2)} (±${strikeRangePercent}%): $${minStrike.toFixed(2)} - $${maxStrike.toFixed(2)}`);
+            // Находим опцион с ближайшим страйком к целевому
+            let closestOption = null;
+            let minDifference = Infinity;
 
-            const rangeStrikeOptions = validOptions.filter(opt => 
-                opt.strike >= minStrike && opt.strike <= maxStrike
-            );
+            validOptions.forEach(opt => {
+                const difference = Math.abs(opt.strike - targetStrikePrice);
+                if (difference < minDifference) {
+                    minDifference = difference;
+                    closestOption = opt;
+                }
+            });
 
-            console.log(`📦 Дата ${date}: найдено ${rangeStrikeOptions.length} CALL опционов в диапазоне страйков`);
-            allCandidates.push(...rangeStrikeOptions);
+            if (closestOption) {
+                console.log(`📦 Дата ${date}: найден ближайший страйк $${closestOption.strike} (разница: $${minDifference.toFixed(2)})`);
+                allCandidates.push(closestOption);
+            }
 
         } catch (error) {
             console.error(`Ошибка загрузки ${date}:`, error);
@@ -146,19 +155,10 @@ export const findBestGoldenBuyCall = async ({
     console.log(`📦 Всего кандидатов: ${allCandidates.length}`);
     onProgress({ stage: 'calculating', total: allCandidates.length, current: 0 });
 
-    // Шаг 3: Расчет прибыли для каждого кандидата
-    // Прибыль = Стоимость опциона при TargetPrice - Стоимость покупки (Ask)
-    // Упрощенная оценка: Intrinsic Value at TargetPrice - Premium
-    // Для более точной оценки (с учетом времени) можно использовать full pricing model, 
-    // но "наибольшая прибыль при условии роста" часто подразумевает P&L на момент экспирации или оценки.
-    // Будем оценивать P&L на МОМЕНТ ЭКСПИРАЦИИ, так как это наиболее прозрачный сценарий "target price reached".
-    // Профит = Max(0, TargetPrice - Strike) - Premium
-
-    const candidatesWithProfit = allCandidates.map((opt, idx) => {
+    // ШАГ 3: Вычисляем убыток для каждого кандидата при падении цены
+    const candidatesWithLoss = allCandidates.map((opt) => {
         const premium = opt.ask || opt.last_price || 0;
         const strike = opt.strike;
-
-        // Гарантируем наличие expiration для результата
         const expiration = opt.expiration_date || opt.expiration;
 
         // Подготовка объекта для calculateOptionPLValue
@@ -169,81 +169,86 @@ export const findBestGoldenBuyCall = async ({
             quantity: 1,
             strike: strike,
             premium: premium,
-            ask: premium, // Используем ask как цену входа
-            expiration_date: expiration // Явно прописываем
+            ask: premium,
+            expiration_date: expiration
         };
 
-        // Используем P&L на момент экспирации (так как мы ждем роста к этому времени)
-        // Используем P&L на момент экспирации (так как мы ждем роста к этому времени)
-        // DaysRemaining = 0
-        const daysRemaining = 0;
-
-        let profit = 0;
+        // Вычисляем P&L при падении цены на момент экспирации
+        let loss = 0;
         try {
-            profit = calculateOptionPLValue(
+            loss = calculateOptionPLValue(
                 optionForCalc,
-                targetPrice,
+                dropPrice,
                 currentPrice,
                 0, // daysRemaining = 0 (на момент экспирации)
-                null, // volatility
-                0 // dividendYield
+                null,
+                0
             );
         } catch (e) {
             console.error('Error calculating PL:', e);
-            profit = 0;
+            loss = 0;
         }
 
-        // Защита от NaN
-        if (!Number.isFinite(profit)) {
-            profit = 0;
+        if (!Number.isFinite(loss)) {
+            loss = 0;
         }
 
-        // Также можно рассчитать ROI %
-        const cost = premium * 100;
-        const roi = cost > 0 ? (profit / cost) * 100 : 0;
+        // Убыток - это отрицательное значение P&L, поэтому берем абсолютное значение для сравнения
+        const absoluteLoss = Math.abs(loss);
 
         return {
-            candidate: { ...opt, expiration_date: expiration }, // Возвращаем объект с гарантированным полем expiration_date
+            candidate: { ...opt, expiration_date: expiration },
             premium,
             strike,
-            profit,
-            roi,
+            loss: loss, // Реальное значение (может быть отрицательным)
+            absoluteLoss: absoluteLoss, // Абсолютное значение для сортировки
             daysToExp: calculateDaysToExpiration(expiration)
         };
     });
 
-    // Шаг 4: Сортировка по прибыли (desc), при одинаковой прибыли - по стоимости (asc)
-    // ЗАЧЕМ: Максимизируем прибыль, при равной прибыли (в пределах погрешности) выбираем более дешевый опцион
-    
+    // ШАГ 4: Сортировка по убытку (минимальный убыток = минимальное absoluteLoss)
     console.log('='.repeat(80));
-    console.log(`📊 СОРТИРОВКА: Всего кандидатов = ${candidatesWithProfit.length}`);
+    console.log(`👑 СПИСОК ВСЕХ КАНДИДАТОВ (${candidatesWithLoss.length} шт.):`);
+    console.log(`👑 Цена при падении: $${dropPrice.toFixed(2)} (падение на ${growthPercent}%)`);
+    console.log('-'.repeat(80));
     
-    // Сначала сортируем по прибыли (по убыванию)
-    candidatesWithProfit.sort((a, b) => b.profit - a.profit);
+    // Выводим все кандидаты с их убытками
+    candidatesWithLoss.forEach((c, index) => {
+        const costPerContract = c.premium * 100;
+        console.log(`👑 ${index + 1}. Страйк $${c.strike} | Экспирация: ${c.candidate.expiration_date} | Дней: ${c.daysToExp} | Премия: $${c.premium.toFixed(2)} | Контракт: $${costPerContract.toFixed(2)} | Убыток: $${c.loss.toFixed(2)}`);
+    });
+    console.log('-'.repeat(80));
     
-    console.log(`🔝 Топ-3 по прибыли:`);
-    candidatesWithProfit.slice(0, 3).forEach(c => {
-        console.log(`   Страйк ${c.strike}: прибыль $${c.profit.toFixed(2)}, премия $${c.premium.toFixed(2)}`);
+    // Сортируем по убытку (по возрастанию absoluteLoss)
+    candidatesWithLoss.sort((a, b) => a.absoluteLoss - b.absoluteLoss);
+    
+    console.log(`🔝 Топ-3 с минимальным убытком:`);
+    candidatesWithLoss.slice(0, 3).forEach(c => {
+        console.log(`   Страйк ${c.strike}: убыток $${c.loss.toFixed(2)}, премия $${c.premium.toFixed(2)}`);
     });
     
-    // Находим группу опционов с максимальной прибылью (в пределах погрешности)
-    if (candidatesWithProfit.length > 0) {
-        const maxProfit = candidatesWithProfit[0].profit;
-        console.log(`💰 Макс прибыль: $${maxProfit.toFixed(2)}, Погрешность: ${profitTolerancePercent}%`);
+    // Находим группу опционов с минимальным убытком (в пределах погрешности)
+    if (candidatesWithLoss.length > 0) {
+        const minLoss = candidatesWithLoss[0].absoluteLoss;
+        console.log(`💰 Мин убыток: $${candidatesWithLoss[0].loss.toFixed(2)}, Погрешность: ${profitTolerancePercent}%`);
         
-        // Фильтруем опционы, чья прибыль в пределах погрешности от максимума
-        const topCandidates = candidatesWithProfit.filter(c => {
-            const percentDiff = (Math.abs(maxProfit - c.profit) / Math.abs(maxProfit)) * 100;
+        // Фильтруем опционы, чей убыток в пределах погрешности от минимума
+        const topCandidates = candidatesWithLoss.filter(c => {
+            // Если minLoss = 0, используем абсолютную разницу
+            if (minLoss === 0) {
+                return c.absoluteLoss <= (currentPrice * c.premium * profitTolerancePercent / 100);
+            }
+            const percentDiff = (Math.abs(minLoss - c.absoluteLoss) / minLoss) * 100;
             return percentDiff <= profitTolerancePercent;
         });
         
-        console.log(`✅ В группе "равной прибыли": ${topCandidates.length} опционов`);
+        console.log(`✅ В группе "равного убытка": ${topCandidates.length} опционов`);
         topCandidates.forEach(c => {
-            const percentDiff = (Math.abs(maxProfit - c.profit) / Math.abs(maxProfit)) * 100;
-            console.log(`   Страйк ${c.strike}: прибыль $${c.profit.toFixed(2)}, разница ${percentDiff.toFixed(2)}%, стоимость $${(c.premium * 100).toFixed(2)}`);
+            const percentDiff = minLoss === 0 ? 0 : (Math.abs(minLoss - c.absoluteLoss) / minLoss) * 100;
+            console.log(`   Страйк ${c.strike}: убыток $${c.loss.toFixed(2)}, разница ${percentDiff.toFixed(2)}%, стоимость $${(c.premium * 100).toFixed(2)}`);
         });
         
-        // Среди всех опционов с "равной прибылью" (в пределах 5%) выбираем самый дешевый
+        // Среди опционов с "равным убытком" выбираем самый дешевый
         topCandidates.sort((a, b) => {
             const costA = a.premium * 100;
             const costB = b.premium * 100;
@@ -252,41 +257,27 @@ export const findBestGoldenBuyCall = async ({
         
         console.log(`💵 Топ-3 самых дешевых в группе:`);
         topCandidates.slice(0, 3).forEach(c => {
-            const percentDiff = (Math.abs(maxProfit - c.profit) / Math.abs(maxProfit)) * 100;
-            console.log(`   Страйк ${c.strike}: стоимость $${(c.premium * 100).toFixed(2)}, прибыль $${c.profit.toFixed(2)} (${percentDiff.toFixed(2)}%)`);
+            const percentDiff = minLoss === 0 ? 0 : (Math.abs(minLoss - c.absoluteLoss) / minLoss) * 100;
+            console.log(`   Страйк ${c.strike}: стоимость $${(c.premium * 100).toFixed(2)}, убыток $${c.loss.toFixed(2)} (${percentDiff.toFixed(2)}%)`);
         });
         
-        // Выбираем лучший (максимальная прибыль + минимальная стоимость)
+        // Выбираем лучший (минимальный убыток + минимальная стоимость)
         const bestOption = topCandidates[0];
-        console.log(`✨ ВЫБРАН: Страйк ${bestOption.strike}, прибыль $${bestOption.profit.toFixed(2)}, стоимость $${(bestOption.premium * 100).toFixed(2)}`);
+        console.log(`✨ ВЫБРАН: Страйк ${bestOption.strike}, убыток $${bestOption.loss.toFixed(2)}, стоимость $${(bestOption.premium * 100).toFixed(2)}`);
         console.log('='.repeat(80));
 
-        if (bestOption && bestOption.profit > 0) {
+        if (bestOption) {
             console.log('✨ Лучший Golden Option:', bestOption);
             return {
                 ...bestOption.candidate,
-                calculatedProfit: bestOption.profit,
-                calculatedRoi: bestOption.roi,
-                targetPrice: targetPrice
+                calculatedLoss: bestOption.loss,
+                dropPrice: dropPrice,
+                isGoldenOption: true // Флаг для визуальной индикации
             };
-        } else {
-            // Если все убыточны (например, слишком дорогой премиум или недостижимый таргет)
-            // Все равно вернем "лучший из худших" или null? 
-            // Вернем лучший по "максимальной возможной выплате" или ROI?
-            // Вернем просто с наибольшим P&L (пусть и отрицательным, хотя это странно для "best profit")
-            if (bestOption) {
-                return {
-                    ...bestOption.candidate,
-                    calculatedProfit: bestOption.profit,
-                    calculatedRoi: bestOption.roi,
-                    targetPrice: targetPrice,
-                    warning: 'Predicted profit is negative'
-                };
-            }
         }
     }
 
-    return { error: 'NO_PROFITABLE_OPTIONS', message: 'Не найдено прибыльных опционов при заданном росте' };
+    return { error: 'NO_OPTIONS', message: 'Не найдено опционов' };
 };
 
 /**
@@ -300,17 +291,16 @@ export const findBestGoldenBuyPut = async ({
     ticker,
     currentPrice,
     availableDates = [],
-    minDays = 5,
-    maxDays = 10,
+    minDays = 8,
+    maxDays = 100,
     dropPercent = -2.5,
     exitDay = 5,
-    strikeRangePercent = 20,
-    minOI = 100,
+    strikeRangePercent = 5,
     profitTolerancePercent = 5,
     existingCallOption = null,
     onProgress = () => { }
 }) => {
-    console.log('🛡️ Начинаем золотой подбор BuyPUT (Hedge)...', {
+    console.log('👑 Начинаем золотой подбор BuyPUT (НОВАЯ ЛОГИКА)...', {
         ticker,
         currentPrice,
         minDays,
@@ -318,56 +308,21 @@ export const findBestGoldenBuyPut = async ({
         dropPercent,
         exitDay,
         strikeRangePercent,
-        minOI,
-        existingCallOption
+        profitTolerancePercent
     });
 
-    // Шаг 1: Вычисляем цену базового актива при падении
+    // ШАГ 1: Вычисляем целевой страйк (currentPrice + strikeRangePercent%)
+    // ЗАЧЕМ: Для PUT опциона ищем страйк ВЫШЕ текущей цены для защиты от падения
+    const targetStrikePrice = currentPrice * (1 + strikeRangePercent / 100);
+    console.log(`👑 Целевой страйк: $${targetStrikePrice.toFixed(2)} (+${strikeRangePercent}% от текущей цены $${currentPrice.toFixed(2)})`);
+
+    // Цена при падении на dropPercent%
     const dropPrice = currentPrice * (1 + dropPercent / 100);
-    console.log(`📉 Цена при падении на ${dropPercent}%: $${dropPrice.toFixed(2)}`);
+    console.log(`👑 Цена при падении на ${dropPercent}%: $${dropPrice.toFixed(2)}`);
 
-    // Шаг 2: Вычисляем убыток BuyCALL опциона через exitDay дней
-    let callLoss = 0;
-    if (existingCallOption) {
-        // Рассчитываем дни до экспирации CALL на момент выхода
-        const callExpirationDate = existingCallOption.expiration_date || existingCallOption.expirationDate || existingCallOption.date;
-        const daysToCallExpiration = calculateDaysToExpiration(callExpirationDate);
-        const daysRemainingAtExit = Math.max(0, daysToCallExpiration - exitDay);
-
-        // Подготовка объекта для расчета P&L
-        const callForCalc = {
-            ...existingCallOption,
-            type: 'CALL',
-            action: 'Buy',
-            quantity: existingCallOption.quantity || 1,
-            strike: existingCallOption.strike,
-            premium: existingCallOption.premium || existingCallOption.ask,
-            ask: existingCallOption.premium || existingCallOption.ask,
-            expiration_date: callExpirationDate
-        };
-
-        try {
-            callLoss = calculateOptionPLValue(
-                callForCalc,
-                dropPrice,           // Цена актива при падении
-                currentPrice,
-                daysRemainingAtExit, // Дней до экспирации на момент выхода
-                null,                // volatility
-                0                    // dividendYield
-            );
-        } catch (e) {
-            console.error('Ошибка расчета убытка CALL:', e);
-            callLoss = 0;
-        }
-
-        console.log(`💸 Убыток BuyCALL на день ${exitDay} при падении: $${callLoss.toFixed(2)}`);
-    } else {
-        console.warn('⚠️ Не передан existingCallOption, убыток CALL = 0');
-    }
-
-    // Шаг 3: Фильтрация дат экспирации
+    // Фильтрация дат экспирации
     const filteredDates = filterDatesByRange(availableDates, minDays, maxDays);
-    console.log(`📅 Подходящие даты (${minDays}-${maxDays} дней): ${filteredDates.length}`);
+    console.log(`👑 Подходящие даты (${minDays}-${maxDays} дней): ${filteredDates.length}`);
 
     if (filteredDates.length === 0) {
         const today = new Date();
@@ -385,14 +340,9 @@ export const findBestGoldenBuyPut = async ({
 
     onProgress({ stage: 'dates', total: filteredDates.length, current: 0 });
 
-    // Шаг 4: Вычисляем диапазон страйков
-    const minStrike = currentPrice * (1 - strikeRangePercent / 100);
-    const maxStrike = currentPrice * (1 + strikeRangePercent / 100);
-    console.log(`🎯 Диапазон страйков: $${minStrike.toFixed(2)} - $${maxStrike.toFixed(2)}`);
-
     const allCandidates = [];
 
-    // Шаг 5: Сбор кандидатов PUT опционов
+    // ШАГ 2: Перебираем даты экспирации и ищем опционы с ближайшим страйком к целевому
     for (let i = 0; i < filteredDates.length; i++) {
         const date = filteredDates[i];
         onProgress({ stage: 'loading', total: filteredDates.length, current: i + 1, date });
@@ -413,20 +363,27 @@ export const findBestGoldenBuyPut = async ({
             // Фильтр: валидная цена (ask > 0)
             const validOptions = putOptions.filter(opt => (opt.ask || 0) > 0);
 
-            // Фильтр: страйки в диапазоне
-            const strikeFilteredOptions = validOptions.filter(opt => {
-                const strike = opt.strike;
-                return strike >= minStrike && strike <= maxStrike;
+            if (validOptions.length === 0) {
+                console.log(`👑 Дата ${date}: нет валидных PUT опционов`);
+                continue;
+            }
+
+            // Находим опцион с ближайшим страйком к целевому
+            let closestOption = null;
+            let minDifference = Infinity;
+
+            validOptions.forEach(opt => {
+                const difference = Math.abs(opt.strike - targetStrikePrice);
+                if (difference < minDifference) {
+                    minDifference = difference;
+                    closestOption = opt;
+                }
             });
 
-            // Фильтр: минимальный Open Interest
-            const liquidOptions = strikeFilteredOptions.filter(opt => {
-                const oi = opt.open_interest || opt.openInterest || 0;
-                return oi >= minOI;
-            });
-
-            console.log(`📦 Дата ${date}: найдено ${liquidOptions.length} PUT опционов (OI >= ${minOI})`);
-            allCandidates.push(...liquidOptions);
+            if (closestOption) {
+                console.log(`👑 Дата ${date}: найден ближайший страйк $${closestOption.strike} (разница: $${minDifference.toFixed(2)})`);
+                allCandidates.push(closestOption);
+            }
 
         } catch (error) {
             console.error(`Ошибка загрузки ${date}:`, error);
@@ -434,28 +391,24 @@ export const findBestGoldenBuyPut = async ({
     }
 
     if (allCandidates.length === 0) {
-        return { 
-            error: 'NO_CANDIDATES', 
-            message: `Не найдено PUT опционов с OI >= ${minOI} в диапазоне страйков ±${strikeRangePercent}%` 
-        };
+        return { error: 'NO_CANDIDATES', message: 'Не найдено подходящих PUT опционов' };
     }
 
-    console.log(`📦 Всего кандидатов PUT: ${allCandidates.length}`);
+    console.log(`👑 Всего кандидатов: ${allCandidates.length}`);
     onProgress({ stage: 'calculating', total: allCandidates.length, current: 0 });
 
-    // Шаг 6: Расчет прибыли PUT опционов и выбор оптимального
-    const candidatesWithMetrics = allCandidates.map((opt) => {
+    // ШАГ 3: Вычисляем прибыль для каждого кандидата при падении цены на день exitDay
+    const candidatesWithProfit = allCandidates.map((opt) => {
         const premium = opt.ask || opt.last_price || 0;
         const strike = opt.strike;
         const expiration = opt.expiration_date || opt.expiration;
-        const openInterest = opt.open_interest || opt.openInterest || 0;
 
         // Рассчитываем дни до экспирации PUT на момент выхода
         const daysToExpiration = calculateDaysToExpiration(expiration);
         const daysRemainingAtExit = Math.max(0, daysToExpiration - exitDay);
 
-        // Подготовка объекта для расчета P&L
-        const putForCalc = {
+        // Подготовка объекта для calculateOptionPLValue
+        const optionForCalc = {
             ...opt,
             type: 'PUT',
             action: 'Buy',
@@ -466,100 +419,108 @@ export const findBestGoldenBuyPut = async ({
             expiration_date: expiration
         };
 
-        // Расчет прибыли PUT при падении цены на exitDay
-        let putProfit = 0;
+        // Вычисляем P&L при падении цены на день exitDay
+        let profit = 0;
         try {
-            putProfit = calculateOptionPLValue(
-                putForCalc,
-                dropPrice,           // Цена актива при падении
+            profit = calculateOptionPLValue(
+                optionForCalc,
+                dropPrice,
                 currentPrice,
                 daysRemainingAtExit, // Дней до экспирации на момент выхода
-                null,                // volatility
-                0                    // dividendYield
+                null,
+                0
             );
         } catch (e) {
-            console.error('Ошибка расчета прибыли PUT:', e);
-            putProfit = 0;
+            console.error('Error calculating PL:', e);
+            profit = 0;
         }
 
-        // Защита от NaN
-        if (!Number.isFinite(putProfit)) {
-            putProfit = 0;
+        if (!Number.isFinite(profit)) {
+            profit = 0;
         }
-
-        // Стоимость покупки PUT (премия × 100)
-        const cost = premium * 100;
-
-        // Чистая компенсация = прибыль PUT - убыток CALL
-        const netCompensation = putProfit + callLoss; // callLoss отрицательный, поэтому +
 
         return {
             candidate: { ...opt, expiration_date: expiration },
             premium,
             strike,
-            putProfit,
-            cost,
-            netCompensation,
-            openInterest,
+            profit: profit,
             daysToExp: daysToExpiration,
-            coversLoss: netCompensation >= 0 // Перекрывает ли убыток
+            daysRemainingAtExit: daysRemainingAtExit
         };
     });
 
-    // Фильтруем только те PUT, которые перекрывают убыток CALL
-    const coveringPuts = candidatesWithMetrics.filter(c => c.coversLoss);
-
-    if (coveringPuts.length === 0) {
-        // Если нет PUT, которые полностью перекрывают убыток, берем лучший по компенсации
-        console.warn('⚠️ Нет PUT опционов, полностью перекрывающих убыток. Выбираем лучший по компенсации.');
-        candidatesWithMetrics.sort((a, b) => b.netCompensation - a.netCompensation);
-        const bestPartial = candidatesWithMetrics[0];
+    // ШАГ 4: Сортировка по прибыли (максимальная прибыль = лучший опцион)
+    console.log('='.repeat(80));
+    console.log(`👑 СПИСОК ВСЕХ КАНДИДАТОВ (${candidatesWithProfit.length} шт.):`);
+    console.log(`👑 Цена при падении: $${dropPrice.toFixed(2)} (падение на ${dropPercent}%)`);
+    console.log(`👑 День выхода: ${exitDay}`);
+    console.log('-'.repeat(80));
+    
+    // Выводим все кандидаты с их прибылью
+    candidatesWithProfit.forEach((c, index) => {
+        const costPerContract = c.premium * 100;
+        console.log(`👑 ${index + 1}. Страйк $${c.strike} | Экспирация: ${c.candidate.expiration_date} | Дней: ${c.daysToExp} | Премия: $${c.premium.toFixed(2)} | Контракт: $${costPerContract.toFixed(2)} | Прибыль: $${c.profit.toFixed(2)}`);
+    });
+    console.log('-'.repeat(80));
+    
+    // Сортируем по прибыли (по убыванию)
+    candidatesWithProfit.sort((a, b) => b.profit - a.profit);
+    
+    console.log(`👑 Топ-3 с максимальной прибылью:`);
+    candidatesWithProfit.slice(0, 3).forEach(c => {
+        console.log(`   Страйк ${c.strike}: прибыль $${c.profit.toFixed(2)}, премия $${c.premium.toFixed(2)}`);
+    });
+    
+    // Находим группу опционов с максимальной прибылью (в пределах погрешности)
+    if (candidatesWithProfit.length > 0) {
+        const maxProfit = candidatesWithProfit[0].profit;
+        console.log(`👑 Макс прибыль: $${maxProfit.toFixed(2)}, Погрешность: ${profitTolerancePercent}%`);
         
-        if (bestPartial) {
-            console.log('✨ Лучший PUT (частичная компенсация):', bestPartial);
-            return {
-                ...bestPartial.candidate,
-                calculatedProfit: bestPartial.putProfit,
-                calculatedCost: bestPartial.cost,
-                netCompensation: bestPartial.netCompensation,
-                dropPrice: dropPrice,
-                exitDay: exitDay,
-                warning: `Частичная компенсация: $${bestPartial.netCompensation.toFixed(2)}`
-            };
-        }
-    } else {
-        // Сортируем по прибыли PUT опциона (по убыванию) - выбираем с максимальной прибылью
-        // ЗАЧЕМ: Максимизируем прибыль PUT опциона, при равной прибыли (в пределах погрешности) выбираем более дешевый
-        
-        // Сначала сортируем по прибыли PUT (по убыванию)
-        coveringPuts.sort((a, b) => b.putProfit - a.putProfit);
-        
-        // Находим группу PUT опционов с максимальной прибылью (в пределах погрешности)
-        const maxPutProfit = coveringPuts[0].putProfit;
-        const topPuts = coveringPuts.filter(c => {
-            const percentDiff = (Math.abs(maxPutProfit - c.putProfit) / Math.abs(maxPutProfit)) * 100;
+        // Фильтруем опционы, чья прибыль в пределах погрешности от максимума
+        const topCandidates = candidatesWithProfit.filter(c => {
+            // Если maxProfit <= 0, используем абсолютную разницу
+            if (maxProfit <= 0) {
+                return c.profit >= maxProfit - (currentPrice * c.premium * profitTolerancePercent / 100);
+            }
+            const percentDiff = (Math.abs(maxProfit - c.profit) / maxProfit) * 100;
             return percentDiff <= profitTolerancePercent;
         });
         
-        // Среди PUT с равной прибылью выбираем самый дешевый
-        topPuts.sort((a, b) => a.cost - b.cost);
+        console.log(`👑 В группе "равной прибыли": ${topCandidates.length} опционов`);
+        topCandidates.forEach(c => {
+            const percentDiff = maxProfit <= 0 ? 0 : (Math.abs(maxProfit - c.profit) / maxProfit) * 100;
+            console.log(`   Страйк ${c.strike}: прибыль $${c.profit.toFixed(2)}, разница ${percentDiff.toFixed(2)}%, стоимость $${(c.premium * 100).toFixed(2)}`);
+        });
         
-        const bestPut = topPuts[0];
+        // Среди опционов с "равной прибылью" выбираем самый дешевый
+        topCandidates.sort((a, b) => {
+            const costA = a.premium * 100;
+            const costB = b.premium * 100;
+            return costA - costB;
+        });
+        
+        console.log(`👑 Топ-3 самых дешевых в группе:`);
+        topCandidates.slice(0, 3).forEach(c => {
+            const percentDiff = maxProfit <= 0 ? 0 : (Math.abs(maxProfit - c.profit) / maxProfit) * 100;
+            console.log(`   Страйк ${c.strike}: стоимость $${(c.premium * 100).toFixed(2)}, прибыль $${c.profit.toFixed(2)} (${percentDiff.toFixed(2)}%)`);
+        });
+        
+        // Выбираем лучший (максимальная прибыль + минимальная стоимость)
+        const bestOption = topCandidates[0];
+        console.log(`👑 ВЫБРАН: Страйк ${bestOption.strike}, прибыль $${bestOption.profit.toFixed(2)}, стоимость $${(bestOption.premium * 100).toFixed(2)}`);
+        console.log('='.repeat(80));
 
-        console.log('✨ Лучший PUT (полная компенсация):', bestPut);
-        console.log(`   Чистая компенсация: $${bestPut.netCompensation.toFixed(2)}, Стоимость: $${bestPut.cost.toFixed(2)}, Страйк: $${bestPut.strike}`);
-        return {
-            ...bestPut.candidate,
-            calculatedProfit: bestPut.putProfit,
-            calculatedCost: bestPut.cost,
-            netCompensation: bestPut.netCompensation,
-            dropPrice: dropPrice,
-            exitDay: exitDay
-        };
+        if (bestOption) {
+            console.log('👑 Лучший Golden PUT Option:', bestOption);
+            return {
+                ...bestOption.candidate,
+                calculatedProfit: bestOption.profit,
+                dropPrice: dropPrice,
+                exitDay: exitDay,
+                isGoldenOption: true // Флаг для визуальной индикации
+            };
+        }
     }
 
-    return { 
-        error: 'NO_SUITABLE_OPTIONS', 
-        message: 'Не найдено подходящих PUT опционов' 
-    };
+    return { error: 'NO_OPTIONS', message: 'Не найдено опционов' };
 };

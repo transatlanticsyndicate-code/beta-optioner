@@ -5,7 +5,7 @@
  */
 
 import { calculateOptionPLValue } from '../../../../utils/optionPricing';
-import { calculateDaysRemainingUTC } from '../../../../utils/dateUtils';
+import { calculateDaysRemainingUTC, getOldestEntryDate } from '../../../../utils/dateUtils';
 import { getOptionVolatility } from '../../../../utils/volatilitySurface';
 
 // Расчет P&L для позиции базового актива
@@ -24,13 +24,15 @@ export const calculateUnderlyingPL = (price, position) => {
 };
 
 // Вычисляет оставшиеся дни до экспирации для конкретного опциона
-export const calculateDaysRemainingForOption = (option, currentDaysPassed) => {
-  return calculateDaysRemainingUTC(option, currentDaysPassed, 30);
+// ВАЖНО: Передаём oldestEntryDate для корректного расчёта actualDaysPassed
+export const calculateDaysRemainingForOption = (option, currentDaysPassed, oldestEntryDate = null) => {
+  return calculateDaysRemainingUTC(option, currentDaysPassed, 30, oldestEntryDate);
 };
 
 // Расчет P&L для опциона
-export const calculateOptionPL = (option, daysToExpiration, targetPrice, currentPrice, ivSurface, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, selectedTicker = '') => {
-  const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0);
+// ВАЖНО: Добавлен параметр oldestEntryDate для индивидуального расчёта daysPassed
+export const calculateOptionPL = (option, daysToExpiration, targetPrice, currentPrice, ivSurface, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, selectedTicker = '', oldestEntryDate = null) => {
+  const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0, 30, oldestEntryDate);
   let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, daysToExpiration, ivSurface);
   
   // Используем AI волатильность если доступна

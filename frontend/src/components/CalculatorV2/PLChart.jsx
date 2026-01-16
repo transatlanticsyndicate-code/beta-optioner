@@ -7,7 +7,7 @@ import {
   calculateIntrinsicValue,
   PRICING_CONSTANTS,
 } from '../../utils/optionPricing';
-import { calculateDaysRemainingUTC, hasRemainingDaysUTC } from '../../utils/dateUtils';
+import { calculateDaysRemainingUTC, hasRemainingDaysUTC, getOldestEntryDate, isOptionActiveAtDay } from '../../utils/dateUtils';
 import { getOptionVolatility } from '../../utils/volatilitySurface';
 
 /**
@@ -168,7 +168,15 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
       'rgba(251, 146, 60, 0.5)',    // оранжевый светлый
     ];
 
+    // Вычисляем самую старую дату входа среди всех опционов
+    // ЗАЧЕМ: Для индивидуального расчёта daysPassed для каждого опциона
+    const oldestEntryDate = getOldestEntryDate(options);
+
     visibleOptions.forEach((option, index) => {
+      // Проверяем, активен ли опцион на текущий день симуляции
+      // ЗАЧЕМ: Если целевая дата раньше даты входа опциона, он ещё не куплен
+      const isActive = isOptionActiveAtDay(option, daysPassed, oldestEntryDate);
+      
       // ВАЖНО: При ручной премии обнуляем ask/bid, чтобы getEntryPrice() использовал premium
       const tempOption = { 
         ...option, 
@@ -179,13 +187,13 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
       const { action, type, strike } = option;
       
       // Вычисляем индивидуальный daysRemaining для каждого опциона
-      // ВАЖНО: Используем UTC для консистентности между часовыми поясами
-      const optionDaysRemaining = calculateDaysRemainingUTC(option, daysPassed);
+      // ВАЖНО: Передаём oldestEntryDate для корректного расчёта actualDaysPassed
+      const optionDaysRemaining = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntryDate);
       
       // Получаем IV из API через единую функцию (как в usePositionExitCalculator)
       // currentDays = daysRemaining без daysPassed, simulatedDays = с учётом daysPassed
       // ivSurface используется для точной интерполяции IV между датами экспирации
-      const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0);
+      const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0, 30, oldestEntryDate);
       let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface);
       
       // Используем AI волатильность если доступна
@@ -205,10 +213,11 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
       }
       
       // Логируем волатильность перед расчетом P&L
-      console.log(`🤖 [PLChart/plArray] Strike ${option.strike}: optionVolatility=${optionVolatility}, isAIEnabled=${isAIEnabled}`);
+      console.log(`🤖 [PLChart/plArray] Strike ${option.strike}: optionVolatility=${optionVolatility}, isAIEnabled=${isAIEnabled}, isActive=${isActive}`);
       
+      // Если опцион ещё не куплен, P/L = 0 (не участвует в расчёте)
       const plArray = prices.map((price) =>
-        calculateOptionPLValue(tempOption, price, currentPrice, optionDaysRemaining, optionVolatility, dividendYield)
+        isActive ? calculateOptionPLValue(tempOption, price, currentPrice, optionDaysRemaining, optionVolatility, dividendYield) : 0
       );
 
       plArray.forEach((pl, i) => {
@@ -218,8 +227,9 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
       // Выбираем уникальный цвет для каждого опциона
       const color = optionColors[index % optionColors.length];
 
-      // Trace для опциона (только если showOptionLines = true)
-      if (showOptionLines) {
+      // Trace для опциона (только если showOptionLines = true И опцион активен)
+      // ЗАЧЕМ: Не рисуем линию опциона, если он ещё не куплен
+      if (showOptionLines && isActive) {
         traces.push({
           x: prices,
           y: plArray,
@@ -255,8 +265,8 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
           ask: option.isPremiumModified ? 0 : option.ask,
           bid: option.isPremiumModified ? 0 : option.bid
         };
-        const optionDaysRemaining = calculateDaysRemainingUTC(option, daysPassed);
-        const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0);
+        const optionDaysRemaining = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntryDate);
+        const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0, 30, oldestEntryDate);
         let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface);
         
         // Используем AI волатильность если доступна
@@ -878,12 +888,22 @@ export function calculatePLDataForMetrics(options = [], currentPrice = 0, positi
 
   // Добавляем P&L от опционов (используем единую функцию из optionPricing.js)
   // ВАЖНО: Используем UTC для консистентности между часовыми поясами
+  // Вычисляем самую старую дату входа для индивидуального расчёта daysPassed
+  const oldestEntryDate = getOldestEntryDate(options);
+  
   visibleOptions.forEach((option) => {
+    // Проверяем, активен ли опцион на текущий день симуляции
+    // ЗАЧЕМ: Если целевая дата раньше даты входа опциона, он ещё не куплен
+    if (!isOptionActiveAtDay(option, daysPassed, oldestEntryDate)) {
+      return; // Пропускаем неактивные опционы
+    }
+    
     // Вычисляем индивидуальный daysRemaining для этого опциона (UTC)
-    const optionDaysRemaining = calculateDaysRemainingUTC(option, daysPassed);
+    // ВАЖНО: Передаём oldestEntryDate для корректного расчёта actualDaysPassed
+    const optionDaysRemaining = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntryDate);
     // Получаем IV из API через единую функцию (как в usePositionExitCalculator)
     // ivSurface используется для точной интерполяции IV между датами экспирации
-    const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0);
+    const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0, 30, oldestEntryDate);
     let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface);
     
     // Используем AI волатильность если доступна

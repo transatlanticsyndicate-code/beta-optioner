@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, ChevronDown, Trash2, Loader2, Save, RotateCcw, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Eye, EyeOff, ChevronDown, Trash2, Loader2, Save, RotateCcw, AlertTriangle, RefreshCw, Crown } from 'lucide-react';
 import { MagicButton, MagicSelectionModal } from '../MagicSelection';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -10,7 +10,7 @@ import { getAllStrategies } from '../../config/optionsStrategies';
 import { calculateOptionPLValue } from '../../utils/optionPricing';
 import { getOptionVolatility } from '../../utils/volatilitySurface';
 import { assessLiquidity, getLiquidityColor, formatLiquidityTooltip, LIQUIDITY_LEVELS } from '../../utils/liquidityCheck';
-import { calculateDaysRemainingUTC } from '../../utils/dateUtils';
+import { calculateDaysRemainingUTC, getOldestEntryDate, isOptionActiveAtDay } from '../../utils/dateUtils';
 import LockIcon from './LockIcon';
 
 import { formatDateForDisplay, formatPLValue } from './utils/formatters';
@@ -522,6 +522,11 @@ function OptionsTable({
             // ЗАЧЕМ: Каждая позиция должна иметь дату входа для отслеживания времени нахождения в позиции
             const entryDate = option.entryDate || new Date().toISOString().split('T')[0];
             
+            // Отладка: проверяем флаг isGoldenOption
+            if (option.isGoldenOption) {
+              console.log('👑 OptionsTable: Опцион с золотой короной:', option.id, option.isGoldenOption, option);
+            }
+            
             return (
           <div
             key={option.id}
@@ -532,20 +537,29 @@ function OptionsTable({
           >
             {/* Иконка видимости: Lock для зафиксированных позиций, Eye/EyeOff для обычных */}
             {/* ЗАЧЕМ: Проверяем isLockedPosition на уровне каждой позиции, а не глобальный isLocked */}
-            <button
-              onClick={() => !option.isLockedPosition && toggleOptionVisibility(option.id)}
-              className={`w-[30px] flex justify-center ${
-                option.isLockedPosition 
-                  ? 'text-red-500 cursor-default' 
-                  : 'text-muted-foreground hover:text-foreground cursor-pointer'
-              }`}
-              title={option.isLockedPosition ? 'Позиция зафиксирована' : (option.visible ? 'Скрыть' : 'Показать')}
-            >
-              {option.isLockedPosition 
-                ? <LockIcon size={16} />
-                : (option.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />)
-              }
-            </button>
+            <div className="w-[30px] flex items-center justify-center gap-0.5">
+              <button
+                onClick={() => !option.isLockedPosition && toggleOptionVisibility(option.id)}
+                className={`flex justify-center ${
+                  option.isLockedPosition 
+                    ? 'text-red-500 cursor-default' 
+                    : 'text-muted-foreground hover:text-foreground cursor-pointer'
+                }`}
+                title={option.isLockedPosition ? 'Позиция зафиксирована' : (option.visible ? 'Скрыть' : 'Показать')}
+              >
+                {option.isLockedPosition 
+                  ? <LockIcon size={16} />
+                  : (option.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />)
+                }
+              </button>
+              {option.isGoldenOption && (
+                <Crown 
+                  className="h-3 w-3" 
+                  style={{ color: '#eab308' }}
+                  title="Подобран через золотую кнопку"
+                />
+              )}
+            </div>
             <div className="flex items-center gap-1 ml-2">
               <span className={`text-xs font-medium ${option.action === "Buy" ? "text-green-600" : "text-red-600"}`}>
                 {option.action}
@@ -894,8 +908,10 @@ function OptionsTable({
               {(() => {
                 const optIV = option.impliedVolatility || option.implied_volatility;
                 // DEBUG: Вычисляем дни до экспирации для отображения
-                const debugCurrentDays = calculateDaysRemainingUTC(option, 0);
-                const debugSimulatedDays = calculateDaysRemainingUTC(option, daysPassed);
+                // ВАЖНО: Передаём oldestEntryDate для корректного расчёта actualDaysPassed
+                const oldestEntry = getOldestEntryDate(options);
+                const debugCurrentDays = calculateDaysRemainingUTC(option, 0, 30, oldestEntry);
+                const debugSimulatedDays = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntry);
                 const debugVolatility = getOptionVolatility(option, debugCurrentDays, debugSimulatedDays, ivSurface);
                 
                 console.log('🔍 DEBUG IV:', { optIV, debugCurrentDays, debugSimulatedDays, debugVolatility, daysPassed });
@@ -950,9 +966,17 @@ function OptionsTable({
                 }
                 
                 // Вычисляем индивидуальное количество дней до экспирации для этого опциона
-                // ВАЖНО: Используем UTC для консистентности между часовыми поясами
-                const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0);
-                const optionDaysRemaining = calculateDaysRemainingUTC(option, daysPassed);
+                // ВАЖНО: Передаём oldestEntryDate для корректного расчёта actualDaysPassed
+                const oldestEntry = getOldestEntryDate(options);
+                
+                // Проверяем, активен ли опцион на текущий день симуляции
+                // ЗАЧЕМ: Если целевая дата раньше даты входа опциона, он ещё не куплен
+                if (!isOptionActiveAtDay(option, daysPassed, oldestEntry)) {
+                  return <span className="text-muted-foreground">—</span>;
+                }
+                
+                const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0, 30, oldestEntry);
+                const optionDaysRemaining = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntry);
                 
                 // Определяем волатильность для этого опциона
                 // ЗАЧЕМ: Используем единую функцию getOptionVolatility с IV Surface для точной интерполяции
@@ -1066,9 +1090,17 @@ function OptionsTable({
                   })
                   .reduce((sum, opt) => {
                     // Вычисляем индивидуальное количество дней до экспирации для этого опциона
-                    // ВАЖНО: Используем UTC для консистентности между часовыми поясами
-                    const currentDaysToExp = calculateDaysRemainingUTC(opt, 0);
-                    const optDaysRemaining = calculateDaysRemainingUTC(opt, daysPassed);
+                    // ВАЖНО: Передаём oldestEntryDate для корректного расчёта actualDaysPassed
+                    const oldestEntry = getOldestEntryDate(options);
+                    
+                    // Проверяем, активен ли опцион на текущий день симуляции
+                    // ЗАЧЕМ: Если целевая дата раньше даты входа опциона, он ещё не куплен
+                    if (!isOptionActiveAtDay(opt, daysPassed, oldestEntry)) {
+                      return sum; // Пропускаем неактивные опционы
+                    }
+                    
+                    const currentDaysToExp = calculateDaysRemainingUTC(opt, 0, 30, oldestEntry);
+                    const optDaysRemaining = calculateDaysRemainingUTC(opt, daysPassed, 30, oldestEntry);
                     
                     // Определяем волатильность для этого опциона
                     // ЗАЧЕМ: Используем единую функцию getOptionVolatility с IV Surface для точной интерполяции

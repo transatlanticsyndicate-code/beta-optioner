@@ -6,7 +6,7 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import Plot from 'react-plotly.js';
-import { getDaysUntilExpirationUTC } from '../../../utils/dateUtils';
+import { getDaysUntilExpirationUTC, getOldestEntryDate } from '../../../utils/dateUtils';
 import { calculateUnderlyingPL, calculateDaysRemainingForOption, calculateOptionPL } from './utils/calculations';
 import { getChartConfig, getChartLayout, OPTION_COLORS } from './config/chartConfig';
 
@@ -61,11 +61,14 @@ function ExitTimeDecayChart({
 
     let maxDays = 30;
     
+    // Вычисляем самую старую дату входа для индивидуального расчёта daysPassed
+    const oldestEntryDate = getOldestEntryDate(options);
+
     if (selectedExpirationDate) {
       const daysUntilExpiration = getDaysUntilExpirationUTC(selectedExpirationDate);
       maxDays = Math.max(daysUntilExpiration, 7);
     } else if (visibleOptions.length > 0) {
-      maxDays = Math.max(...visibleOptions.map(opt => calculateDaysRemainingForOption(opt, 0)));
+      maxDays = Math.max(...visibleOptions.map(opt => calculateDaysRemainingForOption(opt, 0, oldestEntryDate)));
     }
 
     const daysRange = Array.from({ length: maxDays + 1 }, (_, i) => i);
@@ -75,9 +78,9 @@ function ExitTimeDecayChart({
     if (showOptionLines && visibleOptions.length > 0) {
       visibleOptions.forEach((option, index) => {
         const plValues = daysRange.map(days => {
-          const daysRemaining = calculateDaysRemainingForOption(option, daysPassed);
+          const daysRemaining = calculateDaysRemainingForOption(option, daysPassed, oldestEntryDate);
           if (days > daysRemaining) return null;
-          return calculateOptionPL(option, days, targetPrice, currentPrice, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap, selectedTicker);
+          return calculateOptionPL(option, days, targetPrice, currentPrice, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap, selectedTicker, oldestEntryDate);
         });
 
         traces.push({
@@ -101,9 +104,9 @@ function ExitTimeDecayChart({
       let total = 0;
       
       visibleOptions.forEach(option => {
-        const daysRemaining = calculateDaysRemainingForOption(option, daysPassed);
+        const daysRemaining = calculateDaysRemainingForOption(option, daysPassed, oldestEntryDate);
         if (days <= daysRemaining) {
-          total += calculateOptionPL(option, days, targetPrice, currentPrice, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap, selectedTicker);
+          total += calculateOptionPL(option, days, targetPrice, currentPrice, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap, selectedTicker, oldestEntryDate);
         }
       });
       
