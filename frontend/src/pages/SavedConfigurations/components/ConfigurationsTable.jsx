@@ -26,8 +26,6 @@ export function ConfigurationsTable({ configurations, onDelete, onEdit }) {
         <TableRow>
           <TableHead>Название</TableHead>
           <TableHead>Тикер</TableHead>
-          <TableHead>Дата экспирации</TableHead>
-          <TableHead>Опционы</TableHead>
           <TableHead>Автор</TableHead>
           <TableHead>Дата создания</TableHead>
           <TableHead className="text-right">Действия</TableHead>
@@ -38,8 +36,6 @@ export function ConfigurationsTable({ configurations, onDelete, onEdit }) {
           <TableRow key={config.id}>
             <TableCell className="font-medium">{config.name || 'Без названия'}</TableCell>
             <TableCell>{config.ticker || '—'}</TableCell>
-            <TableCell>{formatExpirationDate(config.expirationDate)}</TableCell>
-            <TableCell className="max-w-xs truncate">{formatOptions(config.positions)}</TableCell>
             <TableCell>{config.author || '—'}</TableCell>
             <TableCell>{formatDate(config.createdAt)}</TableCell>
             <TableCell className="text-right">

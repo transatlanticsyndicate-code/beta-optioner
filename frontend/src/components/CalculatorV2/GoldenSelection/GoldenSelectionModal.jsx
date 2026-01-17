@@ -35,6 +35,7 @@ function GoldenSelectionModal({
     const [minDays, setMinDays] = React.useState(90);
     const [maxDays, setMaxDays] = React.useState(300);
     const [growthPercent, setGrowthPercent] = React.useState(5);
+    const [growthPriceInput, setGrowthPriceInput] = React.useState(''); // State for direct price input for scenario 2
     const [strikeRangePercentCall, setStrikeRangePercentCall] = React.useState(5);
     const [profitTolerancePercentCall, setProfitTolerancePercentCall] = React.useState(5);
     const [searchResult, setSearchResult] = React.useState(null);
@@ -79,13 +80,21 @@ function GoldenSelectionModal({
         }
     }, [isOpen, options, positions, isScenario3, hasOneCall, isBuy]);
 
-    // Initialize targetPriceInput when modal opens or defaults change
+    // Initialize targetPriceInput when modal opens or defaults change (Scenario 3)
     React.useEffect(() => {
         if (isOpen && currentPrice && dropPercent) {
             const price = currentPrice * (1 + Number(dropPercent) / 100);
             setTargetPriceInput(price.toFixed(2));
         }
     }, [isOpen, currentPrice]); // Only on open to avoid overriding user input during typing if we added dropPercent dependency carelessly
+
+    // Initialize growthPriceInput when modal opens or defaults change (Scenario 2)
+    React.useEffect(() => {
+        if (isOpen && currentPrice && growthPercent) {
+            const price = currentPrice * (1 + Number(growthPercent) / 100);
+            setGrowthPriceInput(price.toFixed(2));
+        }
+    }, [isOpen, currentPrice]); // Only on open to avoid overriding user input during typing
 
     // Активный сценарий
     const activeScenario = isEmptyState ? 'SCENARIO_2' : (isScenario3 ? 'SCENARIO_3' : 'INVALID');
@@ -122,6 +131,27 @@ function GoldenSelectionModal({
             // If empty or invalid, maybe don't update percent immediately or set to 0?
             // Let's keep percent as is or set to 0 if cleared? 
             // Better to let it be flexible.
+        }
+    };
+
+    // Handlers for two-way binding (Scenario 2)
+    const handleGrowthPercentChange = (e) => {
+        const val = e.target.value;
+        setGrowthPercent(val);
+        if (currentPrice && !isNaN(parseFloat(val))) {
+            const price = currentPrice * (1 + parseFloat(val) / 100);
+            setGrowthPriceInput(price.toFixed(2));
+        } else {
+            setGrowthPriceInput('');
+        }
+    };
+
+    const handleGrowthPriceChange = (e) => {
+        const val = e.target.value;
+        setGrowthPriceInput(val);
+        if (currentPrice && !isNaN(parseFloat(val)) && parseFloat(val) > 0) {
+            const percent = ((parseFloat(val) - currentPrice) / currentPrice) * 100;
+            setGrowthPercent(percent.toFixed(2));
         }
     };
 
@@ -354,15 +384,30 @@ function GoldenSelectionModal({
                                                         {/* Строка 2: Падение */}
                                                         <div className="space-y-1">
                                                             <Label className="text-sm font-medium">
-                                                                Ищем опцион с минимальным убытком при падении актива на <span className="text-muted-foreground text-xs">(%)</span>
+                                                                Ищем опцион с минимальным убытком при падении актива на <span className="text-muted-foreground text-xs">(% и Цена)</span>
                                                             </Label>
-                                                            <Input
-                                                                type="number"
-                                                                value={growthPercent}
-                                                                onChange={(e) => setGrowthPercent(e.target.value)}
-                                                                placeholder="5"
-                                                                className="h-9"
-                                                            />
+                                                            <div className="grid grid-cols-2 gap-2">
+                                                                <div className="relative">
+                                                                    <Input
+                                                                        type="number"
+                                                                        value={growthPercent}
+                                                                        onChange={handleGrowthPercentChange}
+                                                                        placeholder="5"
+                                                                        className="h-9 pr-8"
+                                                                    />
+                                                                    <span className="absolute right-2 top-2 text-xs text-muted-foreground">%</span>
+                                                                </div>
+                                                                <div className="relative">
+                                                                    <Input
+                                                                        type="number"
+                                                                        value={growthPriceInput}
+                                                                        onChange={handleGrowthPriceChange}
+                                                                        placeholder="Price"
+                                                                        className="h-9 pr-4"
+                                                                    />
+                                                                    <span className="absolute right-2 top-2 text-xs text-muted-foreground">$</span>
+                                                                </div>
+                                                            </div>
                                                         </div>
 
                                                         {/* Разделитель */}

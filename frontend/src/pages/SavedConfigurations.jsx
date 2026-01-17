@@ -80,7 +80,8 @@ function SavedConfigurations() {
     navigate(`/tools/options-calculator?config=${configId}&edit=true`);
   };
 
-  // Форматирование даты
+  // Форматирование даты в UTC
+  // ЗАЧЕМ: Все даты и время отображаются в UTC для консистентности между часовыми поясами
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleString('ru-RU', {
@@ -89,6 +90,7 @@ function SavedConfigurations() {
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
+      timeZone: 'UTC',
     });
   };
 
@@ -350,8 +352,6 @@ function SavedConfigurations() {
                   <TableRow>
                     <TableHead>Дата/Время</TableHead>
                     <TableHead>Тикер</TableHead>
-                    <TableHead>Опционы</TableHead>
-                    <TableHead>Дата эксп.</TableHead>
                     <TableHead>Название</TableHead>
                     <TableHead>Автор</TableHead>
                     <TableHead className="text-right">Действия</TableHead>
@@ -365,12 +365,6 @@ function SavedConfigurations() {
                       </TableCell>
                       <TableCell className="font-semibold">
                         {config.ticker || '—'}
-                      </TableCell>
-                      <TableCell className="max-w-md truncate" title={formatOptions(config.state.options)}>
-                        {formatOptions(config.state.options)}
-                      </TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {formatExpirationDate(config.state.selectedExpirationDate)}
                       </TableCell>
                       <TableCell className="text-sm font-semibold">
                         <TooltipProvider>

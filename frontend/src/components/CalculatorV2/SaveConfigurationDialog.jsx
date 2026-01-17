@@ -44,6 +44,29 @@ const getMinEntryDate = (options) => {
 };
 
 /**
+ * Получает дату экспирации из опционов для отображения
+ * ЗАЧЕМ: Показывать правильную дату экспирации в свойствах конфигурации
+ * @param options - массив опционов
+ * @returns строка даты в формате DD.MM.YY или '—' если нет опционов
+ */
+const getExpirationDateFromOptions = (options) => {
+  if (!options || options.length === 0) {
+    return '—';
+  }
+
+  // Берем дату из первого опциона (все опционы обычно имеют одну дату экспирации)
+  const firstOptionWithDate = options.find(opt => opt.date);
+  
+  if (!firstOptionWithDate || !firstOptionWithDate.date) {
+    return '—';
+  }
+
+  // Форматируем дату из ISO (YYYY-MM-DD) в DD.MM.YY
+  const [year, month, day] = firstOptionWithDate.date.split('-');
+  return `${day}.${month}.${year.slice(-2)}`;
+};
+
+/**
  * Генерирует автоматическое название для конфигурации
  * ЗАЧЕМ: Удобное название с информацией о позициях
  * Формат: [FIXED] AAPL 100L @280 | 1 BuyCALL 09.01.26 290
@@ -130,9 +153,12 @@ function SaveConfigurationDialog({ isOpen, onClose, onSave, currentState, isLock
       description: description.trim(),
       author: author.trim() || 'Неизвестный автор',
       ticker: currentState.selectedTicker || '',
-      // Используем минимальную дату входа из опционов как дату сохранения
+      // Используем текущее время для отображения даты/времени создания
+      // ЗАЧЕМ: Показывать реальное время сохранения конфигурации
+      createdAt: new Date().toISOString(),
+      // Сохраняем минимальную дату входа отдельно для расчетов
       // ЗАЧЕМ: Дата входа служит точкой отсчета для расчета дней, прошедших и оставшихся до экспирации
-      createdAt: getMinEntryDate(currentState.options),
+      entryDate: getMinEntryDate(currentState.options),
       // isLocked: если true — позиции зафиксированы, данные не обновляются при загрузке
       isLocked: isLocked,
       state: {
@@ -244,7 +270,7 @@ function SaveConfigurationDialog({ isOpen, onClose, onSave, currentState, isLock
                 <li>• Тикер: {currentState.selectedTicker}</li>
                 <li>• Опционов: {currentState.options?.length || 0}</li>
                 <li>• Позиций базового актива: {currentState.positions?.length || 0}</li>
-                <li>• Дата экспирации: {currentState.selectedExpirationDate || '—'}</li>
+                <li>• Дата экспирации: {getExpirationDateFromOptions(currentState.options)}</li>
                 {isLocked && (
                   <li className="text-red-600 font-medium">• Данные НЕ будут обновляться при загрузке</li>
                 )}

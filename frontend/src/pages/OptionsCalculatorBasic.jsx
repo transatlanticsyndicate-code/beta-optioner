@@ -697,7 +697,14 @@ function OptionsCalculatorV3() {
         setSelectedTicker(state.selectedTicker || '');
         setCurrentPrice(state.currentPrice || 0);
         setPriceChange(state.priceChange || { value: 0, percent: 0 });
-        setOptions(state.options || []);
+        
+        // Восстанавливаем опционы с сохранением entryDate
+        // ЗАЧЕМ: Для старых сохранений без entryDate используем текущую дату
+        const restoredOptions = (state.options || []).map(opt => ({
+          ...opt,
+          entryDate: opt.entryDate || new Date().toISOString().split('T')[0]
+        }));
+        setOptions(restoredOptions);
         setPositions(state.positions || []);
         setSelectedExpirationDate(state.selectedExpirationDate || null);
         // Поддержка старого формата (daysRemaining) и нового (daysPassed)
@@ -1468,36 +1475,38 @@ function OptionsCalculatorV3() {
           setIsLocked(configIsLocked);
           
           // Сохраняем дату создания конфигурации для зафиксированных позиций
-          // ЗАЧЕМ: Ползунок дат должен начинаться с даты сохранения
+          // ЗАЧЕМ: Ползунок дат должен начинаться с даты входа (entryDate)
           // ВАЖНО: Вычисляем daysPassed сразу здесь, чтобы избежать race condition с useEffect
           let calculatedDaysPassed = config.state.daysPassed || config.state.daysRemaining || 0;
           
-          // Используем createdAt или fallback на id (который является timestamp)
-          // ЗАЧЕМ: Старые конфигурации могут не иметь createdAt
-          const configCreatedAt = config.createdAt || (config.id ? new Date(parseInt(config.id)).toISOString() : null);
+          // Используем entryDate для расчетов (дата входа в позицию)
+          // Fallback: createdAt или id (для старых конфигураций)
+          // ЗАЧЕМ: entryDate — это дата входа в позицию, а createdAt — время создания записи
+          const configEntryDate = config.entryDate || config.createdAt || (config.id ? new Date(parseInt(config.id)).toISOString() : null);
           
           console.log('🔍 Config debug:', { 
             configIsLocked, 
+            entryDate: config.entryDate,
             createdAt: config.createdAt, 
             id: config.id,
-            configCreatedAt
+            configEntryDate
           });
           
           if (configIsLocked) {
-            console.log('📅 configCreatedAt:', configCreatedAt);
+            console.log('📅 configEntryDate:', configEntryDate);
             
-            if (configCreatedAt) {
-              setSavedConfigDate(configCreatedAt);
-              // Вычисляем daysPassed как разницу между сегодня и датой сохранения
-              const savedDate = new Date(configCreatedAt);
+            if (configEntryDate) {
+              setSavedConfigDate(configEntryDate);
+              // Вычисляем daysPassed как разницу между сегодня и датой входа
+              const savedDate = new Date(configEntryDate);
               const today = new Date();
               savedDate.setHours(0, 0, 0, 0);
               today.setHours(0, 0, 0, 0);
               const diffTime = today.getTime() - savedDate.getTime();
               calculatedDaysPassed = Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
-              console.log(`📅 Дней с момента сохранения: ${calculatedDaysPassed}, savedDate: ${savedDate}, today: ${today}`);
+              console.log(`📅 Дней с момента входа: ${calculatedDaysPassed}, savedDate: ${savedDate}, today: ${today}`);
             } else {
-              console.log('⚠️ configCreatedAt is null');
+              console.log('⚠️ configEntryDate is null');
               setSavedConfigDate(null);
             }
           } else {
@@ -1545,29 +1554,61 @@ function OptionsCalculatorV3() {
           // Для зафиксированных позиций добавляем initialDaysToExpiration если его нет
           // ЗАЧЕМ: Старые конфигурации могут не иметь этого поля, вычисляем от даты сохранения
           let optionsToSet = config.state.options || [];
-          if (configIsLocked && configCreatedAt) {
-            const savedDate = new Date(configCreatedAt);
+          
+          // Дата для fallback entryDate (дата создания конфигурации в формате YYYY-MM-DD)
+          // ЗАЧЕМ: Для старых конфигураций без entryDate используем дату создания
+          const fallbackEntryDate = configEntryDate 
+            ? new Date(configEntryDate).toISOString().split('T')[0]
+            : new Date().toISOString().split('T')[0];
+          
+          if (configIsLocked && configEntryDate) {
+            const savedDate = new Date(configEntryDate);
             savedDate.setHours(0, 0, 0, 0);
             optionsToSet = optionsToSet.map(opt => {
               // Если initialDaysToExpiration уже есть — не перезаписываем
-              if (opt.initialDaysToExpiration !== undefined) return opt;
+              if (opt.initialDaysToExpiration !== undefined) {
+                // Сохраняем entryDate если его нет
+                return {
+                  ...opt,
+                  entryDate: opt.entryDate || fallbackEntryDate
+                };
+              }
               // Вычисляем дни от даты сохранения до экспирации
               if (opt.date) {
                 const [year, month, day] = opt.date.split('-').map(Number);
                 const expDateUTC = Date.UTC(year, month - 1, day);
                 const savedDateUTC = Date.UTC(savedDate.getFullYear(), savedDate.getMonth(), savedDate.getDate());
                 const initialDaysToExpiration = Math.ceil((expDateUTC - savedDateUTC) / (1000 * 60 * 60 * 24));
-                return { ...opt, initialDaysToExpiration, isLockedPosition: true };
+                return { 
+                  ...opt, 
+                  initialDaysToExpiration, 
+                  isLockedPosition: true,
+                  entryDate: opt.entryDate || fallbackEntryDate
+                };
               }
-              return { ...opt, isLockedPosition: true };
+              return { 
+                ...opt, 
+                isLockedPosition: true,
+                entryDate: opt.entryDate || fallbackEntryDate
+              };
             });
           } else if (editMode) {
             // Если режим редактирования — удаляем флаги блокировки с опционов
             // ЗАЧЕМ: Позволяет редактировать все опционы в разблокированном виде
             optionsToSet = optionsToSet.map(opt => {
               const { isLockedPosition, ...rest } = opt;
-              return rest;
+              return {
+                ...rest,
+                entryDate: rest.entryDate || fallbackEntryDate
+              };
             });
+          } else {
+            // Для обычных (незафиксированных) конфигураций также сохраняем entryDate
+            // ЗАЧЕМ: Дата входа должна сохраняться при любом типе загрузки
+            optionsToSet = optionsToSet.map(opt => ({
+              ...opt,
+              entryDate: opt.entryDate || fallbackEntryDate
+            }));
           }
           setOptions(optionsToSet);
           setPositions(config.state.positions || []);
