@@ -73,7 +73,8 @@ function OptionsTable({
   onSetSimulationParams = null, // Callback для установки параметров симуляции (targetPrice, daysPassed)
   isAIEnabled = false, // Включен ли AI для прогнозирования волатильности
   aiVolatilityMap = {}, // Кэш AI предсказаний волатильности
-  fetchAIVolatility = null // Функция для запроса AI волатильности
+  fetchAIVolatility = null, // Функция для запроса AI волатильности
+  hideColumns = [] // Массив колонок для скрытия: ['premium', 'oi']
 }) {
   // Логирование полученных AI пропсов
   console.log('🤖 [OptionsTable] Получены пропсы:', {
@@ -536,16 +537,21 @@ function OptionsTable({
 
       {hasOptions && (
         <div className="space-y-2">
-          <div className="grid items-center text-xs font-medium text-muted-foreground px-2" style={{ display: 'grid', gridTemplateColumns: '30px 90px 80px 90px 47px 95px 95px 95px 75px 40px 37px 60px 100px 40px', gap: '8px' }}>
+          {/* Заголовки колонок — динамическая сетка в зависимости от hideColumns */}
+          <div className="grid items-center text-xs font-medium text-muted-foreground px-2" style={{ 
+            display: 'grid', 
+            gridTemplateColumns: `30px 90px 80px 90px 47px ${hideColumns.includes('premium') ? '' : '95px '}95px 95px ${hideColumns.includes('oi') ? '' : '75px '}40px 37px 60px 100px 40px`.replace(/\s+/g, ' ').trim(), 
+            gap: '8px' 
+          }}>
             <div></div>
             <div className="text-left ml-2">Тип</div>
             <div className="text-left ml-2">Дата эксп.</div>
             <div className="text-left ml-2">Страйк</div>
             <div className="text-right ml-2">Кол.</div>
-            <div className="text-right ml-2">Премия</div>
+            {!hideColumns.includes('premium') && <div className="text-right ml-2">Премия</div>}
             <div className="text-right ml-2">BID</div>
             <div className="text-right ml-2">ASK</div>
-            <div className="text-right ml-2">OI</div>
+            {!hideColumns.includes('oi') && <div className="text-right ml-2">OI</div>}
             <div className="text-right ml-2" style={{ fontSize: '0.7rem' }}>VOL</div>
             <div className="text-right ml-2" style={{ fontSize: '0.7rem' }}>IV</div>
             <div className="text-right ml-2">Вход</div>
@@ -572,7 +578,11 @@ function OptionsTable({
                 key={option.id}
                 className={`items-center text-sm border rounded-md p-2 ${isGrayedOut ? "[&_*]:!text-[#AAAAAA] [&_span]:!bg-gray-100" : ""
                   }`}
-                style={{ display: 'grid', gridTemplateColumns: '30px 90px 80px 90px 47px 95px 95px 95px 75px 40px 37px 60px 100px 40px', gap: '8px' }}
+                style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: `30px 90px 80px 90px 47px ${hideColumns.includes('premium') ? '' : '95px '}95px 95px ${hideColumns.includes('oi') ? '' : '75px '}40px 37px 60px 100px 40px`.replace(/\s+/g, ' ').trim(), 
+                  gap: '8px' 
+                }}
               >
                 {/* Иконка видимости: Lock для зафиксированных позиций, Eye/EyeOff для обычных */}
                 {/* ЗАЧЕМ: Проверяем isLockedPosition на уровне каждой позиции, а не глобальный isLocked */}
@@ -830,45 +840,48 @@ function OptionsTable({
                   )}
                 </div>
                 {/* Premium - блокируем редактирование для зафиксированных позиций */}
-                <span
-                  className={option.isPremiumModified ? "text-right ml-2 text-orange-600 font-bold cursor-pointer" : `text-right ml-2 ${option.isLockedPosition ? 'cursor-default' : 'cursor-pointer'}`}
-                  onDoubleClick={() => !option.isLockedPosition && setEditingPremium(option.id)}
-                >
-                  {editingPremium === option.id && !option.isLockedPosition ? (
-                    <Input
-                      type="number"
-                      autoFocus
-                      defaultValue={option.customPremium ?? option.premium ?? ''}
-                      onBlur={(e) => {
-                        const val = parseFloat(e.target.value);
-                        if (!isNaN(val)) {
-                          handleFieldChange(option.id, 'customPremium', val);
-                          handleFieldChange(option.id, 'isPremiumModified', true);
-                        }
-                        setEditingPremium(null);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.target.blur();
-                        }
-                        if (e.key === 'Escape') {
+                {/* УСЛОВНО: Скрываем если hideColumns включает 'premium' */}
+                {!hideColumns.includes('premium') && (
+                  <span
+                    className={option.isPremiumModified ? "text-right ml-2 text-orange-600 font-bold cursor-pointer" : `text-right ml-2 ${option.isLockedPosition ? 'cursor-default' : 'cursor-pointer'}`}
+                    onDoubleClick={() => !option.isLockedPosition && setEditingPremium(option.id)}
+                  >
+                    {editingPremium === option.id && !option.isLockedPosition ? (
+                      <Input
+                        type="number"
+                        autoFocus
+                        defaultValue={option.customPremium ?? option.premium ?? ''}
+                        onBlur={(e) => {
+                          const val = parseFloat(e.target.value);
+                          if (!isNaN(val)) {
+                            handleFieldChange(option.id, 'customPremium', val);
+                            handleFieldChange(option.id, 'isPremiumModified', true);
+                          }
                           setEditingPremium(null);
-                        }
-                      }}
-                      className="h-6 text-right text-sm w-[60px]"
-                    />
-                  ) : (
-                    option.isPremiumModified ?
-                      (option.customPremium >= 0 ? `$${option.customPremium.toFixed(2)}` : `-$${Math.abs(option.customPremium).toFixed(2)}`) :
-                      (option.isLoadingDetails ? (
-                        <Loader2 className="h-3 w-3 animate-spin inline" />
-                      ) : option.premium !== null ? (
-                        option.premium >= 0 ? `$${option.premium.toFixed(2)}` : `-$${Math.abs(option.premium).toFixed(2)}`
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      ))
-                  )}
-                </span>
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.target.blur();
+                          }
+                          if (e.key === 'Escape') {
+                            setEditingPremium(null);
+                          }
+                        }}
+                        className="h-6 text-right text-sm w-[60px]"
+                      />
+                    ) : (
+                      option.isPremiumModified ?
+                        (option.customPremium >= 0 ? `$${option.customPremium.toFixed(2)}` : `-$${Math.abs(option.customPremium).toFixed(2)}`) :
+                        (option.isLoadingDetails ? (
+                          <Loader2 className="h-3 w-3 animate-spin inline" />
+                        ) : option.premium !== null ? (
+                          option.premium >= 0 ? `$${option.premium.toFixed(2)}` : `-$${Math.abs(option.premium).toFixed(2)}`
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        ))
+                    )}
+                  </span>
+                )}
 
                 {/* Bid */}
                 <span className="text-green-600 text-right ml-2">
@@ -897,7 +910,8 @@ function OptionsTable({
                 </span>
 
                 {/* OI с индикатором ликвидности */}
-                {(() => {
+                {/* УСЛОВНО: Скрываем если hideColumns включает 'oi' */}
+                {!hideColumns.includes('oi') && (() => {
                   // Оцениваем ликвидность опциона
                   const liquidity = assessLiquidity(option);
                   const colors = getLiquidityColor(liquidity.level);

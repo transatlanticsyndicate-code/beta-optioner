@@ -21,6 +21,7 @@ import {
   TrendingDown,
   Coins,
   ExternalLink,
+  Layers,
 } from 'lucide-react';
 
 function Sidebar() {
@@ -159,6 +160,9 @@ function Sidebar() {
                 <div className="space-y-1">
                   <NavItem to="/tools/options-calculator" icon={Calculator}>
                     Калькулятор опционов
+                  </NavItem>
+                  <NavItem to="/tools/universal-calculator" icon={Layers} title="Универсальный калькулятор (Акции + Фьючерсы)">
+                    Универсальный калькулятор
                   </NavItem>
                   <NavItem to="/tools/saved-configurations" icon={Save}>
                     Сохраненные конфигурации

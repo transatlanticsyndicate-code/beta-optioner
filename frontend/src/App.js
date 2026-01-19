@@ -6,6 +6,7 @@ import HomePageNew from './pages/HomePageNew';
 import OptionsAnalyzer from './pages/OptionsAnalyzer';
 import AnalysisView from './pages/AnalysisView';
 import OptionsCalculatorBasic from './pages/OptionsCalculatorBasic';
+import UniversalOptionsCalculator from './pages/UniversalOptionsCalculator';
 import SavedConfigurations from './pages/SavedConfigurations';
 import ComponentsShowcase from './pages/ComponentsShowcase';
 import FloatingAIChat from './components/FloatingAIChat';
@@ -24,6 +25,7 @@ function App() {
           <Route path="/" element={<HomePageNew />} />
           <Route path="/tools/options-analyzer" element={<OptionsAnalyzer />} />
           <Route path="/tools/options-calculator" element={<OptionsCalculatorBasic />} />
+          <Route path="/tools/universal-calculator" element={<UniversalOptionsCalculator />} />
           <Route path="/tools/gradual-strategy-calculator" element={<GradualStrategyCalculator />} />
           <Route path="/tools/saved-configurations" element={<SavedConfigurations />} />
           <Route path="/tools/test-chart" element={<TestChart />} />

@@ -20,6 +20,8 @@ function TopNav() {
         return 'Архив сделок';
       case '/tools/options-calculator':
         return 'Калькулятор опционов на АКЦИИ';
+      case '/tools/universal-calculator':
+        return 'Универсальный Калькулятор Опционов';
       case '/tools/saved-configurations':
         return 'Сохраненные конфигурации';
       case '/tools/gradual-strategy-calculator':
@@ -49,11 +51,15 @@ function TopNav() {
         {location.pathname === '/tools/options-calculator' && (
           <span className="text-sm text-cyan-500 font-medium">v31</span>
         )}
+        {location.pathname === '/tools/universal-calculator' && (
+          <span className="text-sm text-cyan-500 font-medium">v U1</span>
+        )}
       </div>
 
       <div className="flex items-center gap-2 sm:gap-4 ml-auto sm:ml-0">
         {/* Индикаторы статуса данных Massive API */}
-        <OptionsDataIndicator />
+        {/* УБРАНО: Индикатор Massive не показывается на странице универсального калькулятора */}
+        {location.pathname !== '/tools/universal-calculator' && <OptionsDataIndicator />}
 
         {/* Notifications */}
         <button 
