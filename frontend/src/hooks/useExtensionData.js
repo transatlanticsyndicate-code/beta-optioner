@@ -58,6 +58,14 @@ function adaptOption(option) {
     ? (option.ask || option.premium || 0) 
     : (option.bid || option.premium || 0);
 
+  // Определяем IV: при покупке используем askIV, при продаже — bidIV
+  // ЗАЧЕМ: Волатильность должна соответствовать цене входа в позицию
+  // askIV — волатильность по цене ask (для покупки)
+  // bidIV — волатильность по цене bid (для продажи)
+  const effectiveIV = isBuy 
+    ? (option.askIV || option.impliedVolatility || option.iv || 0) 
+    : (option.bidIV || option.impliedVolatility || option.iv || 0);
+
   return {
     id: option.id || Date.now().toString(),
     action: option.action || 'Buy',
@@ -79,7 +87,7 @@ function adaptOption(option) {
     gamma: option.gamma || 0,
     theta: option.theta || 0,
     vega: option.vega || 0,
-    impliedVolatility: option.impliedVolatility || option.iv || 0,
+    impliedVolatility: effectiveIV,
     // Дата входа в позицию
     entryDate: option.entryDate || new Date().toISOString().split('T')[0]
   };
@@ -93,30 +101,41 @@ export function useExtensionData() {
   const urlParamsRef = useRef(parseUrlParams());
   
   // Состояние данных
-  // ВАЖНО: Читаем localStorage ТОЛЬКО если есть URL параметр ?contract=
-  // ЗАЧЕМ: Изоляция от старого калькулятора — данные читаются только при открытии из расширения
+  // ЛОГИКА ИНИЦИАЛИЗАЦИИ:
+  // 1. Если есть URL параметр ?contract= — читаем данные от расширения (приоритет)
+  // 2. Если нет URL параметра, но в localStorage есть сохранённые данные с тикером — восстанавливаем их
+  // ЗАЧЕМ: При навигации между страницами URL параметры теряются, но данные должны восстанавливаться
   const [state, setState] = useState(() => {
     const { contractCode, urlPrice } = urlParamsRef.current;
     
-    // Читаем localStorage только если есть URL параметр ?contract=
-    // ЗАЧЕМ: Без URL параметра калькулятор не должен показывать данные от расширения
-    const storageState = contractCode ? readStorageState() : null;
+    // Всегда читаем localStorage для проверки сохранённых данных
+    const storageState = readStorageState();
+    
+    // Определяем, есть ли валидные данные для восстановления
+    // ЗАЧЕМ: Если в localStorage есть тикер и опционы — это данные от расширения, которые нужно восстановить
+    const hasStoredData = storageState && 
+      (storageState.selectedTicker || storageState.options?.length > 0);
+    
+    // isFromExtension = true если:
+    // 1. Есть URL параметр ?contract= (открытие из расширения)
+    // 2. ИЛИ в localStorage есть сохранённые данные с тикером/опционами (возврат на страницу)
+    const shouldRestoreFromExtension = !!contractCode || hasStoredData;
     
     return {
-      // Код контракта из URL
-      contractCode: contractCode,
+      // Код контракта из URL (или из localStorage при восстановлении)
+      contractCode: contractCode || (hasStoredData ? storageState.selectedTicker : null),
       // Цена из URL (приоритет над localStorage)
       urlPrice: urlPrice,
       // Цена базового актива (URL > localStorage)
-      underlyingPrice: urlPrice || storageState?.underlyingPrice || 0,
+      underlyingPrice: urlPrice || storageState?.underlyingPrice || storageState?.currentPrice || 0,
       // Тикер контракта
       ticker: storageState?.selectedTicker || contractCode || '',
       // Дата экспирации
       expirationDate: storageState?.selectedExpirationDate || '',
       // Массив опционов (адаптированный формат)
       options: (storageState?.options || []).map(adaptOption),
-      // Флаг: данные получены от расширения (только если есть URL параметр)
-      isFromExtension: !!contractCode,
+      // Флаг: данные получены от расширения (URL параметр ИЛИ восстановление из localStorage)
+      isFromExtension: shouldRestoreFromExtension,
       // Timestamp последнего обновления
       lastUpdated: Date.now()
     };

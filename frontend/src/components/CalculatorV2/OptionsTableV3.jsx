@@ -702,6 +702,8 @@ function OptionsTableV3({
                 </span>
 
                 {/* IV (Implied Volatility) - результирующая волатильность с учётом времени */}
+                {/* ЗАЧЕМ: Отображаем IV с одним знаком после запятой для точности */}
+                {/* При покупке используется askIV, при продаже — bidIV (логика в adaptOption) */}
                 <span className="text-muted-foreground text-right font-medium" style={{ fontSize: '0.7rem' }}>
                   {(() => {
                     const optIV = option.impliedVolatility || option.implied_volatility;
@@ -712,7 +714,7 @@ function OptionsTableV3({
                     const currentDays = calculateDaysRemainingUTC(option, 0, 30, oldestEntry);
                     const simulatedDays = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntry);
                     const resultIV = getOptionVolatility(option, currentDays, simulatedDays, ivSurface);
-                    return `${resultIV.toFixed(0)}%`;
+                    return `${resultIV.toFixed(2)}%`;
                   })()}
                 </span>
 
