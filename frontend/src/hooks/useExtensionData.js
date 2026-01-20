@@ -223,3 +223,123 @@ export function useExtensionData() {
 }
 
 export default useExtensionData;
+
+// ============================================================================
+// УТИЛИТЫ ДЛЯ ОТПРАВКИ КОМАНД В РАСШИРЕНИЕ
+// ============================================================================
+
+/**
+ * Ключ в localStorage для команд калькулятора → расширение
+ * ЗАЧЕМ: Расширение слушает этот ключ и выполняет команды
+ */
+const COMMAND_KEY = 'tvc_refresh_command';
+
+/**
+ * Ключ в localStorage для результатов расширение → калькулятор
+ * ЗАЧЕМ: Расширение записывает прогресс и результат сюда
+ */
+const RESULT_KEY = 'tvc_refresh_result';
+
+/**
+ * Отправка команды refresh_specific — обновление конкретных опционов
+ * ЗАЧЕМ: Кнопка обновления данных (RefreshCw) в OptionsTableV3
+ * 
+ * @param {Array} options - Массив опционов для обновления
+ * @param {boolean} refreshUnderlyingPrice - Также обновить цену базового актива
+ * 
+ * Формат options: [{ date: 'YYYY-MM-DD', strike: number, optionType: 'CALL'|'PUT' }]
+ */
+export function sendRefreshSpecificCommand(options, refreshUnderlyingPrice = true) {
+  const command = {
+    type: 'refresh_specific',
+    options: options.map(opt => ({
+      date: opt.date,
+      strike: opt.strike,
+      optionType: opt.type || opt.optionType
+    })),
+    refreshUnderlyingPrice,
+    timestamp: Date.now(),
+    processed: false
+  };
+
+  localStorage.setItem(COMMAND_KEY, JSON.stringify(command));
+  console.log('📤 [Extension Command] refresh_specific отправлена:', command);
+  
+  return command;
+}
+
+/**
+ * Отправка команды refresh_range — запрос диапазона опционов
+ * ЗАЧЕМ: Волшебная кнопка (Magic) — подбор BuyPUT и BuyCALL
+ * 
+ * @param {number} daysFrom - Минимум дней до экспирации от сегодня
+ * @param {number} daysTo - Максимум дней до экспирации от сегодня
+ * @param {number} strikeFrom - Нижняя граница страйков (% от текущей цены, например -20)
+ * @param {number} strikeTo - Верхняя граница страйков (% от текущей цены, например +20)
+ */
+export function sendRefreshRangeCommand(daysFrom, daysTo, strikeFrom, strikeTo) {
+  const command = {
+    type: 'refresh_range',
+    daysFrom,
+    daysTo,
+    strikeFrom,
+    strikeTo,
+    timestamp: Date.now(),
+    processed: false
+  };
+
+  localStorage.setItem(COMMAND_KEY, JSON.stringify(command));
+  console.log('📤 [Extension Command] refresh_range отправлена:', command);
+  
+  return command;
+}
+
+/**
+ * Отправка команды refresh_single_strike — запрос одного страйка
+ * ЗАЧЕМ: Золотая кнопка (Golden) — подбор с конкретным страйком
+ * 
+ * @param {number} daysFrom - Минимум дней до экспирации от сегодня
+ * @param {number} daysTo - Максимум дней до экспирации от сегодня
+ * @param {number} strikePercent - Процент от текущей цены (например +5 = currentPrice × 1.05)
+ */
+export function sendRefreshSingleStrikeCommand(daysFrom, daysTo, strikePercent) {
+  const command = {
+    type: 'refresh_single_strike',
+    daysFrom,
+    daysTo,
+    strikePercent,
+    timestamp: Date.now(),
+    processed: false
+  };
+
+  localStorage.setItem(COMMAND_KEY, JSON.stringify(command));
+  console.log('📤 [Extension Command] refresh_single_strike отправлена:', command);
+  
+  return command;
+}
+
+/**
+ * Чтение результата выполнения команды
+ * ЗАЧЕМ: Получение прогресса и статуса от расширения
+ * 
+ * @returns {Object|null} Результат: { status, progress, message, data }
+ */
+export function readExtensionResult() {
+  try {
+    const result = localStorage.getItem(RESULT_KEY);
+    if (!result) return null;
+    return JSON.parse(result);
+  } catch (error) {
+    console.error('❌ [Extension Result] Ошибка чтения:', error);
+    return null;
+  }
+}
+
+/**
+ * Очистка результата команды
+ * ЗАЧЕМ: Сброс после обработки результата
+ */
+export function clearExtensionResult() {
+  localStorage.removeItem(RESULT_KEY);
+  console.log('🗑️ [Extension Result] Очищен');
+}

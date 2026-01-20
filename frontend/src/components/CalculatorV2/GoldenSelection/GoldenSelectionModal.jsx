@@ -15,6 +15,7 @@ import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
 import { Crown, AlertCircle, CheckCircle, Loader2, Link, ChevronDown, ChevronUp } from 'lucide-react';
 import { findBestGoldenBuyCall, findBestGoldenBuyPut } from './goldenSelectionLogic';
+import { sendRefreshSingleStrikeCommand } from '../../../hooks/useExtensionData';
 
 /**
  * Компонент модального окна золотого подбора
@@ -28,7 +29,8 @@ function GoldenSelectionModal({
     availableDates = [],
     onAddOption,
     onClose,
-    onSetSimulationParams
+    onSetSimulationParams,
+    isFromExtension = false // Флаг: данные от расширения TradingView (для универсального калькулятора)
 }) {
     // Состояния для Сценария 2
     const [step, setStep] = React.useState('check'); // 'check', 'input', 'searching', 'result'
@@ -169,6 +171,32 @@ function GoldenSelectionModal({
         setStep('searching');
         setError(null);
         setProgress('Начинаем поиск...');
+
+        // РЕЖИМ РАСШИРЕНИЯ: Отправляем команду refresh_single_strike в расширение TradingView
+        // ЗАЧЕМ: Расширение соберет данные опционов с одним страйком (currentPrice + strikePercent%)
+        if (isFromExtension) {
+            if (activeScenario === 'SCENARIO_2') {
+                // Шаг 1: BuyCALL — страйк = currentPrice + strikeRangePercentCall%
+                sendRefreshSingleStrikeCommand(
+                    Number(minDays),              // daysFrom: из UI, по умолчанию 90
+                    Number(maxDays),              // daysTo: из UI, по умолчанию 300
+                    Number(strikeRangePercentCall) // strikePercent: +5% от текущей цены
+                );
+                console.log(`📤 [Extension] Отправлена команда refresh_single_strike для BuyCALL: days ${minDays}-${maxDays}, strike +${strikeRangePercentCall}%`);
+            } else if (activeScenario === 'SCENARIO_3') {
+                // Шаг 2: BuyPUT — страйк = currentPrice + strikeRangePercent%
+                sendRefreshSingleStrikeCommand(
+                    Number(minDaysPut),           // daysFrom: из UI, по умолчанию 8
+                    Number(maxDaysPut),           // daysTo: из UI, по умолчанию 100
+                    Number(strikeRangePercent)    // strikePercent: +5% от текущей цены
+                );
+                console.log(`📤 [Extension] Отправлена команда refresh_single_strike для BuyPUT: days ${minDaysPut}-${maxDaysPut}, strike +${strikeRangePercent}%`);
+            }
+            // Расширение обновит localStorage, после чего можно продолжить подбор
+            // TODO: Добавить ожидание результата от расширения
+            setStep('input');
+            return;
+        }
 
         try {
             let result;

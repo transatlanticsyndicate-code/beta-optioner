@@ -21,6 +21,7 @@ import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
 import { Loader2, Sparkles, AlertCircle, CheckCircle, ChevronDown, ChevronUp, Wand2 } from 'lucide-react';
 import { findBestBuyPut, findBestBuyCall, formatOptionForTable, calculateBaseAssetPL } from './magicSelectionLogic';
+import { sendRefreshRangeCommand } from '../../../hooks/useExtensionData';
 
 /**
  * Компонент модального окна волшебного подбора
@@ -49,7 +50,8 @@ function MagicSelectionModal({
   availableDates = [],
   ivSurface = null,
   dividendYield = 0,
-  onSelectionComplete = null
+  onSelectionComplete = null,
+  isFromExtension = false // Флаг: данные от расширения TradingView (для универсального калькулятора)
 }) {
   // Состояние загрузки подбора
   const [isSearching, setIsSearching] = useState(false);
@@ -213,6 +215,22 @@ function MagicSelectionModal({
     setFoundOption(null);
     setSuggestionWithRef(null); // Сбрасываем предложение при новом поиске
     
+    // РЕЖИМ РАСШИРЕНИЯ: Отправляем команду refresh_range в расширение TradingView
+    // ЗАЧЕМ: Расширение соберет данные опционов в указанном диапазоне
+    if (isFromExtension) {
+      sendRefreshRangeCommand(
+        1,                        // daysFrom: минимум 1 день до экспирации
+        maxDaysToExpiration,      // daysTo: из UI, по умолчанию 100
+        -strikeRangePercent,      // strikeFrom: -20% от текущей цены
+        strikeRangePercent        // strikeTo: +20% от текущей цены
+      );
+      console.log(`📤 [Extension] Отправлена команда refresh_range для BuyPUT: days 1-${maxDaysToExpiration}, strikes ±${strikeRangePercent}%`);
+      // Расширение обновит localStorage, после чего можно продолжить подбор
+      // TODO: Добавить ожидание результата от расширения
+      setIsSearching(false);
+      return;
+    }
+    
     try {
       const result = await findBestBuyPut({
         ticker: selectedTicker,
@@ -323,6 +341,22 @@ function MagicSelectionModal({
     setError(null);
     setFoundOption(null);
     setSuggestionWithRef(null);
+    
+    // РЕЖИМ РАСШИРЕНИЯ: Отправляем команду refresh_range в расширение TradingView
+    // ЗАЧЕМ: Расширение соберет данные опционов в указанном диапазоне
+    if (isFromExtension) {
+      sendRefreshRangeCommand(
+        1,                          // daysFrom: минимум 1 день до экспирации
+        callMaxDaysToExpiration,    // daysTo: из UI, по умолчанию 100
+        -callStrikeRangePercent,    // strikeFrom: -20% от текущей цены
+        callStrikeRangePercent      // strikeTo: +20% от текущей цены
+      );
+      console.log(`📤 [Extension] Отправлена команда refresh_range для BuyCALL: days 1-${callMaxDaysToExpiration}, strikes ±${callStrikeRangePercent}%`);
+      // Расширение обновит localStorage, после чего можно продолжить подбор
+      // TODO: Добавить ожидание результата от расширения
+      setIsSearching(false);
+      return;
+    }
     
     try {
       // Рассчитываем убыток базового актива при цене НИЗ для правильного расчёта % покрытия в предложении

@@ -3,6 +3,7 @@ import { Eye, EyeOff, ChevronDown, Trash2, Loader2, Save, RotateCcw, AlertTriang
 import { MagicButton, MagicSelectionModal } from './MagicSelection';
 import { clearTickerCache } from '../../services/apiClient';
 import { invalidateOptionsForTicker } from '../../services/OptionsDataService';
+import { sendRefreshSpecificCommand } from '../../hooks/useExtensionData';
 
 import { GoldenButton, GoldenSelectionModal } from './GoldenSelection';
 import { Button } from '../ui/button';
@@ -74,7 +75,8 @@ function OptionsTableV3({
   isAIEnabled = false, // Включен ли AI для прогнозирования волатильности
   aiVolatilityMap = {}, // Кэш AI предсказаний волатильности
   fetchAIVolatility = null, // Функция для запроса AI волатильности
-  hideColumns = [] // Массив колонок для скрытия: ['premium', 'oi']
+  hideColumns = [], // Массив колонок для скрытия: ['premium', 'oi']
+  isFromExtension = false // Флаг: данные от расширения TradingView (для универсального калькулятора)
 }) {
   // Логирование полученных AI пропсов
   console.log('🤖 [OptionsTable] Получены пропсы:', {
@@ -178,9 +180,9 @@ function OptionsTableV3({
 
   // Обработчик обновления всех незалоченных опционов
   // ЗАЧЕМ: Позволяет пользователю быстро обновить рыночные данные для всех позиций
-  // ВАЖНО: Очищает кэш перед обновлением для получения свежих данных с API
+  // ВАЖНО: В режиме расширения отправляет команду refresh_specific, иначе использует API
   const handleRefreshAllOptions = async () => {
-    if (!loadOptionDetails || !selectedTicker || isRefreshingAll) return;
+    if (isRefreshingAll) return;
 
     // Фильтруем только незалоченные опционы с заполненными данными
     const optionsToRefresh = options.filter(opt =>
@@ -202,8 +204,24 @@ function OptionsTableV3({
     setIsRefreshingAll(true);
 
     try {
-      // ВАЖНО: Очищаем ВСЕ кэши перед обновлением для получения свежих данных
-      // Это решает проблему разной IV на разных устройствах из-за кэширования
+      // РЕЖИМ РАСШИРЕНИЯ: Отправляем команду refresh_specific в расширение TradingView
+      // ЗАЧЕМ: Расширение обновит данные конкретных опционов + цену базового актива
+      if (isFromExtension) {
+        sendRefreshSpecificCommand(optionsToRefresh, true);
+        console.log(`📤 [Extension] Отправлена команда refresh_specific для ${optionsToRefresh.length} опционов`);
+        // Расширение обновит localStorage, калькулятор получит данные через storage event
+        // Сбрасываем флаг загрузки через небольшую задержку
+        setTimeout(() => setIsRefreshingAll(false), 1000);
+        return;
+      }
+
+      // РЕЖИМ API: Стандартное обновление через API (для старого калькулятора)
+      if (!loadOptionDetails || !selectedTicker) {
+        setIsRefreshingAll(false);
+        return;
+      }
+
+      // Очищаем ВСЕ кэши перед обновлением для получения свежих данных
       clearTickerCache(selectedTicker);
       invalidateOptionsForTicker(selectedTicker);
       console.log(`🔄 Кэш очищен для ${selectedTicker}, запрашиваем свежие данные для ${optionsToRefresh.length} опционов...`);
