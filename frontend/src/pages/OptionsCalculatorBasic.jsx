@@ -35,7 +35,6 @@ import TradingViewWidget from '../components/TradingViewWidget';
 // Импорт модульных компонентов (используем те же, что и в V2)
 import {
   BaseAssetPositions,
-  OptionsTable,
   ExpirationCalendar,
   PriceScale,
   StrikeScale,
@@ -49,6 +48,7 @@ import {
   SaveConfigurationDialog,
   PriceAndTimeSettings
 } from '../components/CalculatorV2';
+import OptionsTable from '../components/CalculatorV2/OptionsTable';
 import FinancialControl from '../components/CalculatorV2/FinancialControl';
 import ExitCalculator from '../components/CalculatorV2/ExitCalculator';
 import OptionSelectionResult from '../components/CalculatorV2/OptionSelectionResult';
@@ -650,7 +650,7 @@ function OptionsCalculatorV3() {
       strikesByDate,
       expirationDates,
     };
-    localStorage.setItem('calculatorState', JSON.stringify(state));
+    localStorage.setItem('stocksCalculatorState', JSON.stringify(state));
   }, [selectedTicker, currentPrice, priceChange, options, positions, selectedExpirationDate, daysPassed, chartDisplayMode, showOptionLines, showProbabilityZones, strikesByDate, expirationDates]);
 
   const resetCalculator = useCallback(() => {
@@ -672,28 +672,30 @@ function OptionsCalculatorV3() {
     setSavedConfigDate(null); // Сбрасываем дату сохранения конфигурации
     setLivePrice(null); // Сбрасываем текущую рыночную цену
     setOptionSelectionParams(null); // Сбрасываем параметры подбора опционов
-    localStorage.removeItem('calculatorState');
+    localStorage.removeItem('stocksCalculatorState');
   }, []);
 
   // Загружаем состояние при первой загрузке страницы
-  // ВАЖНО: Не загружаем из calculatorState если есть config в URL
+  // ВАЖНО: Не загружаем из stocksCalculatorState если есть config в URL
   // ЗАЧЕМ: Конфигурация из URL имеет приоритет над автосохранённым состоянием
   useEffect(() => {
     if (isInitialized) return;
     
-    // Проверяем, есть ли config в URL — если да, пропускаем загрузку из calculatorState
+    // Проверяем, есть ли config в URL — если да, пропускаем загрузку из stocksCalculatorState
     const searchParams = new URLSearchParams(window.location.search);
     const configId = searchParams.get('config');
+    
     if (configId) {
-      console.log('⏭️ Пропускаем загрузку calculatorState — есть config в URL:', configId);
+      console.log('⏭️ Пропускаем загрузку stocksCalculatorState — есть config в URL:', configId);
       setIsInitialized(true);
       return;
     }
     
-    const saved = localStorage.getItem('calculatorState');
+    const saved = localStorage.getItem('stocksCalculatorState');
     if (saved) {
       try {
         const state = JSON.parse(saved);
+        
         setSelectedTicker(state.selectedTicker || '');
         setCurrentPrice(state.currentPrice || 0);
         setPriceChange(state.priceChange || { value: 0, percent: 0 });
@@ -712,7 +714,7 @@ function OptionsCalculatorV3() {
         setChartDisplayMode(state.chartDisplayMode || 'profit-loss-dollar');
         setStrikesByDate(state.strikesByDate || {});
         setExpirationDates(state.expirationDates || {});
-        console.log('✅ Состояние калькулятора загружено из localStorage');
+        console.log('✅ Состояние старого калькулятора загружено из stocksCalculatorState');
         
         // ИСПРАВЛЕНИЕ: Если есть тикер, но нет дат экспирации — загружаем их с API
         // ЗАЧЕМ: При восстановлении состояния даты могли не сохраниться или устареть
@@ -721,7 +723,7 @@ function OptionsCalculatorV3() {
           loadExpirationDates(state.selectedTicker);
         }
       } catch (error) {
-        console.error('Ошибка загрузки состояния калькулятора:', error);
+        console.error('Ошибка загрузки состояния старого калькулятора:', error);
       }
     }
     setIsInitialized(true);

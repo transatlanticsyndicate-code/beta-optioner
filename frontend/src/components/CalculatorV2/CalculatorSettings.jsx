@@ -17,7 +17,8 @@ function CalculatorSettings({
   dividendYield = 0,
   dividendLoading = false,
   isAIEnabled = true,
-  setIsAIEnabled
+  setIsAIEnabled,
+  calculatorMode = 'stocks' // Режим калькулятора: 'stocks' или 'futures'
 }) {
   // Получаем актуальную безрисковую ставку от FRED API
   const { ratePercent, loading: rateLoading } = useRiskFreeRate();
@@ -66,29 +67,32 @@ function CalculatorSettings({
           </div>
 
           {/* Переключатель учёта дивидендов (BSM модель) */}
-          <div className="flex items-center justify-between">
-            <div className="flex flex-col">
-              <Label htmlFor="use-dividends" className="text-sm font-normal cursor-pointer">
-                Учитывать дивиденды
-              </Label>
-              {useDividends && dividendYield > 0 && (
-                <span className="text-xs text-muted-foreground mt-0.5">
-                  Dividend Yield: {dividendLoading ? '...' : `${dividendYieldPercent}%`}
-                </span>
-              )}
-              {useDividends && dividendYield === 0 && !dividendLoading && (
-                <span className="text-xs text-orange-500 mt-0.5">
-                  Нет дивидендов
-                </span>
-              )}
+          {/* ЗАЧЕМ: Отображаем только в режиме акций, для фьючерсов дивиденды не актуальны */}
+          {calculatorMode === 'stocks' && (
+            <div className="flex items-center justify-between">
+              <div className="flex flex-col">
+                <Label htmlFor="use-dividends" className="text-sm font-normal cursor-pointer">
+                  Учитывать дивиденды
+                </Label>
+                {useDividends && dividendYield > 0 && (
+                  <span className="text-xs text-muted-foreground mt-0.5">
+                    Dividend Yield: {dividendLoading ? '...' : `${dividendYieldPercent}%`}
+                  </span>
+                )}
+                {useDividends && dividendYield === 0 && !dividendLoading && (
+                  <span className="text-xs text-orange-500 mt-0.5">
+                    Нет дивидендов
+                  </span>
+                )}
+              </div>
+              <Switch
+                id="use-dividends"
+                checked={useDividends}
+                onCheckedChange={setUseDividends}
+                className="data-[state=checked]:bg-cyan-500"
+              />
             </div>
-            <Switch
-              id="use-dividends"
-              checked={useDividends}
-              onCheckedChange={setUseDividends}
-              className="data-[state=checked]:bg-cyan-500"
-            />
-          </div>
+          )}
 
           {/* Безрисковая ставка - информационный блок */}
           <div className="pt-2 border-t border-gray-200">

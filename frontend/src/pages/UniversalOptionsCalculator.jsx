@@ -48,7 +48,6 @@ import {
 // Импорт модульных компонентов (используем те же, что и в V2)
 import {
   BaseAssetPositions,
-  OptionsTable,
   // УБРАНО: ExpirationCalendar не используется — даты приходят от расширения
   // ExpirationCalendar,
   PriceScale,
@@ -63,6 +62,7 @@ import {
   SaveConfigurationDialog,
   PriceAndTimeSettings
 } from '../components/CalculatorV2';
+import OptionsTableV3 from '../components/CalculatorV2/OptionsTableV3';
 import FinancialControl from '../components/CalculatorV2/FinancialControl';
 import ExitCalculator from '../components/CalculatorV2/ExitCalculator';
 import OptionSelectionResult from '../components/CalculatorV2/OptionSelectionResult';
@@ -114,7 +114,8 @@ function UniversalOptionsCalculator() {
     options: extensionOptions,        // Массив опционов от расширения
     isFromExtension,        // Флаг: данные от расширения
     lastUpdated: extensionLastUpdated,  // Timestamp последнего обновления
-    refreshFromStorage      // Функция ручного обновления
+    refreshFromStorage,     // Функция ручного обновления
+    clearExtensionData      // Функция очистки данных расширения
   } = useExtensionData();
 
   // Установка заголовка страницы
@@ -485,7 +486,10 @@ function UniversalOptionsCalculator() {
     setLivePrice(null); // Сбрасываем текущую рыночную цену
     setOptionSelectionParams(null); // Сбрасываем параметры подбора опционов
     localStorage.removeItem('calculatorState');
-  }, []);
+    
+    // НОВОЕ: Очищаем данные расширения (тикер контракта и временную метку)
+    clearExtensionData();
+  }, [clearExtensionData]);
 
   // Загружаем состояние при первой загрузке страницы
   // ПРИОРИТЕТ: Данные от расширения (URL + localStorage.calculatorState) > сохранённые конфигурации
@@ -538,9 +542,48 @@ function UniversalOptionsCalculator() {
       return;
     }
     
-    // Если нет данных от расширения — показываем пустой калькулятор
-    // (ручной ввод не поддерживается, ждём данные от расширения)
-    console.log('📡 [Universal] Ожидание данных от расширения...');
+    // === ЗАГРУЗКА СОХРАНЕННОГО СОСТОЯНИЯ ===
+    // Если нет данных от расширения — пробуем загрузить сохраненное состояние
+    // ЗАЧЕМ: При перезагрузке страницы без URL параметра восстанавливаем последнее состояние
+    const saved = localStorage.getItem('calculatorState');
+    if (saved) {
+      try {
+        const state = JSON.parse(saved);
+        
+        // Проверяем, что это данные универсального калькулятора (есть underlyingPrice)
+        if (state.underlyingPrice !== undefined || state.selectedTicker) {
+          console.log('📡 [Universal] Загрузка сохраненного состояния из localStorage');
+          
+          setSelectedTicker(state.selectedTicker || '');
+          setCurrentPrice(state.currentPrice || state.underlyingPrice || 0);
+          setTargetPrice(state.currentPrice || state.underlyingPrice || 0);
+          setPriceChange(state.priceChange || { value: 0, percent: 0 });
+          
+          // Восстанавливаем опционы
+          const restoredOptions = (state.options || []).map(opt => ({
+            ...opt,
+            entryDate: opt.entryDate || new Date().toISOString().split('T')[0]
+          }));
+          setOptions(restoredOptions);
+          setPositions(state.positions || []);
+          setSelectedExpirationDate(state.selectedExpirationDate || null);
+          setDaysPassed(state.daysPassed || 0);
+          setChartDisplayMode(state.chartDisplayMode || 'profit-loss-dollar');
+          setStrikesByDate(state.strikesByDate || {});
+          setExpirationDates(state.expirationDates || {});
+          
+          console.log('✅ [Universal] Состояние восстановлено:', {
+            ticker: state.selectedTicker,
+            optionsCount: restoredOptions.length
+          });
+        }
+      } catch (error) {
+        console.error('❌ [Universal] Ошибка загрузки состояния:', error);
+      }
+    } else {
+      console.log('📡 [Universal] Ожидание данных от расширения...');
+    }
+    
     setIsInitialized(true);
   }, [isInitialized, isFromExtension, contractCode, extensionTicker, extensionPrice, extensionExpirationDate, extensionOptions]);
 
@@ -1633,9 +1676,9 @@ function UniversalOptionsCalculator() {
                 />
               </div>
               
-              {/* Код контракта */}
+              {/* Код актива */}
               <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Контракт:</span>
+                <span className="text-sm text-muted-foreground">Актив:</span>
                 <span className="text-lg font-bold">{contractCode || selectedTicker}</span>
               </div>
               
@@ -1853,6 +1896,7 @@ function UniversalOptionsCalculator() {
                     dividendLoading={dividendLoading}
                     isAIEnabled={isAIEnabled}
                     setIsAIEnabled={setIsAIEnabled}
+                    calculatorMode={calculatorMode}
                   />
                 </Card>
               )}
@@ -1867,7 +1911,7 @@ function UniversalOptionsCalculator() {
               <Card className="w-full relative" style={{ borderColor: '#b8b8b8' }}>
                 <CardContent className="pt-[20px] pb-[20px] space-y-4">
                   {selectedTicker ? (
-                    <OptionsTable
+                    <OptionsTableV3
                       options={displayOptions}
                       toggleOptionVisibility={toggleOptionVisibility}
                       deleteOption={deleteOption}

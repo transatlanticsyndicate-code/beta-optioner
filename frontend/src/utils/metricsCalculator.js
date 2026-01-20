@@ -515,16 +515,16 @@ export function formatCurrency(value, showSign = false) {
 
 /**
  * Форматирует Greek значение
- * @param {number} value - значение
+ * @param {number} value - значение греков (уже в правильном формате из API/расширения)
  * @param {number} decimals - количество знаков после запятой
  * @returns {string} - отформатированная строка
  */
 export function formatGreek(value, decimals = 2) {
   if (value === null || value === undefined || isNaN(value)) return '0';
   
-  const scaledValue = value * 100;
-  const sign = scaledValue >= 0 ? '+' : '';
-  return `${sign}${scaledValue.toFixed(decimals)}`;
+  // ИСПРАВЛЕНО: Не умножаем на 100, т.к. греки из расширения уже в правильном формате
+  const sign = value >= 0 ? '+' : '';
+  return `${sign}${value.toFixed(decimals)}`;
 }
 
 /**

@@ -180,6 +180,24 @@ export function useExtensionData() {
     updateFromStorage();
   }, [updateFromStorage]);
 
+  /**
+   * Очистка данных расширения
+   * ЗАЧЕМ: Полный сброс состояния при нажатии кнопки "Полный сброс"
+   */
+  const clearExtensionData = useCallback(() => {
+    console.log('📡 [useExtensionData] Очистка данных расширения');
+    setState({
+      contractCode: null,
+      urlPrice: null,
+      underlyingPrice: 0,
+      ticker: '',
+      expirationDate: '',
+      options: [],
+      isFromExtension: false,
+      lastUpdated: null
+    });
+  }, []);
+
   return {
     // Код контракта из URL (?contract=)
     contractCode: state.contractCode,
@@ -198,7 +216,9 @@ export function useExtensionData() {
     // Timestamp последнего обновления
     lastUpdated: state.lastUpdated,
     // Функция ручного обновления
-    refreshFromStorage
+    refreshFromStorage,
+    // Функция очистки данных
+    clearExtensionData
   };
 }
 
