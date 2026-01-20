@@ -89,9 +89,11 @@ function GoldenSelectionModal({
     }, [isOpen, currentPrice]); // Only on open to avoid overriding user input during typing if we added dropPercent dependency carelessly
 
     // Initialize growthPriceInput when modal opens or defaults change (Scenario 2)
+    // ЗАЧЕМ: Рассчитываем цену при ПАДЕНИИ актива на growthPercent%
     React.useEffect(() => {
         if (isOpen && currentPrice && growthPercent) {
-            const price = currentPrice * (1 + Number(growthPercent) / 100);
+            // Формула падения: currentPrice * (1 - percent / 100)
+            const price = currentPrice * (1 - Number(growthPercent) / 100);
             setGrowthPriceInput(price.toFixed(2));
         }
     }, [isOpen, currentPrice]); // Only on open to avoid overriding user input during typing
@@ -135,22 +137,29 @@ function GoldenSelectionModal({
     };
 
     // Handlers for two-way binding (Scenario 2)
+    // Обработчик изменения процента падения (Scenario 2)
+    // ЗАЧЕМ: При вводе процента падения пересчитываем целевую цену
     const handleGrowthPercentChange = (e) => {
         const val = e.target.value;
         setGrowthPercent(val);
         if (currentPrice && !isNaN(parseFloat(val))) {
-            const price = currentPrice * (1 + parseFloat(val) / 100);
+            // Формула падения: currentPrice * (1 - percent / 100)
+            const price = currentPrice * (1 - parseFloat(val) / 100);
             setGrowthPriceInput(price.toFixed(2));
         } else {
             setGrowthPriceInput('');
         }
     };
 
+    // Обработчик изменения целевой цены падения (Scenario 2)
+    // ЗАЧЕМ: При вводе цены пересчитываем процент падения
     const handleGrowthPriceChange = (e) => {
         const val = e.target.value;
         setGrowthPriceInput(val);
         if (currentPrice && !isNaN(parseFloat(val)) && parseFloat(val) > 0) {
-            const percent = ((parseFloat(val) - currentPrice) / currentPrice) * 100;
+            // Формула: percent = (currentPrice - targetPrice) / currentPrice * 100
+            // Положительный процент = падение цены
+            const percent = ((currentPrice - parseFloat(val)) / currentPrice) * 100;
             setGrowthPercent(percent.toFixed(2));
         }
     };

@@ -17,8 +17,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 // Ключ в localStorage, куда расширение записывает данные
-// ВАЖНО: Используем отдельный ключ, чтобы не конфликтовать со старым калькулятором
-const STORAGE_KEY = 'tvc_calculator_state';
+// ВАЖНО: Расширение использует именно этот ключ — НЕ МЕНЯТЬ!
+const STORAGE_KEY = 'calculatorState';
 
 /**
  * Парсинг URL параметров
