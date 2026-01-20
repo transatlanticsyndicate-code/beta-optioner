@@ -1949,6 +1949,7 @@ function UniversalOptionsCalculator() {
                       aiVolatilityMap={aiVolatilityMap}
                       fetchAIVolatility={fetchAIVolatility}
                       hideColumns={['premium', 'oi']}
+                      isFromExtension={isFromExtension}
                       onAddMagicOption={(option) => {
                         // Добавляем опцион из волшебного подбора
                         console.log('👑 OptionsCalculatorBasic: Получен опцион в onAddMagicOption:', option.isGoldenOption, option);

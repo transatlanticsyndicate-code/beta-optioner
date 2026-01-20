@@ -954,6 +954,7 @@ function OptionsTableV3({
         availableDates={availableDates}
         ivSurface={ivSurface}
         dividendYield={dividendYield}
+        isFromExtension={isFromExtension}
         onAddOption={(option) => {
           if (onAddMagicOption) {
             onAddMagicOption(option);
@@ -972,6 +973,7 @@ function OptionsTableV3({
           currentPrice={currentPrice}
           selectedTicker={selectedTicker}
           availableDates={availableDates}
+          isFromExtension={isFromExtension}
           onAddOption={(option) => {
             console.log('👑 OptionsTable.jsx: Получен опцион от GoldenModal:', option.isGoldenOption, option);
             if (onAddMagicOption) {
