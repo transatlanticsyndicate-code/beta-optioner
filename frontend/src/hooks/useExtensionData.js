@@ -5,16 +5,20 @@
  * 
  * Механизм работы:
  * 1. Расширение парсит данные с TradingView
- * 2. Сохраняет в localStorage.calculatorState
+ * 2. Сохраняет в localStorage.tvc_calculator_state (отдельный ключ от старого калькулятора!)
  * 3. Открывает калькулятор с URL параметрами ?contract=ESH26&price=6910.75
- * 4. Калькулятор читает данные и подписывается на storage event
+ * 4. Калькулятор читает данные ТОЛЬКО если есть URL параметр ?contract=
  * 5. При обновлении данных расширением — калькулятор автоматически обновляется
+ * 
+ * ВАЖНО: Этот хук НЕ читает данные из calculatorState старого калькулятора!
+ * Данные читаются только при наличии URL параметра ?contract=
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 // Ключ в localStorage, куда расширение записывает данные
-const STORAGE_KEY = 'calculatorState';
+// ВАЖНО: Используем отдельный ключ, чтобы не конфликтовать со старым калькулятором
+const STORAGE_KEY = 'tvc_calculator_state';
 
 /**
  * Парсинг URL параметров
@@ -89,9 +93,14 @@ export function useExtensionData() {
   const urlParamsRef = useRef(parseUrlParams());
   
   // Состояние данных
+  // ВАЖНО: Читаем localStorage ТОЛЬКО если есть URL параметр ?contract=
+  // ЗАЧЕМ: Изоляция от старого калькулятора — данные читаются только при открытии из расширения
   const [state, setState] = useState(() => {
-    const storageState = readStorageState();
     const { contractCode, urlPrice } = urlParamsRef.current;
+    
+    // Читаем localStorage только если есть URL параметр ?contract=
+    // ЗАЧЕМ: Без URL параметра калькулятор не должен показывать данные от расширения
+    const storageState = contractCode ? readStorageState() : null;
     
     return {
       // Код контракта из URL
@@ -106,8 +115,8 @@ export function useExtensionData() {
       expirationDate: storageState?.selectedExpirationDate || '',
       // Массив опционов (адаптированный формат)
       options: (storageState?.options || []).map(adaptOption),
-      // Флаг: данные получены от расширения
-      isFromExtension: !!(contractCode || storageState),
+      // Флаг: данные получены от расширения (только если есть URL параметр)
+      isFromExtension: !!contractCode,
       // Timestamp последнего обновления
       lastUpdated: Date.now()
     };

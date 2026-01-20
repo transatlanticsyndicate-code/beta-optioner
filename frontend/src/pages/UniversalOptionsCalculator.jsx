@@ -127,7 +127,7 @@ function UniversalOptionsCalculator() {
 
   // === НОВОЕ: Режим калькулятора (Акции/Фьючерсы) ===
   // ЗАЧЕМ: Определяет тип инструмента и соответствующую математику P&L
-  const [calculatorMode, setCalculatorMode] = useState(CALCULATOR_MODES.STOCKS);
+  const [calculatorMode, setCalculatorMode] = useState(CALCULATOR_MODES.FUTURES);
   
   // Информация о выбранном фьючерсе (для режима фьючерсов)
   // ЗАЧЕМ: Хранит pointValue и название фьючерса для расчётов
@@ -429,36 +429,16 @@ function UniversalOptionsCalculator() {
   // Флаг для загрузки дат экспирации (отдельно от isDataCleared)
   const [needLoadExpirations, setNeedLoadExpirations] = useState(false);
   
+  // ОТКЛЮЧЕНО: В универсальном калькуляторе данные приходят от расширения
+  // Не загружаем данные с внешних API (Polygon)
   useEffect(() => {
     if (selectedTicker && isDataCleared) {
-      // Загружаем цену только если isDataCleared=true (priceData не был передан)
-      // ЗАЧЕМ: Избегаем дублирующего запроса, если цена уже получена из NewTikerFinder
-      const loadTickerData = async () => {
-        try {
-          const priceResponse = await fetch(`/api/polygon/ticker/${selectedTicker}`);
-          if (priceResponse.ok) {
-            const priceData = await priceResponse.json();
-            if (priceData.price) {
-              setCurrentPrice(priceData.price);
-              setTargetPrice(priceData.price);
-              setPriceChange({
-                value: priceData.change || 0,
-                percent: priceData.changePercent || 0
-              });
-            }
-          }
-          await loadExpirationDates(selectedTicker);
-          setIsDataCleared(false);
-        } catch (error) {
-          console.error('❌ Error loading ticker data:', error);
-          setIsLoadingDates(false);
-          setIsDataCleared(false);
-        }
-      };
-      loadTickerData();
-    } else if (selectedTicker && needLoadExpirations) {
-      // Загружаем только даты экспирации (цена уже есть из NewTikerFinder)
-      loadExpirationDates(selectedTicker);
+      // Просто сбрасываем флаг — данные придут от расширения
+      console.log('📡 [Universal] Внешние API отключены — данные от расширения');
+      setIsDataCleared(false);
+      setIsLoadingDates(false);
+    }
+    if (needLoadExpirations) {
       setNeedLoadExpirations(false);
     }
   }, [selectedTicker, isDataCleared, needLoadExpirations]);
@@ -756,21 +736,9 @@ function UniversalOptionsCalculator() {
     console.log('📍 Strike updated via Drag & Drop:', { optionId, updates });
   }, []);
 
-  // Автоматически загружаем страйки для всех дат в опционах (для магнитного прилипания)
-  useEffect(() => {
-    if (!selectedTicker || options.length === 0) return;
-    
-    // Собираем уникальные даты из опционов
-    const uniqueDates = [...new Set(options.map(opt => opt.date).filter(Boolean))];
-    
-    // Загружаем страйки для каждой даты
-    uniqueDates.forEach(date => {
-      if (!strikesByDate[date]) {
-        console.log('🔄 Автозагрузка страйков для даты:', date);
-        loadStrikesForDate(selectedTicker, date);
-      }
-    });
-  }, [options, selectedTicker, strikesByDate, loadStrikesForDate]);
+  // ОТКЛЮЧЕНО: В универсальном калькуляторе страйки приходят от расширения
+  // Не загружаем страйки с внешних API
+  // useEffect для автозагрузки страйков отключен
 
   const roundedPrice = Math.round(currentPrice);
   
@@ -870,25 +838,9 @@ function UniversalOptionsCalculator() {
     console.log('✅ New option created:', newOption);
     setOptions(prevOptions => [...prevOptions, newOption]);
     
-    // Загружаем страйки для даты (для магнитного прилипания при перетаскивании)
-    if (prefilledDate && selectedTicker) {
-      loadStrikesForDate(selectedTicker, prefilledDate);
-    }
-    
-    // Загружаем детали опциона если есть все необходимые данные
-    if (autoStrike && prefilledDate && selectedTicker) {
-      setTimeout(() => {
-        loadOptionDetails(newOption.id, selectedTicker, prefilledDate, autoStrike, type);
-        console.log('🔄 Загрузка деталей нового опциона:', { 
-          id: newOption.id, 
-          ticker: selectedTicker, 
-          date: prefilledDate, 
-          strike: autoStrike, 
-          type 
-        });
-      }, 100); // Небольшая задержка чтобы опцион успел добавиться в state
-    }
-  }, [selectedExpirationDate, calculateAutoStrike, selectedTicker, loadOptionDetails, loadStrikesForDate]);
+    // ОТКЛЮЧЕНО: В универсальном калькуляторе данные приходят от расширения
+    // Не загружаем страйки и детали опционов с внешних API
+  }, [selectedExpirationDate, calculateAutoStrike, selectedTicker]);
 
   const [customStrategies, setCustomStrategies] = useState([]);
   useEffect(() => {
@@ -981,28 +933,8 @@ function UniversalOptionsCalculator() {
     });
     setOptions([...options, ...newOptions]);
     
-    // Загружаем страйки для даты (для магнитного прилипания при перетаскивании)
-    if (prefilledDate && selectedTicker) {
-      loadStrikesForDate(selectedTicker, prefilledDate);
-    }
-    
-    // Загружаем детали для всех новых опционов
-    if (prefilledDate && selectedTicker) {
-      setTimeout(() => {
-        newOptions.forEach(opt => {
-          if (opt.strike) {
-            loadOptionDetails(opt.id, selectedTicker, prefilledDate, opt.strike, opt.type);
-            console.log('🔄 Загрузка деталей опциона из стратегии:', { 
-              id: opt.id, 
-              ticker: selectedTicker, 
-              date: prefilledDate, 
-              strike: opt.strike, 
-              type: opt.type 
-            });
-          }
-        });
-      }, 100); // Небольшая задержка чтобы опционы успели добавиться в state
-    }
+    // ОТКЛЮЧЕНО: В универсальном калькуляторе данные приходят от расширения
+    // Не загружаем страйки и детали опционов с внешних API
   };
 
   const handleSaveCustomStrategy = (name, optionsToSave) => {
@@ -1157,27 +1089,13 @@ function UniversalOptionsCalculator() {
           )
         );
         
-        // Загружаем страйки для новой даты
-        if (selectedTicker && loadStrikesForDate) {
-          await loadStrikesForDate(selectedTicker, newDate);
-        }
-        
-        // Загружаем детали для всех опционов с установленным страйком
-        if (selectedTicker && loadOptionDetails) {
-          const optionsToUpdate = optionsWithDate.filter(opt => opt.strike);
-          console.log('📅 Loading details for', optionsToUpdate.length, 'options');
-          
-          for (const opt of optionsToUpdate) {
-            if (opt.strike) {
-              await loadOptionDetails(opt.id, selectedTicker, newDate, opt.strike, opt.type);
-            }
-          }
-        }
+        // ОТКЛЮЧЕНО: В универсальном калькуляторе данные приходят от расширения
+        // Не загружаем страйки и детали опционов с внешних API
       }
     } else {
       console.log('📅 Multiple dates in use, not updating options');
     }
-  }, [displayOptions, setOptions, selectedTicker, loadStrikesForDate, loadOptionDetails, isLocked]);
+  }, [displayOptions, setOptions, selectedTicker, isLocked]);
 
   const handleMouseDown = (e) => {
     if (!scrollContainerRef.current) return;
@@ -1370,11 +1288,8 @@ function UniversalOptionsCalculator() {
               setLivePrice(null);
             }
             
-            // Загружаем даты экспирации ТОЛЬКО если конфигурация НЕ зафиксирована
-            // ЗАЧЕМ: Для зафиксированных позиций данные не должны обновляться
-            if (!configIsLocked) {
-              await loadExpirationDates(ticker);
-            }
+            // ОТКЛЮЧЕНО: В универсальном калькуляторе даты приходят от расширения
+            // Не загружаем даты экспирации с внешних API
           }
           
           // Затем восстанавливаем остальное состояние
@@ -1670,58 +1585,85 @@ function UniversalOptionsCalculator() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground" style={{ minWidth: '1600px', maxWidth: '1600px' }}>
+    <div className="min-h-screen bg-background text-foreground" style={{ minWidth: '1570px', maxWidth: '1570px' }}>
       <div className="p-6">
-        {/* === НОВОЕ: Переключатель режимов Акции/Фьючерсы === */}
-        {/* ЗАЧЕМ: Определяет тип инструмента и соответствующую математику P&L */}
-        <div className="mb-4 flex items-center gap-4">
-          <div className="flex items-center gap-2 bg-muted/50 rounded-lg p-1">
-            <Button
-              variant={calculatorMode === CALCULATOR_MODES.STOCKS ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => {
-                setCalculatorMode(CALCULATOR_MODES.STOCKS);
-                setSelectedFuture(null);
-              }}
-              className="flex items-center gap-2"
-            >
-              <TrendingUp className="h-4 w-4" />
-              Акции
-            </Button>
-            <Button
-              variant={calculatorMode === CALCULATOR_MODES.FUTURES ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setCalculatorMode(CALCULATOR_MODES.FUTURES)}
-              className="flex items-center gap-2"
-            >
-              <Layers className="h-4 w-4" />
-              Фьючерсы
-            </Button>
-          </div>
-        </div>
-
         {/* === ХЕДЕР С ДАННЫМИ ОТ РАСШИРЕНИЯ === */}
-        {/* ЗАЧЕМ: Отображение контракта и цены, полученных от TradingView Parser */}
+        {/* ЗАЧЕМ: Отображение контракта, цены и метаданных от TradingView Parser */}
         {isFromExtension && (contractCode || selectedTicker) && (
           <div className="mb-6">
-            <div className="inline-flex items-center gap-4 p-3 border border-purple-500 rounded-lg bg-purple-50 dark:bg-purple-950/30">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-purple-700 dark:text-purple-300">📡 TradingView</span>
+            <div className={`inline-flex items-center gap-4 p-3 border rounded-lg ${
+                calculatorMode === CALCULATOR_MODES.FUTURES 
+                  ? 'border-purple-400 bg-purple-50 dark:bg-purple-950/30' 
+                  : 'border-teal-400 bg-teal-50 dark:bg-teal-950/30'
+              }`}>
+              {/* Переключатель режимов Акции/Фьючерсы */}
+              {/* ЗАЧЕМ: Определяет тип инструмента и соответствующую математику P&L */}
+              <div className="flex items-center gap-1 bg-white/50 dark:bg-gray-800/50 rounded-md p-0.5">
+                <button
+                  onClick={() => {
+                    setCalculatorMode(CALCULATOR_MODES.STOCKS);
+                    setSelectedFuture(null);
+                  }}
+                  className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                    calculatorMode === CALCULATOR_MODES.STOCKS 
+                      ? 'bg-teal-500 text-white' 
+                      : 'text-gray-600 hover:bg-gray-200 dark:text-gray-400 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  Акции
+                </button>
+                <button
+                  onClick={() => setCalculatorMode(CALCULATOR_MODES.FUTURES)}
+                  className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                    calculatorMode === CALCULATOR_MODES.FUTURES 
+                      ? 'bg-purple-500 text-white' 
+                      : 'text-gray-600 hover:bg-gray-200 dark:text-gray-400 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  Фьючерсы
+                </button>
               </div>
+              
+              {/* Логотип TradingView */}
+              <div className="flex items-center">
+                <img 
+                  src="/images/black-full-logo.svg" 
+                  alt="TradingView" 
+                  style={{ height: '20px', width: 'auto' }}
+                />
+              </div>
+              
+              {/* Код контракта */}
               <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Contract:</span>
+                <span className="text-sm text-muted-foreground">Контракт:</span>
                 <span className="text-lg font-bold">{contractCode || selectedTicker}</span>
               </div>
+              
+              {/* Цена базового актива */}
               <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Price:</span>
-                <span className="text-lg font-bold">${currentPrice.toFixed(2)}</span>
+                <span className="text-sm text-muted-foreground">Цена:</span>
+                <span className="text-lg font-bold">
+                  ${currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).replace(/,/g, ' ')}
+                </span>
               </div>
+              
+              {/* Количество опционов */}
               {options.length > 0 && (
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Options:</span>
+                  <span className="text-sm text-muted-foreground">Опционов:</span>
                   <span className="text-lg font-bold text-purple-600 dark:text-purple-400">{options.length}</span>
                 </div>
               )}
+              
+              {/* Время последнего обновления */}
+              {extensionLastUpdated && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span>Обновлено:</span>
+                  <span>{new Date(extensionLastUpdated).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+                </div>
+              )}
+              
+              {/* Кнопка ручного обновления */}
               <Button
                 variant="ghost"
                 size="sm"
@@ -1745,6 +1687,7 @@ function UniversalOptionsCalculator() {
               </div>
               <p className="text-sm text-muted-foreground mt-2">
                 Откройте страницу опционов на TradingView и нажмите кнопку "📱 Открыть калькулятор" в расширении.
+                Или просто добавьте любой опцион через кнопку +С или +Р, калькулятор откроется автоматически.
               </p>
             </div>
           </div>
@@ -1824,18 +1767,8 @@ function UniversalOptionsCalculator() {
                             console.log('🤖 ИИ подбор: сохранены параметры для OptionSelectionResult', option.selectionParams);
                           }
                           
-                          // Принудительно загружаем детали опциона (используем тип из опциона)
-                          const optionType = option.type || 'PUT';
-                          setTimeout(() => {
-                            loadOptionDetails(newOptionId, selectedTicker, option.expirationDate, option.strike, optionType);
-                            console.log('🤖 ИИ подбор: загрузка деталей опциона', {
-                              id: newOptionId,
-                              ticker: selectedTicker,
-                              date: option.expirationDate,
-                              strike: option.strike,
-                              type: optionType
-                            });
-                          }, 100);
+                          // ОТКЛЮЧЕНО: В универсальном калькуляторе данные приходят от расширения
+                          // Не загружаем детали опционов с внешних API
                         }}
                         isLocked={isLocked}
                       />
@@ -1997,13 +1930,8 @@ function UniversalOptionsCalculator() {
                         console.log('👑 OptionsCalculatorBasic: Создан новый опцион с isGoldenOption:', newOption.isGoldenOption, newOption);
                         setOptions(prevOptions => [...prevOptions, newOption]);
                         
-                        // Загружаем детали опциона
-                        if (option.strike && option.expirationDate && selectedTicker) {
-                          setTimeout(() => {
-                            // Передаем isGoldenOption через extraFields, т.к. состояние может еще не обновиться
-                            loadOptionDetails(newOptionId, selectedTicker, option.expirationDate, option.strike, option.type || 'PUT', { isGoldenOption: option.isGoldenOption || false });
-                          }, 100);
-                        }
+                        // ОТКЛЮЧЕНО: В универсальном калькуляторе данные приходят от расширения
+                        // Не загружаем детали опционов с внешних API
                       }}
                       onMagicSelectionComplete={(params) => {
                         // Сохраняем параметры волшебного подбора для OptionSelectionResult
@@ -2025,7 +1953,8 @@ function UniversalOptionsCalculator() {
                     />
                   ) : (
                     <div className="w-full h-[80px] flex items-center justify-center text-muted-foreground text-sm">
-                      Введите тикер
+                      {/* ЗАЧЕМ: Калькулятор работает только с данными от расширения */}
+                      Ожидание данных от TradingView Extension...
                     </div>
                   )}
                 </CardContent>

@@ -1843,7 +1843,7 @@ function OptionsCalculatorV3() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground" style={{ minWidth: '1600px', maxWidth: '1600px' }}>
+    <div className="min-h-screen bg-background text-foreground" style={{ minWidth: '1570px', maxWidth: '1570px' }}>
       <div className="p-6">
         {/* Выбор тикера через NewTikerFinder */}
         {/* Рендерим только после инициализации, чтобы передать правильный initialTicker */}

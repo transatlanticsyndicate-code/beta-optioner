@@ -50,11 +50,6 @@ function BaseAssetPositions({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-medium">Базовый актив</h3>
-          {selectedTicker && (
-            <span className="text-[0.5rem]" title={isAIEnabled && isTickerSupported ? 'AI модель активна' : 'AI модель неактивна'}>
-              {isAIEnabled && isTickerSupported ? '🟣' : '⚫️'}
-            </span>
-          )}
         </div>
         <div className="flex gap-2">
           {/* Кнопки добавления доступны всегда (даже для зафиксированных позиций) */}
