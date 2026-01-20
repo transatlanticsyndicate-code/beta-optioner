@@ -1,13 +1,27 @@
 import { useMemo } from 'react';
+// Импорт из старого модуля для режима "Акции" (обратная совместимость)
 import {
-  calculateIntrinsicValue,
-  calculateOptionPLValue,
-  calculateOptionTheoreticalPrice,
-  calculateOptionExpirationPLValue,
+  calculateIntrinsicValue as calculateStockIntrinsicValue,
+  calculateOptionPLValue as calculateStockOptionPLValue,
+  calculateOptionTheoreticalPrice as calculateStockOptionTheoreticalPrice,
+  calculateOptionExpirationPLValue as calculateStockOptionExpirationPLValue,
 } from '../utils/optionPricing';
+// Импорт из нового модуля для режима "Фьючерсы"
+import {
+  calculateFuturesOptionPLValue,
+  calculateFuturesOptionTheoreticalPrice,
+  calculateFuturesOptionExpirationPLValue,
+} from '../utils/futuresPricing';
+import { calculateIntrinsicValueBlack76 } from '../utils/black76';
 import { getOptionVolatility } from '../utils/volatilitySurface';
 import { assessLiquidity, LIQUIDITY_LEVELS } from '../utils/liquidityCheck';
 import { calculateDaysRemainingUTC, getOldestEntryDate } from '../utils/dateUtils';
+
+// Режимы калькулятора
+const CALCULATOR_MODES = {
+  STOCKS: 'stocks',
+  FUTURES: 'futures'
+};
 
 /**
  * Форматирует дату экспирации опциона в формат DD.MM.YY
@@ -105,7 +119,9 @@ export const usePositionExitCalculator = ({
   isAIEnabled = false,
   aiVolatilityMap = {},
   fetchAIVolatility = null,
-  selectedTicker = ''
+  selectedTicker = '',
+  calculatorMode = 'stocks', // Режим калькулятора: 'stocks' | 'futures'
+  contractMultiplier = 100 // Множитель контракта: 100 для акций, pointValue для фьючерсов
 }) => {
   return useMemo(() => {
     // Фильтруем видимые опционы и позиции
@@ -134,7 +150,9 @@ export const usePositionExitCalculator = ({
       daysPassed,
       currentPrice,
       ivSurface,
-      dividendYield
+      dividendYield,
+      calculatorMode,
+      contractMultiplier
     });
 
     // Сценарий 2: Закрыть опционы, оставить акции (Close options only)
@@ -148,7 +166,9 @@ export const usePositionExitCalculator = ({
       dividendYield,
       isAIEnabled,
       aiVolatilityMap,
-      selectedTicker
+      selectedTicker,
+      calculatorMode,
+      contractMultiplier
     });
 
     // Сценарий 3: Закрыть всё (Close everything)
@@ -162,7 +182,9 @@ export const usePositionExitCalculator = ({
       dividendYield,
       isAIEnabled,
       aiVolatilityMap,
-      selectedTicker
+      selectedTicker,
+      calculatorMode,
+      contractMultiplier
     });
 
     // Проверяем ликвидность всех опционов
@@ -193,7 +215,7 @@ export const usePositionExitCalculator = ({
       },
       liquidityWarnings // Предупреждения о низкой ликвидности
     };
-  }, [underlyingPrice, daysPassed, options, positions, currentPrice, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap]);
+  }, [underlyingPrice, daysPassed, options, positions, currentPrice, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap, calculatorMode, contractMultiplier]);
 };
 
 /**
@@ -204,7 +226,7 @@ export const usePositionExitCalculator = ({
  * - Sell PUT: покупаем акции по страйку
  * - Затем P&L от изменения цены акций
  */
-const calculateExerciseScenario = ({ options, positions, underlyingPrice, currentPrice }) => {
+const calculateExerciseScenario = ({ options, positions, underlyingPrice, currentPrice, calculatorMode = 'stocks', contractMultiplier = 100 }) => {
   const details = [];
   let totalPL = 0;
 
@@ -229,9 +251,14 @@ const calculateExerciseScenario = ({ options, positions, underlyingPrice, curren
       ask: option.isPremiumModified ? 0 : option.ask,
       bid: option.isPremiumModified ? 0 : option.bid
     };
-    const pl = calculateOptionExpirationPLValue(tempOption, underlyingPrice);
+    // Выбираем модель расчёта в зависимости от режима калькулятора
+    const pl = calculatorMode === CALCULATOR_MODES.FUTURES
+      ? calculateFuturesOptionExpirationPLValue(tempOption, underlyingPrice, contractMultiplier)
+      : calculateStockOptionExpirationPLValue(tempOption, underlyingPrice);
     const strike = Number(option.strike) || 0;
-    const intrinsicValue = calculateIntrinsicValue(option, underlyingPrice);
+    const intrinsicValue = calculatorMode === CALCULATOR_MODES.FUTURES
+      ? calculateIntrinsicValueBlack76(option.type, underlyingPrice, strike)
+      : calculateStockIntrinsicValue(option, underlyingPrice);
     const isITM = intrinsicValue > 0;
     // Цена входа: ASK для Buy, BID для Sell
     const entryPrice = getEntryPrice(option);
@@ -297,7 +324,7 @@ const calculateExerciseScenario = ({ options, positions, underlyingPrice, curren
  * - Закрываем опционы по текущей цене (intrinsic + time value)
  * - P&L от изменения цены акций
  */
-const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, daysPassed, currentPrice, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, selectedTicker = '' }) => {
+const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, daysPassed, currentPrice, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100 }) => {
   const details = [];
   let totalPL = 0;
 
@@ -362,14 +389,13 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
       }
     }
     
-    const currentValue = calculateOptionTheoreticalPrice(
-      tempOption,
-      underlyingPrice,
-      simulatedDaysToExpiration,
-      optionVolatility,
-      dividendYield
-    );
-    const pl = calculateOptionPLValue(tempOption, underlyingPrice, currentPrice, simulatedDaysToExpiration, optionVolatility, dividendYield);
+    // Выбираем модель расчёта в зависимости от режима калькулятора (Сценарий 2)
+    const currentValue = calculatorMode === CALCULATOR_MODES.FUTURES
+      ? calculateFuturesOptionTheoreticalPrice(tempOption, underlyingPrice, simulatedDaysToExpiration, optionVolatility)
+      : calculateStockOptionTheoreticalPrice(tempOption, underlyingPrice, simulatedDaysToExpiration, optionVolatility, dividendYield);
+    const pl = calculatorMode === CALCULATOR_MODES.FUTURES
+      ? calculateFuturesOptionPLValue(tempOption, underlyingPrice, simulatedDaysToExpiration, contractMultiplier, optionVolatility)
+      : calculateStockOptionPLValue(tempOption, underlyingPrice, currentPrice, simulatedDaysToExpiration, optionVolatility, dividendYield);
 
     // Добавляем IV в описание для прозрачности расчётов
     // Показываем текущую IV и прогнозируемую если они отличаются
@@ -446,7 +472,7 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
  * - Закрываем опционы по текущей цене (intrinsic + time value)
  * - Продаем акции по текущей цене
  */
-const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPassed, currentPrice, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, selectedTicker = '' }) => {
+const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPassed, currentPrice, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100 }) => {
   const details = [];
   let totalPL = 0;
 
@@ -509,14 +535,13 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
       }
     }
     
-    const currentValue = calculateOptionTheoreticalPrice(
-      tempOption,
-      underlyingPrice,
-      simulatedDaysToExpiration,
-      optionVolatility,
-      dividendYield
-    );
-    const pl = calculateOptionPLValue(tempOption, underlyingPrice, currentPrice, simulatedDaysToExpiration, optionVolatility, dividendYield);
+    // Выбираем модель расчёта в зависимости от режима калькулятора (Сценарий 3)
+    const currentValue = calculatorMode === CALCULATOR_MODES.FUTURES
+      ? calculateFuturesOptionTheoreticalPrice(tempOption, underlyingPrice, simulatedDaysToExpiration, optionVolatility)
+      : calculateStockOptionTheoreticalPrice(tempOption, underlyingPrice, simulatedDaysToExpiration, optionVolatility, dividendYield);
+    const pl = calculatorMode === CALCULATOR_MODES.FUTURES
+      ? calculateFuturesOptionPLValue(tempOption, underlyingPrice, simulatedDaysToExpiration, contractMultiplier, optionVolatility)
+      : calculateStockOptionPLValue(tempOption, underlyingPrice, currentPrice, simulatedDaysToExpiration, optionVolatility, dividendYield);
 
     // Добавляем IV в описание для прозрачности расчётов
     // Показываем текущую IV и прогнозируемую если они отличаются
@@ -529,8 +554,8 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
     // ЗАЧЕМ: Пользователь должен видеть как изменилась IV даже при небольших изменениях
     const showOriginalIV = daysPassed > 0 && currentIVPercent > 0;
     
-    // К = P&L / (Цена входа * 100) - показывает отношение P&L к стоимости контракта
-    const entryCost = entryPrice * 100; // Стоимость контракта (цена входа * 100 акций)
+    // К = P&L / (Цена входа * multiplier) - показывает отношение P&L к стоимости контракта
+    const entryCost = entryPrice * contractMultiplier; // Стоимость контракта (цена входа * множитель)
     const kCoeffValue = entryCost !== 0 ? pl / entryCost : 0;
     // Определяем тип цены входа: ASK для Buy, BID для Sell
     const priceType = option.action === 'Buy' ? 'ASK' : 'BID';

@@ -1950,6 +1950,8 @@ function UniversalOptionsCalculator() {
                       fetchAIVolatility={fetchAIVolatility}
                       hideColumns={['premium', 'oi']}
                       isFromExtension={isFromExtension}
+                      calculatorMode={calculatorMode}
+                      contractMultiplier={contractMultiplier}
                       onAddMagicOption={(option) => {
                         // Добавляем опцион из волшебного подбора
                         console.log('👑 OptionsCalculatorBasic: Получен опцион в onAddMagicOption:', option.isGoldenOption, option);
@@ -2059,6 +2061,8 @@ function UniversalOptionsCalculator() {
                     fetchAIVolatility={fetchAIVolatility}
                     targetPrice={targetPrice}
                     selectedTicker={selectedTicker}
+                    calculatorMode={calculatorMode}
+                    contractMultiplier={contractMultiplier}
                   />
                 </Card>
               )}
@@ -2086,6 +2090,8 @@ function UniversalOptionsCalculator() {
                         aiVolatilityMap={aiVolatilityMap}
                         fetchAIVolatility={fetchAIVolatility}
                         selectedTicker={selectedTicker}
+                        calculatorMode={calculatorMode}
+                        contractMultiplier={contractMultiplier}
                       />
                     </CardContent>
                   </Card>
@@ -2141,6 +2147,8 @@ function UniversalOptionsCalculator() {
                 dividendYield={useDividends ? dividendYield : 0}
                 targetPrice={targetPrice}
                 daysPassed={daysPassed}
+                calculatorMode={calculatorMode}
+                contractMultiplier={contractMultiplier}
               />
 
               {/* Калькулятор выхода из позиции */}
@@ -2164,6 +2172,8 @@ function UniversalOptionsCalculator() {
                 aiVolatilityMap={aiVolatilityMap}
                 fetchAIVolatility={fetchAIVolatility}
                 selectedTicker={selectedTicker}
+                calculatorMode={calculatorMode}
+                contractMultiplier={contractMultiplier}
               />
             </div>
           </div>

@@ -12,11 +12,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import { getAllStrategies } from '../../config/optionsStrategies';
-import { calculateOptionPLValue } from '../../utils/optionPricing';
+// Импорт из старого модуля для режима "Акции" (обратная совместимость)
+import { calculateOptionPLValue as calculateStockOptionPLValue } from '../../utils/optionPricing';
+// Импорт из нового модуля для режима "Фьючерсы"
+import { calculateFuturesOptionPLValue } from '../../utils/futuresPricing';
 import { getOptionVolatility } from '../../utils/volatilitySurface';
 import { assessLiquidity, getLiquidityColor, formatLiquidityTooltip, LIQUIDITY_LEVELS } from '../../utils/liquidityCheck';
 import { calculateDaysRemainingUTC, getOldestEntryDate, isOptionActiveAtDay, isOptionExpiredAtDay } from '../../utils/dateUtils';
 import LockIcon from './LockIcon';
+
+// Режимы калькулятора
+const CALCULATOR_MODES = {
+  STOCKS: 'stocks',
+  FUTURES: 'futures'
+};
 
 // Helper: format ISO date (YYYY-MM-DD) to display format (DD.MM.YY)
 const formatDateForDisplay = (isoDate) => {
@@ -76,7 +85,9 @@ function OptionsTableV3({
   aiVolatilityMap = {}, // Кэш AI предсказаний волатильности
   fetchAIVolatility = null, // Функция для запроса AI волатильности
   hideColumns = [], // Массив колонок для скрытия: ['premium', 'oi']
-  isFromExtension = false // Флаг: данные от расширения TradingView (для универсального калькулятора)
+  isFromExtension = false, // Флаг: данные от расширения TradingView (для универсального калькулятора)
+  calculatorMode = 'stocks', // Режим калькулятора: 'stocks' | 'futures'
+  contractMultiplier = 100 // Множитель контракта: 100 для акций, pointValue для фьючерсов
 }) {
   // Логирование полученных AI пропсов
   console.log('🤖 [OptionsTable] Получены пропсы:', {
@@ -818,14 +829,11 @@ function OptionsTableV3({
                     console.log(`[Таблица] 💰 P/L расчёт ${option.type} Strike $${option.strike}: BID=$${option.bid?.toFixed(2) || 'N/A'}, ASK=$${option.ask?.toFixed(2) || 'N/A'}, Premium=$${effectivePremium?.toFixed(2) || 'N/A'}, EntryPrice=${option.action === 'Buy' ? (option.ask || effectivePremium) : (option.bid || effectivePremium)}`);
                     console.log(`[Таблица] 📈 IV расчёт ${option.type} Strike $${option.strike}: rawIV=${rawIV}, IV=${(optionVolatility * 100).toFixed(1)}%, currentDays=${currentDaysToExpiration}, daysRemaining=${optionDaysRemaining}, targetPrice=$${targetPrice || currentPrice}`);
 
-                    const pl = calculateOptionPLValue(
-                      tempOpt,
-                      targetPrice || currentPrice,
-                      currentPrice,
-                      optionDaysRemaining,
-                      optionVolatility,
-                      dividendYield
-                    );
+                    // Выбираем модель расчёта в зависимости от режима калькулятора
+                    // ЗАЧЕМ: Режим "Фьючерсы" использует Black-76, режим "Акции" — BSM
+                    const pl = calculatorMode === CALCULATOR_MODES.FUTURES
+                      ? calculateFuturesOptionPLValue(tempOpt, targetPrice || currentPrice, optionDaysRemaining, contractMultiplier, optionVolatility)
+                      : calculateStockOptionPLValue(tempOpt, targetPrice || currentPrice, currentPrice, optionDaysRemaining, optionVolatility, dividendYield);
 
                     const plColor = pl > 0 ? 'text-green-600' : pl < 0 ? 'text-red-600' : 'text-muted-foreground';
 
@@ -919,14 +927,10 @@ function OptionsTableV3({
                       ask: opt.isPremiumModified ? 0 : opt.ask,
                       bid: opt.isPremiumModified ? 0 : opt.bid
                     };
-                    const pl = calculateOptionPLValue(
-                      tempOpt,
-                      targetPrice || currentPrice,
-                      currentPrice,
-                      optDaysRemaining,
-                      optVolatility,
-                      dividendYield
-                    );
+                    // Выбираем модель расчёта в зависимости от режима калькулятора
+                    const pl = calculatorMode === CALCULATOR_MODES.FUTURES
+                      ? calculateFuturesOptionPLValue(tempOpt, targetPrice || currentPrice, optDaysRemaining, contractMultiplier, optVolatility)
+                      : calculateStockOptionPLValue(tempOpt, targetPrice || currentPrice, currentPrice, optDaysRemaining, optVolatility, dividendYield);
                     return sum + pl;
                   }, 0);
 

@@ -30,7 +30,9 @@ export function ExitCalculator({
   isAIEnabled = false,
   aiVolatilityMap = {},
   fetchAIVolatility = null,
-  selectedTicker = ''
+  selectedTicker = '',
+  calculatorMode = 'stocks', // Режим калькулятора: 'stocks' | 'futures'
+  contractMultiplier = 100 // Множитель контракта: 100 для акций, pointValue для фьючерсов
 }) {
   // State для UI
   // ЗАЧЕМ: Сохранение состояния сворачивания в localStorage
@@ -59,7 +61,9 @@ export function ExitCalculator({
     dividendYield,
     isAIEnabled,
     aiVolatilityMap,
-    selectedTicker
+    selectedTicker,
+    calculatorMode,
+    contractMultiplier
   });
 
   // Проверяем, есть ли данные для расчета

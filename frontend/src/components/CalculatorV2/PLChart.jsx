@@ -1,14 +1,26 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import Plot from 'react-plotly.js';
+// Импорт из старого модуля для режима "Акции" (обратная совместимость)
 import {
-  calculateOptionPLValue,
-  calculateOptionExpirationPLValue,
+  calculateOptionPLValue as calculateStockOptionPLValue,
+  calculateOptionExpirationPLValue as calculateStockOptionExpirationPLValue,
   calculateOptionTheoreticalPrice,
   calculateIntrinsicValue,
   PRICING_CONSTANTS,
 } from '../../utils/optionPricing';
+// Импорт из нового модуля для режима "Фьючерсы"
+import {
+  calculateFuturesOptionPLValue,
+  calculateFuturesOptionExpirationPLValue,
+} from '../../utils/futuresPricing';
 import { calculateDaysRemainingUTC, hasRemainingDaysUTC, getOldestEntryDate, isOptionActiveAtDay } from '../../utils/dateUtils';
 import { getOptionVolatility } from '../../utils/volatilitySurface';
+
+// Режимы калькулятора
+const CALCULATOR_MODES = {
+  STOCKS: 'stocks',
+  FUTURES: 'futures'
+};
 
 /**
  * Компонент графика прибыли/убытка (P&L Chart) с использованием Plotly.js
@@ -19,7 +31,7 @@ import { getOptionVolatility } from '../../utils/volatilitySurface';
  * 
  * Адаптирован из V1 для работы с V2
  */
-function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLines = true, daysPassed = 0, showProbabilityZones = true, targetPrice = 0, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, fetchAIVolatility = null, selectedTicker = '' }) {
+function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLines = true, daysPassed = 0, showProbabilityZones = true, targetPrice = 0, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, fetchAIVolatility = null, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100 }) {
   // Логирование полученных AI пропсов
   console.log('🤖 [PLChart] Получены пропсы:', {
     isAIEnabled,
@@ -75,6 +87,25 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
     }
     return 0;
   }, []);
+
+  // Универсальная функция расчёта P&L опциона в зависимости от режима
+  // ЗАЧЕМ: Единая точка входа для расчётов — автоматически выбирает модель (BSM или Black-76)
+  const calculateOptionPLValue = useCallback((option, price, currentPriceVal, daysRemaining, volatility, divYield) => {
+    if (calculatorMode === CALCULATOR_MODES.FUTURES) {
+      // Режим "Фьючерсы" — используем Black-76 с pointValue
+      return calculateFuturesOptionPLValue(option, price, daysRemaining, contractMultiplier, volatility);
+    }
+    // Режим "Акции" — используем Black-Scholes-Merton с дивидендами
+    return calculateStockOptionPLValue(option, price, currentPriceVal, daysRemaining, volatility, divYield);
+  }, [calculatorMode, contractMultiplier]);
+
+  // Универсальная функция расчёта P&L на экспирации
+  const calculateOptionExpirationPLValue = useCallback((option, price) => {
+    if (calculatorMode === CALCULATOR_MODES.FUTURES) {
+      return calculateFuturesOptionExpirationPLValue(option, price, contractMultiplier);
+    }
+    return calculateStockOptionExpirationPLValue(option, price);
+  }, [calculatorMode, contractMultiplier]);
 
   // Расчет данных для графика
   const chartData = useMemo(() => {
@@ -767,7 +798,7 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
       layout,
       config
     };
-  }, [options, currentPrice, positions, isDarkMode, showOptionLines, daysPassed, showProbabilityZones, xAxisRange, calculateUnderlyingPL, targetPrice, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap]);
+  }, [options, currentPrice, positions, isDarkMode, showOptionLines, daysPassed, showProbabilityZones, xAxisRange, calculateUnderlyingPL, targetPrice, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap, calculateOptionPLValue, calculateOptionExpirationPLValue]);
 
   if (!chartData) {
     return (
@@ -825,8 +856,12 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
 }
 
 /**
- * Вспомогательная функция для расчета P&L данных с использованием Black-Scholes
+ * Вспомогательная функция для расчета P&L данных
  * ЗАЧЕМ: Единая точная модель для расчета метрик (MAX прибыль, MAX убыток, Break-even)
+ * 
+ * Поддерживает два режима:
+ * - 'stocks': Black-Scholes-Merton с дивидендами
+ * - 'futures': Black-76 с pointValue
  * 
  * IMPORTANT: Используем daysPassed (прошедшие дни) вместо daysRemaining
  * Каждый опцион имеет свой initialDaysToExpiration (вычисляется из даты)
@@ -837,12 +872,16 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
  * @param {Array} positions - массив позиций базового актива
  * @param {number} daysPassed - прошедшие дни от сегодня (слайдер)
  * @param {Object} ivSurface - IV Surface для интерполяции (опционально)
- * @param {number} dividendYield - дивидендная доходность
+ * @param {number} dividendYield - дивидендная доходность (только для stocks)
  * @param {boolean} isAIEnabled - включен ли AI
  * @param {Object} aiVolatilityMap - кэш AI волатильности
+ * @param {number} targetPrice - целевая цена
+ * @param {string} selectedTicker - тикер
+ * @param {string} calculatorMode - режим калькулятора ('stocks' | 'futures')
+ * @param {number} contractMultiplier - множитель контракта (100 для акций, pointValue для фьючерсов)
  * @returns {Object} - { prices, totalPLArray } для расчета метрик
  */
-export function calculatePLDataForMetrics(options = [], currentPrice = 0, positions = [], daysPassed = 0, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, targetPrice = 0, selectedTicker = '') {
+export function calculatePLDataForMetrics(options = [], currentPrice = 0, positions = [], daysPassed = 0, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, targetPrice = 0, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100) {
   if (!currentPrice || (options.length === 0 && positions.length === 0)) {
     return { prices: [], totalPLArray: [] };
   }
@@ -929,9 +968,14 @@ export function calculatePLDataForMetrics(options = [], currentPrice = 0, positi
         ask: option.isPremiumModified ? 0 : option.ask,
         bid: option.isPremiumModified ? 0 : option.bid
       };
-      // Используем calculateOptionPLValue из optionPricing.js (Black-Scholes-Merton)
-      // IV и dividendYield передаются явно для единообразия с графиком и ExitCalculator
-      const pl = calculateOptionPLValue(tempOption, price, currentPrice, optionDaysRemaining, optionVolatility, dividendYield);
+      // Выбираем модель расчёта в зависимости от режима калькулятора
+      // ЗАЧЕМ: Режим "Фьючерсы" использует Black-76, режим "Акции" — BSM
+      let pl;
+      if (calculatorMode === CALCULATOR_MODES.FUTURES) {
+        pl = calculateFuturesOptionPLValue(tempOption, price, optionDaysRemaining, contractMultiplier, optionVolatility);
+      } else {
+        pl = calculateStockOptionPLValue(tempOption, price, currentPrice, optionDaysRemaining, optionVolatility, dividendYield);
+      }
       totalPLArray[i] += pl;
     });
   });
