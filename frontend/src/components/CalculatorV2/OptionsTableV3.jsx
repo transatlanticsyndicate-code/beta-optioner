@@ -88,7 +88,6 @@ function OptionsTableV3({
   isFromExtension = false, // Флаг: данные от расширения TradingView (для универсального калькулятора)
   calculatorMode = 'stocks', // Режим калькулятора: 'stocks' | 'futures'
   contractMultiplier = 100, // Множитель контракта: 100 для акций, pointValue для фьючерсов
-  ivProjectionMethod = 'simple', // Метод прогноза IV: 'simple' (упрощённый) или 'surface' (IV Surface)
   isFuturesMissingSettings = false // Флаг: отсутствуют настройки фьючерса (блокирует расчёты)
 }) {
   // Логирование полученных AI пропсов
@@ -726,7 +725,7 @@ function OptionsTableV3({
                     const oldestEntry = getOldestEntryDate(options);
                     const currentDays = calculateDaysRemainingUTC(option, 0, 30, oldestEntry);
                     const simulatedDays = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntry);
-                    const resultIV = getOptionVolatility(option, currentDays, simulatedDays, ivSurface, ivProjectionMethod);
+                    const resultIV = getOptionVolatility(option, currentDays, simulatedDays, ivSurface, 'simple');
                     return `${resultIV.toFixed(2)}%`;
                   })()}
                 </span>
@@ -795,7 +794,7 @@ function OptionsTableV3({
                       currentDaysToExpiration,
                       optionDaysRemaining,
                       ivSurface,
-                      ivProjectionMethod
+                      'simple'
                     );
 
                     // Проверяем наличие AI волатильности в кэше
@@ -920,7 +919,7 @@ function OptionsTableV3({
                       currentDaysToExp,
                       optDaysRemaining,
                       ivSurface,
-                      ivProjectionMethod
+                      'simple'
                     );
 
                     // Проверяем наличие AI волатильности в кэше

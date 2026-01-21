@@ -121,8 +121,7 @@ export const usePositionExitCalculator = ({
   fetchAIVolatility = null,
   selectedTicker = '',
   calculatorMode = 'stocks', // Режим калькулятора: 'stocks' | 'futures'
-  contractMultiplier = 100, // Множитель контракта: 100 для акций, pointValue для фьючерсов
-  ivProjectionMethod = 'simple' // Метод прогноза IV: 'simple' или 'surface'
+  contractMultiplier = 100 // Множитель контракта: 100 для акций, pointValue для фьючерсов
 }) => {
   return useMemo(() => {
     // Фильтруем видимые опционы и позиции
@@ -169,8 +168,7 @@ export const usePositionExitCalculator = ({
       aiVolatilityMap,
       selectedTicker,
       calculatorMode,
-      contractMultiplier,
-      ivProjectionMethod
+      contractMultiplier
     });
 
     // Сценарий 3: Закрыть всё (Close everything)
@@ -186,8 +184,7 @@ export const usePositionExitCalculator = ({
       aiVolatilityMap,
       selectedTicker,
       calculatorMode,
-      contractMultiplier,
-      ivProjectionMethod
+      contractMultiplier
     });
 
     // Проверяем ликвидность всех опционов
@@ -218,7 +215,7 @@ export const usePositionExitCalculator = ({
       },
       liquidityWarnings // Предупреждения о низкой ликвидности
     };
-  }, [underlyingPrice, daysPassed, options, positions, currentPrice, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap, calculatorMode, contractMultiplier, ivProjectionMethod]);
+  }, [underlyingPrice, daysPassed, options, positions, currentPrice, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap, calculatorMode, contractMultiplier]);
 };
 
 /**
@@ -332,7 +329,7 @@ const calculateExerciseScenario = ({ options, positions, underlyingPrice, curren
  * - Закрываем опционы по текущей цене (intrinsic + time value)
  * - P&L от изменения цены акций
  */
-const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, daysPassed, currentPrice, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100, ivProjectionMethod = 'simple' }) => {
+const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, daysPassed, currentPrice, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100 }) => {
   const details = [];
   let totalPL = 0;
 
@@ -385,7 +382,7 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
       currentDaysToExpiration, 
       simulatedDaysToExpiration,
       ivSurface,
-      ivProjectionMethod
+      'simple'
     );
     
     // Используем AI волатильность если доступна
@@ -486,7 +483,7 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
  * - Закрываем опционы по текущей цене (intrinsic + time value)
  * - Продаем акции по текущей цене
  */
-const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPassed, currentPrice, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100, ivProjectionMethod = 'simple' }) => {
+const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPassed, currentPrice, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100 }) => {
   const details = [];
   let totalPL = 0;
 
@@ -537,7 +534,7 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
       currentDaysToExpiration, 
       simulatedDaysToExpiration,
       ivSurface,
-      ivProjectionMethod
+      'simple'
     );
     
     // Используем AI волатильность если доступна

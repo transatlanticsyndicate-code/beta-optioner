@@ -238,12 +238,6 @@ function UniversalOptionsCalculator() {
   const [dividendYield, setDividendYield] = useState(0); // Дивидендная доходность в десятичном формате
   const [dividendLoading, setDividendLoading] = useState(false);
 
-  // State для метода прогноза IV
-  // ЗАЧЕМ: Позволяет сравнить точность упрощённого метода (формула √t) и IV Surface (интерполяция)
-  const [ivProjectionMethod, setIvProjectionMethod] = useState(() => {
-    const saved = localStorage.getItem('ivProjectionMethod');
-    return saved !== null ? JSON.parse(saved) : 'simple'; // По умолчанию упрощённый метод
-  });
 
   // State для синхронизированных настроек цены
   const [targetPrice, setTargetPrice] = useState(0);
@@ -293,11 +287,6 @@ function UniversalOptionsCalculator() {
   useEffect(() => {
     localStorage.setItem('useDividends', JSON.stringify(useDividends));
   }, [useDividends]);
-
-  // Сохраняем ivProjectionMethod в localStorage при изменении
-  useEffect(() => {
-    localStorage.setItem('ivProjectionMethod', JSON.stringify(ivProjectionMethod));
-  }, [ivProjectionMethod]);
 
   // УБРАНО: AI модель не используется в универсальном калькуляторе
   // useEffect для isAIEnabled удалён
@@ -1988,8 +1977,6 @@ function UniversalOptionsCalculator() {
                     isAIEnabled={isAIEnabled}
                     setIsAIEnabled={setIsAIEnabled}
                     calculatorMode={calculatorMode}
-                    ivProjectionMethod={ivProjectionMethod}
-                    setIvProjectionMethod={setIvProjectionMethod}
                   />
                 </Card>
               )}
@@ -2045,7 +2032,6 @@ function UniversalOptionsCalculator() {
                       isFromExtension={isFromExtension}
                       calculatorMode={calculatorMode}
                       contractMultiplier={contractMultiplier}
-                      ivProjectionMethod={ivProjectionMethod}
                       isFuturesMissingSettings={isFuturesMissingSettings}
                       onAddMagicOption={(option) => {
                         // Добавляем опцион из волшебного подбора
@@ -2159,7 +2145,6 @@ function UniversalOptionsCalculator() {
                     selectedTicker={selectedTicker}
                     calculatorMode={calculatorMode}
                     contractMultiplier={contractMultiplier}
-                    ivProjectionMethod={ivProjectionMethod}
                   />
                 </Card>
               )}
@@ -2189,7 +2174,6 @@ function UniversalOptionsCalculator() {
                         selectedTicker={selectedTicker}
                         calculatorMode={calculatorMode}
                         contractMultiplier={contractMultiplier}
-                        ivProjectionMethod={ivProjectionMethod}
                       />
                     </CardContent>
                   </Card>
@@ -2272,7 +2256,6 @@ function UniversalOptionsCalculator() {
                 selectedTicker={selectedTicker}
                 calculatorMode={calculatorMode}
                 contractMultiplier={contractMultiplier}
-                ivProjectionMethod={ivProjectionMethod}
               />
             </div>
           </div>

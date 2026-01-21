@@ -297,7 +297,7 @@ export function calculateUnderlyingPLForMetrics(price, position) {
  * @param {Object} ivSurface - IV Surface для интерполяции (опционально)
  * @returns {Object} - объект с метриками { maxLoss, maxProfit, breakevens, riskReward }
  */
-export function calculatePLMetrics(options, currentPrice, positions = [], daysPassed = 0, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, targetPrice = 0, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100, ivProjectionMethod = 'simple') {
+export function calculatePLMetrics(options, currentPrice, positions = [], daysPassed = 0, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, targetPrice = 0, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100) {
   if (!options || !currentPrice) {
     return {
       maxLoss: 0,
@@ -324,7 +324,7 @@ export function calculatePLMetrics(options, currentPrice, positions = [], daysPa
   // ivSurface передаётся для точной интерполяции IV между датами экспирации
   // dividendYield передаётся для модели BSM
   // isAIEnabled и aiVolatilityMap передаются для использования AI волатильности
-  const { prices, totalPLArray } = calculatePLDataForMetrics(options, currentPrice, positions, daysPassed, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap, targetPrice, selectedTicker, calculatorMode, contractMultiplier, ivProjectionMethod);
+  const { prices, totalPLArray } = calculatePLDataForMetrics(options, currentPrice, positions, daysPassed, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap, targetPrice, selectedTicker, calculatorMode, contractMultiplier, 'simple');
   
   if (prices.length === 0 || totalPLArray.length === 0) {
     return {

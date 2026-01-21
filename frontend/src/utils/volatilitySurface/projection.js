@@ -85,10 +85,10 @@ export const getProjectedIV = (option, currentDaysToExpiration, simulatedDaysToE
  * @param {number} currentDaysToExpiration - текущее количество дней до экспирации (опционально)
  * @param {number} simulatedDaysToExpiration - симулируемое количество дней до экспирации (опционально)
  * @param {Object} ivSurface - IV Surface для интерполяции (опционально)
- * @param {string} ivProjectionMethod - метод прогноза: 'simple' или 'surface' (опционально)
+ * @param {string} method - метод прогноза: 'simple' или 'surface' (по умолчанию 'simple')
  * @returns {number} - волатильность в процентах (например, 25 для 25%)
  */
-export const getOptionVolatility = (option, currentDaysToExpiration = null, simulatedDaysToExpiration = null, ivSurface = null, ivProjectionMethod = 'simple') => {
+export const getOptionVolatility = (option, currentDaysToExpiration = null, simulatedDaysToExpiration = null, ivSurface = null, method = 'simple') => {
   // Используем индивидуальную IV каждого опциона из API
   const optIV = option.impliedVolatility || option.implied_volatility;
   if (!optIV || optIV <= 0) {
@@ -109,7 +109,7 @@ export const getOptionVolatility = (option, currentDaysToExpiration = null, simu
       currentDaysToExpiration, 
       simulatedDaysToExpiration,
       ivSurface,
-      ivProjectionMethod // Передаём метод прогноза
+      method // Передаём метод прогноза
     );
     return projectedIV;
   }

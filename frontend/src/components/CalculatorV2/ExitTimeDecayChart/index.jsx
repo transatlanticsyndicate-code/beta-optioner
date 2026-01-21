@@ -22,8 +22,7 @@ function ExitTimeDecayChart({
   dividendYield = 0,
   isAIEnabled = false,
   aiVolatilityMap = {},
-  selectedTicker = '',
-  ivProjectionMethod = 'simple'
+  selectedTicker = ''
 }) {
   const [isDarkMode, setIsDarkMode] = useState(
     document.documentElement.classList.contains('dark')
@@ -81,7 +80,7 @@ function ExitTimeDecayChart({
         const plValues = daysRange.map(days => {
           const daysRemaining = calculateDaysRemainingForOption(option, daysPassed, oldestEntryDate);
           if (days > daysRemaining) return null;
-          return calculateOptionPL(option, days, targetPrice, currentPrice, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap, selectedTicker, oldestEntryDate, ivProjectionMethod);
+          return calculateOptionPL(option, days, targetPrice, currentPrice, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap, selectedTicker, oldestEntryDate, 'simple');
         });
 
         traces.push({
@@ -107,7 +106,7 @@ function ExitTimeDecayChart({
       visibleOptions.forEach(option => {
         const daysRemaining = calculateDaysRemainingForOption(option, daysPassed, oldestEntryDate);
         if (days <= daysRemaining) {
-          total += calculateOptionPL(option, days, targetPrice, currentPrice, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap, selectedTicker, oldestEntryDate, ivProjectionMethod);
+          total += calculateOptionPL(option, days, targetPrice, currentPrice, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap, selectedTicker, oldestEntryDate, 'simple');
         }
       });
       

@@ -31,7 +31,7 @@ const CALCULATOR_MODES = {
  * 
  * Адаптирован из V1 для работы с V2
  */
-function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLines = true, daysPassed = 0, showProbabilityZones = true, targetPrice = 0, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, fetchAIVolatility = null, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100, ivProjectionMethod = 'simple' }) {
+function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLines = true, daysPassed = 0, showProbabilityZones = true, targetPrice = 0, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, fetchAIVolatility = null, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100 }) {
   // Логирование полученных AI пропсов
   console.log('🤖 [PLChart] Получены пропсы:', {
     isAIEnabled,
@@ -224,7 +224,7 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
       // currentDays = daysRemaining без daysPassed, simulatedDays = с учётом daysPassed
       // ivSurface используется для точной интерполяции IV между датами экспирации
       const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0, 30, oldestEntryDate);
-      let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface, ivProjectionMethod);
+      let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface, 'simple');
       
       // Используем AI волатильность если доступна
       if (isAIEnabled && aiVolatilityMap && selectedTicker && targetPrice) {
@@ -297,7 +297,7 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
         };
         const optionDaysRemaining = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntryDate);
         const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0, 30, oldestEntryDate);
-        let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface, ivProjectionMethod);
+        let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface, 'simple');
         
         // Используем AI волатильность если доступна
         if (isAIEnabled && aiVolatilityMap && options.length > 0 && targetPrice) {
@@ -880,7 +880,7 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
  * @param {number} contractMultiplier - множитель контракта (100 для акций, pointValue для фьючерсов)
  * @returns {Object} - { prices, totalPLArray } для расчета метрик
  */
-export function calculatePLDataForMetrics(options = [], currentPrice = 0, positions = [], daysPassed = 0, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, targetPrice = 0, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100, ivProjectionMethod = 'simple') {
+export function calculatePLDataForMetrics(options = [], currentPrice = 0, positions = [], daysPassed = 0, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, targetPrice = 0, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100) {
   if (!currentPrice || (options.length === 0 && positions.length === 0)) {
     return { prices: [], totalPLArray: [] };
   }
@@ -946,7 +946,7 @@ export function calculatePLDataForMetrics(options = [], currentPrice = 0, positi
     // Получаем IV из API через единую функцию (как в usePositionExitCalculator)
     // ivSurface используется для точной интерполяции IV между датами экспирации
     const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0, 30, oldestEntryDate);
-    let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface, ivProjectionMethod);
+    let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface, 'simple');
     
     // Используем AI волатильность если доступна
     if (isAIEnabled && aiVolatilityMap && selectedTicker && targetPrice) {
