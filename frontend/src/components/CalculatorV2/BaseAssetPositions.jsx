@@ -6,6 +6,8 @@ import { Input } from '../ui/input';
 import { addPosition as savePosition } from '../../utils/portfolioStorage';
 import LockIcon from './LockIcon';
 
+import { CALCULATOR_MODES } from '../../utils/universalPricing';
+
 function BaseAssetPositions({ 
   positions, 
   togglePositionVisibility, 
@@ -18,8 +20,12 @@ function BaseAssetPositions({
   isLocked = false,
   options = [], // Опционы из калькулятора для проверки наличия BuyPUT
   isAIEnabled = false,
-  isTickerSupported = false
+  isTickerSupported = false,
+  calculatorMode = CALCULATOR_MODES.STOCKS // Режим калькулятора (stocks/futures)
 }) {
+  // Для фьючерсов добавляем 1 контракт, для акций - 100 штук
+  // ЗАЧЕМ: Фьючерсный контракт уже включает множитель (pointValue), поэтому quantity = 1
+  const defaultQuantity = calculatorMode === CALCULATOR_MODES.FUTURES ? 1 : 100;
   // Проверяем, есть ли позиции базового актива
   const hasPositions = positions && positions.length > 0;
 
@@ -33,7 +39,7 @@ function BaseAssetPositions({
 
   // Добавить позицию и сохранить в localStorage
   const handleAddPosition = (type) => {
-    const quantity = 100;
+    const quantity = defaultQuantity; // 1 для фьючерсов, 100 для акций
     const price = currentPrice || 3000; // Используем currentPrice или дефолтное значение
     
     // Добавляем в калькулятор
@@ -65,11 +71,11 @@ function BaseAssetPositions({
                 <DropdownMenuContent align="start">
                   <DropdownMenuItem onClick={() => handleAddPosition("LONG")}>
                     <span className="text-green-600 font-medium mr-2">LONG</span>
-                    <span className="text-muted-foreground">100 {selectedTicker || "AAPL"}</span>
+                    <span className="text-muted-foreground">{defaultQuantity} {selectedTicker || "AAPL"}</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => handleAddPosition("SHORT")}>
                     <span className="text-red-600 font-medium mr-2">SHORT</span>
-                    <span className="text-muted-foreground">100 {selectedTicker || "AAPL"}</span>
+                    <span className="text-muted-foreground">{defaultQuantity} {selectedTicker || "AAPL"}</span>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

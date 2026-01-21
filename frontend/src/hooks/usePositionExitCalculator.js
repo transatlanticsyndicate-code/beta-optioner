@@ -121,7 +121,8 @@ export const usePositionExitCalculator = ({
   fetchAIVolatility = null,
   selectedTicker = '',
   calculatorMode = 'stocks', // Режим калькулятора: 'stocks' | 'futures'
-  contractMultiplier = 100 // Множитель контракта: 100 для акций, pointValue для фьючерсов
+  contractMultiplier = 100, // Множитель контракта: 100 для акций, pointValue для фьючерсов
+  ivProjectionMethod = 'simple' // Метод прогноза IV: 'simple' или 'surface'
 }) => {
   return useMemo(() => {
     // Фильтруем видимые опционы и позиции
@@ -168,7 +169,8 @@ export const usePositionExitCalculator = ({
       aiVolatilityMap,
       selectedTicker,
       calculatorMode,
-      contractMultiplier
+      contractMultiplier,
+      ivProjectionMethod
     });
 
     // Сценарий 3: Закрыть всё (Close everything)
@@ -184,7 +186,8 @@ export const usePositionExitCalculator = ({
       aiVolatilityMap,
       selectedTicker,
       calculatorMode,
-      contractMultiplier
+      contractMultiplier,
+      ivProjectionMethod
     });
 
     // Проверяем ликвидность всех опционов
@@ -215,7 +218,7 @@ export const usePositionExitCalculator = ({
       },
       liquidityWarnings // Предупреждения о низкой ликвидности
     };
-  }, [underlyingPrice, daysPassed, options, positions, currentPrice, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap, calculatorMode, contractMultiplier]);
+  }, [underlyingPrice, daysPassed, options, positions, currentPrice, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap, calculatorMode, contractMultiplier, ivProjectionMethod]);
 };
 
 /**
@@ -230,15 +233,20 @@ const calculateExerciseScenario = ({ options, positions, underlyingPrice, curren
   const details = [];
   let totalPL = 0;
 
+  // Множитель для фьючерсов (pointValue), для акций = 1
+  // ЗАЧЕМ: Для фьючерсов P&L = разница в пунктах × quantity × pointValue
+  const positionMultiplier = calculatorMode === CALCULATOR_MODES.FUTURES ? contractMultiplier : 1;
+  const assetLabel = calculatorMode === CALCULATOR_MODES.FUTURES ? 'контрактов' : 'акций';
+
   // Стоимость входа в позицию учитывается в totalPL, но не отображается отдельной строкой
-  // LONG: покупаем акции (тратим деньги) = -entryPrice * quantity
-  // SHORT: продаём акции (получаем деньги) = +entryPrice * quantity
+  // LONG: покупаем акции/контракты (тратим деньги) = -entryPrice * quantity * multiplier
+  // SHORT: продаём акции/контракты (получаем деньги) = +entryPrice * quantity * multiplier
   positions.forEach(position => {
     const quantity = Number(position.quantity) || 0;
     const entryPrice = Number(position.price) || 0;
     const cost = position.type === 'LONG' 
-      ? -entryPrice * quantity  // LONG: тратим на покупку
-      : +entryPrice * quantity; // SHORT: получаем от продажи
+      ? -entryPrice * quantity * positionMultiplier  // LONG: тратим на покупку
+      : +entryPrice * quantity * positionMultiplier; // SHORT: получаем от продажи
     totalPL += cost;
   });
 
@@ -287,7 +295,7 @@ const calculateExerciseScenario = ({ options, positions, underlyingPrice, curren
     totalPL += pl;
   });
 
-  // P&L от продажи акций (показываем разницу, но в totalPL учитываем полную сумму)
+  // P&L от продажи акций/контрактов (показываем разницу, но в totalPL учитываем полную сумму)
   positions.forEach(position => {
     const quantity = Number(position.quantity) || 0;
     const entryPrice = Number(position.price) || 0;
@@ -297,17 +305,17 @@ const calculateExerciseScenario = ({ options, positions, underlyingPrice, curren
     let description = '';
     
     if (position.type === 'LONG') {
-      displayPL = (underlyingPrice - entryPrice) * quantity;
-      actualPL = underlyingPrice * quantity;
-      description = `Продаём ${quantity} акций: ${entryPrice.toFixed(2)} → ${underlyingPrice.toFixed(2)}`;
+      displayPL = (underlyingPrice - entryPrice) * quantity * positionMultiplier;
+      actualPL = underlyingPrice * quantity * positionMultiplier;
+      description = `Продаём ${quantity} ${assetLabel}: ${entryPrice.toFixed(2)} → ${underlyingPrice.toFixed(2)}`;
     } else if (position.type === 'SHORT') {
-      displayPL = (entryPrice - underlyingPrice) * quantity;
-      actualPL = -underlyingPrice * quantity;
-      description = `Выкупаем ${quantity} акций: ${entryPrice.toFixed(2)} → ${underlyingPrice.toFixed(2)}`;
+      displayPL = (entryPrice - underlyingPrice) * quantity * positionMultiplier;
+      actualPL = -underlyingPrice * quantity * positionMultiplier;
+      description = `Выкупаем ${quantity} ${assetLabel}: ${entryPrice.toFixed(2)} → ${underlyingPrice.toFixed(2)}`;
     }
     
     details.push({
-      label: `${position.type} ${quantity} акций - P&L`,
+      label: `${position.type} ${quantity} ${assetLabel} - P&L`,
       value: displayPL,
       description,
       type: 'stock-pl'
@@ -324,19 +332,24 @@ const calculateExerciseScenario = ({ options, positions, underlyingPrice, curren
  * - Закрываем опционы по текущей цене (intrinsic + time value)
  * - P&L от изменения цены акций
  */
-const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, daysPassed, currentPrice, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100 }) => {
+const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, daysPassed, currentPrice, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100, ivProjectionMethod = 'simple' }) => {
   const details = [];
   let totalPL = 0;
 
+  // Множитель для фьючерсов (pointValue), для акций = 1
+  // ЗАЧЕМ: Для фьючерсов P&L = разница в пунктах × quantity × pointValue
+  const positionMultiplier2 = calculatorMode === CALCULATOR_MODES.FUTURES ? contractMultiplier : 1;
+  const assetLabel2 = calculatorMode === CALCULATOR_MODES.FUTURES ? 'контрактов' : 'акций';
+
   // Стоимость входа в позицию учитывается в totalPL, но не отображается отдельной строкой
-  // LONG: покупаем акции (тратим деньги) = -entryPrice * quantity
-  // SHORT: продаём акции (получаем деньги) = +entryPrice * quantity
+  // LONG: покупаем акции/контракты (тратим деньги) = -entryPrice * quantity * multiplier
+  // SHORT: продаём акции/контракты (получаем деньги) = +entryPrice * quantity * multiplier
   positions.forEach(position => {
     const quantity = Number(position.quantity) || 0;
     const entryPrice = Number(position.price) || 0;
     const cost = position.type === 'LONG' 
-      ? -entryPrice * quantity  // LONG: тратим на покупку
-      : +entryPrice * quantity; // SHORT: получаем от продажи
+      ? -entryPrice * quantity * positionMultiplier2  // LONG: тратим на покупку
+      : +entryPrice * quantity * positionMultiplier2; // SHORT: получаем от продажи
     totalPL += cost;
   });
 
@@ -371,7 +384,8 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
       option, 
       currentDaysToExpiration, 
       simulatedDaysToExpiration,
-      ivSurface
+      ivSurface,
+      ivProjectionMethod
     );
     
     // Используем AI волатильность если доступна
@@ -435,7 +449,7 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
     totalPL += pl;
   });
 
-  // P&L от продажи акций (показываем разницу, но в totalPL учитываем полную сумму)
+  // P&L от продажи акций/контрактов (показываем разницу, но в totalPL учитываем полную сумму)
   positions.forEach(position => {
     const quantity = Number(position.quantity) || 0;
     const entryPrice = Number(position.price) || 0;
@@ -445,17 +459,17 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
     let description = '';
     
     if (position.type === 'LONG') {
-      displayPL = (underlyingPrice - entryPrice) * quantity;
-      actualPL = underlyingPrice * quantity;
-      description = `Продаём ${quantity} акций: ${entryPrice.toFixed(2)} → ${underlyingPrice.toFixed(2)}`;
+      displayPL = (underlyingPrice - entryPrice) * quantity * positionMultiplier2;
+      actualPL = underlyingPrice * quantity * positionMultiplier2;
+      description = `Продаём ${quantity} ${assetLabel2}: ${entryPrice.toFixed(2)} → ${underlyingPrice.toFixed(2)}`;
     } else if (position.type === 'SHORT') {
-      displayPL = (entryPrice - underlyingPrice) * quantity;
-      actualPL = -underlyingPrice * quantity;
-      description = `Выкупаем ${quantity} акций: ${entryPrice.toFixed(2)} → ${underlyingPrice.toFixed(2)}`;
+      displayPL = (entryPrice - underlyingPrice) * quantity * positionMultiplier2;
+      actualPL = -underlyingPrice * quantity * positionMultiplier2;
+      description = `Выкупаем ${quantity} ${assetLabel2}: ${entryPrice.toFixed(2)} → ${underlyingPrice.toFixed(2)}`;
     }
     
     details.push({
-      label: `${position.type} ${quantity} акций - P&L`,
+      label: `${position.type} ${quantity} ${assetLabel2} - P&L`,
       value: displayPL,
       description,
       type: 'stock-pl'
@@ -472,19 +486,24 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
  * - Закрываем опционы по текущей цене (intrinsic + time value)
  * - Продаем акции по текущей цене
  */
-const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPassed, currentPrice, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100 }) => {
+const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPassed, currentPrice, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100, ivProjectionMethod = 'simple' }) => {
   const details = [];
   let totalPL = 0;
 
+  // Множитель для фьючерсов (pointValue), для акций = 1
+  // ЗАЧЕМ: Для фьючерсов P&L = разница в пунктах × quantity × pointValue
+  const positionMultiplier3 = calculatorMode === CALCULATOR_MODES.FUTURES ? contractMultiplier : 1;
+  const assetLabel3 = calculatorMode === CALCULATOR_MODES.FUTURES ? 'контрактов' : 'акций';
+
   // Стоимость входа в позицию учитывается в totalPL, но не отображается отдельной строкой
-  // LONG: покупаем акции (тратим деньги) = -entryPrice * quantity
-  // SHORT: продаём акции (получаем деньги) = +entryPrice * quantity
+  // LONG: покупаем акции/контракты (тратим деньги) = -entryPrice * quantity * multiplier
+  // SHORT: продаём акции/контракты (получаем деньги) = +entryPrice * quantity * multiplier
   positions.forEach(position => {
     const quantity = Number(position.quantity) || 0;
     const entryPrice = Number(position.price) || 0;
     const cost = position.type === 'LONG' 
-      ? -entryPrice * quantity  // LONG: тратим на покупку
-      : +entryPrice * quantity; // SHORT: получаем от продажи
+      ? -entryPrice * quantity * positionMultiplier3  // LONG: тратим на покупку
+      : +entryPrice * quantity * positionMultiplier3; // SHORT: получаем от продажи
     totalPL += cost;
   });
 
@@ -517,7 +536,8 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
       option, 
       currentDaysToExpiration, 
       simulatedDaysToExpiration,
-      ivSurface
+      ivSurface,
+      ivProjectionMethod
     );
     
     // Используем AI волатильность если доступна
@@ -580,7 +600,7 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
     totalPL += pl;
   });
 
-  // P&L от продажи акций (показываем разницу, но в totalPL учитываем полную сумму)
+  // P&L от продажи акций/контрактов (показываем разницу, но в totalPL учитываем полную сумму)
   positions.forEach(position => {
     const quantity = Number(position.quantity) || 0;
     const entryPrice = Number(position.price) || 0;
@@ -590,17 +610,17 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
     let description = '';
     
     if (position.type === 'LONG') {
-      displayPL = (underlyingPrice - entryPrice) * quantity;
-      actualPL = underlyingPrice * quantity;
-      description = `Продаём ${quantity} акций: ${entryPrice.toFixed(2)} → ${underlyingPrice.toFixed(2)}`;
+      displayPL = (underlyingPrice - entryPrice) * quantity * positionMultiplier3;
+      actualPL = underlyingPrice * quantity * positionMultiplier3;
+      description = `Продаём ${quantity} ${assetLabel3}: ${entryPrice.toFixed(2)} → ${underlyingPrice.toFixed(2)}`;
     } else if (position.type === 'SHORT') {
-      displayPL = (entryPrice - underlyingPrice) * quantity;
-      actualPL = -underlyingPrice * quantity;
-      description = `Выкупаем ${quantity} акций: ${entryPrice.toFixed(2)} → ${underlyingPrice.toFixed(2)}`;
+      displayPL = (entryPrice - underlyingPrice) * quantity * positionMultiplier3;
+      actualPL = -underlyingPrice * quantity * positionMultiplier3;
+      description = `Выкупаем ${quantity} ${assetLabel3}: ${entryPrice.toFixed(2)} → ${underlyingPrice.toFixed(2)}`;
     }
     
     details.push({
-      label: `${position.type} ${quantity} акций - P&L`,
+      label: `${position.type} ${quantity} ${assetLabel3} - P&L`,
       value: displayPL,
       description,
       type: 'stock-pl'

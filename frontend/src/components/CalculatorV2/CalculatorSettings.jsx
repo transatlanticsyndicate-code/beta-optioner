@@ -18,7 +18,9 @@ function CalculatorSettings({
   dividendLoading = false,
   isAIEnabled = true,
   setIsAIEnabled,
-  calculatorMode = 'stocks' // Режим калькулятора: 'stocks' или 'futures'
+  calculatorMode = 'stocks', // Режим калькулятора: 'stocks' или 'futures'
+  ivProjectionMethod = 'simple', // Метод прогноза IV: 'simple' (упрощённый) или 'surface' (IV Surface)
+  setIvProjectionMethod // Функция для изменения метода прогноза IV
 }) {
   // Получаем актуальную безрисковую ставку от FRED API
   const { ratePercent, loading: rateLoading } = useRiskFreeRate();
@@ -89,6 +91,29 @@ function CalculatorSettings({
                 id="use-dividends"
                 checked={useDividends}
                 onCheckedChange={setUseDividends}
+                className="data-[state=checked]:bg-cyan-500"
+              />
+            </div>
+          )}
+
+          {/* Переключатель метода прогноза IV */}
+          {/* ЗАЧЕМ: Позволяет сравнить точность упрощённого метода и IV Surface */}
+          {setIvProjectionMethod && (
+            <div className="flex items-center justify-between">
+              <div className="flex flex-col">
+                <Label htmlFor="iv-projection-method" className="text-sm font-normal cursor-pointer">
+                  Метод прогноза IV
+                </Label>
+                <span className="text-xs text-muted-foreground mt-0.5">
+                  {ivProjectionMethod === 'surface' 
+                    ? 'IV Surface (интерполяция по страйку и времени)' 
+                    : 'Упрощённый (формула роста √t)'}
+                </span>
+              </div>
+              <Switch
+                id="iv-projection-method"
+                checked={ivProjectionMethod === 'surface'}
+                onCheckedChange={(checked) => setIvProjectionMethod(checked ? 'surface' : 'simple')}
                 className="data-[state=checked]:bg-cyan-500"
               />
             </div>

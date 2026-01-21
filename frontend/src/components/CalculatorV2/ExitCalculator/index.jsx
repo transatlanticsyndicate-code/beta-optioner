@@ -13,6 +13,7 @@ import ExitTimeDecayChart from '../ExitTimeDecayChart';
 import PriceAndTimeSettings from '../PriceAndTimeSettings';
 import { getPriceRange } from './utils/formatters';
 import { ScenarioCard, LiquidityWarning } from './components';
+import { CALCULATOR_MODES } from '../../../utils/universalPricing';
 
 export function ExitCalculator({ 
   options = [], 
@@ -32,7 +33,8 @@ export function ExitCalculator({
   fetchAIVolatility = null,
   selectedTicker = '',
   calculatorMode = 'stocks', // Режим калькулятора: 'stocks' | 'futures'
-  contractMultiplier = 100 // Множитель контракта: 100 для акций, pointValue для фьючерсов
+  contractMultiplier = 100, // Множитель контракта: 100 для акций, pointValue для фьючерсов
+  ivProjectionMethod = 'simple' // Метод прогноза IV: 'simple' или 'surface'
 }) {
   // State для UI
   // ЗАЧЕМ: Сохранение состояния сворачивания в localStorage
@@ -63,7 +65,8 @@ export function ExitCalculator({
     aiVolatilityMap,
     selectedTicker,
     calculatorMode,
-    contractMultiplier
+    contractMultiplier,
+    ivProjectionMethod
   });
 
   // Проверяем, есть ли данные для расчета
@@ -75,14 +78,27 @@ export function ExitCalculator({
         <div className="flex items-center gap-2">
           <CalculatorIcon size={16} className="text-cyan-500" />
           <div className="flex items-center gap-2">
-            <h3 className="text-sm font-medium">Расчёт выхода из позиции</h3>
+            <h3 className="text-sm font-medium">
+              Расчёт выхода из позиции
+              {/* Для фьючерсов показываем информацию о цене пункта */}
+              {calculatorMode === CALCULATOR_MODES.FUTURES && (
+                <span className="ml-2 text-xs text-muted-foreground font-normal">
+                  (цена пункта: ${contractMultiplier})
+                </span>
+              )}
+            </h3>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <HelpCircle size={16} className="text-gray-400 cursor-help hover:text-gray-600" />
                 </TooltipTrigger>
                 <TooltipContent className="max-w-xs">
-                  <p>Внимание! Расчет P&L за X дней до конца экспирации является приблизительным, так как неизвестно какая будет волатильность и безрисковая процентная ставка на прогнозируемую дату!</p>
+                  <p>
+                    {calculatorMode === CALCULATOR_MODES.FUTURES 
+                      ? `Расчет P&L для фьючерсного контракта. Цена пункта: $${contractMultiplier}. P&L = разница в пунктах × количество контрактов × цена пункта.`
+                      : 'Внимание! Расчет P&L за X дней до конца экспирации является приблизительным, так как неизвестно какая будет волатильность и безрисковая процентная ставка на прогнозируемую дату!'
+                    }
+                  </p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -166,6 +182,7 @@ export function ExitCalculator({
                   isAIEnabled={isAIEnabled}
                   aiVolatilityMap={aiVolatilityMap}
                   selectedTicker={selectedTicker}
+                  ivProjectionMethod={ivProjectionMethod}
                 />
               </div>
             </>

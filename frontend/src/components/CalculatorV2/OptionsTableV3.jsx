@@ -87,7 +87,9 @@ function OptionsTableV3({
   hideColumns = [], // Массив колонок для скрытия: ['premium', 'oi']
   isFromExtension = false, // Флаг: данные от расширения TradingView (для универсального калькулятора)
   calculatorMode = 'stocks', // Режим калькулятора: 'stocks' | 'futures'
-  contractMultiplier = 100 // Множитель контракта: 100 для акций, pointValue для фьючерсов
+  contractMultiplier = 100, // Множитель контракта: 100 для акций, pointValue для фьючерсов
+  ivProjectionMethod = 'simple', // Метод прогноза IV: 'simple' (упрощённый) или 'surface' (IV Surface)
+  isFuturesMissingSettings = false // Флаг: отсутствуют настройки фьючерса (блокирует расчёты)
 }) {
   // Логирование полученных AI пропсов
   console.log('🤖 [OptionsTable] Получены пропсы:', {
@@ -724,7 +726,7 @@ function OptionsTableV3({
                     const oldestEntry = getOldestEntryDate(options);
                     const currentDays = calculateDaysRemainingUTC(option, 0, 30, oldestEntry);
                     const simulatedDays = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntry);
-                    const resultIV = getOptionVolatility(option, currentDays, simulatedDays, ivSurface);
+                    const resultIV = getOptionVolatility(option, currentDays, simulatedDays, ivSurface, ivProjectionMethod);
                     return `${resultIV.toFixed(2)}%`;
                   })()}
                 </span>
@@ -792,7 +794,8 @@ function OptionsTableV3({
                       option,
                       currentDaysToExpiration,
                       optionDaysRemaining,
-                      ivSurface
+                      ivSurface,
+                      ivProjectionMethod
                     );
 
                     // Проверяем наличие AI волатильности в кэше
@@ -828,6 +831,15 @@ function OptionsTableV3({
                     const rawIV = option.impliedVolatility || option.implied_volatility;
                     console.log(`[Таблица] 💰 P/L расчёт ${option.type} Strike $${option.strike}: BID=$${option.bid?.toFixed(2) || 'N/A'}, ASK=$${option.ask?.toFixed(2) || 'N/A'}, Premium=$${effectivePremium?.toFixed(2) || 'N/A'}, EntryPrice=${option.action === 'Buy' ? (option.ask || effectivePremium) : (option.bid || effectivePremium)}`);
                     console.log(`[Таблица] 📈 IV расчёт ${option.type} Strike $${option.strike}: rawIV=${rawIV}, IV=${(optionVolatility * 100).toFixed(1)}%, currentDays=${currentDaysToExpiration}, daysRemaining=${optionDaysRemaining}, targetPrice=$${targetPrice || currentPrice}`);
+
+                    // ПРОВЕРКА: Если отсутствуют настройки фьючерса — показываем иконку с восклицательным знаком
+                    if (isFuturesMissingSettings) {
+                      return (
+                        <span className="text-red-600 flex items-center justify-center" title="Отсутствуют настройки фьючерса">
+                          <AlertTriangle className="h-4 w-4" />
+                        </span>
+                      );
+                    }
 
                     // Выбираем модель расчёта в зависимости от режима калькулятора
                     // ЗАЧЕМ: Режим "Фьючерсы" использует Black-76, режим "Акции" — BSM
@@ -907,7 +919,8 @@ function OptionsTableV3({
                       opt,
                       currentDaysToExp,
                       optDaysRemaining,
-                      ivSurface
+                      ivSurface,
+                      ivProjectionMethod
                     );
 
                     // Проверяем наличие AI волатильности в кэше
@@ -927,6 +940,11 @@ function OptionsTableV3({
                       ask: opt.isPremiumModified ? 0 : opt.ask,
                       bid: opt.isPremiumModified ? 0 : opt.bid
                     };
+                    // ПРОВЕРКА: Если отсутствуют настройки фьючерса — не считаем прибыль
+                    if (isFuturesMissingSettings) {
+                      return sum;
+                    }
+                    
                     // Выбираем модель расчёта в зависимости от режима калькулятора
                     const pl = calculatorMode === CALCULATOR_MODES.FUTURES
                       ? calculateFuturesOptionPLValue(tempOpt, targetPrice || currentPrice, optDaysRemaining, contractMultiplier, optVolatility)

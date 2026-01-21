@@ -127,6 +127,87 @@ export const getAllFuturesTickers = () => {
 };
 
 /**
+ * Проверяет, является ли тикер фьючерсом по паттерну
+ * ЗАЧЕМ: Автоматическая детекция типа инструмента БЕЗ проверки настроек
+ * @param {string} ticker - Тикер для проверки
+ * @returns {boolean} true если тикер соответствует паттерну фьючерса
+ * 
+ * Паттерн фьючерса: 1-2 буквы + код месяца (FGHJKMNQUVXZ) + 2 цифры года
+ * Примеры: ESH26, NQM25, GCZ24, CLF25
+ */
+export const isFuturesTickerByPattern = (ticker) => {
+  console.log('🔍 [isFuturesTickerByPattern] Проверка тикера:', ticker);
+  
+  if (!ticker || typeof ticker !== 'string') {
+    console.log('❌ [isFuturesTickerByPattern] Тикер пустой или не строка');
+    return false;
+  }
+  
+  const upperTicker = ticker.toUpperCase().trim();
+  console.log('🔍 [isFuturesTickerByPattern] upperTicker:', upperTicker, 'длина:', upperTicker.length);
+  
+  // Минимальная длина: 4 символа (например, GCG6)
+  // Максимальная длина: 9 символов (например, BTCF2026, MESH2026)
+  if (upperTicker.length < 4 || upperTicker.length > 9) {
+    console.log('❌ [isFuturesTickerByPattern] Длина не подходит (должна быть 4-9)');
+    return false;
+  }
+  
+  // Коды месяцев фьючерсов
+  const futuresMonthCodes = 'FGHJKMNQUVXZ';
+  
+  // Проверяем паттерн: буквы + месяц + год (2 или 4 цифры)
+  for (let i = 1; i < upperTicker.length - 2; i++) {
+    const char = upperTicker[i];
+    const prefix = upperTicker.slice(0, i);
+    
+    // Проверяем: текущий символ - код месяца
+    if (!futuresMonthCodes.includes(char)) continue;
+    
+    // Проверяем: перед кодом месяца должны быть только буквы (1-4 символа)
+    if (!/^[A-Z]{1,4}$/.test(prefix)) continue;
+    
+    console.log(`🔍 [isFuturesTickerByPattern] i=${i}: prefix="${prefix}", char="${char}"`);
+    
+    // Проверяем год: может быть 2 цифры (26) или 4 цифры (2026)
+    const afterMonth = upperTicker.slice(i + 1);
+    
+    // Вариант 1: 2 цифры года (например, H26)
+    if (/^\d{2}$/.test(afterMonth)) {
+      console.log(`✅ [isFuturesTickerByPattern] Найден паттерн: "${prefix}" + "${char}" + "${afterMonth}" (короткий год) - ЭТО ФЬЮЧЕРС!`);
+      return true;
+    }
+    
+    // Вариант 2: 4 цифры года (например, H2026)
+    if (/^\d{4}$/.test(afterMonth)) {
+      console.log(`✅ [isFuturesTickerByPattern] Найден паттерн: "${prefix}" + "${char}" + "${afterMonth}" (полный год) - ЭТО ФЬЮЧЕРС!`);
+      return true;
+    }
+  }
+  
+  console.log('❌ [isFuturesTickerByPattern] Паттерн не найден - ЭТО АКЦИЯ');
+  return false;
+};
+
+/**
+ * Определяет тип инструмента по тикеру (акции или фьючерсы)
+ * ЗАЧЕМ: Автоматическое переключение режима калькулятора
+ * @param {string} ticker - Тикер для проверки
+ * @returns {'stocks'|'futures'} Тип инструмента
+ */
+export const detectInstrumentTypeByPattern = (ticker) => {
+  if (!ticker) return 'stocks';
+  
+  // Сначала проверяем по паттерну
+  if (isFuturesTickerByPattern(ticker)) {
+    return 'futures';
+  }
+  
+  // Если паттерн не подошёл — считаем акцией
+  return 'stocks';
+};
+
+/**
  * Проверяет, является ли тикер фьючерсом
  * ЗАЧЕМ: Для автоматического определения типа инструмента
  * @param {string} ticker - Тикер для проверки (может быть полным: ESH26 или базовым: ES)

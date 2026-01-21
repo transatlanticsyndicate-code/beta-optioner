@@ -24,7 +24,7 @@ import './OptionsMetrics.css';
  * @param {Array} props.positions - массив позиций базового актива
  * @param {Object} props.plData - данные графика P&L (опционально)
  */
-function OptionsMetrics({ options = [], currentPrice = 0, positions = [], daysPassed = 0, plData = null, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, fetchAIVolatility = null, targetPrice = 0, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100 }) {
+function OptionsMetrics({ options = [], currentPrice = 0, positions = [], daysPassed = 0, plData = null, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, fetchAIVolatility = null, targetPrice = 0, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100, ivProjectionMethod = 'simple' }) {
   // Логирование полученных AI пропсов
   console.log('🤖 [OptionsMetrics] Получены пропсы:', {
     isAIEnabled,
@@ -66,7 +66,7 @@ function OptionsMetrics({ options = [], currentPrice = 0, positions = [], daysPa
       };
     }
 
-    const plMetrics = calculatePLMetrics(completeOptions, currentPrice, positions, daysPassed, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap, targetPrice, selectedTicker, calculatorMode, contractMultiplier);
+    const plMetrics = calculatePLMetrics(completeOptions, currentPrice, positions, daysPassed, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap, targetPrice, selectedTicker, calculatorMode, contractMultiplier, ivProjectionMethod);
 
     return {
       premium: calculateTotalPremium(completeOptions, contractMultiplier),
@@ -75,7 +75,7 @@ function OptionsMetrics({ options = [], currentPrice = 0, positions = [], daysPa
       plMetrics: plMetrics,
       hasCompleteOptions: true
     };
-  }, [options, currentPrice, positions, daysPassed, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap, targetPrice, selectedTicker, calculatorMode, contractMultiplier]);
+  }, [options, currentPrice, positions, daysPassed, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap, targetPrice, selectedTicker, calculatorMode, contractMultiplier, ivProjectionMethod]);
 
   // Метрики с приоритетами согласно ТЗ
   const metrics = useMemo(() => [

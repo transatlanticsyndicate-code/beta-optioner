@@ -31,7 +31,7 @@ const CALCULATOR_MODES = {
  * 
  * Адаптирован из V1 для работы с V2
  */
-function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLines = true, daysPassed = 0, showProbabilityZones = true, targetPrice = 0, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, fetchAIVolatility = null, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100 }) {
+function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLines = true, daysPassed = 0, showProbabilityZones = true, targetPrice = 0, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, fetchAIVolatility = null, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100, ivProjectionMethod = 'simple' }) {
   // Логирование полученных AI пропсов
   console.log('🤖 [PLChart] Получены пропсы:', {
     isAIEnabled,
@@ -68,25 +68,24 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
   }, []);
 
   // Функция расчета P&L для позиции базового актива
+  // ЗАЧЕМ: Для фьючерсов P&L = разница в пунктах × quantity × pointValue
+  // Для акций P&L = разница в цене × quantity
   const calculateUnderlyingPL = useCallback((price, position) => {
     if (!position || !position.type) return 0;
     
     const { type, quantity, price: entryPrice } = position;
     const entryPriceNum = Number(entryPrice) || 0;
-    // quantity уже содержит количество в штуках (не в контрактах)
-    // Опционы используют quantity * 100 потому что 1 контракт = 100 акций
-    // Позиции базового актива - это просто акции, поэтому quantity = количество акций
     
-    const qty = parseFloat(quantity) || 0;
-    const entry = parseFloat(entryPrice) || 0;
+    // Множитель для фьючерсов (pointValue), для акций = 1
+    const multiplier = calculatorMode === CALCULATOR_MODES.FUTURES ? contractMultiplier : 1;
     
     if (type === 'LONG') {
-      return (price - entryPriceNum) * quantity;
+      return (price - entryPriceNum) * quantity * multiplier;
     } else if (type === 'SHORT') {
-      return (entryPriceNum - price) * quantity;
+      return (entryPriceNum - price) * quantity * multiplier;
     }
     return 0;
-  }, []);
+  }, [calculatorMode, contractMultiplier]);
 
   // Универсальная функция расчёта P&L опциона в зависимости от режима
   // ЗАЧЕМ: Единая точка входа для расчётов — автоматически выбирает модель (BSM или Black-76)
@@ -225,7 +224,7 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
       // currentDays = daysRemaining без daysPassed, simulatedDays = с учётом daysPassed
       // ivSurface используется для точной интерполяции IV между датами экспирации
       const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0, 30, oldestEntryDate);
-      let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface);
+      let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface, ivProjectionMethod);
       
       // Используем AI волатильность если доступна
       if (isAIEnabled && aiVolatilityMap && selectedTicker && targetPrice) {
@@ -298,7 +297,7 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
         };
         const optionDaysRemaining = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntryDate);
         const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0, 30, oldestEntryDate);
-        let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface);
+        let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface, ivProjectionMethod);
         
         // Используем AI волатильность если доступна
         if (isAIEnabled && aiVolatilityMap && options.length > 0 && targetPrice) {
@@ -881,7 +880,7 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
  * @param {number} contractMultiplier - множитель контракта (100 для акций, pointValue для фьючерсов)
  * @returns {Object} - { prices, totalPLArray } для расчета метрик
  */
-export function calculatePLDataForMetrics(options = [], currentPrice = 0, positions = [], daysPassed = 0, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, targetPrice = 0, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100) {
+export function calculatePLDataForMetrics(options = [], currentPrice = 0, positions = [], daysPassed = 0, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, targetPrice = 0, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100, ivProjectionMethod = 'simple') {
   if (!currentPrice || (options.length === 0 && positions.length === 0)) {
     return { prices: [], totalPLArray: [] };
   }
@@ -911,15 +910,19 @@ export function calculatePLDataForMetrics(options = [], currentPrice = 0, positi
   const totalPLArray = new Array(prices.length).fill(0);
 
   // Добавляем P&L от позиций базового актива (линейная зависимость)
+  // ЗАЧЕМ: Для фьючерсов P&L = разница в пунктах × quantity × pointValue
+  // Для акций P&L = разница в цене × quantity (множитель не применяется к акциям напрямую)
   visiblePositions.forEach((position) => {
     prices.forEach((price, i) => {
       const { type, quantity, price: entryPrice } = position;
       const entryPriceNum = Number(entryPrice) || 0;
       let pl = 0;
       if (type === 'LONG') {
-        pl = (price - entryPriceNum) * quantity;
+        // Для фьючерсов: (текущая цена - цена входа) × quantity × pointValue
+        // Для акций: (текущая цена - цена входа) × quantity
+        pl = (price - entryPriceNum) * quantity * (calculatorMode === CALCULATOR_MODES.FUTURES ? contractMultiplier : 1);
       } else if (type === 'SHORT') {
-        pl = (entryPriceNum - price) * quantity;
+        pl = (entryPriceNum - price) * quantity * (calculatorMode === CALCULATOR_MODES.FUTURES ? contractMultiplier : 1);
       }
       totalPLArray[i] += pl;
     });
@@ -943,7 +946,7 @@ export function calculatePLDataForMetrics(options = [], currentPrice = 0, positi
     // Получаем IV из API через единую функцию (как в usePositionExitCalculator)
     // ivSurface используется для точной интерполяции IV между датами экспирации
     const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0, 30, oldestEntryDate);
-    let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface);
+    let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface, ivProjectionMethod);
     
     // Используем AI волатильность если доступна
     if (isAIEnabled && aiVolatilityMap && selectedTicker && targetPrice) {

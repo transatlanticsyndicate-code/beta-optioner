@@ -5,34 +5,57 @@
  */
 
 import { DEFAULT_IV_PERCENT } from './constants';
+import { interpolateIV } from './interpolation';
 
 /**
  * Рассчитать прогнозируемую IV для опциона при симуляции времени
  * ЗАЧЕМ: Основная функция для использования в расчётах P&L
  * 
- * ВАЖНО: IV Surface содержит данные для РАЗНЫХ опционов с разными датами экспирации.
- * Мы используем Term Structure (соотношение IV между датами) для прогнозирования,
- * а не абсолютные значения IV из Surface.
+ * Поддерживает два метода:
+ * - 'simple': Упрощённая формула роста √t (по умолчанию)
+ * - 'surface': Билинейная интерполяция по IV Surface (страйк + время)
  * 
  * @param {Object} option - опцион с полями: strike, impliedVolatility, date
  * @param {number} currentDaysToExpiration - текущее количество дней до экспирации
  * @param {number} simulatedDaysToExpiration - симулируемое количество дней до экспирации
- * @param {Object} ivSurface - IV Surface (опционально, для определения Term Structure)
+ * @param {Object} ivSurface - IV Surface (опционально, для метода 'surface')
+ * @param {string} method - метод прогноза: 'simple' или 'surface'
  * @returns {number} - прогнозируемая IV в процентах (например, 25 для 25%)
  */
-export const getProjectedIV = (option, currentDaysToExpiration, simulatedDaysToExpiration, ivSurface = null) => {
+export const getProjectedIV = (option, currentDaysToExpiration, simulatedDaysToExpiration, ivSurface = null, method = 'simple') => {
   // Получаем текущую IV опциона
   const currentIV = option.impliedVolatility || option.implied_volatility || 0.25;
   const currentIVDecimal = currentIV > 1 ? currentIV / 100 : currentIV;
+  
+  // Логирование для отладки
+  console.log('🔮 [getProjectedIV] Вызов:', {
+    strike: option.strike,
+    method,
+    currentDays: currentDaysToExpiration,
+    simulatedDays: simulatedDaysToExpiration,
+    hasIVSurface: ivSurface ? Object.keys(ivSurface).length : 0,
+    currentIV: currentIVDecimal
+  });
   
   // Если симулируемое время = текущему, возвращаем текущую IV
   if (simulatedDaysToExpiration >= currentDaysToExpiration || simulatedDaysToExpiration <= 0) {
     return currentIVDecimal * 100;
   }
   
-  // УПРОЩЁННАЯ МОДЕЛЬ: IV растёт плавно при приближении к экспирации
-  // ЗАЧЕМ: Избегаем резких скачков и нереалистичных значений IV
+  // === МЕТОД IV SURFACE ===
+  // ЗАЧЕМ: Использует реальные данные IV из разных страйков и дат для интерполяции
+  if (method === 'surface' && ivSurface && Object.keys(ivSurface).length > 0) {
+    const strike = Number(option.strike) || 0;
+    // interpolateIV возвращает IV в десятичном формате (0.25)
+    const interpolatedIV = interpolateIV(ivSurface, strike, simulatedDaysToExpiration, currentIVDecimal);
+    // Конвертируем в проценты
+    const resultIV = interpolatedIV < 1 ? interpolatedIV * 100 : interpolatedIV;
+    console.log('🔮 [getProjectedIV] IV Surface результат:', { strike, interpolatedIV, resultIV });
+    return resultIV;
+  }
   
+  // === УПРОЩЁННЫЙ МЕТОД ===
+  // ЗАЧЕМ: IV растёт плавно при приближении к экспирации по формуле √t
   const timeRatio = currentDaysToExpiration / Math.max(simulatedDaysToExpiration, 1);
   
   // Консервативная модель роста IV:
@@ -62,9 +85,10 @@ export const getProjectedIV = (option, currentDaysToExpiration, simulatedDaysToE
  * @param {number} currentDaysToExpiration - текущее количество дней до экспирации (опционально)
  * @param {number} simulatedDaysToExpiration - симулируемое количество дней до экспирации (опционально)
  * @param {Object} ivSurface - IV Surface для интерполяции (опционально)
+ * @param {string} ivProjectionMethod - метод прогноза: 'simple' или 'surface' (опционально)
  * @returns {number} - волатильность в процентах (например, 25 для 25%)
  */
-export const getOptionVolatility = (option, currentDaysToExpiration = null, simulatedDaysToExpiration = null, ivSurface = null) => {
+export const getOptionVolatility = (option, currentDaysToExpiration = null, simulatedDaysToExpiration = null, ivSurface = null, ivProjectionMethod = 'simple') => {
   // Используем индивидуальную IV каждого опциона из API
   const optIV = option.impliedVolatility || option.implied_volatility;
   if (!optIV || optIV <= 0) {
@@ -75,16 +99,17 @@ export const getOptionVolatility = (option, currentDaysToExpiration = null, simu
   // Конвертируем в проценты если в десятичном формате
   const currentIVPercent = optIV < 1 ? optIV * 100 : optIV;
   
-  // Если есть данные о времени — используем прогнозируемую IV (Volatility Surface)
+  // Если есть данные о времени — используем прогнозируемую IV
   // ЗАЧЕМ: IV обычно растёт при приближении к экспирации
   if (currentDaysToExpiration !== null && simulatedDaysToExpiration !== null && 
       simulatedDaysToExpiration < currentDaysToExpiration && simulatedDaysToExpiration > 0) {
-    // Используем функцию прогнозирования IV с IV Surface если доступен
+    // Используем функцию прогнозирования IV с выбранным методом
     const projectedIV = getProjectedIV(
       option, 
       currentDaysToExpiration, 
       simulatedDaysToExpiration,
-      ivSurface // Передаём IV Surface для точной интерполяции
+      ivSurface,
+      ivProjectionMethod // Передаём метод прогноза
     );
     return projectedIV;
   }

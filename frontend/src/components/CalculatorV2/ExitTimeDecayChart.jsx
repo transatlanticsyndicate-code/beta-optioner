@@ -21,7 +21,8 @@ function ExitTimeDecayChart({
   dividendYield = 0,
   isAIEnabled = false,
   aiVolatilityMap = {},
-  selectedTicker = ''
+  selectedTicker = '',
+  ivProjectionMethod = 'simple' // Метод прогноза IV: 'simple' или 'surface'
 }) {
   const [isDarkMode, setIsDarkMode] = useState(
     document.documentElement.classList.contains('dark')
@@ -74,7 +75,7 @@ function ExitTimeDecayChart({
       // Получаем IV из API через единую функцию (как в usePositionExitCalculator и PLChart)
       // ivSurface используется для точной интерполяции IV между датами экспирации
       const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0);
-      let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, daysToExpiration, ivSurface);
+      let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, daysToExpiration, ivSurface, ivProjectionMethod);
       
       // Используем AI волатильность если доступна
       if (isAIEnabled && aiVolatilityMap && selectedTicker) {

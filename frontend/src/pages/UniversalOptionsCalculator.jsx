@@ -68,13 +68,13 @@ import ExitCalculator from '../components/CalculatorV2/ExitCalculator';
 import OptionSelectionResult from '../components/CalculatorV2/OptionSelectionResult';
 import { getDaysUntilExpirationUTC, calculateDaysRemainingUTC } from '../utils/dateUtils';
 import { WhatsNewModal, shouldShowModal } from '../components/WhatsNewModal';
-import { useIVSurface } from '../hooks/useIVSurface';
+import { buildIVSurface } from '../utils/volatilitySurface';
 // УБРАНО: AI модель не используется в универсальном калькуляторе
 // import aiPredictionService from '../services/aiPredictionService';
 
 // Импорт утилиты для работы с настройками фьючерсов
 // ЗАЧЕМ: Получение pointValue для расчётов P&L в режиме фьючерсов
-import { loadFuturesSettings, getPointValue, getFutureByTicker, isFuturesTicker } from '../utils/futuresSettings';
+import { loadFuturesSettings, getPointValue, getFutureByTicker, isFuturesTicker, detectInstrumentTypeByPattern, isFuturesTickerByPattern } from '../utils/futuresSettings';
 
 // Импорт хука для работы с данными от Chrome Extension TradingView Parser
 // ЗАЧЕМ: Получение опционов, тикера и цены из localStorage и URL параметров
@@ -177,6 +177,12 @@ function UniversalOptionsCalculator() {
 
   // State для выбранного тикера
   const [selectedTicker, setSelectedTicker] = useState("");
+  
+  // Проверка наличия настроек фьючерса
+  // ЗАЧЕМ: Если фьючерс не найден в настройках — блокируем расчёты и показываем предупреждение
+  const isFuturesMissingSettings = useMemo(() => {
+    return calculatorMode === CALCULATOR_MODES.FUTURES && !selectedFuture && (extensionTicker || contractCode || selectedTicker);
+  }, [calculatorMode, selectedFuture, extensionTicker, contractCode, selectedTicker]);
   const [isDataCleared, setIsDataCleared] = useState(false);
   const [showDemoData, setShowDemoData] = useState(false);
   const [currentPrice, setCurrentPrice] = useState(0); // Начальное значение 0, обновляется при выборе тикера
@@ -232,6 +238,13 @@ function UniversalOptionsCalculator() {
   const [dividendYield, setDividendYield] = useState(0); // Дивидендная доходность в десятичном формате
   const [dividendLoading, setDividendLoading] = useState(false);
 
+  // State для метода прогноза IV
+  // ЗАЧЕМ: Позволяет сравнить точность упрощённого метода (формула √t) и IV Surface (интерполяция)
+  const [ivProjectionMethod, setIvProjectionMethod] = useState(() => {
+    const saved = localStorage.getItem('ivProjectionMethod');
+    return saved !== null ? JSON.parse(saved) : 'simple'; // По умолчанию упрощённый метод
+  });
+
   // State для синхронизированных настроек цены
   const [targetPrice, setTargetPrice] = useState(0);
 
@@ -280,6 +293,11 @@ function UniversalOptionsCalculator() {
   useEffect(() => {
     localStorage.setItem('useDividends', JSON.stringify(useDividends));
   }, [useDividends]);
+
+  // Сохраняем ivProjectionMethod в localStorage при изменении
+  useEffect(() => {
+    localStorage.setItem('ivProjectionMethod', JSON.stringify(ivProjectionMethod));
+  }, [ivProjectionMethod]);
 
   // УБРАНО: AI модель не используется в универсальном калькуляторе
   // useEffect для isAIEnabled удалён
@@ -330,11 +348,6 @@ function UniversalOptionsCalculator() {
 
   // State для загрузки дат экспирации
   const [isLoadingDates, setIsLoadingDates] = useState(false);
-  
-  // Загружаем IV Surface для точного прогнозирования волатильности
-  // ЗАЧЕМ: IV Surface содержит IV для разных дат экспирации, что позволяет
-  // интерполировать IV при симуляции времени вместо использования простой sqrt модели
-  const { ivSurface, loading: ivSurfaceLoading } = useIVSurface(selectedTicker);
   
   // State для модального окна "Что нового?"
   // ЗАЧЕМ: Показываем пользователю нововведения при первом посещении новой версии
@@ -447,6 +460,30 @@ function UniversalOptionsCalculator() {
   const [options, setOptions] = useState([]);
   const [isInitialized, setIsInitialized] = useState(false);
 
+  // Строим IV Surface из опционов, полученных от расширения TradingView
+  // ЗАЧЕМ: IV Surface содержит IV для разных страйков и дат экспирации, что позволяет
+  // интерполировать IV при симуляции времени вместо использования простой sqrt модели
+  // ВАЖНО: В универсальном калькуляторе НЕ используем Polygon API — данные только от расширения
+  const ivSurface = useMemo(() => {
+    if (!options || options.length === 0) return null;
+    
+    // Преобразуем опционы в формат для buildIVSurface
+    const optionsForSurface = options.map(opt => ({
+      strike: Number(opt.strike) || 0,
+      daysToExpiration: getDaysUntilExpirationUTC(opt.date),
+      impliedVolatility: opt.impliedVolatility || opt.implied_volatility || 0
+    })).filter(opt => opt.strike > 0 && opt.daysToExpiration > 0 && opt.impliedVolatility > 0);
+    
+    if (optionsForSurface.length === 0) return null;
+    
+    const surface = buildIVSurface(optionsForSurface);
+    console.log('📊 [Universal] IV Surface построен из опционов расширения:', {
+      optionsCount: optionsForSurface.length,
+      strikesCount: Object.keys(surface).length
+    });
+    return surface;
+  }, [options]);
+
   // Функции для сохранения и загрузки состояния калькулятора
   const saveCalculatorState = useCallback(() => {
     const state = {
@@ -530,12 +567,36 @@ function UniversalOptionsCalculator() {
       }
       
       // Автоматически определяем режим (фьючерсы/акции) по тикеру
+      // ЗАЧЕМ: Паттерн-детекция работает даже для фьючерсов без настроек
       const ticker = extensionTicker || contractCode;
-      if (ticker && isFuturesTicker(ticker)) {
-        setCalculatorMode(CALCULATOR_MODES.FUTURES);
-        const futureInfo = getFutureByTicker(ticker);
-        setSelectedFuture(futureInfo);
-        console.log('📊 Автоматически переключено в режим фьючерсов:', futureInfo);
+      console.log('🎯 [UniversalCalculator] Автоопределение режима для тикера:', ticker);
+      console.log('🎯 [UniversalCalculator] extensionTicker:', extensionTicker, 'contractCode:', contractCode);
+      
+      if (ticker) {
+        console.log('🎯 [UniversalCalculator] Вызываем detectInstrumentTypeByPattern для:', ticker);
+        const detectedType = detectInstrumentTypeByPattern(ticker);
+        console.log('🎯 [UniversalCalculator] Результат детекции:', detectedType);
+        
+        if (detectedType === 'futures') {
+          setCalculatorMode(CALCULATOR_MODES.FUTURES);
+          
+          // Пытаемся найти настройки фьючерса
+          const futureInfo = getFutureByTicker(ticker);
+          setSelectedFuture(futureInfo);
+          
+          if (futureInfo) {
+            console.log('📊 Автоматически переключено в режим фьючерсов (найдены настройки):', futureInfo);
+          } else {
+            console.log('⚠️ Автоматически переключено в режим фьючерсов (настройки НЕ найдены):', ticker);
+          }
+        } else {
+          // Режим акций
+          setCalculatorMode(CALCULATOR_MODES.STOCKS);
+          setSelectedFuture(null);
+          console.log('📊 Автоматически переключено в режим акций:', ticker);
+        }
+      } else {
+        console.log('⚠️ [UniversalCalculator] Тикер пустой, автоопределение не выполняется');
       }
       
       setIsInitialized(true);
@@ -617,6 +678,18 @@ function UniversalOptionsCalculator() {
       setSelectedExpirationDate(extensionExpirationDate);
     }
   }, [isInitialized, extensionLastUpdated]); // Зависимость от extensionLastUpdated для реакции на storage event
+
+  // === АВТОСОХРАНЕНИЕ СОСТОЯНИЯ ПРИ ИЗМЕНЕНИИ ОПЦИОНОВ ===
+  // ЗАЧЕМ: При удалении/добавлении опционов сохраняем актуальное состояние в localStorage
+  // Это гарантирует, что после перезагрузки страницы восстановится правильный набор опционов
+  useEffect(() => {
+    if (!isInitialized) return;
+    // Сохраняем только если есть тикер (калькулятор активен)
+    if (selectedTicker) {
+      saveCalculatorState();
+      console.log('💾 [Universal] Автосохранение состояния:', { optionsCount: options.length });
+    }
+  }, [isInitialized, options, positions, selectedTicker, saveCalculatorState]);
 
   // УБРАНО: AI модель не используется в универсальном калькуляторе
   // useEffect для автоматического запроса AI прогнозов удалён
@@ -1735,6 +1808,24 @@ function UniversalOptionsCalculator() {
             </div>
           </div>
         )}
+        
+        {/* Предупреждение об отсутствии настроек фьючерса */}
+        {isFuturesMissingSettings && (
+          <div className="mb-6">
+            <div className="p-4 border border-red-500 rounded-lg bg-red-50 dark:bg-red-950/30">
+              <div className="flex items-center gap-2 text-red-700 dark:text-red-300">
+                <span className="text-lg">⚠️</span>
+                <span className="font-medium">
+                  Для данного фьючерса отсутствует настройка цены пункта! Перейдите в{' '}
+                  <a href="/settings?section=futures" className="underline hover:text-red-900 dark:hover:text-red-100">
+                    Настройки
+                  </a>
+                  {' '}и добавьте фьючерс.
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="space-y-6">
           <div className="flex gap-6">
@@ -1757,6 +1848,7 @@ function UniversalOptionsCalculator() {
                         options={options}
                         isAIEnabled={isAIEnabled}
                         isTickerSupported={false}
+                        calculatorMode={calculatorMode}
                         onAddOption={(option) => {
                           // Добавляем опцион из ИИ подбора (PUT или CALL)
                           const newOptionId = Date.now().toString();
@@ -1897,6 +1989,8 @@ function UniversalOptionsCalculator() {
                     isAIEnabled={isAIEnabled}
                     setIsAIEnabled={setIsAIEnabled}
                     calculatorMode={calculatorMode}
+                    ivProjectionMethod={ivProjectionMethod}
+                    setIvProjectionMethod={setIvProjectionMethod}
                   />
                 </Card>
               )}
@@ -1952,6 +2046,8 @@ function UniversalOptionsCalculator() {
                       isFromExtension={isFromExtension}
                       calculatorMode={calculatorMode}
                       contractMultiplier={contractMultiplier}
+                      ivProjectionMethod={ivProjectionMethod}
+                      isFuturesMissingSettings={isFuturesMissingSettings}
                       onAddMagicOption={(option) => {
                         // Добавляем опцион из волшебного подбора
                         console.log('👑 OptionsCalculatorBasic: Получен опцион в onAddMagicOption:', option.isGoldenOption, option);
@@ -2007,7 +2103,8 @@ function UniversalOptionsCalculator() {
                 </CardContent>
               </Card>
 
-              {shouldShowBlock('strike-scale') && (
+              {/* СКРЫТО: Блок "Шкала страйков" */}
+              {/* {shouldShowBlock('strike-scale') && (
                 <Card className="w-full relative border-0" style={{ maxWidth: '1200px', borderColor: '#b8b8b8', overflow: 'visible' }}>
                   <div className="flex items-center justify-between px-6 py-3 border-b border-border">
                     <h3 className="text-sm font-medium">Шкала страйков</h3>
@@ -2045,9 +2142,9 @@ function UniversalOptionsCalculator() {
                     </CardContent>
                   )}
                 </Card>
-              )}
+              )} */}
 
-              {shouldShowBlock('metrics-block') && (
+              {shouldShowBlock('metrics-block') && !isFuturesMissingSettings && (
                 <Card className="w-full relative" style={{ borderColor: '#b8b8b8' }}>
                   <OptionsMetrics 
                     options={displayOptions}
@@ -2063,6 +2160,7 @@ function UniversalOptionsCalculator() {
                     selectedTicker={selectedTicker}
                     calculatorMode={calculatorMode}
                     contractMultiplier={contractMultiplier}
+                    ivProjectionMethod={ivProjectionMethod}
                   />
                 </Card>
               )}
@@ -2092,6 +2190,7 @@ function UniversalOptionsCalculator() {
                         selectedTicker={selectedTicker}
                         calculatorMode={calculatorMode}
                         contractMultiplier={contractMultiplier}
+                        ivProjectionMethod={ivProjectionMethod}
                       />
                     </CardContent>
                   </Card>
@@ -2174,6 +2273,7 @@ function UniversalOptionsCalculator() {
                 selectedTicker={selectedTicker}
                 calculatorMode={calculatorMode}
                 contractMultiplier={contractMultiplier}
+                ivProjectionMethod={ivProjectionMethod}
               />
             </div>
           </div>
