@@ -8,6 +8,7 @@ import AnalysisView from './pages/AnalysisView';
 import OptionsCalculatorBasic from './pages/OptionsCalculatorBasic';
 import UniversalOptionsCalculator from './pages/UniversalOptionsCalculator';
 import SavedConfigurations from './pages/SavedConfigurations';
+import UniversalSavedConfigurations from './pages/UniversalSavedConfigurations';
 import ComponentsShowcase from './pages/ComponentsShowcase';
 import FloatingAIChat from './components/FloatingAIChat';
 import GradualStrategyCalculator from './components/GradualStrategyCalculator/GradualStrategyCalculator';
@@ -28,6 +29,7 @@ function App() {
           <Route path="/tools/universal-calculator" element={<UniversalOptionsCalculator />} />
           <Route path="/tools/gradual-strategy-calculator" element={<GradualStrategyCalculator />} />
           <Route path="/tools/saved-configurations" element={<SavedConfigurations />} />
+          <Route path="/tools/universal-saved-configurations" element={<UniversalSavedConfigurations />} />
           <Route path="/tools/test-chart" element={<TestChart />} />
           <Route path="/tools/new-deal" element={<NewDeal />} />
           <Route path="/tools/deals-archive" element={<DealsArchive />} />

@@ -686,8 +686,8 @@ function UniversalOptionsCalculator() {
     
     // Для зафиксированных позиций — не перезаписываем daysPassed
     // ЗАЧЕМ: daysPassed уже вычислен как разница между сегодня и датой сохранения
-    if (savedConfigDate) {
-      console.log('📅 Зафиксированная позиция — daysPassed не перезаписывается');
+    if (isLocked || savedConfigDate) {
+      console.log('📅 Зафиксированная позиция — daysPassed не перезаписывается (isLocked:', isLocked, ', savedConfigDate:', savedConfigDate, ')');
       return;
     }
     
@@ -728,7 +728,7 @@ function UniversalOptionsCalculator() {
       // Пользователь не трогал бегунок — устанавливаем в максимум (крайнее правое положение)
       setDaysPassed(maxDays);
     }
-  }, [options.length, options.map(o => o.date).join(','), options.map(o => o.entryDate).join(','), savedConfigDate]); // Добавили entryDate в зависимости
+  }, [options.length, options.map(o => o.date).join(','), options.map(o => o.entryDate).join(','), savedConfigDate, isLocked]); // Добавили entryDate и isLocked в зависимости
   
   const displayOptions = useMemo(() => {
     const result = showDemoData ? demoOptions : options;
@@ -1303,7 +1303,7 @@ function UniversalOptionsCalculator() {
   // ВАЖНО: Если config.isLocked=true — НЕ загружаем новые данные с API
   // ВАЖНО: Если editMode=true — сбрасываем флаги блокировки для редактирования
   const loadConfiguration = async (configId, editMode = false) => {
-    const saved = localStorage.getItem('savedCalculatorConfigurations');
+    const saved = localStorage.getItem('universalCalculatorConfigurations');
     if (saved) {
       try {
         const configurations = JSON.parse(saved);
@@ -1509,7 +1509,7 @@ function UniversalOptionsCalculator() {
     
     if (!loadedConfigId || options.length === 0) return;
     
-    const saved = localStorage.getItem('savedCalculatorConfigurations');
+    const saved = localStorage.getItem('universalCalculatorConfigurations');
     if (!saved) return;
     
     try {
@@ -1535,18 +1535,19 @@ function UniversalOptionsCalculator() {
         showOptionLines,
         showProbabilityZones,
         chartDisplayMode,
+        calculatorMode,
       };
       
-      localStorage.setItem('savedCalculatorConfigurations', JSON.stringify(configurations));
+      localStorage.setItem('universalCalculatorConfigurations', JSON.stringify(configurations));
       console.log('💾 Конфигурация автосохранена:', loadedConfigId);
     } catch (error) {
       console.error('❌ Ошибка автосохранения конфигурации:', error);
     }
-  }, [isLocked, isEditMode, loadedConfigId, options, positions, selectedExpirationDate, daysPassed, showOptionLines, showProbabilityZones, chartDisplayMode]);
+  }, [isLocked, isEditMode, loadedConfigId, options, positions, selectedExpirationDate, daysPassed, showOptionLines, showProbabilityZones, chartDisplayMode, calculatorMode]);
 
   // Функция сохранения конфигурации
   const handleSaveConfiguration = (configuration) => {
-    const saved = localStorage.getItem('savedCalculatorConfigurations');
+    const saved = localStorage.getItem('universalCalculatorConfigurations');
     let configurations = [];
     
     if (saved) {
@@ -1558,7 +1559,7 @@ function UniversalOptionsCalculator() {
     }
     
     configurations.push(configuration);
-    localStorage.setItem('savedCalculatorConfigurations', JSON.stringify(configurations));
+    localStorage.setItem('universalCalculatorConfigurations', JSON.stringify(configurations));
     
     console.log('✅ Конфигурация сохранена:', configuration.name);
     alert('Конфигурация успешно сохранена!');
@@ -1604,7 +1605,7 @@ function UniversalOptionsCalculator() {
   const handleSaveEditedConfiguration = () => {
     if (!loadedConfigId) return;
     
-    const saved = localStorage.getItem('savedCalculatorConfigurations');
+    const saved = localStorage.getItem('universalCalculatorConfigurations');
     if (!saved) return;
     
     try {
@@ -1651,10 +1652,11 @@ function UniversalOptionsCalculator() {
           showOptionLines,
           showProbabilityZones,
           chartDisplayMode,
+          calculatorMode,
         },
       };
       
-      localStorage.setItem('savedCalculatorConfigurations', JSON.stringify(configurations));
+      localStorage.setItem('universalCalculatorConfigurations', JSON.stringify(configurations));
       
       // Сбрасываем флаг изменений
       setHasChanges(false);
@@ -1680,6 +1682,7 @@ function UniversalOptionsCalculator() {
       showOptionLines,
       showProbabilityZones,
       chartDisplayMode,
+      calculatorMode,
     };
   };
 

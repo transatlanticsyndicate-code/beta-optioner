@@ -167,6 +167,9 @@ function Sidebar() {
                   <NavItem to="/tools/saved-configurations" icon={Save}>
                     Сохраненные конфигурации
                   </NavItem>
+                  <NavItem to="/tools/universal-saved-configurations" icon={Save} title="Сохраненные конфигурации универсального калькулятора">
+                    Конфигурации (Универсальный)
+                  </NavItem>
                   <NavItem to="/tools/gradual-strategy-calculator" icon={TrendingUp} title="Калькулятор градуальных стратегий">
                     Градуальный калькулятор
                   </NavItem>

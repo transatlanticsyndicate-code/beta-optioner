@@ -190,6 +190,7 @@ function SaveConfigurationDialog({ isOpen, onClose, onSave, currentState, isLock
         showOptionLines: currentState.showOptionLines,
         showProbabilityZones: currentState.showProbabilityZones,
         chartDisplayMode: currentState.chartDisplayMode,
+        calculatorMode: currentState.calculatorMode, // Режим калькулятора: 'stocks' | 'futures'
       },
     };
 

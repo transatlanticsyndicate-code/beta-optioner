@@ -321,24 +321,21 @@ function OptionsTableV3({
 
           {/* Золотая кнопка для альтернативного подбора опционов */}
           <GoldenButton onClick={() => setGoldenModalOpen(true)} />
-          {/* Меню сохранения - временно отключено */}
+          {/* Меню сохранения */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
-                variant="outline"
                 size="sm"
-                className="h-8 bg-transparent text-gray-400 cursor-not-allowed border-gray-300"
-                disabled={true}
-                title="Функционал в разработке"
+                variant="outline"
+                className="h-8"
+                disabled={false}
+                title="Сохранить конфигурацию или зафиксировать позиции"
               >
                 Сохранить
                 <ChevronDown className="ml-1 h-3 w-3" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
-              <DropdownMenuItem onClick={() => setSaveDialogOpen && setSaveDialogOpen(true)}>
-                <span>Сохранить текущую стратегию</span>
-              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onSaveConfiguration && onSaveConfiguration()}>
                 <span>Сохранить текущую конфигурацию</span>
               </DropdownMenuItem>

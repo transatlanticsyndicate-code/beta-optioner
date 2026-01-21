@@ -17,11 +17,12 @@ const EXPORT_VERSION = '1.0';
  * Экспортирует все сохранённые конфигурации и позиции в JSON-файл
  * ЗАЧЕМ: Создаёт портативный файл для передачи коллегам
  * @param {string} exportedBy - Имя пользователя, выполняющего экспорт
+ * @param {string} storageKey - Ключ localStorage для конфигураций (по умолчанию для старого калькулятора)
  */
-export const exportConfigurations = (exportedBy = 'Unknown') => {
+export const exportConfigurations = (exportedBy = 'Unknown', storageKey = STORAGE_KEYS.configurations) => {
   try {
     // Собираем данные из localStorage
-    const configurations = JSON.parse(localStorage.getItem(STORAGE_KEYS.configurations) || '[]');
+    const configurations = JSON.parse(localStorage.getItem(storageKey) || '[]');
     const positions = JSON.parse(localStorage.getItem(STORAGE_KEYS.positions) || '[]');
 
     // Формируем объект экспорта с метаданными
@@ -46,8 +47,9 @@ export const exportConfigurations = (exportedBy = 'Unknown') => {
     
     // Формируем имя файла с датой
     const date = new Date().toISOString().split('T')[0];
+    const prefix = storageKey === 'universalCalculatorConfigurations' ? 'universal-calc' : 'optioner';
     link.href = url;
-    link.download = `optioner-export-${date}.json`;
+    link.download = `${prefix}-export-${date}.json`;
     
     document.body.appendChild(link);
     link.click();
@@ -141,15 +143,16 @@ export const readImportFile = (file) => {
  * ЗАЧЕМ: Позволяет гибко управлять процессом импорта (замена или объединение)
  * @param {object} importData - Данные для импорта
  * @param {string} mode - Режим импорта: 'replace' или 'merge'
+ * @param {string} storageKey - Ключ localStorage для конфигураций (по умолчанию для старого калькулятора)
  * @returns {object} - Результат импорта
  */
-export const importConfigurations = (importData, mode = 'merge') => {
+export const importConfigurations = (importData, mode = 'merge', storageKey = STORAGE_KEYS.configurations) => {
   try {
     const { configurations = [], positions = [] } = importData.data;
 
     if (mode === 'replace') {
       // Полная замена данных
-      localStorage.setItem(STORAGE_KEYS.configurations, JSON.stringify(configurations));
+      localStorage.setItem(storageKey, JSON.stringify(configurations));
       localStorage.setItem(STORAGE_KEYS.positions, JSON.stringify(positions));
       
       return {
@@ -162,7 +165,7 @@ export const importConfigurations = (importData, mode = 'merge') => {
     }
 
     // Режим объединения (merge)
-    const existingConfigs = JSON.parse(localStorage.getItem(STORAGE_KEYS.configurations) || '[]');
+    const existingConfigs = JSON.parse(localStorage.getItem(storageKey) || '[]');
     const existingPositions = JSON.parse(localStorage.getItem(STORAGE_KEYS.positions) || '[]');
 
     // Объединяем конфигурации, избегая дубликатов по ID
@@ -176,7 +179,7 @@ export const importConfigurations = (importData, mode = 'merge') => {
     const mergedPositions = [...existingPositions, ...newPositions];
 
     // Сохраняем объединённые данные
-    localStorage.setItem(STORAGE_KEYS.configurations, JSON.stringify(mergedConfigs));
+    localStorage.setItem(storageKey, JSON.stringify(mergedConfigs));
     localStorage.setItem(STORAGE_KEYS.positions, JSON.stringify(mergedPositions));
 
     return {

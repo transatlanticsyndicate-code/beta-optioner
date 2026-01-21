@@ -24,6 +24,8 @@ function TopNav() {
         return 'Универсальный Калькулятор Опционов';
       case '/tools/saved-configurations':
         return 'Сохраненные конфигурации';
+      case '/tools/universal-saved-configurations':
+        return 'Сохранения из Универсального калькулятора';
       case '/tools/gradual-strategy-calculator':
         return 'Градуальный калькулятор';
       case '/tools/options-analyzer':
@@ -58,8 +60,10 @@ function TopNav() {
 
       <div className="flex items-center gap-2 sm:gap-4 ml-auto sm:ml-0">
         {/* Индикаторы статуса данных Massive API */}
-        {/* УБРАНО: Индикатор Massive не показывается на странице универсального калькулятора */}
-        {location.pathname !== '/tools/universal-calculator' && <OptionsDataIndicator />}
+        {/* УБРАНО: Индикатор Massive не показывается на странице универсального калькулятора и его сохранений */}
+        {location.pathname !== '/tools/universal-calculator' && 
+         location.pathname !== '/tools/universal-saved-configurations' && 
+         <OptionsDataIndicator />}
 
         {/* Notifications */}
         <button 
