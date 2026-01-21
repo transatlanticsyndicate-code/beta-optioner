@@ -499,7 +499,7 @@ function UniversalOptionsCalculator() {
     setPriceChange({ value: 0, percent: 0 });
     setOptions([]);
     setPositions([]);
-    setSelectedExpirationDate(null);
+    setSelectedExpirationDate(null); // ВАЖНО: Очищаем закэшированную дату экспирации
     setDaysPassed(0);
     setChartDisplayMode('profit-loss-dollar');
     setUserAdjustedDays(false);
@@ -511,9 +511,13 @@ function UniversalOptionsCalculator() {
     setSavedConfigDate(null); // Сбрасываем дату сохранения конфигурации
     setLivePrice(null); // Сбрасываем текущую рыночную цену
     setOptionSelectionParams(null); // Сбрасываем параметры подбора опционов
-    localStorage.removeItem('calculatorState');
     
-    // НОВОЕ: Очищаем данные расширения (тикер контракта и временную метку)
+    // ВАЖНО: Очищаем localStorage ПЕРЕД очисткой данных расширения
+    // ЗАЧЕМ: Предотвращаем восстановление старой selectedExpirationDate из кэша
+    localStorage.removeItem('calculatorState');
+    console.log('🧹 [Universal] localStorage.calculatorState очищен');
+    
+    // Очищаем данные расширения (тикер контракта и временную метку)
     clearExtensionData();
   }, [clearExtensionData]);
 
@@ -656,9 +660,16 @@ function UniversalOptionsCalculator() {
       setSelectedTicker(extensionTicker);
     }
     
-    // Обновляем дату экспирации
-    if (extensionExpirationDate && extensionExpirationDate !== selectedExpirationDate) {
-      setSelectedExpirationDate(extensionExpirationDate);
+    // ИСПРАВЛЕНИЕ: Обновляем дату экспирации при КАЖДОМ изменении от расширения
+    // ЗАЧЕМ: Предотвращаем использование закэшированной даты при добавлении новых опционов
+    if (extensionExpirationDate) {
+      if (extensionExpirationDate !== selectedExpirationDate) {
+        console.log('📡 [Universal] Обновление даты экспирации:', {
+          old: selectedExpirationDate,
+          new: extensionExpirationDate
+        });
+        setSelectedExpirationDate(extensionExpirationDate);
+      }
     }
   }, [isInitialized, extensionLastUpdated]); // Зависимость от extensionLastUpdated для реакции на storage event
 
