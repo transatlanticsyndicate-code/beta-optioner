@@ -69,8 +69,8 @@ function OptionsMetrics({ options = [], currentPrice = 0, positions = [], daysPa
     const plMetrics = calculatePLMetrics(completeOptions, currentPrice, positions, daysPassed, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap, targetPrice, selectedTicker, calculatorMode, contractMultiplier);
 
     return {
-      premium: calculateTotalPremium(completeOptions),
-      requiredCapital: calculateRequiredCapital(completeOptions, currentPrice, positions),
+      premium: calculateTotalPremium(completeOptions, contractMultiplier),
+      requiredCapital: calculateRequiredCapital(completeOptions, currentPrice, positions, contractMultiplier),
       greeks: calculateTotalGreeks(completeOptions),
       plMetrics: plMetrics,
       hasCompleteOptions: true

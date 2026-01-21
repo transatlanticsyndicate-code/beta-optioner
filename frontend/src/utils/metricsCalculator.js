@@ -46,9 +46,10 @@ function getEntryPrice(option = {}) {
  * Рассчитывает общую премию (сумму всех премий с учетом Buy/Sell)
  * ЗАЧЕМ: Для Buy используем ASK, для Sell используем BID
  * @param {Array} options - массив опционов
+ * @param {number} contractMultiplier - множитель контракта (100 для акций, pointValue для фьючерсов)
  * @returns {number} - общая премия (отрицательная = дебет, положительная = кредит)
  */
-export function calculateTotalPremium(options) {
+export function calculateTotalPremium(options, contractMultiplier = 100) {
   if (!options || options.length === 0) return 0;
 
   return options
@@ -59,7 +60,7 @@ export function calculateTotalPremium(options) {
       const quantity = Math.abs(parseInt(option.quantity) || 0);
       const multiplier = option.action === 'Sell' ? 1 : -1;
       
-      return total + (entryPrice * quantity * multiplier * 100);
+      return total + (entryPrice * quantity * multiplier * contractMultiplier);
     }, 0);
 }
 
@@ -69,16 +70,17 @@ export function calculateTotalPremium(options) {
  * @param {Array} positions - массив позиций базового актива
  * @param {number} currentPrice - текущая цена актива
  * @param {number} optionQuantity - количество контрактов опциона
+ * @param {number} contractMultiplier - множитель контракта (100 для акций, pointValue для фьючерсов)
  * @returns {boolean} - true если опцион покрыт
  */
-function checkIfCovered(option, positions, currentPrice, optionQuantity) {
+function checkIfCovered(option, positions, currentPrice, optionQuantity, contractMultiplier = 100) {
   if (!positions || positions.length === 0) return false;
 
   // Опцион должен быть продан (Sell)
   if (option.action !== 'Sell') return false;
 
-  // Рассчитываем количество акций, необходимое для покрытия (1 контракт = 100 акций)
-  const sharesNeeded = optionQuantity * 100;
+  // Рассчитываем количество акций/единиц, необходимое для покрытия
+  const sharesNeeded = optionQuantity * contractMultiplier;
 
   let totalSharesAvailable = 0;
 
@@ -110,7 +112,7 @@ function checkIfCovered(option, positions, currentPrice, optionQuantity) {
 
   return totalSharesAvailable >= sharesNeeded;
 }
-export function calculateRequiredCapital(options, currentPrice = 245.27, positions = []) {
+export function calculateRequiredCapital(options, currentPrice = 245.27, positions = [], contractMultiplier = 100) {
   if (!options || options.length === 0) return 0;
 
   const visibleOptions = options.filter(opt => opt.visible !== false);
@@ -118,7 +120,7 @@ export function calculateRequiredCapital(options, currentPrice = 245.27, positio
 
   if (visibleOptions.length === 0) return 0;
 
-  const premium = calculateTotalPremium(options);
+  const premium = calculateTotalPremium(options, contractMultiplier);
   let marginRequirement = 0;
 
   visibleOptions.forEach(option => {
@@ -132,29 +134,29 @@ export function calculateRequiredCapital(options, currentPrice = 245.27, positio
 
     if (option.action === 'Sell') {
       // Проверяем покрытие позиции базовым активом
-      const isCovered = checkIfCovered(option, visiblePositions, currentPrice, quantity);
+      const isCovered = checkIfCovered(option, visiblePositions, currentPrice, quantity, contractMultiplier);
 
       if (isCovered) {
         // Для покрытых позиций маржа значительно ниже
         if (option.type === 'CALL') {
           // Covered Call: максимум между премией и 10% от прибыли
           const maxProfit = Math.max(0, strike - currentPrice);
-          marginRequirement += Math.min(optionPremium, maxProfit) * quantity * 100;
+          marginRequirement += Math.min(optionPremium, maxProfit) * quantity * contractMultiplier;
         } else if (option.type === 'PUT') {
           // Covered Put: максимум между премией и 10% от прибыли
           const maxProfit = Math.max(0, currentPrice - strike);
-          marginRequirement += Math.min(optionPremium, maxProfit) * quantity * 100;
+          marginRequirement += Math.min(optionPremium, maxProfit) * quantity * contractMultiplier;
         }
       } else {
         // Непокрытые (naked) опционы - стандартная маржа Reg T
         if (option.type === 'CALL') {
           const otmAmount = Math.max(0, strike - currentPrice);
-          const callMargin = (0.20 * currentPrice + optionPremium - otmAmount) * quantity * 100;
-          marginRequirement += Math.max(callMargin, (0.10 * currentPrice + optionPremium) * quantity * 100);
+          const callMargin = (0.20 * currentPrice + optionPremium - otmAmount) * quantity * contractMultiplier;
+          marginRequirement += Math.max(callMargin, (0.10 * currentPrice + optionPremium) * quantity * contractMultiplier);
         } else if (option.type === 'PUT') {
           const otmAmount = Math.max(0, currentPrice - strike);
-          const putMargin = (0.20 * currentPrice + optionPremium - otmAmount) * quantity * 100;
-          marginRequirement += Math.max(putMargin, (0.10 * strike + optionPremium) * quantity * 100);
+          const putMargin = (0.20 * currentPrice + optionPremium - otmAmount) * quantity * contractMultiplier;
+          marginRequirement += Math.max(putMargin, (0.10 * strike + optionPremium) * quantity * contractMultiplier);
         }
       }
     }
@@ -163,7 +165,7 @@ export function calculateRequiredCapital(options, currentPrice = 245.27, positio
   // Учитываем спреды (они могут снижать маржу независимо от покрытия)
   const spreads = detectSpreads(visibleOptions);
   if (spreads.length > 0) {
-    marginRequirement = Math.min(marginRequirement, calculateSpreadMargin(spreads, currentPrice));
+    marginRequirement = Math.min(marginRequirement, calculateSpreadMargin(spreads, currentPrice, contractMultiplier));
   }
 
   const debitAmount = premium < 0 ? Math.abs(premium) : 0;
@@ -213,9 +215,10 @@ function detectSpreads(options) {
  * Рассчитывает маржу для спредов
  * @param {Array} spreads - массив спредов
  * @param {number} currentPrice - текущая цена актива
+ * @param {number} contractMultiplier - множитель контракта (100 для акций, pointValue для фьючерсов)
  * @returns {number} - маржинальные требования для спредов
  */
-function calculateSpreadMargin(spreads, currentPrice) {
+function calculateSpreadMargin(spreads, currentPrice, contractMultiplier = 100) {
   let totalMargin = 0;
 
   spreads.forEach(spread => {
@@ -225,12 +228,12 @@ function calculateSpreadMargin(spreads, currentPrice) {
     if (spread.type === 'vertical_call') {
       // Используем getEntryPrice для ASK/BID вместо premium
       const netCredit = getEntryPrice(spread.upper) - getEntryPrice(spread.lower);
-      const spreadMargin = Math.max(0, (width - netCredit) * quantity * 100);
+      const spreadMargin = Math.max(0, (width - netCredit) * quantity * contractMultiplier);
       totalMargin += spreadMargin;
     } else if (spread.type === 'vertical_put') {
       // Используем getEntryPrice для ASK/BID вместо premium
       const netCredit = getEntryPrice(spread.lower) - getEntryPrice(spread.upper);
-      const spreadMargin = Math.max(0, (width - netCredit) * quantity * 100);
+      const spreadMargin = Math.max(0, (width - netCredit) * quantity * contractMultiplier);
       totalMargin += spreadMargin;
     }
   });

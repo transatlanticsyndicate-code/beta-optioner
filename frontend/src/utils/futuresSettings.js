@@ -50,16 +50,48 @@ export const loadFuturesSettings = () => {
 };
 
 /**
+ * Извлекает базовый тикер из полного тикера фьючерса
+ * ЗАЧЕМ: Тикеры фьючерсов приходят с датой (ESH26, NQM25), нужно извлечь базовый тикер (ES, NQ)
+ * @param {string} ticker - Полный тикер (например, 'ESH26', 'NQM25')
+ * @returns {string} Базовый тикер (например, 'ES', 'NQ')
+ */
+const extractBaseTicker = (ticker) => {
+  if (!ticker) return '';
+  
+  const upperTicker = ticker.toUpperCase();
+  
+  // Паттерн: 1-2 буквы базового тикера + 1 буква месяца + 2 цифры года
+  // Примеры: ESH26, NQM25, GCZ24, CLF25
+  // Месяцы: F(Jan), G(Feb), H(Mar), J(Apr), K(May), M(Jun), N(Jul), Q(Aug), U(Sep), V(Oct), X(Nov), Z(Dec)
+  const futuresMonthCodes = 'FGHJKMNQUVXZ';
+  
+  // Ищем позицию, где начинается код месяца + год
+  for (let i = 1; i < upperTicker.length - 2; i++) {
+    const char = upperTicker[i];
+    const nextTwo = upperTicker.slice(i + 1, i + 3);
+    
+    // Проверяем: текущий символ - код месяца, следующие 2 - цифры года
+    if (futuresMonthCodes.includes(char) && /^\d{2}$/.test(nextTwo)) {
+      return upperTicker.slice(0, i);
+    }
+  }
+  
+  // Если паттерн не найден, возвращаем исходный тикер
+  return upperTicker;
+};
+
+/**
  * Получает pointValue для конкретного тикера фьючерса
  * ЗАЧЕМ: Используется в расчётах P&L вместо стандартного множителя 100 для акций
- * @param {string} ticker - Тикер фьючерса (например, 'ES', 'NQ')
+ * @param {string} ticker - Тикер фьючерса (может быть полным: ESH26 или базовым: ES)
  * @returns {number} Цена пункта для данного фьючерса (или 1 если не найден)
  */
 export const getPointValue = (ticker) => {
   if (!ticker) return 1;
   
+  const baseTicker = extractBaseTicker(ticker);
   const futures = loadFuturesSettings();
-  const future = futures.find(f => f.ticker.toUpperCase() === ticker.toUpperCase());
+  const future = futures.find(f => f.ticker.toUpperCase() === baseTicker);
   
   if (future && future.pointValue) {
     return future.pointValue;
@@ -73,14 +105,15 @@ export const getPointValue = (ticker) => {
 /**
  * Получает полную информацию о фьючерсе по тикеру
  * ЗАЧЕМ: Для отображения названия и параметров в UI калькулятора
- * @param {string} ticker - Тикер фьючерса
+ * @param {string} ticker - Тикер фьючерса (может быть полным: ESH26 или базовым: ES)
  * @returns {Object|null} Объект фьючерса или null если не найден
  */
 export const getFutureByTicker = (ticker) => {
   if (!ticker) return null;
   
+  const baseTicker = extractBaseTicker(ticker);
   const futures = loadFuturesSettings();
-  return futures.find(f => f.ticker.toUpperCase() === ticker.toUpperCase()) || null;
+  return futures.find(f => f.ticker.toUpperCase() === baseTicker) || null;
 };
 
 /**
@@ -96,14 +129,15 @@ export const getAllFuturesTickers = () => {
 /**
  * Проверяет, является ли тикер фьючерсом
  * ЗАЧЕМ: Для автоматического определения типа инструмента
- * @param {string} ticker - Тикер для проверки
+ * @param {string} ticker - Тикер для проверки (может быть полным: ESH26 или базовым: ES)
  * @returns {boolean} true если тикер есть в списке фьючерсов
  */
 export const isFuturesTicker = (ticker) => {
   if (!ticker) return false;
   
+  const baseTicker = extractBaseTicker(ticker);
   const futures = loadFuturesSettings();
-  return futures.some(f => f.ticker.toUpperCase() === ticker.toUpperCase());
+  return futures.some(f => f.ticker.toUpperCase() === baseTicker);
 };
 
 /**
