@@ -136,20 +136,15 @@ export const getAllFuturesTickers = () => {
  * Примеры: ESH26, NQM25, GCZ24, CLF25
  */
 export const isFuturesTickerByPattern = (ticker) => {
-  console.log('🔍 [isFuturesTickerByPattern] Проверка тикера:', ticker);
-  
   if (!ticker || typeof ticker !== 'string') {
-    console.log('❌ [isFuturesTickerByPattern] Тикер пустой или не строка');
     return false;
   }
   
   const upperTicker = ticker.toUpperCase().trim();
-  console.log('🔍 [isFuturesTickerByPattern] upperTicker:', upperTicker, 'длина:', upperTicker.length);
   
   // Минимальная длина: 4 символа (например, GCG6)
   // Максимальная длина: 9 символов (например, BTCF2026, MESH2026)
   if (upperTicker.length < 4 || upperTicker.length > 9) {
-    console.log('❌ [isFuturesTickerByPattern] Длина не подходит (должна быть 4-9)');
     return false;
   }
   
@@ -167,25 +162,20 @@ export const isFuturesTickerByPattern = (ticker) => {
     // Проверяем: перед кодом месяца должны быть только буквы (1-4 символа)
     if (!/^[A-Z]{1,4}$/.test(prefix)) continue;
     
-    console.log(`🔍 [isFuturesTickerByPattern] i=${i}: prefix="${prefix}", char="${char}"`);
-    
     // Проверяем год: может быть 2 цифры (26) или 4 цифры (2026)
     const afterMonth = upperTicker.slice(i + 1);
     
     // Вариант 1: 2 цифры года (например, H26)
     if (/^\d{2}$/.test(afterMonth)) {
-      console.log(`✅ [isFuturesTickerByPattern] Найден паттерн: "${prefix}" + "${char}" + "${afterMonth}" (короткий год) - ЭТО ФЬЮЧЕРС!`);
       return true;
     }
     
     // Вариант 2: 4 цифры года (например, H2026)
     if (/^\d{4}$/.test(afterMonth)) {
-      console.log(`✅ [isFuturesTickerByPattern] Найден паттерн: "${prefix}" + "${char}" + "${afterMonth}" (полный год) - ЭТО ФЬЮЧЕРС!`);
       return true;
     }
   }
   
-  console.log('❌ [isFuturesTickerByPattern] Паттерн не найден - ЭТО АКЦИЯ');
   return false;
 };
 

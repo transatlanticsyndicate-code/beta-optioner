@@ -569,13 +569,9 @@ function UniversalOptionsCalculator() {
       // Автоматически определяем режим (фьючерсы/акции) по тикеру
       // ЗАЧЕМ: Паттерн-детекция работает даже для фьючерсов без настроек
       const ticker = extensionTicker || contractCode;
-      console.log('🎯 [UniversalCalculator] Автоопределение режима для тикера:', ticker);
-      console.log('🎯 [UniversalCalculator] extensionTicker:', extensionTicker, 'contractCode:', contractCode);
       
       if (ticker) {
-        console.log('🎯 [UniversalCalculator] Вызываем detectInstrumentTypeByPattern для:', ticker);
         const detectedType = detectInstrumentTypeByPattern(ticker);
-        console.log('🎯 [UniversalCalculator] Результат детекции:', detectedType);
         
         if (detectedType === 'futures') {
           setCalculatorMode(CALCULATOR_MODES.FUTURES);
@@ -595,8 +591,6 @@ function UniversalOptionsCalculator() {
           setSelectedFuture(null);
           console.log('📊 Автоматически переключено в режим акций:', ticker);
         }
-      } else {
-        console.log('⚠️ [UniversalCalculator] Тикер пустой, автоопределение не выполняется');
       }
       
       setIsInitialized(true);
@@ -1801,10 +1795,15 @@ function UniversalOptionsCalculator() {
                 <span className="text-lg">⏳</span>
                 <span className="font-medium">Ожидание данных от TradingView Extension</span>
               </div>
-              <p className="text-sm text-muted-foreground mt-2">
-                Откройте страницу опционов на TradingView и нажмите кнопку "📱 Открыть калькулятор" в расширении.
-                Или просто добавьте любой опцион через кнопку +С или +Р, калькулятор откроется автоматически.
-              </p>
+              <div className="text-sm text-muted-foreground mt-2 space-y-2">
+                <p>
+                  Откройте страницу опционов на TradingView и нажмите кнопку ОТКРЫТЬ КАЛЬКУЛЯТОР в расширении. 
+                  Или просто добавьте любой опцион через кнопку +С или +Р, калькулятор откроется автоматически.
+                </p>
+                <p className="font-medium">
+                  ВНИМАНИЕ! Сайт TradingView должен отображаться на английском. В настройках страницы Options должны быть выбраны 20 rows и все Customize columns
+                </p>
+              </div>
             </div>
           </div>
         )}
