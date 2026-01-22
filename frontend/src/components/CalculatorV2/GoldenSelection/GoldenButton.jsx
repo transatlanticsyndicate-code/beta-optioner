@@ -18,7 +18,7 @@ function GoldenButton({ onClick, disabled = false }) {
       size="sm"
       onClick={onClick}
       disabled={disabled}
-      className="h-8 text-white border-0 transition-all duration-200 hover:opacity-90 hover:scale-105"
+      className="h-8 text-white border-0 transition-all duration-200 hover:opacity-90 hover:scale-105 active:scale-95"
       style={{
         background: 'linear-gradient(135deg, #facc15 0%, #eab308 50%, #ca8a04 100%)',
         boxShadow: disabled ? 'none' : '0 2px 8px rgba(234, 179, 8, 0.4)',

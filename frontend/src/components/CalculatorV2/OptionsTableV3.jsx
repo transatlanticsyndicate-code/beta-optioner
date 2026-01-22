@@ -353,7 +353,7 @@ function OptionsTableV3({
               <TooltipTrigger asChild>
                 <Button
                   size="sm"
-                  className="h-8 w-8 p-0 bg-cyan-400 hover:bg-cyan-500 text-white"
+                  className="h-8 w-8 p-0 bg-cyan-400 hover:bg-cyan-500 text-white transition-all duration-200 hover:scale-105 active:scale-95"
                   onClick={handleRefreshAllOptions}
                   disabled={isRefreshingAll || options.filter(opt => !opt.isLockedPosition && opt.date && opt.strike).length === 0}
                   title="Обновить данные незалоченных опционов"
@@ -395,7 +395,7 @@ function OptionsTableV3({
               <TooltipTrigger asChild>
                 <Button
                   size="sm"
-                  className="h-8 w-8 p-0 bg-orange-500 hover:bg-orange-600 text-white"
+                  className="h-8 w-8 p-0 bg-orange-500 hover:bg-orange-600 text-white transition-all duration-200 hover:scale-105 active:scale-95"
                   onClick={() => {
                     if (window.confirm('Вы уверены? Калькулятор будет полностью сброшен.')) {
                       onResetCalculator?.();
@@ -834,6 +834,18 @@ function OptionsTableV3({
                     if (isFuturesMissingSettings) {
                       return (
                         <span className="text-red-600 flex items-center justify-center" title="Отсутствуют настройки фьючерса">
+                          <AlertTriangle className="h-4 w-4" />
+                        </span>
+                      );
+                    }
+
+                    // ПРОВЕРКА: Если Bid и Ask равны нулю — показываем иконку с восклицательным знаком
+                    // ЗАЧЕМ: Расширение может добавить опцион с нулевыми ценами, что делает расчёт P&L невозможным
+                    const hasBid = option.bid !== null && option.bid !== undefined && option.bid > 0;
+                    const hasAsk = option.ask !== null && option.ask !== undefined && option.ask > 0;
+                    if (!hasBid && !hasAsk) {
+                      return (
+                        <span className="text-red-600 flex items-center justify-center" title="Отсутствуют цены Bid и Ask">
                           <AlertTriangle className="h-4 w-4" />
                         </span>
                       );
