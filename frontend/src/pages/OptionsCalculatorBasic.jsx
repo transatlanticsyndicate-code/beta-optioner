@@ -1279,7 +1279,8 @@ function OptionsCalculatorV3() {
     const dates = sourceDates
       .filter(d => d && d.date)
       .map(d => d.date); // ISO формат YYYY-MM-DD
-    console.log('📅 availableDates (ISO):', dates);
+    // DEBUG: Закомментировано для production
+    // console.log('📅 availableDates (ISO):', dates);
     return dates;
   }, [showDemoData, expirationDatesKeys]);
 

@@ -25,14 +25,14 @@ import './OptionsMetrics.css';
  * @param {Object} props.plData - данные графика P&L (опционально)
  */
 function OptionsMetrics({ options = [], currentPrice = 0, positions = [], daysPassed = 0, plData = null, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, fetchAIVolatility = null, targetPrice = 0, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100 }) {
-  // Логирование полученных AI пропсов
-  console.log('🤖 [OptionsMetrics] Получены пропсы:', {
-    isAIEnabled,
-    targetPrice,
-    selectedTicker,
-    aiVolatilityMapKeys: Object.keys(aiVolatilityMap || {}),
-    aiVolatilityMapSize: Object.keys(aiVolatilityMap || {}).length
-  });
+  // DEBUG: Закомментировано для production
+  // console.log('🤖 [OptionsMetrics] Получены пропсы:', {
+  //   isAIEnabled,
+  //   targetPrice,
+  //   selectedTicker,
+  //   aiVolatilityMapKeys: Object.keys(aiVolatilityMap || {}),
+  //   aiVolatilityMapSize: Object.keys(aiVolatilityMap || {}).length
+  // });
   
   const {
     canScrollLeft,

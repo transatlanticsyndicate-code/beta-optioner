@@ -37,8 +37,7 @@ function OptionSelectionResult({
     localStorage.setItem('isOptionSelectionResultCollapsed', JSON.stringify(isCollapsed));
   }, [isCollapsed]);
 
-  // Извлекаем параметры подбора (с дефолтными значениями для хуков)
-  // ЗАЧЕМ: Хуки должны вызываться безусловно, поэтому извлекаем параметры до проверки
+  // Извлекаем параметры подбора (с безопасными значениями по умолчанию)
   const {
     optionType = 'PUT', // Тип опциона: 'PUT' или 'CALL'
     daysAfterEntry = 5,
@@ -75,13 +74,15 @@ function OptionSelectionResult({
   // ЗАЧЕМ: Buy CALL работает только при росте цены (сценарий ВВЕРХ)
   const optionsForDown = options.filter(opt => {
     const isBuyCall = opt.action === 'Buy' && opt.type === 'CALL';
-    if (isBuyCall) {
-      console.log('🔴 Фильтруем Buy CALL из сценария ВНИЗ:', opt.action, opt.type, opt.strike);
-    }
+    // DEBUG: Закомментировано для production
+    // if (isBuyCall) {
+    //   console.log('🔴 Фильтруем Buy CALL из сценария ВНИЗ:', opt.action, opt.type, opt.strike);
+    // }
     return !isBuyCall; // Исключаем Buy CALL
   });
   
-  console.log('📊 OptionSelectionResult ВНИЗ: всего опционов =', options.length, ', после фильтрации =', optionsForDown.length);
+  // DEBUG: Закомментировано для production
+  // console.log('📊 OptionSelectionResult ВНИЗ: всего опционов =', options.length, ', после фильтрации =', optionsForDown.length);
   
   const plDown = usePositionExitCalculator({
     underlyingPrice: targetDownPrice,
@@ -99,12 +100,6 @@ function OptionSelectionResult({
     positions,
     currentPrice
   });
-
-  // Если нет параметров подбора — не отображаем компонент
-  // ЗАЧЕМ: Компонент появляется только после выбора опциона в диалоге подбора
-  if (!selectionParams) {
-    return null;
-  }
 
   // Актуальные P&L CALL опциона из калькулятора (вместо сохранённых при подборе)
   // ЗАЧЕМ: Синхронизация с актуальными данными калькулятора
@@ -139,6 +134,12 @@ function OptionSelectionResult({
     if (value < 0) return 'text-red-600';
     return 'text-gray-600';
   };
+
+  // ВАЖНО: Не отображаем компонент, если нет параметров подбора
+  // ЗАЧЕМ: Предотвращаем автоматические расчёты и отображение пустого блока
+  if (!selectionParams) {
+    return null;
+  }
 
   return (
     <Card className="w-full relative border-0" style={{ borderColor: '#b8b8b8' }}>

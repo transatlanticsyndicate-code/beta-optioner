@@ -54,7 +54,7 @@ function TopNav() {
           <span className="text-sm text-cyan-500 font-medium">v32</span>
         )}
         {location.pathname === '/tools/universal-calculator' && (
-          <span className="text-sm text-cyan-500 font-medium">v U4</span>
+          <span className="text-sm text-cyan-500 font-medium">v U5</span>
         )}
       </div>
 

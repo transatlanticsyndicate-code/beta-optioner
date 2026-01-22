@@ -177,11 +177,16 @@ function UniversalOptionsCalculator() {
   // State для выбранного тикера
   const [selectedTicker, setSelectedTicker] = useState("");
   
+  // State для отслеживания завершения инициализации
+  // ЗАЧЕМ: Предотвращает мигание предупреждений до загрузки данных
+  const [isInitialized, setIsInitialized] = useState(false);
+  
   // Проверка наличия настроек фьючерса
   // ЗАЧЕМ: Если фьючерс не найден в настройках — блокируем расчёты и показываем предупреждение
+  // ВАЖНО: Проверяем isInitialized, чтобы не показывать плашку до завершения инициализации
   const isFuturesMissingSettings = useMemo(() => {
-    return calculatorMode === CALCULATOR_MODES.FUTURES && !selectedFuture && (extensionTicker || contractCode || selectedTicker);
-  }, [calculatorMode, selectedFuture, extensionTicker, contractCode, selectedTicker]);
+    return isInitialized && calculatorMode === CALCULATOR_MODES.FUTURES && !selectedFuture && (extensionTicker || contractCode || selectedTicker);
+  }, [isInitialized, calculatorMode, selectedFuture, extensionTicker, contractCode, selectedTicker]);
   const [isDataCleared, setIsDataCleared] = useState(false);
   const [showDemoData, setShowDemoData] = useState(false);
   const [currentPrice, setCurrentPrice] = useState(0); // Начальное значение 0, обновляется при выборе тикера
@@ -446,7 +451,6 @@ function UniversalOptionsCalculator() {
   }, [selectedTicker, isDataCleared, needLoadExpirations]);
 
   const [options, setOptions] = useState([]);
-  const [isInitialized, setIsInitialized] = useState(false);
 
   // Строим IV Surface из опционов, полученных от расширения TradingView
   // ЗАЧЕМ: IV Surface содержит IV для разных страйков и дат экспирации, что позволяет
@@ -751,24 +755,25 @@ function UniversalOptionsCalculator() {
     // Фильтруем только опционы с датой (displayOptions уже содержит только видимые)
     const optionsWithDate = displayOptions.filter(opt => opt.date && opt.visible !== false);
     
-    console.log('🏷️ forceShowDateBadges check:', {
-      totalDisplayOptions: displayOptions.length,
-      optionsWithDate: optionsWithDate.length,
-      dates: optionsWithDate.map(opt => opt.date),
-    });
+    // DEBUG: Закомментировано для production
+    // console.log('🏷️ forceShowDateBadges check:', {
+    //   totalDisplayOptions: displayOptions.length,
+    //   optionsWithDate: optionsWithDate.length,
+    //   dates: optionsWithDate.map(opt => opt.date),
+    // });
     
     if (optionsWithDate.length <= 1) {
-      console.log('🏷️ Result: false (only 1 or 0 options)');
+      // console.log('🏷️ Result: false (only 1 or 0 options)');
       return false;
     }
     
     const uniqueDates = new Set(optionsWithDate.map(opt => opt.date));
     const shouldShow = uniqueDates.size > 1;
     
-    console.log('🏷️ Result:', {
-      uniqueDates: Array.from(uniqueDates),
-      shouldShow
-    });
+    // console.log('🏷️ Result:', {
+    //   uniqueDates: Array.from(uniqueDates),
+    //   shouldShow
+    // });
     
     return shouldShow;
   }, [displayOptions]);
@@ -789,7 +794,8 @@ function UniversalOptionsCalculator() {
       map[date] = colors[index % colors.length];
     });
     
-    console.log('🎨 dateColorMap:', map);
+    // DEBUG: Закомментировано для production
+    // console.log('🎨 dateColorMap:', map);
     return map;
   }, [displayOptions]);
 
@@ -1154,7 +1160,8 @@ function UniversalOptionsCalculator() {
     const dates = sourceDates
       .filter(d => d && d.date)
       .map(d => d.date); // ISO формат YYYY-MM-DD
-    console.log('📅 availableDates (ISO):', dates);
+    // DEBUG: Закомментировано для production
+    // console.log('📅 availableDates (ISO):', dates);
     return dates;
   }, [showDemoData, expirationDatesKeys]);
 
@@ -1863,12 +1870,9 @@ function UniversalOptionsCalculator() {
                             console.log('🤖 ИИ подбор: установлена дата экспирации =', option.expirationDate);
                           }
                           
-                          // Сохраняем параметры подбора для компонента OptionSelectionResult
-                          // ЗАЧЕМ: Отображаем результат подбора с расчётом P&L по целевым ценам
-                          if (option.selectionParams) {
-                            setOptionSelectionParams(option.selectionParams);
-                            console.log('🤖 ИИ подбор: сохранены параметры для OptionSelectionResult', option.selectionParams);
-                          }
+                          // УДАЛЕНО: Автоматическая установка optionSelectionParams после ИИ подбора
+                          // ЗАЧЕМ: ИИ подбора больше нет, расчёты должны запускаться только по явному действию пользователя
+                          // (через волшебную/золотую кнопку в onMagicSelectionComplete)
                           
                           // ОТКЛЮЧЕНО: В универсальном калькуляторе данные приходят от расширения
                           // Не загружаем детали опционов с внешних API

@@ -352,7 +352,8 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
 
   // P&L от закрытия опционов (Сценарий 2: Закрыть опционы)
   // ВАЖНО: Каждый опцион имеет свою дату экспирации и IV из API
-  console.log(`[Расчёт выхода] 🔍 Сценарий 2: underlyingPrice=$${underlyingPrice}, daysPassed=${daysPassed}, currentPrice=$${currentPrice}`);
+  // DEBUG: Закомментировано для production
+  // console.log(`[Расчёт выхода] 🔍 Сценарий 2: underlyingPrice=$${underlyingPrice}, daysPassed=${daysPassed}, currentPrice=$${currentPrice}`);
   
   // Вычисляем самую старую дату входа для индивидуального расчёта daysPassed
   const oldestEntryDate = getOldestEntryDate(options);

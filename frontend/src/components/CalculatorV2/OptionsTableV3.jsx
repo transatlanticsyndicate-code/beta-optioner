@@ -90,15 +90,15 @@ function OptionsTableV3({
   contractMultiplier = 100, // Множитель контракта: 100 для акций, pointValue для фьючерсов
   isFuturesMissingSettings = false // Флаг: отсутствуют настройки фьючерса (блокирует расчёты)
 }) {
-  // Логирование полученных AI пропсов
-  console.log('🤖 [OptionsTable] Получены пропсы:', {
-    isAIEnabled,
-    targetPrice,
-    currentPrice,
-    aiVolatilityMapKeys: Object.keys(aiVolatilityMap || {}),
-    aiVolatilityMapSize: Object.keys(aiVolatilityMap || {}).length,
-    aiVolatilityMap
-  });
+  // DEBUG: Закомментировано для production
+  // console.log('🤖 [OptionsTable] Получены пропсы:', {
+  //   isAIEnabled,
+  //   targetPrice,
+  //   currentPrice,
+  //   aiVolatilityMapKeys: Object.keys(aiVolatilityMap || {}),
+  //   aiVolatilityMapSize: Object.keys(aiVolatilityMap || {}).length,
+  //   aiVolatilityMap
+  // });
 
   const [customStrategyName, setCustomStrategyName] = React.useState('');
   const [saveDialogOpen, setSaveDialogOpenLocal] = React.useState(false);
@@ -775,7 +775,8 @@ function OptionsTableV3({
                     // Проверяем, активен ли опцион на текущий день симуляции
                     // ЗАЧЕМ: Если целевая дата раньше даты входа опциона, он ещё не куплен
                     const isActive = isOptionActiveAtDay(option, daysPassed, oldestEntry);
-                    console.log(`📅 [OptionsTable] Проверка активности: ${option.type} ${option.strike}, entryDate=${option.entryDate}, oldestEntry=${oldestEntry?.toISOString()}, daysPassed=${daysPassed}, isActive=${isActive}`);
+                    // DEBUG: Закомментировано для production
+                    // console.log(`📅 [OptionsTable] Проверка активности: ${option.type} ${option.strike}, entryDate=${option.entryDate}, oldestEntry=${oldestEntry?.toISOString()}, daysPassed=${daysPassed}, isActive=${isActive}`);
                     
                     if (!isActive) {
                       return <span className="text-muted-foreground">—</span>;
@@ -822,11 +823,12 @@ function OptionsTableV3({
                       bid: option.isPremiumModified ? 0 : option.bid
                     };
 
+                    // DEBUG: Закомментировано для production
                     // ЛОГИРОВАНИЕ: Выводим bid/ask и IV для сравнения с подбором
                     // ЗАЧЕМ: Диагностика расхождений P/L между подбором и таблицей
-                    const rawIV = option.impliedVolatility || option.implied_volatility;
-                    console.log(`[Таблица] 💰 P/L расчёт ${option.type} Strike $${option.strike}: BID=$${option.bid?.toFixed(2) || 'N/A'}, ASK=$${option.ask?.toFixed(2) || 'N/A'}, Premium=$${effectivePremium?.toFixed(2) || 'N/A'}, EntryPrice=${option.action === 'Buy' ? (option.ask || effectivePremium) : (option.bid || effectivePremium)}`);
-                    console.log(`[Таблица] 📈 IV расчёт ${option.type} Strike $${option.strike}: rawIV=${rawIV}, IV=${(optionVolatility * 100).toFixed(1)}%, currentDays=${currentDaysToExpiration}, daysRemaining=${optionDaysRemaining}, targetPrice=$${targetPrice || currentPrice}`);
+                    // const rawIV = option.impliedVolatility || option.implied_volatility;
+                    // console.log(`[Таблица] 💰 P/L расчёт ${option.type} Strike $${option.strike}: BID=$${option.bid?.toFixed(2) || 'N/A'}, ASK=$${option.ask?.toFixed(2) || 'N/A'}, Premium=$${effectivePremium?.toFixed(2) || 'N/A'}, EntryPrice=${option.action === 'Buy' ? (option.ask || effectivePremium) : (option.bid || effectivePremium)}`);
+                    // console.log(`[Таблица] 📈 IV расчёт ${option.type} Strike $${option.strike}: rawIV=${rawIV}, IV=${(optionVolatility * 100).toFixed(1)}%, currentDays=${currentDaysToExpiration}, daysRemaining=${optionDaysRemaining}, targetPrice=$${targetPrice || currentPrice}`);
 
                     // ПРОВЕРКА: Если отсутствуют настройки фьючерса — показываем иконку с восклицательным знаком
                     if (isFuturesMissingSettings) {

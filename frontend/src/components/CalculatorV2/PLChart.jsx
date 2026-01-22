@@ -32,14 +32,14 @@ const CALCULATOR_MODES = {
  * Адаптирован из V1 для работы с V2
  */
 function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLines = true, daysPassed = 0, showProbabilityZones = true, targetPrice = 0, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, fetchAIVolatility = null, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100 }) {
-  // Логирование полученных AI пропсов
-  console.log('🤖 [PLChart] Получены пропсы:', {
-    isAIEnabled,
-    targetPrice,
-    selectedTicker,
-    aiVolatilityMapKeys: Object.keys(aiVolatilityMap || {}),
-    aiVolatilityMapSize: Object.keys(aiVolatilityMap || {}).length
-  });
+  // DEBUG: Закомментировано для production
+  // console.log('🤖 [PLChart] Получены пропсы:', {
+  //   isAIEnabled,
+  //   targetPrice,
+  //   selectedTicker,
+  //   aiVolatilityMapKeys: Object.keys(aiVolatilityMap || {}),
+  //   aiVolatilityMapSize: Object.keys(aiVolatilityMap || {}).length
+  // });
   
   // Отслеживание темы
   const [isDarkMode, setIsDarkMode] = useState(
@@ -242,8 +242,8 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
         }
       }
       
-      // Логируем волатильность перед расчетом P&L
-      console.log(`🤖 [PLChart/plArray] Strike ${option.strike}: optionVolatility=${optionVolatility}, isAIEnabled=${isAIEnabled}, isActive=${isActive}`);
+      // DEBUG: Закомментировано для production
+      // console.log(`🤖 [PLChart/plArray] Strike ${option.strike}: optionVolatility=${optionVolatility}, isAIEnabled=${isAIEnabled}, isActive=${isActive}`);
       
       // Если опцион ещё не куплен, P/L = 0 (не участвует в расчёте)
       const plArray = prices.map((price) =>
