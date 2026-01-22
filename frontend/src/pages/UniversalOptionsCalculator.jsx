@@ -33,7 +33,6 @@ import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
 import {
   Select,
@@ -1704,37 +1703,21 @@ function UniversalOptionsCalculator() {
         {/* ЗАЧЕМ: Отображение контракта, цены и метаданных от TradingView Parser */}
         {isFromExtension && (contractCode || selectedTicker) && (
           <div className="mb-6">
-            <div className={`inline-flex items-center gap-4 p-3 border rounded-lg ${
+            <div className={`inline-flex items-center gap-4 p-3 border-2 rounded-lg ${
                 calculatorMode === CALCULATOR_MODES.FUTURES 
                   ? 'border-purple-400 bg-purple-50 dark:bg-purple-950/30' 
                   : 'border-teal-400 bg-teal-50 dark:bg-teal-950/30'
               }`}>
-              {/* Переключатель режимов Акции/Фьючерсы */}
-              {/* ЗАЧЕМ: Определяет тип инструмента и соответствующую математику P&L */}
+              {/* Индикатор режима Акции/Фьючерсы */}
+              {/* ЗАЧЕМ: Отображает текущий тип инструмента */}
               <div className="flex items-center gap-1 bg-white/50 dark:bg-gray-800/50 rounded-md p-0.5">
-                <button
-                  onClick={() => {
-                    setCalculatorMode(CALCULATOR_MODES.STOCKS);
-                    setSelectedFuture(null);
-                  }}
-                  className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
-                    calculatorMode === CALCULATOR_MODES.STOCKS 
-                      ? 'bg-teal-500 text-white' 
-                      : 'text-gray-600 hover:bg-gray-200 dark:text-gray-400 dark:hover:bg-gray-700'
-                  }`}
-                >
-                  Акции
-                </button>
-                <button
-                  onClick={() => setCalculatorMode(CALCULATOR_MODES.FUTURES)}
-                  className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
-                    calculatorMode === CALCULATOR_MODES.FUTURES 
-                      ? 'bg-purple-500 text-white' 
-                      : 'text-gray-600 hover:bg-gray-200 dark:text-gray-400 dark:hover:bg-gray-700'
-                  }`}
-                >
-                  Фьючерсы
-                </button>
+                <div className={`px-2 py-1 text-xs font-medium rounded ${
+                  calculatorMode === CALCULATOR_MODES.STOCKS 
+                    ? 'bg-teal-500 text-white' 
+                    : 'bg-purple-500 text-white'
+                }`}>
+                  {calculatorMode === CALCULATOR_MODES.STOCKS ? 'Акции' : 'Фьючерсы'}
+                </div>
               </div>
               
               {/* Логотип TradingView */}
@@ -1760,32 +1743,15 @@ function UniversalOptionsCalculator() {
                 </span>
               </div>
               
-              {/* Количество опционов */}
-              {options.length > 0 && (
+              {/* Цена пункта для фьючерсов */}
+              {calculatorMode === CALCULATOR_MODES.FUTURES && (
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Опционов:</span>
-                  <span className="text-lg font-bold text-purple-600 dark:text-purple-400">{options.length}</span>
+                  <span className="text-sm text-muted-foreground">Цена пункта:</span>
+                  <span className="text-lg text-muted-foreground">
+                    {selectedFuture ? `$${contractMultiplier}` : '—'}
+                  </span>
                 </div>
               )}
-              
-              {/* Время последнего обновления */}
-              {extensionLastUpdated && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>Обновлено:</span>
-                  <span>{new Date(extensionLastUpdated).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
-                </div>
-              )}
-              
-              {/* Кнопка ручного обновления */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={refreshFromStorage}
-                className="ml-2"
-                title="Обновить данные из расширения"
-              >
-                <RotateCcw className="h-4 w-4" />
-              </Button>
             </div>
           </div>
         )}
@@ -1923,6 +1889,8 @@ function UniversalOptionsCalculator() {
                         aiVolatilityMap={aiVolatilityMap}
                         fetchAIVolatility={fetchAIVolatility}
                         targetPrice={targetPrice}
+                        calculatorMode={calculatorMode}
+                        contractMultiplier={contractMultiplier}
                       />
                     </>
                   )}
@@ -2163,75 +2131,27 @@ function UniversalOptionsCalculator() {
                 </Card>
               )}
 
-              <Tabs defaultValue="chart" className="w-full">
-                <TabsList className="w-full grid grid-cols-2" style={{ backgroundColor: '#e5e7eb' }}>
-                  <TabsTrigger value="chart">График</TabsTrigger>
-                  <TabsTrigger value="board">Доска</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="chart">
-                  <Card className="w-full relative" style={{ borderColor: '#b8b8b8' }}>
-                    <CardContent className="pt-4 pb-4 px-6">
-                      <PLChart 
-                        options={displayOptions}
-                        currentPrice={currentPrice}
-                        positions={positions}
-                        showOptionLines={showOptionLines}
-                        daysPassed={daysPassed}
-                        showProbabilityZones={showProbabilityZones}
-                        targetPrice={targetPrice}
-                        ivSurface={ivSurface}
-                        dividendYield={useDividends ? dividendYield : 0}
-                        isAIEnabled={isAIEnabled}
-                        aiVolatilityMap={aiVolatilityMap}
-                        fetchAIVolatility={fetchAIVolatility}
-                        selectedTicker={selectedTicker}
-                        calculatorMode={calculatorMode}
-                        contractMultiplier={contractMultiplier}
-                      />
-                    </CardContent>
-                  </Card>
-                </TabsContent>
-
-                <TabsContent value="board">
-                  <OptionsBoard
-                    selectedTicker={selectedTicker}
+              <Card className="w-full relative" style={{ borderColor: '#b8b8b8' }}>
+                <CardContent className="pt-4 pb-4 px-6">
+                  <PLChart 
+                    options={displayOptions}
                     currentPrice={currentPrice}
-                    selectedDate={selectedExpirationDate}
-                    onAddOption={(option) => {
-                      if (!selectedTicker) {
-                        return;
-                      }
-                      // Шаг 1: Используем дату из календаря напрямую (ISO формат)
-                      const prefilledDate = selectedExpirationDate || "";
-                      
-                      const newOption = {
-                        id: Date.now().toString(),
-                        action: option.type === 'CALL' ? 'Buy' : 'Sell',
-                        type: option.type,
-                        strike: option.strike,
-                        date: prefilledDate,
-                        quantity: 1,
-                        premium: option.last || option.premium || 0,
-                        bid: option.bid || 0,
-                        ask: option.ask || 0,
-                        volume: option.volume || 0,
-                        oi: option.open_interest || 0,
-                        delta: option.delta || 0,
-                        gamma: option.gamma || 0,
-                        theta: option.theta || 0,
-                        vega: option.vega || 0,
-                        impliedVolatility: option.implied_volatility || 0,
-                        visible: true,
-                        // Дата входа в позицию (текущая дата в ISO формате YYYY-MM-DD)
-                        // ЗАЧЕМ: Фиксируем момент создания опциона для отслеживания времени нахождения в позиции
-                        entryDate: new Date().toISOString().split('T')[0],
-                      };
-                      setOptions(prevOptions => [...prevOptions, newOption]);
-                    }}
+                    positions={positions}
+                    showOptionLines={showOptionLines}
+                    daysPassed={daysPassed}
+                    showProbabilityZones={showProbabilityZones}
+                    targetPrice={targetPrice}
+                    ivSurface={ivSurface}
+                    dividendYield={useDividends ? dividendYield : 0}
+                    isAIEnabled={isAIEnabled}
+                    aiVolatilityMap={aiVolatilityMap}
+                    fetchAIVolatility={fetchAIVolatility}
+                    selectedTicker={selectedTicker}
+                    calculatorMode={calculatorMode}
+                    contractMultiplier={contractMultiplier}
                   />
-                </TabsContent>
-              </Tabs>
+                </CardContent>
+              </Card>
 
               {/* Результат подбора опционов - появляется после выбора опциона в ИИ подборе */}
               <OptionSelectionResult

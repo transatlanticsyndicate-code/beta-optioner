@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { calculateTotalPremium } from '../../utils/metricsCalculator';
 import { calculatePLMetrics } from '../../utils/metricsCalculator';
+import { CALCULATOR_MODES } from '../../utils/universalPricing';
 
 /**
  * Компонент финансового контроля позиций
@@ -15,7 +16,9 @@ function PositionFinancialControl({
   depositAmount = '',
   instrumentCount = '',
   maxLossPercent = '',
-  ivSurface = null
+  ivSurface = null,
+  calculatorMode = CALCULATOR_MODES.STOCKS,
+  contractMultiplier = 100
 }) {
   // Рассчитываем стоимость позиций базового актива
   const positionsCost = useMemo(() => {
@@ -36,8 +39,10 @@ function PositionFinancialControl({
       opt.visible !== false
     );
     
-    // Получаем премию (отрицательная = дебет, положительная = кредит)
-    const premium = calculateTotalPremium(completeOptions);
+    // Получаем премию с учетом множителя контракта
+    // ЗАЧЕМ: Функция calculateTotalPremium уже умножает на contractMultiplier внутри
+    // Для акций: contractMultiplier = 100, для фьючерсов: contractMultiplier = pointValue
+    const premium = calculateTotalPremium(completeOptions, contractMultiplier);
     
     // Если премия положительная (кредит) - это уменьшает затраты
     // Если премия отрицательная (дебет) - это увеличивает затраты
@@ -45,7 +50,7 @@ function PositionFinancialControl({
       optionsPremium: premium,
       optionsCost: Math.abs(premium)
     };
-  }, [options]);
+  }, [options, calculatorMode, contractMultiplier]);
 
   // Итоговая сумма
   // Если премия положительная (кредит), вычитаем из стоимости позиций
@@ -79,9 +84,22 @@ function PositionFinancialControl({
     
     if (completeOptions.length === 0) return 0;
     
-    const plMetrics = calculatePLMetrics(completeOptions, currentPrice, positions, daysPassed, ivSurface);
+    const plMetrics = calculatePLMetrics(
+      completeOptions, 
+      currentPrice, 
+      positions, 
+      daysPassed, 
+      ivSurface,
+      0, // dividendYield
+      false, // isAIEnabled
+      {}, // aiVolatilityMap
+      0, // targetPrice
+      '', // selectedTicker
+      calculatorMode,
+      contractMultiplier
+    );
     return Math.abs(plMetrics.maxLoss);
-  }, [options, currentPrice, positions, daysPassed, ivSurface]);
+  }, [options, currentPrice, positions, daysPassed, ivSurface, calculatorMode, contractMultiplier]);
 
   // Рассчитываем лимит MAX убытка
   const maxLossLimit = useMemo(() => {

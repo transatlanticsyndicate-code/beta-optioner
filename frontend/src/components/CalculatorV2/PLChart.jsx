@@ -700,24 +700,9 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
 
     // Layout для графика
     const layout = {
-      title: {
-        text: 'Profit & Loss Chart',
-        font: {
-          color: themeColors.text,
-          size: 18,
-          family: 'Inter, system-ui, sans-serif'
-        }
-      },
       paper_bgcolor: themeColors.paper,
       plot_bgcolor: themeColors.background,
       xaxis: {
-        title: {
-          text: 'Stock Price',
-          font: {
-            color: themeColors.text,
-            size: 14
-          }
-        },
         gridcolor: themeColors.grid,
         color: themeColors.text,
         tickformat: '$,.2f',

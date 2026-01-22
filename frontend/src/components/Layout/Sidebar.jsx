@@ -41,7 +41,7 @@ function Sidebar() {
     setIsMobileMenuOpen(false);
   }
 
-  function NavItem({ to, icon: Icon, children, title }) {
+  function NavItem({ to, icon: Icon, children, title, customColor }) {
     const isActive = location.pathname === to;
 
     const handleClick = (e) => {
@@ -56,10 +56,10 @@ function Sidebar() {
         className={`flex items-center px-3 py-2 text-sm rounded-md transition-colors ${
           isActive
             ? 'font-medium bg-accent text-accent-foreground'
-            : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
+            : customColor || 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
         }`}
       >
-        <Icon className="h-4 w-4 mr-3 flex-shrink-0" />
+        <Icon className={`h-4 w-4 mr-3 flex-shrink-0 ${customColor ? customColor.split(' ')[0] : ''}`} />
         <span className={isSidebarCollapsed ? 'lg:hidden' : ''}>{children}</span>
       </Link>
     );
@@ -161,14 +161,14 @@ function Sidebar() {
                   <NavItem to="/tools/options-calculator" icon={Calculator}>
                     Калькулятор опционов
                   </NavItem>
-                  <NavItem to="/tools/universal-calculator" icon={Layers} title="Универсальный калькулятор (Акции + Фьючерсы)">
-                    Универсальный калькулятор
-                  </NavItem>
                   <NavItem to="/tools/saved-configurations" icon={Save}>
                     Сохраненные конфигурации
                   </NavItem>
-                  <NavItem to="/tools/universal-saved-configurations" icon={Save} title="Сохраненные конфигурации универсального калькулятора">
-                    Конфигурации (Универсальный)
+                  <NavItem to="/tools/universal-calculator" icon={Layers} title="Универсальный калькулятор (Акции + Фьючерсы)" customColor="text-cyan-500 hover:text-cyan-600 hover:bg-accent/50">
+                    Универсальный калькулятор
+                  </NavItem>
+                  <NavItem to="/tools/universal-saved-configurations" icon={Save} title="Сохраненные конфигурации универсального калькулятора" customColor="text-cyan-500 hover:text-cyan-600 hover:bg-accent/50">
+                    Сохранения
                   </NavItem>
                   <NavItem to="/tools/gradual-strategy-calculator" icon={TrendingUp} title="Калькулятор градуальных стратегий">
                     Градуальный калькулятор
