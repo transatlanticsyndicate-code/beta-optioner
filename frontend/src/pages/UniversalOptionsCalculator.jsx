@@ -493,6 +493,10 @@ function UniversalOptionsCalculator() {
       expirationDates,
     };
     localStorage.setItem('calculatorState', JSON.stringify(state));
+    console.log('💾 [Universal] Сохранение состояния:', {
+      positionsCount: positions.length,
+      positions: positions
+    });
   }, [selectedTicker, currentPrice, priceChange, options, positions, selectedExpirationDate, daysPassed, chartDisplayMode, showOptionLines, showProbabilityZones, strikesByDate, expirationDates]);
 
   const resetCalculator = useCallback(() => {
@@ -567,21 +571,27 @@ function UniversalOptionsCalculator() {
         setSelectedExpirationDate(extensionExpirationDate);
       }
       
-      // Устанавливаем опционы с сохранением ручных изменений Bid/Ask
-      // ЗАЧЕМ: При обновлении страницы восстанавливаем ручные изменения цен из localStorage
-      if (extensionOptions && extensionOptions.length > 0) {
-        // Пытаемся загрузить сохраненные опционы из localStorage
-        const saved = localStorage.getItem('calculatorState');
-        let savedOptions = [];
-        if (saved) {
-          try {
-            const state = JSON.parse(saved);
-            savedOptions = state.options || [];
-          } catch (error) {
-            console.error('❌ Ошибка чтения сохраненных опционов:', error);
-          }
+      // Загружаем сохраненное состояние из localStorage для восстановления позиций и ручных изменений
+      // ЗАЧЕМ: При перезагрузке страницы восстанавливаем позиции базового актива и ручные изменения цен
+      const saved = localStorage.getItem('calculatorState');
+      let savedOptions = [];
+      let savedPositions = [];
+      if (saved) {
+        try {
+          const state = JSON.parse(saved);
+          savedOptions = state.options || [];
+          savedPositions = state.positions || [];
+          console.log('📡 [Universal] Загружено из localStorage:', {
+            optionsCount: savedOptions.length,
+            positionsCount: savedPositions.length
+          });
+        } catch (error) {
+          console.error('❌ Ошибка чтения сохраненного состояния:', error);
         }
-        
+      }
+      
+      // Устанавливаем опционы с сохранением ручных изменений Bid/Ask
+      if (extensionOptions && extensionOptions.length > 0) {
         // Сливаем данные: берем свежие данные от расширения, но сохраняем ручные изменения
         const mergedOptions = extensionOptions.map(extOption => {
           // Ищем соответствующий опцион в сохраненных данных
@@ -611,6 +621,13 @@ function UniversalOptionsCalculator() {
         
         setOptions(mergedOptions);
         console.log('📡 [Universal] Загружено опционов:', mergedOptions.length, '(с сохранением ручных изменений)');
+      }
+      
+      // Восстанавливаем позиции базового актива из localStorage
+      // ЗАЧЕМ: Позиции не приходят от расширения, они добавляются вручную пользователем
+      if (savedPositions.length > 0) {
+        setPositions(savedPositions);
+        console.log('📡 [Universal] Восстановлено позиций базового актива:', savedPositions.length);
       }
       
       // Автоматически определяем режим (фьючерсы/акции) по тикеру
@@ -676,7 +693,9 @@ function UniversalOptionsCalculator() {
           
           console.log('✅ [Universal] Состояние восстановлено:', {
             ticker: state.selectedTicker,
-            optionsCount: restoredOptions.length
+            optionsCount: restoredOptions.length,
+            positionsCount: (state.positions || []).length,
+            positions: state.positions
           });
         }
       } catch (error) {
@@ -756,15 +775,14 @@ function UniversalOptionsCalculator() {
     }
   }, [isInitialized, extensionLastUpdated]); // Зависимость от extensionLastUpdated для реакции на storage event
 
-  // === АВТОСОХРАНЕНИЕ СОСТОЯНИЯ ПРИ ИЗМЕНЕНИИ ОПЦИОНОВ ===
-  // ЗАЧЕМ: При удалении/добавлении опционов сохраняем актуальное состояние в localStorage
-  // Это гарантирует, что после перезагрузки страницы восстановится правильный набор опционов
+  // === АВТОСОХРАНЕНИЕ СОСТОЯНИЯ ПРИ ИЗМЕНЕНИИ ОПЦИОНОВ И ПОЗИЦИЙ ===
+  // ЗАЧЕМ: При удалении/добавлении опционов или позиций сохраняем актуальное состояние в localStorage
+  // Это гарантирует, что после перезагрузки страницы восстановится правильный набор опционов и позиций
   useEffect(() => {
     if (!isInitialized) return;
     // Сохраняем только если есть тикер (калькулятор активен)
     if (selectedTicker) {
       saveCalculatorState();
-      console.log('💾 [Universal] Автосохранение состояния:', { optionsCount: options.length });
     }
   }, [isInitialized, options, positions, selectedTicker, saveCalculatorState]);
 
@@ -879,15 +897,15 @@ function UniversalOptionsCalculator() {
     return map;
   }, [displayOptions]);
 
-  const togglePositionVisibility = (id) => {
-    setPositions(positions.map((pos) => (pos.id === id ? { ...pos, visible: !pos.visible } : pos)));
-  };
+  const togglePositionVisibility = useCallback((id) => {
+    setPositions(prevPositions => prevPositions.map((pos) => (pos.id === id ? { ...pos, visible: !pos.visible } : pos)));
+  }, []);
 
-  const deletePosition = (id) => {
-    setPositions(positions.filter((pos) => pos.id !== id));
-  };
+  const deletePosition = useCallback((id) => {
+    setPositions(prevPositions => prevPositions.filter((pos) => pos.id !== id));
+  }, []);
 
-  const addPosition = (type, quantity = 100, price = 242.14) => {
+  const addPosition = useCallback((type, quantity = 100, price = 242.14) => {
     const newPosition = {
       id: Date.now().toString(),
       type,
@@ -896,8 +914,13 @@ function UniversalOptionsCalculator() {
       price,
       visible: true,
     };
-    setPositions([...positions, newPosition]);
-  };
+    console.log('➕ [Universal] Добавление позиции:', newPosition);
+    setPositions(prevPositions => {
+      const updated = [...prevPositions, newPosition];
+      console.log('➕ [Universal] Новый массив позиций:', updated);
+      return updated;
+    });
+  }, [selectedTicker]);
 
   const toggleOptionVisibility = useCallback((id) => {
     setOptions(prevOptions => prevOptions.map((opt) => (opt.id === id ? { ...opt, visible: !opt.visible } : opt)));

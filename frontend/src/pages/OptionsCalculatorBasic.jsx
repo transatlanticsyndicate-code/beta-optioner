@@ -870,15 +870,15 @@ function OptionsCalculatorV3() {
     return map;
   }, [displayOptions]);
 
-  const togglePositionVisibility = (id) => {
-    setPositions(positions.map((pos) => (pos.id === id ? { ...pos, visible: !pos.visible } : pos)));
-  };
+  const togglePositionVisibility = useCallback((id) => {
+    setPositions(prevPositions => prevPositions.map((pos) => (pos.id === id ? { ...pos, visible: !pos.visible } : pos)));
+  }, []);
 
-  const deletePosition = (id) => {
-    setPositions(positions.filter((pos) => pos.id !== id));
-  };
+  const deletePosition = useCallback((id) => {
+    setPositions(prevPositions => prevPositions.filter((pos) => pos.id !== id));
+  }, []);
 
-  const addPosition = (type, quantity = 100, price = 242.14) => {
+  const addPosition = useCallback((type, quantity = 100, price = 242.14) => {
     const newPosition = {
       id: Date.now().toString(),
       type,
@@ -887,8 +887,8 @@ function OptionsCalculatorV3() {
       price,
       visible: true,
     };
-    setPositions([...positions, newPosition]);
-  };
+    setPositions(prevPositions => [...prevPositions, newPosition]);
+  }, [selectedTicker]);
 
   const toggleOptionVisibility = useCallback((id) => {
     setOptions(prevOptions => prevOptions.map((opt) => (opt.id === id ? { ...opt, visible: !opt.visible } : opt)));

@@ -3,7 +3,6 @@ import { Eye, EyeOff, ChevronDown, Trash2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { Input } from '../ui/input';
-import { addPosition as savePosition } from '../../utils/portfolioStorage';
 import LockIcon from './LockIcon';
 
 import { CALCULATOR_MODES } from '../../utils/universalPricing';
@@ -37,18 +36,14 @@ function BaseAssetPositions({
     return regex.test(value) ? value : value.replace(/[^0-9.]/g, '');
   };
 
-  // Добавить позицию и сохранить в localStorage
+  // Добавить позицию
+  // ЗАЧЕМ: Позиции автоматически сохраняются через автосохранение состояния калькулятора
   const handleAddPosition = (type) => {
     const quantity = defaultQuantity; // 1 для фьючерсов, 100 для акций
     const price = currentPrice || 3000; // Используем currentPrice или дефолтное значение
     
-    // Добавляем в калькулятор
+    // Добавляем в калькулятор (автосохранение произойдет автоматически)
     addPosition(type, quantity, price);
-    
-    // Сохраняем в localStorage
-    if (selectedTicker) {
-      savePosition(selectedTicker, type, quantity, price);
-    }
   };
 
   return (
