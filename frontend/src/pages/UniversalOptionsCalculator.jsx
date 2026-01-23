@@ -117,6 +117,10 @@ function UniversalOptionsCalculator() {
     clearExtensionData      // Функция очистки данных расширения
   } = useExtensionData();
 
+  // Ref для отслеживания предыдущего тикера
+  // ЗАЧЕМ: Позволяет определить, когда тикер изменился, и очистить позиции базового актива
+  const prevTickerRef = useRef(null);
+
   // Установка заголовка страницы
   useEffect(() => {
     document.title = 'Универсальный Калькулятор Опционов | SYNDICATE Platform';
@@ -576,12 +580,15 @@ function UniversalOptionsCalculator() {
       const saved = localStorage.getItem('calculatorState');
       let savedOptions = [];
       let savedPositions = [];
+      let savedTicker = null;
       if (saved) {
         try {
           const state = JSON.parse(saved);
           savedOptions = state.options || [];
           savedPositions = state.positions || [];
+          savedTicker = state.selectedTicker;
           console.log('📡 [Universal] Загружено из localStorage:', {
+            savedTicker,
             optionsCount: savedOptions.length,
             positionsCount: savedPositions.length
           });
@@ -589,6 +596,9 @@ function UniversalOptionsCalculator() {
           console.error('❌ Ошибка чтения сохраненного состояния:', error);
         }
       }
+      
+      // Определяем текущий тикер от расширения
+      const currentTicker = extensionTicker || contractCode;
       
       // Устанавливаем опционы с сохранением ручных изменений Bid/Ask
       if (extensionOptions && extensionOptions.length > 0) {
@@ -623,12 +633,25 @@ function UniversalOptionsCalculator() {
         console.log('📡 [Universal] Загружено опционов:', mergedOptions.length, '(с сохранением ручных изменений)');
       }
       
-      // Восстанавливаем позиции базового актива из localStorage
-      // ЗАЧЕМ: Позиции не приходят от расширения, они добавляются вручную пользователем
+      // Восстанавливаем позиции базового актива ТОЛЬКО если их тикер совпадает с текущим
+      // ЗАЧЕМ: При переключении на другой инструмент позиции от предыдущего тикера должны очищаться
       if (savedPositions.length > 0) {
-        setPositions(savedPositions);
-        console.log('📡 [Universal] Восстановлено позиций базового актива:', savedPositions.length);
+        // Фильтруем позиции: оставляем только те, у которых ticker совпадает с текущим
+        const matchingPositions = savedPositions.filter(pos => pos.ticker === currentTicker);
+        
+        if (matchingPositions.length > 0) {
+          setPositions(matchingPositions);
+          console.log('📡 [Universal] Восстановлено позиций базового актива:', matchingPositions.length);
+        } else {
+          setPositions([]);
+          console.log('🔄 [Universal] Позиции не совпадают с текущим тикером', currentTicker, '- позиции очищены');
+        }
       }
+      
+      // Инициализируем prevTickerRef для отслеживания последующих изменений
+      // ЗАЧЕМ: Позволяет определить смену тикера в useEffect
+      prevTickerRef.current = currentTicker;
+      console.log('📝 [Universal] prevTickerRef инициализирован:', currentTicker);
       
       // Автоматически определяем режим (фьючерсы/акции) по тикеру
       // ЗАЧЕМ: Паттерн-детекция работает даже для фьючерсов без настроек
@@ -707,6 +730,35 @@ function UniversalOptionsCalculator() {
     
     setIsInitialized(true);
   }, [isInitialized, isFromExtension, contractCode, extensionTicker, extensionPrice, extensionExpirationDate, extensionOptions]);
+
+  // === ОТСЛЕЖИВАНИЕ ИЗМЕНЕНИЯ ТИКЕРА ДЛЯ ОЧИСТКИ ПОЗИЦИЙ ===
+  // ЗАЧЕМ: При переключении на другой инструмент очищаем позиции базового актива
+  useEffect(() => {
+    if (!isInitialized) return;
+    
+    const currentTicker = extensionTicker || contractCode || selectedTicker;
+    
+    console.log('🔍 [Universal] Проверка тикера:', {
+      prevTicker: prevTickerRef.current,
+      currentTicker,
+      extensionTicker,
+      contractCode,
+      selectedTicker,
+      positionsCount: positions.length
+    });
+    
+    // Если тикер изменился и это не первая инициализация
+    if (prevTickerRef.current && prevTickerRef.current !== currentTicker && currentTicker) {
+      console.log('🔄 [Universal] Смена тикера с', prevTickerRef.current, 'на', currentTicker, '- очистка позиций');
+      setPositions([]);
+    }
+    
+    // Обновляем ref для следующей проверки
+    if (currentTicker) {
+      prevTickerRef.current = currentTicker;
+      console.log('📝 [Universal] prevTickerRef обновлен на:', currentTicker);
+    }
+  }, [isInitialized, extensionTicker, contractCode, selectedTicker, positions.length]);
 
   // === СИНХРОНИЗАЦИЯ С CHROME EXTENSION ===
   // ЗАЧЕМ: Автоматическое обновление при изменении данных расширением (storage event)
