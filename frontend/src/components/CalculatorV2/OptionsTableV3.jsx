@@ -185,8 +185,12 @@ function OptionsTableV3({
 
   // Обработчик изменения поля опциона
   const handleFieldChange = (optionId, field, value) => {
+    console.log('🔧 [OptionsTable] handleFieldChange:', { optionId, field, value });
     if (onUpdateOption) {
       onUpdateOption(optionId, field, value);
+      console.log('✅ [OptionsTable] onUpdateOption вызван');
+    } else {
+      console.warn('⚠️ [OptionsTable] onUpdateOption не определен!');
     }
   };
 

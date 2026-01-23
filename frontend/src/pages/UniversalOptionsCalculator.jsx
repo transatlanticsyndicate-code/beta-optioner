@@ -514,11 +514,22 @@ function UniversalOptionsCalculator() {
     setSavedConfigDate(null); // Сбрасываем дату сохранения конфигурации
     setLivePrice(null); // Сбрасываем текущую рыночную цену
     setOptionSelectionParams(null); // Сбрасываем параметры подбора опционов
+    setIsInitialized(false); // ВАЖНО: Сбрасываем флаг инициализации для повторной загрузки при обновлении страницы
+    setCalculatorMode(CALCULATOR_MODES.STOCKS); // Сбрасываем режим калькулятора на акции
+    setSelectedFuture(null); // Сбрасываем выбранный фьючерс
     
     // ВАЖНО: Очищаем localStorage ПЕРЕД очисткой данных расширения
     // ЗАЧЕМ: Предотвращаем восстановление старой selectedExpirationDate из кэша
     localStorage.removeItem('calculatorState');
     console.log('🧹 [Universal] localStorage.calculatorState очищен');
+    
+    // Очищаем URL параметры (contract, price)
+    // ЗАЧЕМ: Предотвращаем восстановление данных из URL при обновлении страницы
+    const url = new URL(window.location.href);
+    url.searchParams.delete('contract');
+    url.searchParams.delete('price');
+    window.history.replaceState({}, '', url.pathname);
+    console.log('🧹 [Universal] URL параметры очищены');
     
     // Очищаем данные расширения (тикер контракта и временную метку)
     clearExtensionData();
@@ -556,10 +567,50 @@ function UniversalOptionsCalculator() {
         setSelectedExpirationDate(extensionExpirationDate);
       }
       
-      // Устанавливаем опционы
+      // Устанавливаем опционы с сохранением ручных изменений Bid/Ask
+      // ЗАЧЕМ: При обновлении страницы восстанавливаем ручные изменения цен из localStorage
       if (extensionOptions && extensionOptions.length > 0) {
-        setOptions(extensionOptions);
-        console.log('📡 [Universal] Загружено опционов:', extensionOptions.length);
+        // Пытаемся загрузить сохраненные опционы из localStorage
+        const saved = localStorage.getItem('calculatorState');
+        let savedOptions = [];
+        if (saved) {
+          try {
+            const state = JSON.parse(saved);
+            savedOptions = state.options || [];
+          } catch (error) {
+            console.error('❌ Ошибка чтения сохраненных опционов:', error);
+          }
+        }
+        
+        // Сливаем данные: берем свежие данные от расширения, но сохраняем ручные изменения
+        const mergedOptions = extensionOptions.map(extOption => {
+          // Ищем соответствующий опцион в сохраненных данных
+          const savedOption = savedOptions.find(saved => 
+            saved.type === extOption.type && 
+            saved.strike === extOption.strike && 
+            saved.date === extOption.date
+          );
+          
+          // Если найден сохраненный опцион с ручными изменениями - используем их
+          if (savedOption) {
+            return {
+              ...extOption,
+              // Сохраняем ручные изменения Bid
+              customBid: savedOption.customBid,
+              isBidModified: savedOption.isBidModified,
+              // Сохраняем ручные изменения Ask
+              customAsk: savedOption.customAsk,
+              isAskModified: savedOption.isAskModified,
+              // Сохраняем ручные изменения премии
+              isPremiumModified: savedOption.isPremiumModified,
+            };
+          }
+          
+          return extOption;
+        });
+        
+        setOptions(mergedOptions);
+        console.log('📡 [Universal] Загружено опционов:', mergedOptions.length, '(с сохранением ручных изменений)');
       }
       
       // Автоматически определяем режим (фьючерсы/акции) по тикеру
@@ -643,10 +694,39 @@ function UniversalOptionsCalculator() {
   useEffect(() => {
     if (!isInitialized) return;
     
-    // Обновляем опционы при изменении от расширения
+    // Обновляем опционы при изменении от расширения с сохранением ручных изменений
     if (extensionOptions && extensionOptions.length > 0) {
-      setOptions(extensionOptions);
-      console.log('📡 [Universal] Опционы обновлены от расширения:', extensionOptions.length);
+      setOptions(prevOptions => {
+        // Сливаем данные: берем свежие данные от расширения, но сохраняем ручные изменения
+        const mergedOptions = extensionOptions.map(extOption => {
+          // Ищем соответствующий опцион в текущих данных
+          const existingOption = prevOptions.find(existing => 
+            existing.type === extOption.type && 
+            existing.strike === extOption.strike && 
+            existing.date === extOption.date
+          );
+          
+          // Если найден опцион с ручными изменениями - сохраняем их
+          if (existingOption) {
+            return {
+              ...extOption,
+              // Сохраняем ручные изменения Bid
+              customBid: existingOption.customBid,
+              isBidModified: existingOption.isBidModified,
+              // Сохраняем ручные изменения Ask
+              customAsk: existingOption.customAsk,
+              isAskModified: existingOption.isAskModified,
+              // Сохраняем ручные изменения премии
+              isPremiumModified: existingOption.isPremiumModified,
+            };
+          }
+          
+          return extOption;
+        });
+        
+        console.log('📡 [Universal] Опционы обновлены от расширения:', mergedOptions.length, '(с сохранением ручных изменений)');
+        return mergedOptions;
+      });
     }
     
     // Обновляем цену
@@ -833,9 +913,27 @@ function UniversalOptionsCalculator() {
   }, []);
 
   const updateOption = useCallback((id, field, value) => {
-    setOptions(prevOptions => prevOptions.map((opt) => 
-      opt.id === id ? { ...opt, [field]: value } : opt
-    ));
+    console.log('🔄 [Universal] updateOption вызван:', { id, field, value });
+    setOptions(prevOptions => {
+      const updated = prevOptions.map((opt) => {
+        if (opt.id === id) {
+          const updatedOpt = { ...opt, [field]: value };
+          console.log('📝 [Universal] Опцион обновлен:', {
+            id,
+            field,
+            value,
+            isAskModified: updatedOpt.isAskModified,
+            customAsk: updatedOpt.customAsk,
+            isBidModified: updatedOpt.isBidModified,
+            customBid: updatedOpt.customBid
+          });
+          return updatedOpt;
+        }
+        return opt;
+      });
+      console.log('✅ [Universal] Опционы обновлены, всего:', updated.length);
+      return updated;
+    });
   }, []);
   
   const updatePosition = useCallback((id, field, value) => {
@@ -1777,7 +1875,7 @@ function UniversalOptionsCalculator() {
                   Или просто добавьте любой опцион через кнопку +С или +Р, калькулятор откроется автоматически.
                 </p>
                 <p className="font-medium">
-                  ВНИМАНИЕ! Сайт TradingView должен отображаться на английском. В настройках страницы Options должны быть выбраны 20 rows и все Customize columns
+                  ВНИМАНИЕ! Сайт TradingView должен отображаться <span className="text-red-600">на английском</span>. В настройках страницы Options должны быть выбраны <span className="text-red-600">All rows</span> и <span className="text-red-600">все Customize columns</span>
                 </p>
               </div>
             </div>

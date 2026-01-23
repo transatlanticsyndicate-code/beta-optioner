@@ -205,6 +205,12 @@ export function useExtensionData() {
    */
   const clearExtensionData = useCallback(() => {
     console.log('📡 [useExtensionData] Очистка данных расширения');
+    
+    // Очищаем localStorage
+    // ЗАЧЕМ: Предотвращаем восстановление данных при обновлении страницы после сброса
+    localStorage.removeItem(STORAGE_KEY);
+    console.log('📡 [useExtensionData] localStorage очищен');
+    
     setState({
       contractCode: null,
       urlPrice: null,
