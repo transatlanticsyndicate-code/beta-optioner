@@ -142,7 +142,29 @@ export const isFuturesTickerByPattern = (ticker) => {
   
   const upperTicker = ticker.toUpperCase().trim();
   
-  // Минимальная длина: 4 символа (например, GCG6)
+  // Специальные паттерны для непрерывных контрактов
+  // ЗАЧЕМ: Поддержка тикеров типа BTC1!, 6E1!, ES1!, NQ2! и т.д.
+  if (/^[A-Z0-9]{2,4}\d!$/.test(upperTicker)) {
+    return true;
+  }
+  
+  // Короткие базовые тикеры криптовалютных и валютных фьючерсов (2-3 символа)
+  // ЗАЧЕМ: Поддержка тикеров типа BTC, ETH, MBT, 6E, 6B, 6A и т.д.
+  const knownShortFutures = [
+    'BTC', 'ETH', 'MBT', 'MET', // Криптовалюты
+    '6E', '6B', '6A', '6C', '6J', '6M', '6N', '6S', '6Z', // Валюты CME
+    'ES', 'NQ', 'YM', 'RTY', 'MES', 'MNQ', 'MYM', 'M2K', // Индексы
+    'GC', 'SI', 'HG', 'MGC', 'SIL', // Металлы
+    'CL', 'NG', 'RB', 'HO', 'MCL', // Энергия
+    'ZB', 'ZN', 'ZF', 'ZT', 'ZQ', // Казначейские облигации
+    'ZC', 'ZS', 'ZW', 'ZM', 'ZL', // Зерновые
+  ];
+  
+  if (knownShortFutures.includes(upperTicker)) {
+    return true;
+  }
+  
+  // Минимальная длина: 4 символа (например, GCG6, 6EH26)
   // Максимальная длина: 9 символов (например, BTCF2026, MESH2026)
   if (upperTicker.length < 4 || upperTicker.length > 9) {
     return false;
@@ -151,7 +173,8 @@ export const isFuturesTickerByPattern = (ticker) => {
   // Коды месяцев фьючерсов
   const futuresMonthCodes = 'FGHJKMNQUVXZ';
   
-  // Проверяем паттерн: буквы + месяц + год (2 или 4 цифры)
+  // Проверяем паттерн: [цифры][буквы] + месяц + год (2 или 4 цифры)
+  // ЗАЧЕМ: Поддержка валютных фьючерсов типа 6EH26, 6BM2026
   for (let i = 1; i < upperTicker.length - 2; i++) {
     const char = upperTicker[i];
     const prefix = upperTicker.slice(0, i);
@@ -159,8 +182,10 @@ export const isFuturesTickerByPattern = (ticker) => {
     // Проверяем: текущий символ - код месяца
     if (!futuresMonthCodes.includes(char)) continue;
     
-    // Проверяем: перед кодом месяца должны быть только буквы (1-4 символа)
-    if (!/^[A-Z]{1,4}$/.test(prefix)) continue;
+    // Проверяем: перед кодом месяца могут быть:
+    // - только буквы (1-4 символа): ESH26, BTCH26
+    // - цифры + буквы (2-4 символа): 6EH26, 6BM26
+    if (!/^[0-9]?[A-Z]{1,4}$/.test(prefix)) continue;
     
     // Проверяем год: может быть 2 цифры (26) или 4 цифры (2026)
     const afterMonth = upperTicker.slice(i + 1);

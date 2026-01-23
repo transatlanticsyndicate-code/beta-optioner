@@ -1806,7 +1806,8 @@ function UniversalOptionsCalculator() {
       <div className="p-6">
         {/* === ХЕДЕР С ДАННЫМИ ОТ РАСШИРЕНИЯ === */}
         {/* ЗАЧЕМ: Отображение контракта, цены и метаданных от TradingView Parser */}
-        {isFromExtension && (contractCode || selectedTicker) && (
+        {/* ВАЖНО: Показываем только после инициализации, чтобы избежать мигания неправильного режима */}
+        {isInitialized && isFromExtension && (contractCode || selectedTicker) && (
           <div className="mb-6">
             <div className={`inline-flex items-center gap-4 p-3 border-2 rounded-lg ${
                 calculatorMode === CALCULATOR_MODES.FUTURES 
