@@ -6,6 +6,7 @@ import { invalidateOptionsForTicker } from '../../services/OptionsDataService';
 import { sendRefreshSpecificCommand } from '../../hooks/useExtensionData';
 
 import { GoldenButton, GoldenSelectionModal } from './GoldenSelection';
+import { SuperButton, SuperSelectionModal } from './SuperSelection';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -104,6 +105,7 @@ function OptionsTableV3({
   const [saveDialogOpen, setSaveDialogOpenLocal] = React.useState(false);
   const [magicModalOpen, setMagicModalOpen] = useState(false); // Состояние модального окна волшебного подбора
   const [goldenModalOpen, setGoldenModalOpen] = useState(false); // Состояние модального окна золотого подбора
+  const [superModalOpen, setSuperModalOpen] = useState(false); // Состояние модального окна Супер подбора
   const [showAllStrikesForOption, setShowAllStrikesForOption] = React.useState({}); // { optionId: true/false }
   const [editingPremium, setEditingPremium] = React.useState(null); // optionId для редактирования премии
   const [editingEntryDate, setEditingEntryDate] = React.useState(null); // optionId для редактирования даты входа
@@ -325,6 +327,9 @@ function OptionsTableV3({
 
           {/* Золотая кнопка для альтернативного подбора опционов */}
           <GoldenButton onClick={() => setGoldenModalOpen(true)} />
+
+          {/* Супер кнопка для расширенного подбора опционов */}
+          <SuperButton onClick={() => setSuperModalOpen(true)} />
           {/* Меню сохранения */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -1021,6 +1026,25 @@ function OptionsTableV3({
             setGoldenModalOpen(false);
           }}
           onSetSimulationParams={onSetSimulationParams}
+        />
+      )}
+      {/* Модальное окно Супер подбора */}
+      {superModalOpen && (
+        <SuperSelectionModal
+          isOpen={superModalOpen}
+          onClose={() => setSuperModalOpen(false)}
+          positions={positions}
+          options={options}
+          currentPrice={currentPrice}
+          selectedTicker={selectedTicker}
+          availableDates={availableDates}
+          isFromExtension={isFromExtension}
+          onAddOption={(option) => {
+            if (onAddMagicOption) {
+              onAddMagicOption(option);
+            }
+            setSuperModalOpen(false);
+          }}
         />
       )}
     </div>
