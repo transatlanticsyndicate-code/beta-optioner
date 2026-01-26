@@ -133,11 +133,11 @@ function UniversalOptionsCalculator() {
   // === НОВОЕ: Режим калькулятора (Акции/Фьючерсы) ===
   // ЗАЧЕМ: Определяет тип инструмента и соответствующую математику P&L
   const [calculatorMode, setCalculatorMode] = useState(CALCULATOR_MODES.FUTURES);
-  
+
   // Информация о выбранном фьючерсе (для режима фьючерсов)
   // ЗАЧЕМ: Хранит pointValue и название фьючерса для расчётов
   const [selectedFuture, setSelectedFuture] = useState(null);
-  
+
   // Множитель контракта (100 для акций, pointValue для фьючерсов)
   // ЗАЧЕМ: Используется в расчётах P&L
   const contractMultiplier = useMemo(() => {
@@ -146,11 +146,11 @@ function UniversalOptionsCalculator() {
     }
     return 100; // Стандартный множитель для акций
   }, [calculatorMode, selectedFuture]);
-  
+
   // Статус подключения к TradingView Extension
   // ЗАЧЕМ: Отображение статуса в UI
   const [tradingViewConnected, setTradingViewConnected] = useState(false);
-  
+
   // Проверка статуса TradingView Extension при монтировании
   useEffect(() => {
     const checkTradingViewStatus = async () => {
@@ -181,11 +181,11 @@ function UniversalOptionsCalculator() {
 
   // State для выбранного тикера
   const [selectedTicker, setSelectedTicker] = useState("");
-  
+
   // State для отслеживания завершения инициализации
   // ЗАЧЕМ: Предотвращает мигание предупреждений до загрузки данных
   const [isInitialized, setIsInitialized] = useState(false);
-  
+
   // Проверка наличия настроек фьючерса
   // ЗАЧЕМ: Если фьючерс не найден в настройках — блокируем расчёты и показываем предупреждение
   // ВАЖНО: Проверяем isInitialized, чтобы не показывать плашку до завершения инициализации
@@ -196,32 +196,32 @@ function UniversalOptionsCalculator() {
   const [showDemoData, setShowDemoData] = useState(false);
   const [currentPrice, setCurrentPrice] = useState(0); // Начальное значение 0, обновляется при выборе тикера
   const [priceChange, setPriceChange] = useState({ value: 0, percent: 0 }); // Начальное значение
-  
+
   // State для классификации акции
   // ЗАЧЕМ: Определяет группу акции (stable/growth/illiquid) для корректировки P&L прогнозов
   // ВАЖНО: Применяется только в режиме stocks
   const [stockClassification, setStockClassification] = useState(null);
-  
+
   // State для зафиксированных позиций
   // ЗАЧЕМ: Если isLocked=true, данные НЕ обновляются с API при загрузке конфигурации
   const [isLocked, setIsLocked] = useState(false);
-  
+
   // State для даты сохранения конфигурации (для зафиксированных позиций)
   // ЗАЧЕМ: Ползунок дат должен начинаться с даты сохранения, а не с сегодня
   const [savedConfigDate, setSavedConfigDate] = useState(null);
-  
+
   // State для текущей рыночной цены (для зафиксированных позиций)
   // ЗАЧЕМ: Кнопка сброса цены должна сбрасывать на текущую цену, а не на цену при сохранении
   const [livePrice, setLivePrice] = useState(null);
-  
+
   // State для отслеживания загруженной конфигурации
   // ЗАЧЕМ: Позволяет автоматически сохранять изменения (новые опционы) в localStorage
   const [loadedConfigId, setLoadedConfigId] = useState(null);
-  
+
   // State для режима редактирования конфигурации
   // ЗАЧЕМ: Позволяет редактировать сохраненную конфигурацию в разблокированном виде
   const [isEditMode, setIsEditMode] = useState(false);
-  
+
   // State для отслеживания изменений в режиме редактирования
   // ЗАЧЕМ: Показывать кнопку "Сохранить изменения" только при наличии изменений
   const [hasChanges, setHasChanges] = useState(false);
@@ -263,9 +263,9 @@ function UniversalOptionsCalculator() {
   // УБРАНО: AI модель не используется в универсальном калькуляторе
   // Оставляем переменные как заглушки для совместимости с компонентами
   const isAIEnabled = false;
-  const setIsAIEnabled = () => {}; // Заглушка
+  const setIsAIEnabled = () => { }; // Заглушка
   const aiVolatilityMap = {};
-  const setAiVolatilityMap = () => {}; // Заглушка
+  const setAiVolatilityMap = () => { }; // Заглушка
 
   // Синхронизируем targetPrice с currentPrice при первой загрузке цены
   useEffect(() => {
@@ -313,7 +313,7 @@ function UniversalOptionsCalculator() {
         setDividendYield(0);
         return;
       }
-      
+
       setDividendLoading(true);
       try {
         const response = await fetch(`/api/polygon/dividend-yield/${selectedTicker}`);
@@ -331,7 +331,7 @@ function UniversalOptionsCalculator() {
         setDividendLoading(false);
       }
     };
-    
+
     fetchDividendYield();
   }, [selectedTicker]);
 
@@ -342,7 +342,7 @@ function UniversalOptionsCalculator() {
       setStockClassification(null);
       return;
     }
-    
+
     try {
       const response = await fetch(`/api/stock/classify?symbol=${ticker}`);
       if (response.ok) {
@@ -362,23 +362,23 @@ function UniversalOptionsCalculator() {
       setStockClassification(null);
     }
   }, [calculatorMode]);
-  
+
   useEffect(() => {
     fetchClassification(selectedTicker);
   }, [selectedTicker, fetchClassification]);
-  
+
   // Принудительное обновление классификации (очистка кэша + повторный запрос)
   // ЗАЧЕМ: Позволяет пользователю обновить авто-определение группы
   const refreshClassification = useCallback(async () => {
     if (!selectedTicker || calculatorMode !== 'stocks') return;
-    
+
     try {
       // Очищаем кэш для этого тикера
       await fetch(`/api/stock/clear-cache?symbol=${selectedTicker}`, { method: 'POST' });
-      
+
       // Запрашиваем классификацию заново
       await fetchClassification(selectedTicker);
-      
+
       console.log(`🔄 Классификация ${selectedTicker} обновлена`);
     } catch (error) {
       console.error('Ошибка обновления классификации:', error);
@@ -401,15 +401,15 @@ function UniversalOptionsCalculator() {
 
   // State для загрузки дат экспирации
   const [isLoadingDates, setIsLoadingDates] = useState(false);
-  
+
   // State для модального окна "Что нового?"
   // ЗАЧЕМ: Показываем пользователю нововведения при первом посещении новой версии
   const [showWhatsNew, setShowWhatsNew] = useState(() => shouldShowModal());
-  
+
   // State для страйков по датам
   const [strikesByDate, setStrikesByDate] = useState({}); // { "2025-10-17": [195, 200, 205, ...] }
   const [loadingStrikesForDate, setLoadingStrikesForDate] = useState({}); // { "2025-10-17": true }
-  
+
   // State для календаря экспирации (объявляем рано, чтобы использовать в addOption)
   // Используем ISO формат YYYY-MM-DD
   // ВАЖНО: Начальное значение null — дата выбирается пользователем из списка доступных
@@ -422,14 +422,14 @@ function UniversalOptionsCalculator() {
     console.log('📡 [Universal] loadStrikesForDate отключена — данные от расширения');
     return [];
   }, []);
-  
+
   // Функция загрузки деталей опциона (bid/ask/volume/oi) после выбора страйка
   // ОТКЛЮЧЕНО: В универсальном калькуляторе данные приходят от расширения
   const loadOptionDetails = useCallback(async (optionId, ticker, date, strike, optionType, extraFields = {}) => {
     console.log('📡 [Universal] loadOptionDetails отключена — данные от расширения');
     return null;
   }, []);
-  
+
   // Функция загрузки дат экспирации
   // ОТКЛЮЧЕНО: В универсальном калькуляторе даты приходят от расширения
   const loadExpirationDates = useCallback(async (ticker) => {
@@ -453,7 +453,7 @@ function UniversalOptionsCalculator() {
         setPositions([]);
         setExpirationDates({});
         setOptions([]);
-        
+
         // Если priceData передан из NewTikerFinder — используем его сразу
         // ЗАЧЕМ: Избегаем дублирующего запроса к Polygon API
         if (priceData && priceData.price) {
@@ -468,11 +468,11 @@ function UniversalOptionsCalculator() {
           setCurrentPrice(0);
           setPriceChange({ value: 0, percent: 0 });
         }
-        
+
         // Сохраняем классификацию акции для корректировки P&L (только для stocks)
         // ЗАЧЕМ: Применяем коэффициенты группы к прогнозу P&L
         setStockClassification(classification);
-        
+
         // Используем переданный тип инструмента или определяем автоматически
         const type = instrumentType || detectInstrumentType(ticker);
         setDealForm(prev => ({
@@ -500,7 +500,7 @@ function UniversalOptionsCalculator() {
 
   // Флаг для загрузки дат экспирации (отдельно от isDataCleared)
   const [needLoadExpirations, setNeedLoadExpirations] = useState(false);
-  
+
   // ОТКЛЮЧЕНО: В универсальном калькуляторе данные приходят от расширения
   // Не загружаем данные с внешних API (Polygon)
   useEffect(() => {
@@ -523,16 +523,16 @@ function UniversalOptionsCalculator() {
   // ВАЖНО: В универсальном калькуляторе НЕ используем Polygon API — данные только от расширения
   const ivSurface = useMemo(() => {
     if (!options || options.length === 0) return null;
-    
+
     // Преобразуем опционы в формат для buildIVSurface
     const optionsForSurface = options.map(opt => ({
       strike: Number(opt.strike) || 0,
       daysToExpiration: getDaysUntilExpirationUTC(opt.date),
       impliedVolatility: opt.impliedVolatility || opt.implied_volatility || 0
     })).filter(opt => opt.strike > 0 && opt.daysToExpiration > 0 && opt.impliedVolatility > 0);
-    
+
     if (optionsForSurface.length === 0) return null;
-    
+
     const surface = buildIVSurface(optionsForSurface);
     console.log('📊 [Universal] IV Surface построен из опционов расширения:', {
       optionsCount: optionsForSurface.length,
@@ -586,12 +586,12 @@ function UniversalOptionsCalculator() {
     setIsInitialized(false); // ВАЖНО: Сбрасываем флаг инициализации для повторной загрузки при обновлении страницы
     setCalculatorMode(CALCULATOR_MODES.STOCKS); // Сбрасываем режим калькулятора на акции
     setSelectedFuture(null); // Сбрасываем выбранный фьючерс
-    
+
     // ВАЖНО: Очищаем localStorage ПЕРЕД очисткой данных расширения
     // ЗАЧЕМ: Предотвращаем восстановление старой selectedExpirationDate из кэша
     localStorage.removeItem('calculatorState');
     console.log('🧹 [Universal] localStorage.calculatorState очищен');
-    
+
     // Очищаем URL параметры (contract, price)
     // ЗАЧЕМ: Предотвращаем восстановление данных из URL при обновлении страницы
     const url = new URL(window.location.href);
@@ -599,7 +599,7 @@ function UniversalOptionsCalculator() {
     url.searchParams.delete('price');
     window.history.replaceState({}, '', url.pathname);
     console.log('🧹 [Universal] URL параметры очищены');
-    
+
     // Очищаем данные расширения (тикер контракта и временную метку)
     clearExtensionData();
   }, [clearExtensionData]);
@@ -609,7 +609,7 @@ function UniversalOptionsCalculator() {
   // ЗАЧЕМ: Универсальный калькулятор работает только с данными от Chrome Extension
   useEffect(() => {
     if (isInitialized) return;
-    
+
     // === ИНТЕГРАЦИЯ С CHROME EXTENSION ===
     // Если есть данные от расширения — используем их
     if (isFromExtension) {
@@ -619,23 +619,23 @@ function UniversalOptionsCalculator() {
         price: extensionPrice,
         optionsCount: extensionOptions?.length || 0
       });
-      
+
       // Устанавливаем тикер
       if (extensionTicker || contractCode) {
         setSelectedTicker(extensionTicker || contractCode);
       }
-      
+
       // Устанавливаем цену (приоритет URL > localStorage)
       if (extensionPrice > 0) {
         setCurrentPrice(extensionPrice);
         setTargetPrice(extensionPrice);
       }
-      
+
       // Устанавливаем дату экспирации
       if (extensionExpirationDate) {
         setSelectedExpirationDate(extensionExpirationDate);
       }
-      
+
       // Загружаем сохраненное состояние из localStorage для восстановления позиций и ручных изменений
       // ЗАЧЕМ: При перезагрузке страницы восстанавливаем позиции базового актива и ручные изменения цен
       const saved = localStorage.getItem('calculatorState');
@@ -657,21 +657,21 @@ function UniversalOptionsCalculator() {
           console.error('❌ Ошибка чтения сохраненного состояния:', error);
         }
       }
-      
+
       // Определяем текущий тикер от расширения
       const currentTicker = extensionTicker || contractCode;
-      
+
       // Устанавливаем опционы с сохранением ручных изменений Bid/Ask
       if (extensionOptions && extensionOptions.length > 0) {
         // Сливаем данные: берем свежие данные от расширения, но сохраняем ручные изменения
         const mergedOptions = extensionOptions.map(extOption => {
           // Ищем соответствующий опцион в сохраненных данных
-          const savedOption = savedOptions.find(saved => 
-            saved.type === extOption.type && 
-            saved.strike === extOption.strike && 
+          const savedOption = savedOptions.find(saved =>
+            saved.type === extOption.type &&
+            saved.strike === extOption.strike &&
             saved.date === extOption.date
           );
-          
+
           // Если найден сохраненный опцион с ручными изменениями - используем их
           if (savedOption) {
             return {
@@ -686,20 +686,20 @@ function UniversalOptionsCalculator() {
               isPremiumModified: savedOption.isPremiumModified,
             };
           }
-          
+
           return extOption;
         });
-        
+
         setOptions(mergedOptions);
         console.log('📡 [Universal] Загружено опционов:', mergedOptions.length, '(с сохранением ручных изменений)');
       }
-      
+
       // Восстанавливаем позиции базового актива ТОЛЬКО если их тикер совпадает с текущим
       // ЗАЧЕМ: При переключении на другой инструмент позиции от предыдущего тикера должны очищаться
       if (savedPositions.length > 0) {
         // Фильтруем позиции: оставляем только те, у которых ticker совпадает с текущим
         const matchingPositions = savedPositions.filter(pos => pos.ticker === currentTicker);
-        
+
         if (matchingPositions.length > 0) {
           setPositions(matchingPositions);
           console.log('📡 [Universal] Восстановлено позиций базового актива:', matchingPositions.length);
@@ -708,26 +708,26 @@ function UniversalOptionsCalculator() {
           console.log('🔄 [Universal] Позиции не совпадают с текущим тикером', currentTicker, '- позиции очищены');
         }
       }
-      
+
       // Инициализируем prevTickerRef для отслеживания последующих изменений
       // ЗАЧЕМ: Позволяет определить смену тикера в useEffect
       prevTickerRef.current = currentTicker;
       console.log('📝 [Universal] prevTickerRef инициализирован:', currentTicker);
-      
+
       // Автоматически определяем режим (фьючерсы/акции) по тикеру
       // ЗАЧЕМ: Паттерн-детекция работает даже для фьючерсов без настроек
       const ticker = extensionTicker || contractCode;
-      
+
       if (ticker) {
         const detectedType = detectInstrumentTypeByPattern(ticker);
-        
+
         if (detectedType === 'futures') {
           setCalculatorMode(CALCULATOR_MODES.FUTURES);
-          
+
           // Пытаемся найти настройки фьючерса
           const futureInfo = getFutureByTicker(ticker);
           setSelectedFuture(futureInfo);
-          
+
           if (futureInfo) {
             console.log('📊 Автоматически переключено в режим фьючерсов (найдены настройки):', futureInfo);
           } else {
@@ -740,11 +740,11 @@ function UniversalOptionsCalculator() {
           console.log('📊 Автоматически переключено в режим акций:', ticker);
         }
       }
-      
+
       setIsInitialized(true);
       return;
     }
-    
+
     // === ЗАГРУЗКА СОХРАНЕННОГО СОСТОЯНИЯ ===
     // Если нет данных от расширения — пробуем загрузить сохраненное состояние
     // ЗАЧЕМ: При перезагрузке страницы без URL параметра восстанавливаем последнее состояние
@@ -752,16 +752,16 @@ function UniversalOptionsCalculator() {
     if (saved) {
       try {
         const state = JSON.parse(saved);
-        
+
         // Проверяем, что это данные универсального калькулятора (есть underlyingPrice)
         if (state.underlyingPrice !== undefined || state.selectedTicker) {
           console.log('📡 [Universal] Загрузка сохраненного состояния из localStorage');
-          
+
           setSelectedTicker(state.selectedTicker || '');
           setCurrentPrice(state.currentPrice || state.underlyingPrice || 0);
           setTargetPrice(state.currentPrice || state.underlyingPrice || 0);
           setPriceChange(state.priceChange || { value: 0, percent: 0 });
-          
+
           // Восстанавливаем опционы
           const restoredOptions = (state.options || []).map(opt => ({
             ...opt,
@@ -774,7 +774,7 @@ function UniversalOptionsCalculator() {
           setChartDisplayMode(state.chartDisplayMode || 'profit-loss-dollar');
           setStrikesByDate(state.strikesByDate || {});
           setExpirationDates(state.expirationDates || {});
-          
+
           console.log('✅ [Universal] Состояние восстановлено:', {
             ticker: state.selectedTicker,
             optionsCount: restoredOptions.length,
@@ -788,7 +788,7 @@ function UniversalOptionsCalculator() {
     } else {
       console.log('📡 [Universal] Ожидание данных от расширения...');
     }
-    
+
     setIsInitialized(true);
   }, [isInitialized, isFromExtension, contractCode, extensionTicker, extensionPrice, extensionExpirationDate, extensionOptions]);
 
@@ -796,9 +796,9 @@ function UniversalOptionsCalculator() {
   // ЗАЧЕМ: При переключении на другой инструмент очищаем позиции базового актива
   useEffect(() => {
     if (!isInitialized) return;
-    
+
     const currentTicker = extensionTicker || contractCode || selectedTicker;
-    
+
     console.log('🔍 [Universal] Проверка тикера:', {
       prevTicker: prevTickerRef.current,
       currentTicker,
@@ -807,13 +807,13 @@ function UniversalOptionsCalculator() {
       selectedTicker,
       positionsCount: positions.length
     });
-    
+
     // Если тикер изменился и это не первая инициализация
     if (prevTickerRef.current && prevTickerRef.current !== currentTicker && currentTicker) {
       console.log('🔄 [Universal] Смена тикера с', prevTickerRef.current, 'на', currentTicker, '- очистка позиций');
       setPositions([]);
     }
-    
+
     // Обновляем ref для следующей проверки
     if (currentTicker) {
       prevTickerRef.current = currentTicker;
@@ -825,19 +825,19 @@ function UniversalOptionsCalculator() {
   // ЗАЧЕМ: Автоматическое обновление при изменении данных расширением (storage event)
   useEffect(() => {
     if (!isInitialized) return;
-    
+
     // Обновляем опционы при изменении от расширения с сохранением ручных изменений
     if (extensionOptions && extensionOptions.length > 0) {
       setOptions(prevOptions => {
         // Сливаем данные: берем свежие данные от расширения, но сохраняем ручные изменения
         const mergedOptions = extensionOptions.map(extOption => {
           // Ищем соответствующий опцион в текущих данных
-          const existingOption = prevOptions.find(existing => 
-            existing.type === extOption.type && 
-            existing.strike === extOption.strike && 
+          const existingOption = prevOptions.find(existing =>
+            existing.type === extOption.type &&
+            existing.strike === extOption.strike &&
             existing.date === extOption.date
           );
-          
+
           // Если найден опцион с ручными изменениями - сохраняем их
           if (existingOption) {
             return {
@@ -852,15 +852,15 @@ function UniversalOptionsCalculator() {
               isPremiumModified: existingOption.isPremiumModified,
             };
           }
-          
+
           return extOption;
         });
-        
+
         console.log('📡 [Universal] Опционы обновлены от расширения:', mergedOptions.length, '(с сохранением ручных изменений)');
         return mergedOptions;
       });
     }
-    
+
     // Обновляем цену
     if (extensionPrice > 0) {
       setCurrentPrice(extensionPrice);
@@ -869,12 +869,12 @@ function UniversalOptionsCalculator() {
         setTargetPrice(extensionPrice);
       }
     }
-    
+
     // Обновляем тикер
     if (extensionTicker && extensionTicker !== selectedTicker) {
       setSelectedTicker(extensionTicker);
     }
-    
+
     // ИСПРАВЛЕНИЕ: Обновляем дату экспирации при КАЖДОМ изменении от расширения
     // ЗАЧЕМ: Предотвращаем использование закэшированной даты при добавлении новых опционов
     if (extensionExpirationDate) {
@@ -901,21 +901,21 @@ function UniversalOptionsCalculator() {
 
   // УБРАНО: AI модель не используется в универсальном калькуляторе
   // useEffect для автоматического запроса AI прогнозов удалён
-  
+
   // Автоматически устанавливаем daysPassed при изменении опционов
   // ЛОГИКА: Если пользователь установил ползунок — сохраняем его выбор (с коррекцией если нужно)
   // Если пользователь не трогал ползунок — устанавливаем в максимум (день экспирации)
   // ВАЖНО: Для зафиксированных позиций НЕ перезаписываем daysPassed
   useEffect(() => {
     if (options.length === 0) return;
-    
+
     // Для зафиксированных позиций — не перезаписываем daysPassed
     // ЗАЧЕМ: daysPassed уже вычислен как разница между сегодня и датой сохранения
     if (isLocked || savedConfigDate) {
       console.log('📅 Зафиксированная позиция — daysPassed не перезаписывается (isLocked:', isLocked, ', savedConfigDate:', savedConfigDate, ')');
       return;
     }
-    
+
     // Вычисляем самую старую дату входа (entryDate) среди всех опционов
     // ЗАЧЕМ: Ползунок должен начинать отсчет от даты входа в самую старую позицию
     let oldestEntryDate = null;
@@ -926,12 +926,12 @@ function UniversalOptionsCalculator() {
         oldestEntryDate = entryDate;
       }
     });
-    
+
     // Вычисляем максимальное количество дней от самой старой даты входа до экспирации
     // ВАЖНО: Считаем от oldestEntryDate, а не от сегодня
     const baseDate = oldestEntryDate || new Date();
     baseDate.setHours(0, 0, 0, 0);
-    
+
     const maxDays = options.reduce((max, opt) => {
       if (!opt.date) return max;
       const expirationDate = new Date(opt.date + 'T00:00:00');
@@ -939,7 +939,7 @@ function UniversalOptionsCalculator() {
       const daysUntil = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       return Math.max(max, daysUntil);
     }, 0);
-    
+
     if (userAdjustedDays) {
       // Пользователь установил ползунок — сохраняем его выбор
       // ЗАЧЕМ: При изменении опциона ползунок должен остаться на том же дне
@@ -954,41 +954,41 @@ function UniversalOptionsCalculator() {
       setDaysPassed(maxDays);
     }
   }, [options.length, options.map(o => o.date).join(','), options.map(o => o.entryDate).join(','), savedConfigDate, isLocked]); // Добавили entryDate и isLocked в зависимости
-  
+
   const displayOptions = useMemo(() => {
     const result = showDemoData ? demoOptions : options;
     return result;
   }, [showDemoData, options]);
-  
+
   // Шаг 2: Определяем, нужно ли показывать метки дат на флажках
   // Показываем метки, если используется более одной уникальной даты
   const forceShowDateBadges = useMemo(() => {
     // Фильтруем только опционы с датой (displayOptions уже содержит только видимые)
     const optionsWithDate = displayOptions.filter(opt => opt.date && opt.visible !== false);
-    
+
     // DEBUG: Закомментировано для production
     // console.log('🏷️ forceShowDateBadges check:', {
     //   totalDisplayOptions: displayOptions.length,
     //   optionsWithDate: optionsWithDate.length,
     //   dates: optionsWithDate.map(opt => opt.date),
     // });
-    
+
     if (optionsWithDate.length <= 1) {
       // console.log('🏷️ Result: false (only 1 or 0 options)');
       return false;
     }
-    
+
     const uniqueDates = new Set(optionsWithDate.map(opt => opt.date));
     const shouldShow = uniqueDates.size > 1;
-    
+
     // console.log('🏷️ Result:', {
     //   uniqueDates: Array.from(uniqueDates),
     //   shouldShow
     // });
-    
+
     return shouldShow;
   }, [displayOptions]);
-  
+
   // Шаг 3: Создаем единую карту цветов для дат
   // Каждая уникальная дата получает свой цвет
   const dateColorMap = useMemo(() => {
@@ -998,13 +998,13 @@ function UniversalOptionsCalculator() {
       '#34b9fe',  // Голубой
       '#b0a10c',  // Желто-зеленый
     ];
-    
+
     const uniqueDates = [...new Set(displayOptions.filter(opt => opt.date).map(opt => opt.date))].sort();
     const map = {};
     uniqueDates.forEach((date, index) => {
       map[date] = colors[index % colors.length];
     });
-    
+
     // DEBUG: Закомментировано для production
     // console.log('🎨 dateColorMap:', map);
     return map;
@@ -1071,15 +1071,15 @@ function UniversalOptionsCalculator() {
       return updated;
     });
   }, []);
-  
+
   const updatePosition = useCallback((id, field, value) => {
-    setPositions(prevPositions => prevPositions.map((pos) => 
+    setPositions(prevPositions => prevPositions.map((pos) =>
       pos.id === id ? { ...pos, [field]: value } : pos
     ));
   }, []);
-  
+
   const handleStrikeUpdate = useCallback((optionId, updates) => {
-    setOptions(prevOptions => prevOptions.map((opt) => 
+    setOptions(prevOptions => prevOptions.map((opt) =>
       opt.id === optionId ? { ...opt, ...updates } : opt
     ));
     console.log('📍 Strike updated via Drag & Drop:', { optionId, updates });
@@ -1090,7 +1090,7 @@ function UniversalOptionsCalculator() {
   // useEffect для автозагрузки страйков отключен
 
   const roundedPrice = Math.round(currentPrice);
-  
+
   const availableStrikes = useMemo(() => {
     if (!roundedPrice || roundedPrice <= 0) {
       return [200, 210, 220, 230, 240, 250, 260, 270, 280, 290, 300];
@@ -1110,14 +1110,14 @@ function UniversalOptionsCalculator() {
   // Функция для расчета автоматического страйка из доступных страйков
   const calculateAutoStrike = useCallback((type, price = currentPrice) => {
     if (!price || price <= 0 || availableStrikes.length === 0) return null;
-    
+
     // Сортируем страйки по возрастанию
     const sortedStrikes = [...availableStrikes].sort((a, b) => a - b);
-    
+
     // Находим ближайший страйк к текущей цене (ATM)
     let atmIndex = 0;
     let minDiff = Math.abs(sortedStrikes[0] - price);
-    
+
     for (let i = 1; i < sortedStrikes.length; i++) {
       const diff = Math.abs(sortedStrikes[i] - price);
       if (diff < minDiff) {
@@ -1125,15 +1125,15 @@ function UniversalOptionsCalculator() {
         atmIndex = i;
       }
     }
-    
+
     // Считаем сколько уже есть опционов этого типа
     const existingOptionsOfType = options.filter(opt => opt.type === type);
     const countOfType = existingOptionsOfType.length;
-    
+
     // Базовая дистанция: 2 позиции от ATM
     // Дополнительная дистанция: +2 позиции за каждый существующий опцион того же типа
     const additionalDistance = countOfType * 2;
-    
+
     if (type === 'CALL') {
       // Для CALL: берем страйк на (2 + дополнительная дистанция) позиций выше ATM
       const targetIndex = atmIndex + 2 + additionalDistance;
@@ -1143,29 +1143,29 @@ function UniversalOptionsCalculator() {
       const targetIndex = atmIndex - 2 - additionalDistance;
       return targetIndex >= 0 ? sortedStrikes[targetIndex] : sortedStrikes[0];
     }
-    
+
     return null;
   }, [currentPrice, availableStrikes, options]);
 
   const addOption = useCallback((action, type) => {
     // Очищаем название стратегии при добавлении опциона
     setSelectedStrategyName('');
-    
+
     // Шаг 1: Предустанавливаем дату из выбранной на календаре (ISO формат)
     const prefilledDate = selectedExpirationDate || "";
-    
+
     // Шаг 2: Автоматически назначаем страйк (через 2 круглых цены)
     const autoStrike = calculateAutoStrike(type);
-    
-    console.log('🔧 addOption called:', { 
-      selectedExpirationDate, 
-      prefilledDate, 
-      action, 
+
+    console.log('🔧 addOption called:', {
+      selectedExpirationDate,
+      prefilledDate,
+      action,
       type,
       currentPrice,
       autoStrike
     });
-    
+
     const newOption = {
       id: Date.now().toString(),
       action,
@@ -1186,7 +1186,7 @@ function UniversalOptionsCalculator() {
     };
     console.log('✅ New option created:', newOption);
     setOptions(prevOptions => [...prevOptions, newOption]);
-    
+
     // ОТКЛЮЧЕНО: В универсальном калькуляторе данные приходят от расширения
     // Не загружаем страйки и детали опционов с внешних API
   }, [selectedExpirationDate, calculateAutoStrike, selectedTicker]);
@@ -1199,10 +1199,10 @@ function UniversalOptionsCalculator() {
 
   const handleSelectStrategy = (strategyId) => {
     if (!currentPrice) return;
-    
+
     let strategyPositions;
     let strategyName = '';
-    
+
     if (strategyId.startsWith('custom_')) {
       strategyPositions = applyCustomStrategy(strategyId, currentPrice);
       // Получаем название кастомной стратегии
@@ -1215,18 +1215,18 @@ function UniversalOptionsCalculator() {
       const strategy = allStrategies.find(s => s.id === strategyId);
       strategyName = strategy ? strategy.nameRu : '';
     }
-    
+
     // Сохраняем название стратегии ТОЛЬКО если было 0 опционов
     if (options.length === 0) {
       setSelectedStrategyName(strategyName);
     }
     // Шаг 1: Предустанавливаем дату из выбранной на календаре (ISO формат)
     const prefilledDate = selectedExpirationDate || "";
-    
+
     const newOptions = strategyPositions.map((pos, index) => {
       // Если стратегия вернула страйк - используем его, иначе автоназначаем
       let strike = pos.strike;
-      
+
       if (!strike) {
         // Считаем сколько опционов этого типа уже есть в текущей стратегии (до текущего индекса)
         const sameTypeInStrategy = strategyPositions.slice(0, index).filter(p => p.type === pos.type).length;
@@ -1234,13 +1234,13 @@ function UniversalOptionsCalculator() {
         const sameTypeExisting = options.filter(opt => opt.type === pos.type).length;
         // Общее количество = существующие + в текущей стратегии до этого индекса
         const totalSameType = sameTypeExisting + sameTypeInStrategy;
-        
+
         // Вычисляем страйк с учетом offset
         if (availableStrikes.length > 0) {
           const sortedStrikes = [...availableStrikes].sort((a, b) => a - b);
           let atmIndex = 0;
           let minDiff = Math.abs(sortedStrikes[0] - currentPrice);
-          
+
           for (let i = 1; i < sortedStrikes.length; i++) {
             const diff = Math.abs(sortedStrikes[i] - currentPrice);
             if (diff < minDiff) {
@@ -1248,9 +1248,9 @@ function UniversalOptionsCalculator() {
               atmIndex = i;
             }
           }
-          
+
           const additionalDistance = totalSameType * 2;
-          
+
           if (pos.type === 'CALL') {
             const targetIndex = atmIndex + 2 + additionalDistance;
             strike = targetIndex < sortedStrikes.length ? sortedStrikes[targetIndex] : sortedStrikes[sortedStrikes.length - 1];
@@ -1260,7 +1260,7 @@ function UniversalOptionsCalculator() {
           }
         }
       }
-      
+
       return {
         id: `${Date.now()}-${index}`,
         action: pos.action,
@@ -1281,7 +1281,7 @@ function UniversalOptionsCalculator() {
       };
     });
     setOptions([...options, ...newOptions]);
-    
+
     // ОТКЛЮЧЕНО: В универсальном калькуляторе данные приходят от расширения
     // Не загружаем страйки и детали опционов с внешних API
   };
@@ -1318,7 +1318,7 @@ function UniversalOptionsCalculator() {
       try {
         // Используем существующий механизм сохранения
         const success = handleSaveCustomStrategy(strategyName, displayOptions);
-        
+
         if (success) {
           console.log("✅ Стратегия сохранена:", { name: strategyName, comment: strategyComment });
           // Можно сохранить комментарий отдельно, если нужно
@@ -1369,19 +1369,19 @@ function UniversalOptionsCalculator() {
     { date: "2028-01-21", month: "Jan '28", displayDate: "21" },
   ];
 
-  const groupedDates = showDemoData 
+  const groupedDates = showDemoData
     ? expirationDatesStatic.reduce((acc, date) => {
-        const key = date.month;
-        if (!acc[key]) {
-          acc[key] = [];
-        }
-        acc[key].push(date);
-        return acc;
-      }, {})
+      const key = date.month;
+      if (!acc[key]) {
+        acc[key] = [];
+      }
+      acc[key].push(date);
+      return acc;
+    }, {})
     : expirationDates;
 
   const expirationDatesKeys = Object.keys(expirationDates).join(',');
-  
+
   // availableDates теперь просто возвращает ISO даты напрямую
   const availableDates = useMemo(() => {
     let sourceDates;
@@ -1403,42 +1403,42 @@ function UniversalOptionsCalculator() {
   const [isDragging, setIsDragging] = useState(false);
   const [startX, setStartX] = useState(0);
   const [scrollLeft, setScrollLeft] = useState(0);
-  
+
   // Обработчик изменения даты в календаре
   // Если все опционы на одной дате — обновляем дату всех опционов
   const handleExpirationDateChange = useCallback(async (newDate) => {
     setSelectedExpirationDate(newDate);
-    
+
     // Для зафиксированных позиций — не обновляем опционы
     // ЗАЧЕМ: Данные должны оставаться неизменными
     if (isLocked) {
       console.log('📅 Позиции зафиксированы — опционы не обновляются');
       return;
     }
-    
+
     // Проверяем, есть ли опционы
     const optionsWithDate = displayOptions.filter(opt => opt.date);
     if (optionsWithDate.length === 0) {
       console.log('📅 No options with dates');
       return;
     }
-    
+
     // Проверяем, все ли опционы на одной дате
     const uniqueDates = new Set(optionsWithDate.map(opt => opt.date));
     if (uniqueDates.size === 1) {
       const currentDate = Array.from(uniqueDates)[0];
-      
+
       // Если выбрана другая дата — обновляем все опционы
       if (currentDate !== newDate) {
         console.log('📅 Updating all options from', currentDate, 'to', newDate);
-        
+
         // Обновляем даты
-        setOptions(prevOptions => 
-          prevOptions.map(opt => 
+        setOptions(prevOptions =>
+          prevOptions.map(opt =>
             opt.date === currentDate ? { ...opt, date: newDate } : opt
           )
         );
-        
+
         // ОТКЛЮЧЕНО: В универсальном калькуляторе данные приходят от расширения
         // Не загружаем страйки и детали опционов с внешних API
       }
@@ -1499,18 +1499,18 @@ function UniversalOptionsCalculator() {
   const [strategiesDialogOpen, setStrategiesDialogOpen] = useState(false);
   const [selectedStrategy, setSelectedStrategy] = useState("");
   const [selectedStrategyName, setSelectedStrategyName] = useState("");
-  
+
   // State для диалога сохранения конфигурации
   const [saveConfigDialogOpen, setSaveConfigDialogOpen] = useState(false);
   // State для диалога фиксации позиций (isLocked=true)
   const [lockConfigDialogOpen, setLockConfigDialogOpen] = useState(false);
-  
+
   // State для сворачивания блока StrikeScale
   const [isStrikeScaleCollapsed, setIsStrikeScaleCollapsed] = useState(() => {
     const saved = localStorage.getItem('isStrikeScaleCollapsed');
     return saved ? JSON.parse(saved) : false;
   });
-  
+
   // Сохраняем состояние сворачивания в localStorage
   useEffect(() => {
     localStorage.setItem('isStrikeScaleCollapsed', JSON.stringify(isStrikeScaleCollapsed));
@@ -1535,7 +1535,7 @@ function UniversalOptionsCalculator() {
     const searchParams = new URLSearchParams(location.search);
     const configId = searchParams.get('config');
     const editMode = searchParams.get('edit') === 'true';
-    
+
     if (configId) {
       loadConfiguration(configId, editMode);
       setLoadedConfigId(configId);
@@ -1559,7 +1559,7 @@ function UniversalOptionsCalculator() {
       try {
         const configurations = JSON.parse(saved);
         const config = configurations.find(c => c.id === configId);
-        
+
         if (config && config.state) {
           // Проверяем, зафиксирована ли конфигурация
           // ЗАЧЕМ: Если режим редактирования — игнорируем флаг isLocked и разблокируем позиции
@@ -1568,28 +1568,28 @@ function UniversalOptionsCalculator() {
             configIsLocked = false; // Разблокируем для редактирования
           }
           setIsLocked(configIsLocked);
-          
+
           // Сохраняем дату создания конфигурации для зафиксированных позиций
           // ЗАЧЕМ: Ползунок дат должен начинаться с даты входа (entryDate)
           // ВАЖНО: Вычисляем daysPassed сразу здесь, чтобы избежать race condition с useEffect
           let calculatedDaysPassed = config.state.daysPassed || config.state.daysRemaining || 0;
-          
+
           // Используем entryDate для расчетов (дата входа в позицию)
           // Fallback: createdAt или id (для старых конфигураций)
           // ЗАЧЕМ: entryDate — это дата входа в позицию, а createdAt — время создания записи
           const configEntryDate = config.entryDate || config.createdAt || (config.id ? new Date(parseInt(config.id)).toISOString() : null);
-          
-          console.log('🔍 Config debug:', { 
-            configIsLocked, 
+
+          console.log('🔍 Config debug:', {
+            configIsLocked,
             entryDate: config.entryDate,
-            createdAt: config.createdAt, 
+            createdAt: config.createdAt,
             id: config.id,
             configEntryDate
           });
-          
+
           if (configIsLocked) {
             console.log('📅 configEntryDate:', configEntryDate);
-            
+
             if (configEntryDate) {
               setSavedConfigDate(configEntryDate);
               // Вычисляем daysPassed как разницу между сегодня и датой входа
@@ -1608,16 +1608,16 @@ function UniversalOptionsCalculator() {
             console.log('⚠️ Config is NOT locked');
             setSavedConfigDate(null);
           }
-          
+
           // Восстанавливаем состояние калькулятора
           const ticker = config.state.selectedTicker || '';
-          
+
           // Сначала устанавливаем тикер
           if (ticker) {
             setSelectedTicker(ticker);
             setCurrentPrice(config.state.currentPrice || 0);
             setPriceChange(config.state.priceChange || { value: 0, percent: 0 });
-            
+
             // Для зафиксированных позиций загружаем текущую рыночную цену
             // ЗАЧЕМ: Кнопка сброса цены должна сбрасывать на текущую цену, а не на цену при сохранении
             if (configIsLocked) {
@@ -1637,22 +1637,22 @@ function UniversalOptionsCalculator() {
               // Для незафиксированных позиций livePrice не нужен
               setLivePrice(null);
             }
-            
+
             // ОТКЛЮЧЕНО: В универсальном калькуляторе даты приходят от расширения
             // Не загружаем даты экспирации с внешних API
           }
-          
+
           // Затем восстанавливаем остальное состояние
           // Для зафиксированных позиций добавляем initialDaysToExpiration если его нет
           // ЗАЧЕМ: Старые конфигурации могут не иметь этого поля, вычисляем от даты сохранения
           let optionsToSet = config.state.options || [];
-          
+
           // Дата для fallback entryDate (дата создания конфигурации в формате YYYY-MM-DD)
           // ЗАЧЕМ: Для старых конфигураций без entryDate используем дату создания
-          const fallbackEntryDate = configEntryDate 
+          const fallbackEntryDate = configEntryDate
             ? new Date(configEntryDate).toISOString().split('T')[0]
             : new Date().toISOString().split('T')[0];
-          
+
           if (configIsLocked && configEntryDate) {
             const savedDate = new Date(configEntryDate);
             savedDate.setHours(0, 0, 0, 0);
@@ -1671,15 +1671,15 @@ function UniversalOptionsCalculator() {
                 const expDateUTC = Date.UTC(year, month - 1, day);
                 const savedDateUTC = Date.UTC(savedDate.getFullYear(), savedDate.getMonth(), savedDate.getDate());
                 const initialDaysToExpiration = Math.ceil((expDateUTC - savedDateUTC) / (1000 * 60 * 60 * 24));
-                return { 
-                  ...opt, 
-                  initialDaysToExpiration, 
+                return {
+                  ...opt,
+                  initialDaysToExpiration,
                   isLockedPosition: true,
                   entryDate: opt.entryDate || fallbackEntryDate
                 };
               }
-              return { 
-                ...opt, 
+              return {
+                ...opt,
                 isLockedPosition: true,
                 entryDate: opt.entryDate || fallbackEntryDate
               };
@@ -1705,16 +1705,16 @@ function UniversalOptionsCalculator() {
           setOptions(optionsToSet);
           setPositions(config.state.positions || []);
           setSelectedExpirationDate(config.state.selectedExpirationDate || '');
-          
+
           // Устанавливаем daysPassed (вычисленный выше)
           setDaysPassed(calculatedDaysPassed);
           // Помечаем что пользователь "настроил" бегунок, чтобы useEffect не перезаписал
           setUserAdjustedDays(true);
-          
+
           setShowOptionLines(config.state.showOptionLines !== undefined ? config.state.showOptionLines : true);
           setShowProbabilityZones(config.state.showProbabilityZones !== undefined ? config.state.showProbabilityZones : true);
           setChartDisplayMode(config.state.chartDisplayMode || 'profit-loss-dollar');
-          
+
           console.log(`✅ Конфигурация загружена: ${config.name}${configIsLocked ? ' (🔒 зафиксирована)' : ''}`);
         } else {
           console.warn('⚠️ Конфигурация не найдена:', configId);
@@ -1726,7 +1726,7 @@ function UniversalOptionsCalculator() {
       }
     }
   };
-  
+
   // Отслеживание изменений в режиме редактирования
   // ЗАЧЕМ: Показывать кнопку "Сохранить изменения" только при наличии изменений
   useEffect(() => {
@@ -1734,7 +1734,7 @@ function UniversalOptionsCalculator() {
       setHasChanges(false);
       return;
     }
-    
+
     // Если есть какие-то изменения в опционах, позициях или других параметрах — отмечаем это
     setHasChanges(true);
   }, [isEditMode, loadedConfigId, options, positions, selectedExpirationDate, daysPassed, showOptionLines, showProbabilityZones, chartDisplayMode]);
@@ -1750,32 +1750,32 @@ function UniversalOptionsCalculator() {
       console.log('🔒 Автосохранение отключено: позиция зафиксирована');
       return;
     }
-    
+
     // Если в режиме редактирования — НЕ автосохраняем (только ручное сохранение)
     // ЗАЧЕМ: В режиме редактирования пользователь должен явно нажать "Сохранить изменения"
     if (isEditMode) {
       console.log('✏️ Автосохранение отключено: режим редактирования');
       return;
     }
-    
+
     if (!loadedConfigId || options.length === 0) return;
-    
+
     const saved = localStorage.getItem('universalCalculatorConfigurations');
     if (!saved) return;
-    
+
     try {
       const configurations = JSON.parse(saved);
       const configIndex = configurations.findIndex(c => c.id === loadedConfigId);
-      
+
       if (configIndex === -1) return;
-      
+
       // Дополнительная проверка: не обновляем зафиксированные конфигурации
       // ЗАЧЕМ: Защита от случайного изменения даже если isLocked state ещё не синхронизирован
       if (configurations[configIndex].isLocked) {
         console.log('🔒 Автосохранение отключено: конфигурация зафиксирована в localStorage');
         return;
       }
-      
+
       // Обновляем состояние конфигурации (только для незафиксированных)
       configurations[configIndex].state = {
         ...configurations[configIndex].state,
@@ -1788,7 +1788,7 @@ function UniversalOptionsCalculator() {
         chartDisplayMode,
         calculatorMode,
       };
-      
+
       localStorage.setItem('universalCalculatorConfigurations', JSON.stringify(configurations));
       console.log('💾 Конфигурация автосохранена:', loadedConfigId);
     } catch (error) {
@@ -1800,7 +1800,7 @@ function UniversalOptionsCalculator() {
   const handleSaveConfiguration = (configuration) => {
     const saved = localStorage.getItem('universalCalculatorConfigurations');
     let configurations = [];
-    
+
     if (saved) {
       try {
         configurations = JSON.parse(saved);
@@ -1808,10 +1808,10 @@ function UniversalOptionsCalculator() {
         console.error('Ошибка парсинга сохраненных конфигураций:', error);
       }
     }
-    
+
     configurations.push(configuration);
     localStorage.setItem('universalCalculatorConfigurations', JSON.stringify(configurations));
-    
+
     console.log('✅ Конфигурация сохранена:', configuration.name);
     alert('Конфигурация успешно сохранена!');
   };
@@ -1820,7 +1820,7 @@ function UniversalOptionsCalculator() {
   // ЗАЧЕМ: Автоматически создает название из тикера, опционов и даты экспирации
   const generateConfigurationName = () => {
     if (!selectedTicker) return 'Конфигурация';
-    
+
     // Формируем строку с опционами
     const optionsStr = options
       .filter(opt => opt.visible !== false)
@@ -1830,14 +1830,14 @@ function UniversalOptionsCalculator() {
         return `${action}${type}${opt.strike}`;
       })
       .join('_');
-    
+
     // Формируем дату экспирации в формате DD.MM.YY
     let dateStr = '';
     if (selectedExpirationDate) {
       const [year, month, day] = selectedExpirationDate.split('-');
       dateStr = `${day}.${month}.${year.slice(-2)}`;
     }
-    
+
     // Собираем название: TICKER_OPCS_DATE
     let name = selectedTicker;
     if (optionsStr) {
@@ -1846,7 +1846,7 @@ function UniversalOptionsCalculator() {
     if (dateStr) {
       name += `_${dateStr}`;
     }
-    
+
     return name;
   };
 
@@ -1855,28 +1855,28 @@ function UniversalOptionsCalculator() {
   // ВАЖНО: Сохраняет флаг isLocked если конфигурация была зафиксирована
   const handleSaveEditedConfiguration = () => {
     if (!loadedConfigId) return;
-    
+
     const saved = localStorage.getItem('universalCalculatorConfigurations');
     if (!saved) return;
-    
+
     try {
       const configurations = JSON.parse(saved);
       const configIndex = configurations.findIndex(c => c.id === loadedConfigId);
-      
+
       if (configIndex === -1) return;
-      
+
       const config = configurations[configIndex];
-      
+
       // Генерируем новое название на основе текущих данных
       // ЗАЧЕМ: Название должно отражать новые данные после редактирования
       const generatedName = generateConfigurationName();
-      
+
       // Добавляем эмодзи ✍️ в начало названия если его еще нет
       let updatedName = generatedName;
       if (!updatedName.startsWith('✍️')) {
         updatedName = `✍️ ${updatedName}`;
       }
-      
+
       // Восстанавливаем флаги блокировки для опционов если конфигурация была зафиксирована
       // ЗАЧЕМ: После редактирования зафиксированная позиция должна остаться зафиксированной
       let optionsToSave = options;
@@ -1886,7 +1886,7 @@ function UniversalOptionsCalculator() {
           isLockedPosition: true
         }));
       }
-      
+
       // Обновляем конфигурацию
       configurations[configIndex] = {
         ...config,
@@ -1906,12 +1906,12 @@ function UniversalOptionsCalculator() {
           calculatorMode,
         },
       };
-      
+
       localStorage.setItem('universalCalculatorConfigurations', JSON.stringify(configurations));
-      
+
       // Сбрасываем флаг изменений
       setHasChanges(false);
-      
+
       console.log('✅ Изменения сохранены:', updatedName);
       alert('Изменения успешно сохранены!');
     } catch (error) {
@@ -1945,38 +1945,36 @@ function UniversalOptionsCalculator() {
         {/* ВАЖНО: Показываем только после инициализации, чтобы избежать мигания неправильного режима */}
         {isInitialized && isFromExtension && (contractCode || selectedTicker) && (
           <div className="mb-6">
-            <div className={`inline-flex items-center gap-4 p-3 border-2 rounded-lg ${
-                calculatorMode === CALCULATOR_MODES.FUTURES 
-                  ? 'border-purple-400 bg-purple-50 dark:bg-purple-950/30' 
-                  : 'border-teal-400 bg-teal-50 dark:bg-teal-950/30'
+            <div className={`inline-flex items-center gap-4 p-3 border-2 rounded-lg ${calculatorMode === CALCULATOR_MODES.FUTURES
+              ? 'border-purple-400 bg-purple-50 dark:bg-purple-950/30'
+              : 'border-teal-400 bg-teal-50 dark:bg-teal-950/30'
               }`}>
               {/* Индикатор режима Акции/Фьючерсы */}
               {/* ЗАЧЕМ: Отображает текущий тип инструмента */}
               <div className="flex items-center gap-1 bg-white/50 dark:bg-gray-800/50 rounded-md p-0.5">
-                <div className={`px-2 py-1 text-xs font-medium rounded ${
-                  calculatorMode === CALCULATOR_MODES.STOCKS 
-                    ? 'bg-teal-500 text-white' 
-                    : 'bg-purple-500 text-white'
-                }`}>
+                <div className={`px-2 py-1 text-xs font-medium rounded ${calculatorMode === CALCULATOR_MODES.STOCKS
+                  ? 'bg-teal-500 text-white'
+                  : 'bg-purple-500 text-white'
+                  }`}>
                   {calculatorMode === CALCULATOR_MODES.STOCKS ? 'Акции' : 'Фьючерсы'}
                 </div>
               </div>
-              
+
               {/* Логотип TradingView */}
               <div className="flex items-center">
-                <img 
-                  src="/images/black-full-logo.svg" 
-                  alt="TradingView" 
+                <img
+                  src="/images/black-full-logo.svg"
+                  alt="TradingView"
                   style={{ height: '20px', width: 'auto' }}
                 />
               </div>
-              
+
               {/* Код актива */}
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">Актив:</span>
                 <span className="text-lg font-bold">{contractCode || selectedTicker}</span>
               </div>
-              
+
               {/* Цена базового актива */}
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">Цена:</span>
@@ -1984,7 +1982,7 @@ function UniversalOptionsCalculator() {
                   ${currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).replace(/,/g, ' ')}
                 </span>
               </div>
-              
+
               {/* Цена пункта для фьючерсов */}
               {calculatorMode === CALCULATOR_MODES.FUTURES && (
                 <div className="flex items-center gap-2">
@@ -1994,7 +1992,7 @@ function UniversalOptionsCalculator() {
                   </span>
                 </div>
               )}
-              
+
               {/* Селектор группы акции (только для режима stocks) */}
               {calculatorMode === CALCULATOR_MODES.STOCKS && selectedTicker && (
                 <StockGroupSelector
@@ -2022,7 +2020,7 @@ function UniversalOptionsCalculator() {
             </div>
           </div>
         )}
-        
+
         {/* Сообщение если нет данных от расширения */}
         {!isFromExtension && isInitialized && (
           <div className="mb-6">
@@ -2033,7 +2031,7 @@ function UniversalOptionsCalculator() {
               </div>
               <div className="text-sm text-muted-foreground mt-2 space-y-2">
                 <p>
-                  Откройте страницу опционов на TradingView и нажмите кнопку ОТКРЫТЬ КАЛЬКУЛЯТОР в расширении. 
+                  Откройте страницу опционов на TradingView и нажмите кнопку ОТКРЫТЬ КАЛЬКУЛЯТОР в расширении.
                   Или просто добавьте любой опцион через кнопку +С или +Р, калькулятор откроется автоматически.
                 </p>
                 <p className="font-medium">
@@ -2043,7 +2041,7 @@ function UniversalOptionsCalculator() {
             </div>
           </div>
         )}
-        
+
         {/* Предупреждение об отсутствии настроек фьючерса */}
         {isFuturesMissingSettings && (
           <div className="mb-6">
@@ -2065,8 +2063,8 @@ function UniversalOptionsCalculator() {
         <div className="space-y-6">
           <div className="flex gap-6">
             <div className="flex-[1] space-y-6" style={{ minWidth: '400px', maxWidth: '400px' }}>
-              <Card 
-                className="flex-[1]" 
+              <Card
+                className="flex-[1]"
                 style={{ borderColor: '#b8b8b8' }}
               >
                 <CardContent className="pt-[20px] pb-[20px] space-y-4">
@@ -2107,14 +2105,14 @@ function UniversalOptionsCalculator() {
                             // ЗАЧЕМ: IV из подбора должна совпадать с IV в таблице
                             impliedVolatility: option.iv || option.impliedVolatility || 0,
                             visible: true,
-                            isLoadingDetails: true, // Показываем что загружаем детали
+                            isLoadingDetails: false, // Показываем что загружаем детали
                             bestExitDay: bestExitDay, // Индивидуальный лучший день выхода для этого опциона
                             // Дата входа в позицию (текущая дата в ISO формате YYYY-MM-DD)
                             // ЗАЧЕМ: Фиксируем момент создания опциона для отслеживания времени нахождения в позиции
                             entryDate: new Date().toISOString().split('T')[0],
                           };
                           setOptions(prevOptions => [...prevOptions, newOption]);
-                          
+
                           // Устанавливаем параметры симуляции из ИИ подбора
                           if (option.daysAfterEntry) {
                             setDaysPassed(option.daysAfterEntry);
@@ -2129,11 +2127,11 @@ function UniversalOptionsCalculator() {
                             setSelectedExpirationDate(option.expirationDate);
                             console.log('🤖 ИИ подбор: установлена дата экспирации =', option.expirationDate);
                           }
-                          
+
                           // УДАЛЕНО: Автоматическая установка optionSelectionParams после ИИ подбора
                           // ЗАЧЕМ: ИИ подбора больше нет, расчёты должны запускаться только по явному действию пользователя
                           // (через волшебную/золотую кнопку в onMagicSelectionComplete)
-                          
+
                           // ОТКЛЮЧЕНО: В универсальном калькуляторе данные приходят от расширения
                           // Не загружаем детали опционов с внешних API
                         }}
@@ -2163,10 +2161,9 @@ function UniversalOptionsCalculator() {
 
               {/* Синхронизированный блок настроек цены и времени */}
               {selectedTicker && (
-                <Card 
-                  className={`w-full relative overflow-hidden ${
-                    displayOptions.length === 0 ? 'opacity-20 pointer-events-none' : ''
-                  }`} 
+                <Card
+                  className={`w-full relative overflow-hidden ${displayOptions.length === 0 ? 'opacity-20 pointer-events-none' : ''
+                    }`}
                   style={{ borderColor: '#b8b8b8' }}
                 >
                   <div className="flex items-center justify-between px-6 py-3 border-b border-border">
@@ -2207,10 +2204,9 @@ function UniversalOptionsCalculator() {
               )}
 
               {shouldShowBlock('calculator-settings') && (
-                <Card 
-                  className={`w-full relative ${
-                    displayOptions.length === 0 ? 'opacity-20 pointer-events-none' : ''
-                  }`} 
+                <Card
+                  className={`w-full relative ${displayOptions.length === 0 ? 'opacity-20 pointer-events-none' : ''
+                    }`}
                   style={{ borderColor: '#b8b8b8' }}
                 >
                   <CalculatorSettings
@@ -2288,7 +2284,7 @@ function UniversalOptionsCalculator() {
                           action: option.action || 'Buy',
                           type: option.type || 'PUT',
                           strike: option.strike,
-                          date: option.expirationDate,
+                          date: option.expirationDate || option.date, // Поддержка date из SuperSelection
                           quantity: 1,
                           premium: option.premium || 0,
                           bid: option.bid || 0,
@@ -2296,14 +2292,18 @@ function UniversalOptionsCalculator() {
                           volume: option.volume || 0,
                           oi: option.openInterest || 0,
                           delta: option.delta || 0,
+                          gamma: option.gamma || 0,
+                          theta: option.theta || 0,
+                          vega: option.vega || 0,
                           impliedVolatility: option.iv || option.impliedVolatility || 0,
                           visible: true,
-                          isLoadingDetails: true,
+                          isLoadingDetails: false,
                           isGoldenOption: option.isGoldenOption || false, // Флаг для визуальной индикации золотой короны
+                          entryDate: option.entryDate || new Date().toISOString().split('T')[0], // Дата входа
                         };
                         console.log('👑 OptionsCalculatorBasic: Создан новый опцион с isGoldenOption:', newOption.isGoldenOption, newOption);
                         setOptions(prevOptions => [...prevOptions, newOption]);
-                        
+
                         // ОТКЛЮЧЕНО: В универсальном калькуляторе данные приходят от расширения
                         // Не загружаем детали опционов с внешних API
                       }}
@@ -2378,7 +2378,7 @@ function UniversalOptionsCalculator() {
 
               {shouldShowBlock('metrics-block') && !isFuturesMissingSettings && (
                 <Card className="w-full relative" style={{ borderColor: '#b8b8b8' }}>
-                  <OptionsMetrics 
+                  <OptionsMetrics
                     options={displayOptions}
                     currentPrice={currentPrice}
                     positions={positions}
@@ -2398,7 +2398,7 @@ function UniversalOptionsCalculator() {
 
               <Card className="w-full relative" style={{ borderColor: '#b8b8b8' }}>
                 <CardContent className="pt-4 pb-4 px-6">
-                  <PLChart 
+                  <PLChart
                     options={displayOptions}
                     currentPrice={currentPrice}
                     positions={positions}
@@ -2520,7 +2520,7 @@ function UniversalOptionsCalculator() {
           onSave={handleSaveConfiguration}
           currentState={getCurrentState()}
         />
-        
+
         {/* Диалог фиксации позиций (isLocked=true) */}
         <SaveConfigurationDialog
           isOpen={lockConfigDialogOpen}
@@ -2529,7 +2529,7 @@ function UniversalOptionsCalculator() {
           currentState={getCurrentState()}
           isLocked={true}
         />
-        
+
         {/* Модальное окно "Что нового?" */}
         {showWhatsNew && (
           <WhatsNewModal onClose={() => setShowWhatsNew(false)} />

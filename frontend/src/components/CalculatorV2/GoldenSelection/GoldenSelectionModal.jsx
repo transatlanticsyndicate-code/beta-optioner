@@ -14,7 +14,12 @@ import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
 import { Crown, AlertCircle, CheckCircle, Loader2, Link, ChevronDown, ChevronUp } from 'lucide-react';
-import { findBestGoldenBuyCall, findBestGoldenBuyPut } from './goldenSelectionLogic';
+import {
+    findBestGoldenBuyCall,
+    findBestGoldenBuyPut,
+    selectBestGoldenCall,
+    selectBestGoldenPut
+} from './goldenSelectionLogic';
 import { sendRefreshSingleStrikeCommand } from '../../../hooks/useExtensionData';
 
 /**
@@ -52,6 +57,9 @@ function GoldenSelectionModal({
     const [targetPriceInput, setTargetPriceInput] = React.useState(''); // State for direct price input
     const [progress, setProgress] = React.useState('');
     const [isParamsCollapsed, setIsParamsCollapsed] = React.useState(true);
+
+    // НОВОЕ: Состояние ожидания ответа от расширения
+    const [isWaitingForExtension, setIsWaitingForExtension] = React.useState(false);
 
     // Проверка условия Сценария 1: Калькулятор должен быть пуст
     const isEmptyState = positions.length === 0 && options.length === 0;
@@ -110,6 +118,7 @@ function GoldenSelectionModal({
             setStep('check');
             setSearchResult(null);
             setError(null);
+            setIsWaitingForExtension(false);
         }
     }, [isOpen]);
 
@@ -166,6 +175,74 @@ function GoldenSelectionModal({
         }
     };
 
+    // НОВОЕ: Эффект для обработки ответа от расширения
+    // ЗАЧЕМ: Когда мы ждем обновления от расширения, мы следим за изменением массива options
+    React.useEffect(() => {
+        if (!isWaitingForExtension || !isFromExtension) return;
+
+        // Если это первый запуск и опционов еще нет, ждем
+        if (options.length === 0) return;
+
+        console.log('👑 [Extension Response] Опционы обновлены, запускаем подбор...', {
+            optionsCount: options.length,
+            waiting: isWaitingForExtension
+        });
+
+        // Запускаем логику подбора на НОВЫХ данных
+        let result;
+        if (activeScenario === 'SCENARIO_2') {
+            result = selectBestGoldenCall({
+                options: options,
+                currentPrice,
+                growthPercent: Number(growthPercent),
+                strikeRangePercent: Number(strikeRangePercentCall),
+                profitTolerancePercent: Number(profitTolerancePercentCall)
+            });
+        } else if (activeScenario === 'SCENARIO_3') {
+            result = selectBestGoldenPut({
+                options: options, // В этом списке могут быть и CALL и PUT, функция сама отфильтрует
+                currentPrice,
+                dropPercent: Number(dropPercent),
+                exitDay: Number(exitDay),
+                strikeRangePercent: Number(strikeRangePercent),
+                profitTolerancePercent: Number(profitTolerancePercentPut)
+            });
+        }
+
+        console.log('👑 [Extension Response] Результат подбора:', result);
+
+        if (result && !result.error) {
+            addOptionToTable(result);
+            setIsWaitingForExtension(false);
+        } else {
+            // Возможно пришли не те данные (например только CALL, а мы ждем PUT)
+            // Продолжаем ждать или показываем ошибку если таймаут?
+            // Пока просто логируем ошибку поиска, но не сбрасываем ожидание сразу, вдруг данные еще догружаются?
+            // Или сбрасываем? Обычно расширение обновляет все сразу.
+            console.log('👑 [Extension Response] Ошибка подбора:', result?.message);
+            // Если ошибка "Нет валидных...", возможно данные еще не пришли полностью?
+            // Но мы реагируем на КАЖДОЕ обновление options.
+            // Если результат отрицательный, лучше показать ошибку в UI
+            setError(result?.message || 'Не удалось подобрать опцион по обновленным данным');
+            setStep('input');
+            setIsWaitingForExtension(false);
+        }
+
+    }, [
+        options, // Следим за изменением опционов
+        isWaitingForExtension,
+        isFromExtension,
+        activeScenario,
+        currentPrice,
+        growthPercent,
+        strikeRangePercentCall,
+        profitTolerancePercentCall,
+        dropPercent,
+        exitDay,
+        strikeRangePercent,
+        profitTolerancePercentPut
+    ]);
+
     const handleSearch = async () => {
         console.log('👑 handleSearch: Начинаем поиск, сценарий:', activeScenario);
         setStep('searching');
@@ -175,6 +252,9 @@ function GoldenSelectionModal({
         // РЕЖИМ РАСШИРЕНИЯ: Отправляем команду refresh_single_strike в расширение TradingView
         // ЗАЧЕМ: Расширение соберет данные опционов с одним страйком (currentPrice + strikePercent%)
         if (isFromExtension) {
+            setIsWaitingForExtension(true);
+            setProgress('Ожидание данных от расширения...');
+
             if (activeScenario === 'SCENARIO_2') {
                 // Шаг 1: BuyCALL — страйк = currentPrice + strikeRangePercentCall%
                 sendRefreshSingleStrikeCommand(
@@ -192,9 +272,8 @@ function GoldenSelectionModal({
                 );
                 console.log(`📤 [Extension] Отправлена команда refresh_single_strike для BuyPUT: days ${minDaysPut}-${maxDaysPut}, strike +${strikeRangePercent}%`);
             }
-            // Расширение обновит localStorage, после чего можно продолжить подбор
-            // TODO: Добавить ожидание результата от расширения
-            setStep('input');
+
+            // Больше ничего не делаем, ждем useEffect который сработает при обновлении options
             return;
         }
 
