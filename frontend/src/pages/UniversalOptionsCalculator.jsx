@@ -560,7 +560,9 @@ function UniversalOptionsCalculator() {
     localStorage.setItem('calculatorState', JSON.stringify(state));
     console.log('💾 [Universal] Сохранение состояния:', {
       positionsCount: positions.length,
-      positions: positions
+      optionsCount: options.length,
+      superOptions: options.filter(o => o.isSuperOption).length,
+      sampleOption: options[0] ? { type: options[0].type, isSuper: !!options[0].isSuperOption } : 'none'
     });
   }, [selectedTicker, currentPrice, priceChange, options, positions, selectedExpirationDate, daysPassed, chartDisplayMode, showOptionLines, showProbabilityZones, strikesByDate, expirationDates]);
 
@@ -665,12 +667,50 @@ function UniversalOptionsCalculator() {
       if (extensionOptions && extensionOptions.length > 0) {
         // Сливаем данные: берем свежие данные от расширения, но сохраняем ручные изменения
         const mergedOptions = extensionOptions.map(extOption => {
-          // Ищем соответствующий опцион в сохраненных данных
-          const savedOption = savedOptions.find(saved =>
-            saved.type === extOption.type &&
-            saved.strike === extOption.strike &&
-            saved.date === extOption.date
-          );
+          // Ищем соответствующий опцион в сохраненных данных с более гибким сравнением
+          const savedOption = savedOptions.find(saved => {
+            const savedType = saved.type || saved.optionType || '';
+            const extType = extOption.type || extOption.optionType || '';
+            const typeMatch = savedType.toUpperCase() === extType.toUpperCase();
+
+            const strikeMatch = Math.abs(parseFloat(saved.strike) - parseFloat(extOption.strike)) < 0.001;
+
+            // Сравнение дат с учетом возможных смещений часовых поясов (допуск 48 часов)
+            let dateMatch = false;
+            try {
+              // Пытаемся сравнить как объекты Date
+              const t1 = new Date(saved.date).getTime();
+              const t2 = new Date(extOption.date).getTime();
+
+              if (!isNaN(t1) && !isNaN(t2)) {
+                // Разница в часах
+                const diffHours = Math.abs(t1 - t2) / (1000 * 60 * 60);
+                // Считаем совпадением, если разница меньше 48 часов (чтобы покрыть смену суток из-за TZ)
+                dateMatch = diffHours < 48;
+              } else {
+                // Fallback на смелое строковое стравнение (prefix)
+                const s1 = (saved.date || '').toString().split('T')[0];
+                const s2 = (extOption.date || '').toString().split('T')[0];
+                dateMatch = s1 === s2;
+              }
+            } catch (e) {
+              console.warn('Date comparison error:', e);
+              dateMatch = false;
+            }
+
+            return typeMatch && strikeMatch && dateMatch;
+          });
+
+          // DEBUG: Логируем если опцион найден или если это супер опцион
+          if (extOption.isSuperOption || (savedOption && savedOption.isSuperOption)) {
+            console.log('💎 Super Option merge check:', {
+              extHasFlag: !!extOption.isSuperOption,
+              savedHasFlag: !!savedOption?.isSuperOption,
+              foundSaved: !!savedOption,
+              extDate: extOption.date,
+              savedDate: savedOption?.date
+            });
+          }
 
           // Если найден сохраненный опцион с ручными изменениями - используем их
           if (savedOption) {
@@ -684,6 +724,12 @@ function UniversalOptionsCalculator() {
               isAskModified: savedOption.isAskModified,
               // Сохраняем ручные изменения премии
               isPremiumModified: savedOption.isPremiumModified,
+              // Сохраняем флаги происхождения опциона (Super/Golden)
+              isSuperOption: savedOption.isSuperOption,
+              isGoldenOption: savedOption.isGoldenOption,
+              // Сохраняем дополнительные параметры
+              entryDate: savedOption.entryDate,
+              simulationTargetPrice: savedOption.simulationTargetPrice,
             };
           }
 
@@ -831,12 +877,34 @@ function UniversalOptionsCalculator() {
       setOptions(prevOptions => {
         // Сливаем данные: берем свежие данные от расширения, но сохраняем ручные изменения
         const mergedOptions = extensionOptions.map(extOption => {
-          // Ищем соответствующий опцион в текущих данных
-          const existingOption = prevOptions.find(existing =>
-            existing.type === extOption.type &&
-            existing.strike === extOption.strike &&
-            existing.date === extOption.date
-          );
+          // Ищем соответствующий опцион в текущих данных с более гибким сравнением
+          const existingOption = prevOptions.find(existing => {
+            const existingType = existing.type || existing.optionType || '';
+            const extType = extOption.type || extOption.optionType || '';
+            const typeMatch = existingType.toUpperCase() === extType.toUpperCase();
+
+            const strikeMatch = Math.abs(parseFloat(existing.strike) - parseFloat(extOption.strike)) < 0.001;
+
+            // Сравнение дат с учетом возможных смещений часовых поясов (допуск 48 часов)
+            let dateMatch = false;
+            try {
+              const t1 = new Date(existing.date).getTime();
+              const t2 = new Date(extOption.date).getTime();
+
+              if (!isNaN(t1) && !isNaN(t2)) {
+                const diffHours = Math.abs(t1 - t2) / (1000 * 60 * 60);
+                dateMatch = diffHours < 48;
+              } else {
+                const s1 = (existing.date || '').toString().split('T')[0];
+                const s2 = (extOption.date || '').toString().split('T')[0];
+                dateMatch = s1 === s2;
+              }
+            } catch (e) {
+              dateMatch = false;
+            }
+
+            return typeMatch && strikeMatch && dateMatch;
+          });
 
           // Если найден опцион с ручными изменениями - сохраняем их
           if (existingOption) {
@@ -850,6 +918,12 @@ function UniversalOptionsCalculator() {
               isAskModified: existingOption.isAskModified,
               // Сохраняем ручные изменения премии
               isPremiumModified: existingOption.isPremiumModified,
+              // Сохраняем флаги происхождения опциона (Super/Golden)
+              isSuperOption: existingOption.isSuperOption,
+              isGoldenOption: existingOption.isGoldenOption,
+              // Сохраняем дополнительные параметры
+              entryDate: existingOption.entryDate,
+              simulationTargetPrice: existingOption.simulationTargetPrice,
             };
           }
 
@@ -2299,10 +2373,24 @@ function UniversalOptionsCalculator() {
                           visible: true,
                           isLoadingDetails: false,
                           isGoldenOption: option.isGoldenOption || false, // Флаг для визуальной индикации золотой короны
+                          isSuperOption: option.isSuperOption || false, // Флаг для визуальной индикации бриллианта (Super Selection)
                           entryDate: option.entryDate || new Date().toISOString().split('T')[0], // Дата входа
                         };
                         console.log('👑 OptionsCalculatorBasic: Создан новый опцион с isGoldenOption:', newOption.isGoldenOption, newOption);
                         setOptions(prevOptions => [...prevOptions, newOption]);
+
+                        // Если передана целевая цена симуляции (например, из SuperSelection), устанавливаем её
+                        if (option.simulationTargetPrice) {
+                          setTargetPrice(option.simulationTargetPrice);
+                          console.log('💎 SuperSelection: установлена targetPrice =', option.simulationTargetPrice);
+                        }
+
+                        // Если передано количество дней для симуляции, устанавливаем его
+                        if (option.simulationDaysPassed !== undefined) {
+                          setDaysPassed(option.simulationDaysPassed);
+                          setUserAdjustedDays(true);
+                          console.log('💎 SuperSelection: установлено daysPassed =', option.simulationDaysPassed);
+                        }
 
                         // ОТКЛЮЧЕНО: В универсальном калькуляторе данные приходят от расширения
                         // Не загружаем детали опционов с внешних API

@@ -14,7 +14,7 @@ import {
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
-import { Gem, MoveRight, Loader2, ArrowRight } from 'lucide-react';
+import { Gem, MoveRight, Loader2, ArrowRight, AlertTriangle } from 'lucide-react';
 import { sendRefreshRangeCommand, readExtensionResult, useExtensionData } from '../../../hooks/useExtensionData';
 import { calculateSuperSelectionScenarios } from './superSelectionLogic';
 
@@ -64,25 +64,57 @@ function SuperSelectionModal({
     const [minStrikePercent, setMinStrikePercent] = useState('-5');
     const [maxStrikePercent, setMaxStrikePercent] = useState('20');
 
+    // 4. Выход на день (только для шага 2)
+    const [exitDay, setExitDay] = useState('0');
+
     // Результаты расчета
     const [results, setResults] = useState([]);
 
-    // Сброс статуса при открытии
+    // Определение текущего шага
+    // ШАГ 2 только если:
+    // 1. Есть ровно один опцион "Супер подбора"
+    // 2. Его тип CALL
+    const superOptions = options.filter(opt => opt.isSuperOption);
+    const step = (superOptions.length === 1 && superOptions[0].type === 'CALL') ? 2 : 1;
+
+    // Блокировка Шага 1, если калькулятор не пуст
+    const isBlocked = step === 1 && options.length > 0;
+
+    // Сброс статуса и инициализация параметров при открытии
     useEffect(() => {
         if (isOpen) {
             setStatus('idle');
             setResults([]);
             setProgressMessage('');
-        }
-    }, [isOpen]);
 
-    // Инициализация цены падения при открытии окна
-    useEffect(() => {
-        if (isOpen && currentPrice && dropPercent && !dropPrice) {
-            const price = currentPrice * (1 - parseFloat(dropPercent) / 100);
-            setDropPrice(price.toFixed(2));
+            // Установка дефолтных значений в зависимости от шага
+            let newDropPercent = '5';
+
+            if (step === 2) {
+                newDropPercent = '2.5';
+                setDropPercent(newDropPercent);
+                setMinDays('8');
+                setMaxDays('100');
+                setMinStrikePercent('-5');
+                setMaxStrikePercent('20');
+                setExitDay('5');
+            } else {
+                newDropPercent = '5';
+                setDropPercent(newDropPercent);
+                setMinDays('90');
+                setMaxDays('300');
+                setMinStrikePercent('-5');
+                setMaxStrikePercent('20');
+                setExitDay('0');
+            }
+
+            // Обновляем цену падения
+            if (currentPrice) {
+                const price = currentPrice * (1 - parseFloat(newDropPercent) / 100);
+                setDropPrice(price.toFixed(2));
+            }
         }
-    }, [isOpen, currentPrice]);
+    }, [isOpen]); // step и currentPrice не добавляем в зависимости, чтобы не сбрасывать при их изменении внутри модалки (хотя они не должны меняться)
 
     // --- ЛОГИКА ОЖИДАНИЯ ОТВЕТА ОТ РАСШИРЕНИЯ ---
     useEffect(() => {
@@ -157,11 +189,14 @@ function SuperSelectionModal({
                         console.warn('💎 [SuperSelection] Внимание: опционы не найдены в calculatorState (ни в rangeOptions, ни в options)');
                     }
 
+                    const targetType = step === 2 ? 'PUT' : 'CALL';
                     const calculated = calculateSuperSelectionScenarios(
                         freshOptions,
                         currentPrice,
                         Number(dropPercent),
-                        50 // Growth percent
+                        50, // Growth percent
+                        targetType,
+                        Number(exitDay) // День выхода (для Time Decay)
                     );
 
                     setResults(calculated);
@@ -175,8 +210,7 @@ function SuperSelectionModal({
 
             return () => clearTimeout(timer);
         }
-    }, [status, currentPrice, dropPercent]); // Убрали options из зависимостей
-
+    }, [status, currentPrice, dropPercent, step]); // Добавили step
 
     // Обработчик изменения процента падения
     const handleDropPercentChange = (e) => {
@@ -234,7 +268,7 @@ function SuperSelectionModal({
             const adaptedOption = {
                 id: Date.now().toString(), // Уникальный ID
                 ticker: selectedTicker || option.ticker,
-                type: 'CALL',
+                type: step === 2 ? 'PUT' : 'CALL',
                 action: 'Buy',
                 strike: parseFloat(option.strike),
                 date: option.expirationISO || option.date || option.expiration, // Приоритет ISO даты
@@ -249,6 +283,11 @@ function SuperSelectionModal({
                 bid: parseFloat(option.bid || 0),
                 ask: parseFloat(option.ask || 0),
                 volume: parseFloat(option.volume || 0),
+                isSuperOption: true, // Флаг для отображения иконки бриллианта
+                // Передаем целевую цену падения для симуляции (для обоих шагов)
+                simulationTargetPrice: dropPrice ? parseFloat(dropPrice) : undefined,
+                // Передаем дней прошло для симуляции (только для Шага 2)
+                simulationDaysPassed: step === 2 ? Number(exitDay) : undefined,
             };
 
             onAddOption(adaptedOption);
@@ -258,11 +297,14 @@ function SuperSelectionModal({
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className={`border-0 [&>button]:text-white [&>button]:hover:text-white/80 transition-all duration-300 ${status === 'result' ? 'sm:max-w-[700px]' : 'sm:max-w-[500px]'}`}>
+            <DialogContent
+                className={`border-0 [&>button]:text-white [&>button]:hover:text-white/80 transition-all duration-300 ${status === 'result' ? 'sm:max-w-[700px]' : 'sm:max-w-[500px]'}`}
+                onOpenAutoFocus={(e) => e.preventDefault()}
+            >
                 <DialogHeader style={headerStyle}>
                     <DialogTitle className="text-white text-lg font-semibold flex items-center gap-2">
                         <Gem className="h-5 w-5" />
-                        Супер подбор — {status === 'result' ? 'Результаты' : 'Шаг 1'}
+                        Супер подбор — {status === 'result' ? 'Результаты' : `Шаг ${step}`}
                     </DialogTitle>
                 </DialogHeader>
 
@@ -283,14 +325,37 @@ function SuperSelectionModal({
                         </div>
                     )}
 
+
+                    {/* БЛОКИРОВКА */}
+                    {isBlocked && status === 'idle' && (
+                        <div className="py-8 text-center space-y-4">
+                            <div className="flex justify-center text-amber-500">
+                                <AlertTriangle className="h-12 w-12" />
+                            </div>
+                            <div className="space-y-2">
+                                <h3 className="font-medium text-lg">Калькулятор не пуст</h3>
+                                <p className="text-muted-foreground text-sm max-w-xs mx-auto">
+                                    Для использования Шага 1 "Супер подбора" необходимо, чтобы в калькуляторе не было других опционов.
+                                </p>
+                            </div>
+                            <Button variant="outline" onClick={onClose} className="!text-black hover:!text-black/80">
+                                Закрыть
+                            </Button>
+                        </div>
+                    )}
+
                     {/* Режим НАСТРОЙКИ (IDLE) */}
-                    {status === 'idle' && (
+                    {status === 'idle' && !isBlocked && (
                         <>
-                            {/* Заголовок Шага 1 */}
+                            {/* Заголовок Шага */}
                             <div className="space-y-1">
-                                <h3 className="font-semibold text-base">ШАГ 1</h3>
+                                <h3 className="font-semibold text-base">ШАГ {step}</h3>
                                 <p className="text-sm text-muted-foreground">
-                                    Подбор опциона <span className="text-green-600 font-medium">BuyCALL</span> с минимальным убытком при падении актива.
+                                    {step === 1 ? (
+                                        <>Подбор опциона <span className="text-green-600 font-medium">BuyCALL</span> с минимальным убытком при падении актива.</>
+                                    ) : (
+                                        <>Подбор опциона <span className="text-red-500 font-medium">BuyPUT</span> для компенсации убытков при выходе по низу.</>
+                                    )}
                                 </p>
                             </div>
 
@@ -298,7 +363,10 @@ function SuperSelectionModal({
                                 {/* 1. Цель падения */}
                                 <div className="space-y-2">
                                     <Label className="text-sm font-medium">
-                                        Ищем опцион с минимальным убытком при падении актива на (% и Цена)
+                                        {step === 1
+                                            ? "Ищем опцион с минимальным убытком при падении актива на (% и Цена)"
+                                            : "Ищем опцион с максимальной прибылью при падении актива на (% и Цена)"
+                                        }
                                     </Label>
                                     <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
                                         <div className="relative">
@@ -329,6 +397,29 @@ function SuperSelectionModal({
 
                                 {/* Разделитель */}
                                 <div className="h-px bg-slate-200" />
+
+                                {/* 1.1 Выход на день (только шаг 2) */}
+                                {step === 2 && (
+                                    <>
+                                        <div className="space-y-2">
+                                            <Label className="text-sm font-medium">
+                                                Выход на (день)
+                                            </Label>
+                                            <div className="flex items-center gap-2">
+                                                <div className="relative w-full">
+                                                    <Input
+                                                        type="number"
+                                                        value={exitDay}
+                                                        onChange={(e) => setExitDay(e.target.value)}
+                                                        className="pr-8 bg-white"
+                                                    />
+                                                    <span className="absolute right-3 top-2.5 text-xs text-muted-foreground">дн</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="h-px bg-slate-200" />
+                                    </>
+                                )}
 
                                 {/* 2. Диапазон дат экспирации */}
                                 <div className="space-y-2">
@@ -399,12 +490,25 @@ function SuperSelectionModal({
                     {status === 'result' && (
                         <>
                             <div className="space-y-2">
-                                <h3 className="font-semibold text-base">ШАГ 1 — Результаты BuyCALL</h3>
-                                <p className="text-sm text-muted-foreground">
-                                    Подобранные опционы с минимальным убытком при падении актива на <span className="text-red-500 font-medium">{dropPercent}% (${dropPrice})</span>.
-                                    <br />
-                                    Клик по конкретному опциону добавит его в Калькулятор.
-                                </p>
+                                {step === 2 ? (
+                                    <>
+                                        <h3 className="font-semibold text-base">ШАГ 2 — Результаты BuyPUT</h3>
+                                        <p className="text-sm text-muted-foreground">
+                                            Подобранные опционы с максимальной прибылью при падении актива на <span className="text-red-500 font-medium">{dropPercent}% (${dropPrice})</span>.
+                                            <br />
+                                            Клик по конкретному опциону добавит его в Калькулятор.
+                                        </p>
+                                    </>
+                                ) : (
+                                    <>
+                                        <h3 className="font-semibold text-base">ШАГ 1 — Результаты BuyCALL</h3>
+                                        <p className="text-sm text-muted-foreground">
+                                            Подобранные опционы с минимальным убытком при падении актива на <span className="text-red-500 font-medium">{dropPercent}% (${dropPrice})</span>.
+                                            <br />
+                                            Клик по конкретному опциону добавит его в Калькулятор.
+                                        </p>
+                                    </>
+                                )}
                             </div>
 
                             <div className="max-h-[400px] overflow-y-auto border rounded-lg">
@@ -413,6 +517,7 @@ function SuperSelectionModal({
                                         <tr>
                                             <th className="px-4 py-3">Экспирация</th>
                                             <th className="px-4 py-3">Страйк</th>
+                                            <th className="px-4 py-3 text-right">Vol</th>
                                             <th className="px-4 py-3 text-right">P&L Низ (-{dropPercent}%)</th>
                                             <th className="px-4 py-3 text-right">P&L Верх (+50%)</th>
                                             <th className="px-4 py-3"></th>
@@ -428,8 +533,14 @@ function SuperSelectionModal({
                                                 <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">
                                                     {opt.expirationISO || opt.expiration || opt.date}
                                                 </td>
-                                                <td className="px-4 py-3">
+                                                <td className="px-4 py-3 font-medium">
+                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded mr-2 font-bold ${opt.type === 'CALL' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                        {opt.type}
+                                                    </span>
                                                     {opt.strike}
+                                                </td>
+                                                <td className="px-4 py-3 text-right text-muted-foreground">
+                                                    {opt.volume || 0}
                                                 </td>
                                                 <td className={`px-4 py-3 text-right font-medium ${opt.calculated.pnlDown >= 0 ? 'text-green-600' : 'text-red-500'}`}>
                                                     {opt.calculated.pnlDown > 0 ? '+' : ''}{opt.calculated.pnlDown.toFixed(2)}
@@ -445,7 +556,7 @@ function SuperSelectionModal({
 
                                         {results.length === 0 && (
                                             <tr>
-                                                <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                                                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
                                                     Не найдено подходящих опционов
                                                 </td>
                                             </tr>

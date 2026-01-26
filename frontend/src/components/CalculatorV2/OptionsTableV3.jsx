@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, ChevronDown, Trash2, Loader2, Save, RotateCcw, AlertTriangle, RefreshCw, Crown } from 'lucide-react';
+import { Eye, EyeOff, ChevronDown, Trash2, Loader2, Save, RotateCcw, AlertTriangle, RefreshCw, Crown, Gem } from 'lucide-react';
 import { MagicButton, MagicSelectionModal } from './MagicSelection';
 import { clearTickerCache } from '../../services/apiClient';
 import { invalidateOptionsForTicker } from '../../services/OptionsDataService';
@@ -493,6 +493,13 @@ function OptionsTableV3({
                       className="h-3 w-3"
                       style={{ color: '#eab308' }}
                       title="Подобран через золотую кнопку"
+                    />
+                  )}
+                  {option.isSuperOption && (
+                    <Gem
+                      className="h-3 w-3"
+                      style={{ color: '#00BFFF' }} // Голубой цвет (DeepSkyBlue)
+                      title="Подобран через супер кнопку"
                     />
                   )}
                 </div>
