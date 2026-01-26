@@ -102,6 +102,10 @@ function OptionsCalculatorV3() {
   const [currentPrice, setCurrentPrice] = useState(0); // Начальное значение 0, обновляется при выборе тикера
   const [priceChange, setPriceChange] = useState({ value: 0, percent: 0 }); // Начальное значение
   
+  // State для классификации акции
+  // ЗАЧЕМ: Определяет группу акции (stable/growth/illiquid) для корректировки P&L прогнозов
+  const [stockClassification, setStockClassification] = useState(null);
+  
   // State для зафиксированных позиций
   // ЗАЧЕМ: Если isLocked=true, данные НЕ обновляются с API при загрузке конфигурации
   const [isLocked, setIsLocked] = useState(false);
@@ -546,8 +550,8 @@ function OptionsCalculatorV3() {
 
   // Обработчик выбора тикера из NewTikerFinder
   // ЗАЧЕМ: Единая точка входа для выбора тикера с автоматическим определением типа
-  // ВАЖНО: Используем priceData из NewTikerFinder, чтобы избежать дублирующего запроса к API
-  const handleTickerSelect = (ticker, instrumentType = null, priceData = null) => {
+  // ВАЖНО: Используем priceData и classification из NewTikerFinder
+  const handleTickerSelect = (ticker, instrumentType = null, priceData = null, classification = null) => {
     if (ticker) {
       flushSync(() => {
         setShowDemoData(false);
@@ -570,6 +574,10 @@ function OptionsCalculatorV3() {
           setPriceChange({ value: 0, percent: 0 });
         }
         
+        // Сохраняем классификацию акции для корректировки P&L
+        // ЗАЧЕМ: Применяем коэффициенты группы к прогнозу P&L
+        setStockClassification(classification);
+        
         // Используем переданный тип инструмента или определяем автоматически
         const type = instrumentType || detectInstrumentType(ticker);
         setDealForm(prev => ({
@@ -587,6 +595,7 @@ function OptionsCalculatorV3() {
       }
     } else {
       setSelectedTicker("");
+      setStockClassification(null);
       setIsDataCleared(false);
       setShowDemoData(false);
       setExpirationDates({});
@@ -1854,9 +1863,13 @@ function OptionsCalculatorV3() {
           {isInitialized && (
             <NewTikerFinder
               key={selectedTicker || 'empty'}
-              onTickerSelect={(ticker, instrumentType, priceData) => {
-                // Передаём priceData для избежания дублирующего запроса к API
-                handleTickerSelect(ticker, instrumentType, priceData);
+              onTickerSelect={(ticker, instrumentType, priceData, classification) => {
+                // Передаём priceData и classification для избежания дублирующего запроса к API
+                handleTickerSelect(ticker, instrumentType, priceData, classification);
+              }}
+              onClassificationChange={(classification) => {
+                // Обновляем только классификацию без сброса опционов
+                setStockClassification(classification);
               }}
               initialTicker={selectedTicker}
               placeholder="Введите тикер и Enter"
@@ -2201,6 +2214,7 @@ function OptionsCalculatorV3() {
                           console.log('👑 Золотая кнопка: установлено daysPassed =', params.daysPassed);
                         }
                       }}
+                      stockClassification={stockClassification}
                     />
                   ) : (
                     <div className="w-full h-[80px] flex items-center justify-center text-muted-foreground text-sm">
@@ -2291,6 +2305,7 @@ function OptionsCalculatorV3() {
                         aiVolatilityMap={aiVolatilityMap}
                         fetchAIVolatility={fetchAIVolatility}
                         selectedTicker={selectedTicker}
+                        stockClassification={stockClassification}
                       />
                     </CardContent>
                   </Card>

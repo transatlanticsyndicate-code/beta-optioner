@@ -14,7 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import { getAllStrategies } from '../../config/optionsStrategies';
 // Импорт из старого модуля для режима "Акции" (обратная совместимость)
-import { calculateOptionPLValue as calculateStockOptionPLValue } from '../../utils/optionPricing';
+import { calculateOptionPLValue as calculateStockOptionPLValue, adjustPLByStockGroup } from '../../utils/optionPricing';
 // Импорт из нового модуля для режима "Фьючерсы"
 import { calculateFuturesOptionPLValue } from '../../utils/futuresPricing';
 import { getOptionVolatility } from '../../utils/volatilitySurface';
@@ -89,7 +89,8 @@ function OptionsTableV3({
   isFromExtension = false, // Флаг: данные от расширения TradingView (для универсального калькулятора)
   calculatorMode = 'stocks', // Режим калькулятора: 'stocks' | 'futures'
   contractMultiplier = 100, // Множитель контракта: 100 для акций, pointValue для фьючерсов
-  isFuturesMissingSettings = false // Флаг: отсутствуют настройки фьючерса (блокирует расчёты)
+  isFuturesMissingSettings = false, // Флаг: отсутствуют настройки фьючерса (блокирует расчёты)
+  stockClassification = null // Классификация акции для корректировки P&L (только для режима stocks)
 }) {
   // DEBUG: Закомментировано для production
   // console.log('🤖 [OptionsTable] Получены пропсы:', {
@@ -862,9 +863,14 @@ function OptionsTableV3({
 
                     // Выбираем модель расчёта в зависимости от режима калькулятора
                     // ЗАЧЕМ: Режим "Фьючерсы" использует Black-76, режим "Акции" — BSM
-                    const pl = calculatorMode === CALCULATOR_MODES.FUTURES
+                    let pl = calculatorMode === CALCULATOR_MODES.FUTURES
                       ? calculateFuturesOptionPLValue(tempOpt, targetPrice || currentPrice, optionDaysRemaining, contractMultiplier, optionVolatility)
                       : calculateStockOptionPLValue(tempOpt, targetPrice || currentPrice, currentPrice, optionDaysRemaining, optionVolatility, dividendYield);
+
+                    // Применяем корректировку P&L по группе акции (только для режима stocks)
+                    if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
+                      pl = adjustPLByStockGroup(pl, stockClassification);
+                    }
 
                     const plColor = pl > 0 ? 'text-green-600' : pl < 0 ? 'text-red-600' : 'text-muted-foreground';
 
@@ -965,9 +971,15 @@ function OptionsTableV3({
                     }
                     
                     // Выбираем модель расчёта в зависимости от режима калькулятора
-                    const pl = calculatorMode === CALCULATOR_MODES.FUTURES
+                    let pl = calculatorMode === CALCULATOR_MODES.FUTURES
                       ? calculateFuturesOptionPLValue(tempOpt, targetPrice || currentPrice, optDaysRemaining, contractMultiplier, optVolatility)
                       : calculateStockOptionPLValue(tempOpt, targetPrice || currentPrice, currentPrice, optDaysRemaining, optVolatility, dividendYield);
+                    
+                    // Применяем корректировку P&L по группе акции (только для режима stocks)
+                    if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
+                      pl = adjustPLByStockGroup(pl, stockClassification);
+                    }
+                    
                     return sum + pl;
                   }, 0);
 

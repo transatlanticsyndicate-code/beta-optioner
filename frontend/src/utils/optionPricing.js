@@ -280,6 +280,61 @@ export const calculateOptionExpirationPLValue = (option = {}, price = 0) => {
 };
 
 /**
+ * Корректировка P&L на основе группы акции
+ * ЗАЧЕМ: Разные типы акций требуют разных коэффициентов корректировки прогноза
+ * 
+ * ЛОГИКА КОЭФФИЦИЕНТОВ:
+ * Коэффициент показывает "точность" прогноза. Например:
+ * - down_mult = 0.75 означает: реальный убыток = расчётный / 0.75 = расчётный × 1.33
+ * - up_mult = 0.9 означает: реальная прибыль = расчётная × 0.9
+ * 
+ * Группы:
+ * - stable: коэфф. 1.0/1.0 (без корректировки)
+ * - growth: down=0.75 (убытки ×1.33), up=0.9 (прибыль ×0.9)
+ * - illiquid: down=1.0, up=1.2 (прибыль может быть выше)
+ * 
+ * @param {number} basePL - Базовый P&L до корректировки
+ * @param {Object} classification - Объект классификации акции
+ * @param {number} classification.down_mult - Коэффициент точности для убытков (< 1 = убытки больше)
+ * @param {number} classification.up_mult - Коэффициент для прибыли (< 1 = прибыль меньше)
+ * @returns {number} - Скорректированный P&L
+ */
+export const adjustPLByStockGroup = (basePL, classification) => {
+  // Если нет классификации — возвращаем без изменений
+  if (!classification || (!classification.down_mult && !classification.up_mult)) {
+    return basePL;
+  }
+  
+  if (basePL < 0) {
+    // Для убытков: делим на коэффициент (down_mult=0.75 → убыток × 1.33)
+    // ЗАЧЕМ: Реальные убытки обычно больше расчётных для growth акций
+    const downMult = classification.down_mult || 1.0;
+    return downMult > 0 ? basePL / downMult : basePL;
+  } else {
+    // Для прибыли: умножаем на коэффициент (up_mult=0.9 → прибыль × 0.9)
+    // ЗАЧЕМ: Реальная прибыль обычно меньше расчётной для growth акций
+    const upMult = classification.up_mult || 1.0;
+    return basePL * upMult;
+  }
+};
+
+/**
+ * Корректировка массива P&L значений на основе группы акции
+ * ЗАЧЕМ: Для применения корректировки ко всему графику P&L
+ * 
+ * @param {Array<number>} plArray - Массив P&L значений
+ * @param {Object} classification - Объект классификации акции
+ * @returns {Array<number>} - Массив скорректированных P&L значений
+ */
+export const adjustPLArrayByStockGroup = (plArray, classification) => {
+  if (!classification || !Array.isArray(plArray)) {
+    return plArray;
+  }
+  
+  return plArray.map(pl => adjustPLByStockGroup(pl, classification));
+};
+
+/**
  * Экспорт констант и функций для использования в других модулях
  */
 export const PRICING_CONSTANTS = {

@@ -14,6 +14,7 @@ import { flushSync } from 'react-dom';
 import { Calculator, ChevronUp, ChevronDown, Save, RotateCcw, TrendingUp, Activity, BarChart3, Target, Bitcoin, LineChart, Layers } from 'lucide-react';
 // УБРАНО: NewTikerFinder не используется — данные приходят от расширения
 // import NewTikerFinder from '../components/NewTikerFinder';
+import StockGroupSelector from '../components/StockGroupSelector';
 import { useLocation } from 'react-router-dom';
 import { useLocalStorageValue } from '../hooks/useLocalStorage';
 import { getActiveBlocks, isBlockEnabled } from '../config/calculatorV3Blocks';
@@ -196,6 +197,11 @@ function UniversalOptionsCalculator() {
   const [currentPrice, setCurrentPrice] = useState(0); // Начальное значение 0, обновляется при выборе тикера
   const [priceChange, setPriceChange] = useState({ value: 0, percent: 0 }); // Начальное значение
   
+  // State для классификации акции
+  // ЗАЧЕМ: Определяет группу акции (stable/growth/illiquid) для корректировки P&L прогнозов
+  // ВАЖНО: Применяется только в режиме stocks
+  const [stockClassification, setStockClassification] = useState(null);
+  
   // State для зафиксированных позиций
   // ЗАЧЕМ: Если isLocked=true, данные НЕ обновляются с API при загрузке конфигурации
   const [isLocked, setIsLocked] = useState(false);
@@ -329,6 +335,56 @@ function UniversalOptionsCalculator() {
     fetchDividendYield();
   }, [selectedTicker]);
 
+  // Загрузка классификации акции при выборе тикера (только для режима stocks)
+  // ЗАЧЕМ: Определяем группу акции для корректировки P&L прогнозов
+  const fetchClassification = useCallback(async (ticker) => {
+    if (!ticker || calculatorMode !== 'stocks') {
+      setStockClassification(null);
+      return;
+    }
+    
+    try {
+      const response = await fetch(`/api/stock/classify?symbol=${ticker}`);
+      if (response.ok) {
+        const data = await response.json();
+        // Добавляем originalGroup для отслеживания исходной группы из API
+        const classificationWithOriginal = {
+          ...data,
+          originalGroup: data.group
+        };
+        setStockClassification(classificationWithOriginal);
+        console.log(`📊 Классификация ${ticker}:`, classificationWithOriginal);
+      } else {
+        setStockClassification(null);
+      }
+    } catch (error) {
+      console.error('Ошибка загрузки классификации:', error);
+      setStockClassification(null);
+    }
+  }, [calculatorMode]);
+  
+  useEffect(() => {
+    fetchClassification(selectedTicker);
+  }, [selectedTicker, fetchClassification]);
+  
+  // Принудительное обновление классификации (очистка кэша + повторный запрос)
+  // ЗАЧЕМ: Позволяет пользователю обновить авто-определение группы
+  const refreshClassification = useCallback(async () => {
+    if (!selectedTicker || calculatorMode !== 'stocks') return;
+    
+    try {
+      // Очищаем кэш для этого тикера
+      await fetch(`/api/stock/clear-cache?symbol=${selectedTicker}`, { method: 'POST' });
+      
+      // Запрашиваем классификацию заново
+      await fetchClassification(selectedTicker);
+      
+      console.log(`🔄 Классификация ${selectedTicker} обновлена`);
+    } catch (error) {
+      console.error('Ошибка обновления классификации:', error);
+    }
+  }, [selectedTicker, calculatorMode, fetchClassification]);
+
   // State для позиций
   const [positions, setPositions] = useState([]); // Убрано демо-данные AAPL
 
@@ -389,8 +445,8 @@ function UniversalOptionsCalculator() {
 
   // Обработчик выбора тикера из NewTikerFinder
   // ЗАЧЕМ: Единая точка входа для выбора тикера с автоматическим определением типа
-  // ВАЖНО: Используем priceData из NewTikerFinder, чтобы избежать дублирующего запроса к API
-  const handleTickerSelect = (ticker, instrumentType = null, priceData = null) => {
+  // ВАЖНО: Используем priceData и classification из NewTikerFinder
+  const handleTickerSelect = (ticker, instrumentType = null, priceData = null, classification = null) => {
     if (ticker) {
       flushSync(() => {
         setShowDemoData(false);
@@ -413,6 +469,10 @@ function UniversalOptionsCalculator() {
           setPriceChange({ value: 0, percent: 0 });
         }
         
+        // Сохраняем классификацию акции для корректировки P&L (только для stocks)
+        // ЗАЧЕМ: Применяем коэффициенты группы к прогнозу P&L
+        setStockClassification(classification);
+        
         // Используем переданный тип инструмента или определяем автоматически
         const type = instrumentType || detectInstrumentType(ticker);
         setDealForm(prev => ({
@@ -430,6 +490,7 @@ function UniversalOptionsCalculator() {
       }
     } else {
       setSelectedTicker("");
+      setStockClassification(null);
       setIsDataCleared(false);
       setShowDemoData(false);
       setExpirationDates({});
@@ -1933,6 +1994,31 @@ function UniversalOptionsCalculator() {
                   </span>
                 </div>
               )}
+              
+              {/* Селектор группы акции (только для режима stocks) */}
+              {calculatorMode === CALCULATOR_MODES.STOCKS && selectedTicker && (
+                <StockGroupSelector
+                  symbol={selectedTicker}
+                  classification={stockClassification}
+                  onGroupChange={(newGroup, multipliers) => {
+                    // Обновляем только классификацию без сброса опционов
+                    // ВАЖНО: Сохраняем originalGroup для корректного определения "авто"
+                    const originalGroup = stockClassification?.originalGroup || stockClassification?.group || 'growth';
+                    setStockClassification({
+                      ...stockClassification,
+                      group: newGroup,
+                      down_mult: multipliers.down_mult,
+                      up_mult: multipliers.up_mult,
+                      originalGroup: originalGroup,
+                      overridden: newGroup !== originalGroup
+                    });
+                  }}
+                  onRefreshClassification={refreshClassification}
+                  isLoading={!stockClassification && selectedTicker}
+                  compact={false}
+                  disabled={false}
+                />
+              )}
             </div>
           </div>
         )}
@@ -2238,6 +2324,7 @@ function UniversalOptionsCalculator() {
                           console.log('👑 Золотая кнопка: установлено daysPassed =', params.daysPassed);
                         }
                       }}
+                      stockClassification={calculatorMode === 'stocks' ? stockClassification : null}
                     />
                   ) : (
                     <div className="w-full h-[80px] flex items-center justify-center text-muted-foreground text-sm">
@@ -2327,6 +2414,7 @@ function UniversalOptionsCalculator() {
                     selectedTicker={selectedTicker}
                     calculatorMode={calculatorMode}
                     contractMultiplier={contractMultiplier}
+                    stockClassification={calculatorMode === 'stocks' ? stockClassification : null}
                   />
                 </CardContent>
               </Card>

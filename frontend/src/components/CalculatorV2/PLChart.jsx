@@ -7,6 +7,7 @@ import {
   calculateOptionTheoreticalPrice,
   calculateIntrinsicValue,
   PRICING_CONSTANTS,
+  adjustPLByStockGroup,
 } from '../../utils/optionPricing';
 // Импорт из нового модуля для режима "Фьючерсы"
 import {
@@ -31,7 +32,7 @@ const CALCULATOR_MODES = {
  * 
  * Адаптирован из V1 для работы с V2
  */
-function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLines = true, daysPassed = 0, showProbabilityZones = true, targetPrice = 0, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, fetchAIVolatility = null, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100 }) {
+function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLines = true, daysPassed = 0, showProbabilityZones = true, targetPrice = 0, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, fetchAIVolatility = null, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100, stockClassification = null }) {
   // DEBUG: Закомментировано для production
   // console.log('🤖 [PLChart] Получены пропсы:', {
   //   isAIEnabled,
@@ -278,6 +279,14 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
         });
       }
     });
+
+    // Применяем корректировку P&L на основе группы акции (только для режима stocks)
+    // ЗАЧЕМ: Разные типы акций требуют разных коэффициентов корректировки прогноза
+    if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
+      for (let i = 0; i < totalPLArray.length; i++) {
+        totalPLArray[i] = adjustPLByStockGroup(totalPLArray[i], stockClassification);
+      }
+    }
 
     // Поиск точки схождения всех опционов (где все линии пересекаются максимально близко)
     // ЗАЧЕМ: Показать пользователю цену, при которой все опционы сходятся

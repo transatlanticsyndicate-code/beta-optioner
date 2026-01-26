@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import { getAllStrategies } from '../../config/optionsStrategies';
-import { calculateOptionPLValue } from '../../utils/optionPricing';
+import { calculateOptionPLValue, adjustPLByStockGroup } from '../../utils/optionPricing';
 import { getOptionVolatility } from '../../utils/volatilitySurface';
 import { assessLiquidity, getLiquidityColor, formatLiquidityTooltip, LIQUIDITY_LEVELS } from '../../utils/liquidityCheck';
 import { calculateDaysRemainingUTC, getOldestEntryDate, isOptionActiveAtDay, isOptionExpiredAtDay } from '../../utils/dateUtils';
@@ -74,7 +74,8 @@ function OptionsTable({
   isAIEnabled = false, // Включен ли AI для прогнозирования волатильности
   aiVolatilityMap = {}, // Кэш AI предсказаний волатильности
   fetchAIVolatility = null, // Функция для запроса AI волатильности
-  hideColumns = [] // Массив колонок для скрытия: ['premium', 'oi']
+  hideColumns = [], // Массив колонок для скрытия: ['premium', 'oi']
+  stockClassification = null // Классификация акции для корректировки P&L
 }) {
   // Логирование полученных AI пропсов
   console.log('🤖 [OptionsTable] Получены пропсы:', {
@@ -1067,7 +1068,7 @@ function OptionsTable({
                     console.log(`[Таблица] 💰 P/L расчёт ${option.type} Strike $${option.strike}: BID=$${option.bid?.toFixed(2) || 'N/A'}, ASK=$${option.ask?.toFixed(2) || 'N/A'}, Premium=$${effectivePremium?.toFixed(2) || 'N/A'}, EntryPrice=${option.action === 'Buy' ? (option.ask || effectivePremium) : (option.bid || effectivePremium)}`);
                     console.log(`[Таблица] 📈 IV расчёт ${option.type} Strike $${option.strike}: rawIV=${rawIV}, IV=${(optionVolatility * 100).toFixed(1)}%, currentDays=${currentDaysToExpiration}, daysRemaining=${optionDaysRemaining}, targetPrice=$${targetPrice || currentPrice}`);
 
-                    const pl = calculateOptionPLValue(
+                    let pl = calculateOptionPLValue(
                       tempOpt,
                       targetPrice || currentPrice,
                       currentPrice,
@@ -1075,6 +1076,11 @@ function OptionsTable({
                       optionVolatility,
                       dividendYield
                     );
+
+                    // Применяем корректировку P&L по группе акции
+                    if (stockClassification) {
+                      pl = adjustPLByStockGroup(pl, stockClassification);
+                    }
 
                     const plColor = pl > 0 ? 'text-green-600' : pl < 0 ? 'text-red-600' : 'text-muted-foreground';
 
@@ -1199,7 +1205,7 @@ function OptionsTable({
                       ask: opt.isPremiumModified ? 0 : opt.ask,
                       bid: opt.isPremiumModified ? 0 : opt.bid
                     };
-                    const pl = calculateOptionPLValue(
+                    let pl = calculateOptionPLValue(
                       tempOpt,
                       targetPrice || currentPrice,
                       currentPrice,
@@ -1207,6 +1213,12 @@ function OptionsTable({
                       optVolatility,
                       dividendYield
                     );
+                    
+                    // Применяем корректировку P&L по группе акции
+                    if (stockClassification) {
+                      pl = adjustPLByStockGroup(pl, stockClassification);
+                    }
+                    
                     return sum + pl;
                   }, 0);
 

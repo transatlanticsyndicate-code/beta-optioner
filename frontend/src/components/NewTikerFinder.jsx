@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { TrendingUp, BarChart3, LineChart, Circle, Bitcoin, Search, Trash2, Clock, X } from 'lucide-react';
+import StockGroupSelector from './StockGroupSelector';
 import { Input } from './ui/input';
 import {
   Select,
@@ -110,6 +111,7 @@ const detectInstrumentType = (ticker) => {
 
 const NewTikerFinder = ({
   onTickerSelect,
+  onClassificationChange,
   initialTicker = '',
   initialInstrumentType,
   placeholder = 'Введите тикер и Enter',
@@ -137,6 +139,11 @@ const NewTikerFinder = ({
   const [priceData, setPriceData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   
+  // Состояние классификации акции
+  // ЗАЧЕМ: Для определения группы акции и применения коэффициентов P&L
+  const [stockClassification, setStockClassification] = useState(null);
+  const [isClassificationLoading, setIsClassificationLoading] = useState(false);
+  
   // Загрузка истории тикеров при монтировании
   useEffect(() => {
     setTickerHistory(getTickerHistory());
@@ -152,6 +159,64 @@ const NewTikerFinder = ({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Загрузка классификации акции
+  // ЗАЧЕМ: Определяем группу акции для корректировки P&L прогнозов
+  const fetchClassification = useCallback(async (ticker) => {
+    if (!ticker) {
+      setStockClassification(null);
+      return null;
+    }
+    
+    setIsClassificationLoading(true);
+    
+    try {
+      const response = await fetch(`/api/stock/classify?symbol=${ticker}`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        // Добавляем originalGroup для отслеживания исходной группы из API
+        // ЗАЧЕМ: При ручном переопределении группы нужно знать, какая была исходная
+        const classificationWithOriginal = {
+          ...data,
+          originalGroup: data.group
+        };
+        setStockClassification(classificationWithOriginal);
+        console.log(`📊 Классификация ${ticker}:`, classificationWithOriginal);
+        return classificationWithOriginal;
+      } else {
+        console.warn(`Ошибка классификации ${ticker}:`, response.status);
+        setStockClassification(null);
+        return null;
+      }
+    } catch (error) {
+      console.error('Ошибка загрузки классификации:', error);
+      setStockClassification(null);
+      return null;
+    } finally {
+      setIsClassificationLoading(false);
+    }
+  }, []);
+
+  // Принудительное обновление классификации (очистка кэша + повторный запрос)
+  // ЗАЧЕМ: Позволяет пользователю обновить авто-определение группы
+  const refreshClassification = useCallback(async () => {
+    if (!confirmedTicker || instrumentType !== 'stock') return;
+    
+    setIsClassificationLoading(true);
+    
+    try {
+      // Очищаем кэш для этого тикера
+      await fetch(`/api/stock/clear-cache?symbol=${confirmedTicker}`, { method: 'POST' });
+      
+      // Запрашиваем классификацию заново
+      await fetchClassification(confirmedTicker);
+      
+      console.log(`🔄 Классификация ${confirmedTicker} обновлена`);
+    } catch (error) {
+      console.error('Ошибка обновления классификации:', error);
+    }
+  }, [confirmedTicker, instrumentType, fetchClassification]);
 
   // Загрузка цены от API
   // ЗАЧЕМ: Получаем актуальную цену после подтверждения тикера
@@ -304,15 +369,18 @@ const NewTikerFinder = ({
     const updatedHistory = saveTickerToHistory(upperTicker, detectedType);
     setTickerHistory(updatedHistory);
     
-    // Загружаем цену и ждём результат
-    // ЗАЧЕМ: Передаём priceData в onTickerSelect для избежания дублирующего запроса в калькуляторе
-    const loadedPriceData = await fetchPrice(upperTicker, detectedType);
+    // Загружаем цену и классификацию параллельно
+    // ЗАЧЕМ: Передаём priceData и classification в onTickerSelect
+    const [loadedPriceData, loadedClassification] = await Promise.all([
+      fetchPrice(upperTicker, detectedType),
+      detectedType === 'stock' ? fetchClassification(upperTicker) : Promise.resolve(null)
+    ]);
     
-    // Уведомляем родителя с загруженными данными о цене
+    // Уведомляем родителя с загруженными данными о цене и классификации
     if (onTickerSelect) {
-      onTickerSelect(upperTicker, detectedType, loadedPriceData);
+      onTickerSelect(upperTicker, detectedType, loadedPriceData, loadedClassification);
     }
-  }, [fetchPrice, onTickerSelect]);
+  }, [fetchPrice, fetchClassification, onTickerSelect]);
 
   // Обработка нажатия Enter
   // ЗАЧЕМ: Подтверждение тикера и запуск загрузки цены
@@ -380,12 +448,36 @@ const NewTikerFinder = ({
     setInputValue('');
     setConfirmedTicker('');
     setPriceData(null);
+    setStockClassification(null);
     setIsHistoryOpen(true);
     // Уведомляем родителя об очистке
     if (onTickerSelect) {
-      onTickerSelect('', 'stock', null);
+      onTickerSelect('', 'stock', null, null);
     }
   };
+  
+  // Обработчик изменения группы акции
+  // ЗАЧЕМ: Позволяет пользователю вручную переопределить автоматическую классификацию
+  // ВАЖНО: Используем onClassificationChange вместо onTickerSelect, чтобы не сбрасывать опционы
+  const handleGroupChange = useCallback((newGroup, multipliers) => {
+    // Обновляем локальное состояние с новой группой
+    // ВАЖНО: Сохраняем originalGroup для корректного определения "авто" в селекторе
+    const originalGroup = stockClassification?.originalGroup || stockClassification?.group || 'growth';
+    const updatedClassification = {
+      ...stockClassification,
+      group: newGroup,
+      down_mult: multipliers.down_mult,
+      up_mult: multipliers.up_mult,
+      originalGroup: originalGroup,
+      overridden: newGroup !== originalGroup
+    };
+    setStockClassification(updatedClassification);
+    
+    // Уведомляем родителя об изменении классификации (без сброса опционов)
+    if (onClassificationChange) {
+      onClassificationChange(updatedClassification);
+    }
+  }, [stockClassification, onClassificationChange]);
 
   return (
     <div className="inline-flex flex-col gap-2 p-3 border border-cyan-500 rounded-lg">
@@ -478,7 +570,7 @@ const NewTikerFinder = ({
         </div>
 
         {/* Цена от поставщика */}
-        <div className="flex items-center gap-2 min-w-[80px]">
+        <div className="flex items-center gap-3 min-w-[80px]">
           {isLoading ? (
             <span className="text-muted-foreground text-sm">Загрузка...</span>
           ) : priceData ? (
@@ -504,6 +596,27 @@ const NewTikerFinder = ({
             <span className="text-muted-foreground text-sm">Нет данных</span>
           ) : null}
         </div>
+        
+        {/* Селектор группы акции */}
+        {confirmedTicker && instrumentType === 'stock' && (
+          <>
+            {console.log('[NewTikerFinder] Rendering StockGroupSelector:', { 
+              confirmedTicker, 
+              instrumentType, 
+              hasClassification: !!stockClassification,
+              isLoading: isClassificationLoading 
+            })}
+            <StockGroupSelector
+              symbol={confirmedTicker}
+              classification={stockClassification}
+              onGroupChange={handleGroupChange}
+              onRefreshClassification={refreshClassification}
+              isLoading={isClassificationLoading}
+              compact={false}
+              disabled={false}
+            />
+          </>
+        )}
       </div>
     </div>
   );
