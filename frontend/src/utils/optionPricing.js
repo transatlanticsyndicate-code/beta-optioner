@@ -63,7 +63,7 @@ const isBuyAction = (option = {}) => {
 const getImpliedVolatility = (option = {}) => {
   // Проверяем все возможные поля для IV (camelCase и snake_case)
   const iv = option.impliedVolatility || option.implied_volatility || option.iv || option.volatility;
-  
+
   if (iv !== undefined && iv !== null && iv !== 0) {
     const ivNum = toNumber(iv);
     // Если IV передана в процентах (>1), конвертируем в десятичный формат
@@ -77,7 +77,7 @@ const getImpliedVolatility = (option = {}) => {
       return ivNum;
     }
   }
-  
+
   console.log(`⚠️ No IV for ${option.type} ${option.strike}, using default ${DEFAULT_VOLATILITY * 100}%`);
   return DEFAULT_VOLATILITY;
 };
@@ -125,7 +125,7 @@ export const calculateOptionTheoreticalPrice = (
 ) => {
   const strike = toNumber(option.strike);
   const type = option.type || 'CALL';
-  
+
   // Используем переданную волатильность или берём из опциона
   let volatility;
   if (overrideVolatility !== null && overrideVolatility > 0) {
@@ -134,23 +134,23 @@ export const calculateOptionTheoreticalPrice = (
   } else {
     volatility = getImpliedVolatility(option);
   }
-  
+
   // Внутренняя стоимость
   const intrinsicValue = calculateIntrinsicValue(option, targetPrice);
-  
+
   // Время до экспирации в годах (Black-Scholes требует годы)
   const timeToExpiryYears = Math.max(0, daysRemaining) / 365;
-  
+
   // На экспирации (T=0) возвращаем только внутреннюю стоимость
   if (timeToExpiryYears <= 0) {
     return intrinsicValue;
   }
-  
+
   // Расчёт по Black-Scholes-Merton
   // ЗАЧЕМ: Используем актуальную ставку от FRED API и дивидендную доходность
   const riskFreeRate = getRiskFreeRate();
   const safeQ = Math.max(0, dividendYield); // Дивидендная доходность >= 0
-  
+
   const bsPrice = calculateOptionPrice(
     targetPrice,      // S - цена базового актива
     strike,           // K - страйк
@@ -160,11 +160,11 @@ export const calculateOptionTheoreticalPrice = (
     type,             // тип опциона (CALL/PUT)
     safeQ             // q - дивидендная доходность (BSM)
   );
-  
+
   // Временная стоимость = BS цена - intrinsic value
   // Временная стоимость всегда >= 0 (опцион стоит как минимум intrinsic + time value)
   const timeValue = Math.max(0, bsPrice - intrinsicValue);
-  
+
   // Итоговая цена = intrinsic + time value
   // Это гарантирует что цена >= intrinsic и линии не пересекутся
   return intrinsicValue + timeValue;
@@ -180,18 +180,24 @@ export const calculateOptionTheoreticalPrice = (
  */
 const getEntryPrice = (option = {}) => {
   const isBuy = isBuyAction(option);
-  
+
   if (isBuy) {
     // Покупка: входим по ASK (цена продавца)
-    const ask = toNumber(option.ask);
+    // Учитываем ручную правку, если она есть
+    const ask = option.isAskModified && option.customAsk !== undefined ? toNumber(option.customAsk) : toNumber(option.ask);
     if (ask > 0) return ask;
   } else {
     // Продажа: входим по BID (цена покупателя)
-    const bid = toNumber(option.bid);
+    // Учитываем ручную правку, если она есть
+    const bid = option.isBidModified && option.customBid !== undefined ? toNumber(option.customBid) : toNumber(option.bid);
     if (bid > 0) return bid;
   }
-  
+
   // Fallback на premium если bid/ask недоступны
+  // Учитываем ручную правку премии, если она есть
+  if (option.isPremiumModified && option.customPremium !== undefined) {
+    return Math.max(0, toNumber(option.customPremium));
+  }
   return Math.max(0, toNumber(option.premium));
 };
 
@@ -227,7 +233,7 @@ export const calculateOptionPLValue = (
   // Цена входа: ASK для Buy, BID для Sell
   const entryPrice = getEntryPrice(option);
   const multiplier = getMultiplier(option);
-  
+
   // Теоретическая цена опциона по Black-Scholes-Merton
   const theoreticalPrice = calculateOptionTheoreticalPrice(
     option,
@@ -236,7 +242,7 @@ export const calculateOptionPLValue = (
     overrideVolatility,
     dividendYield
   );
-  
+
   // ЛОГИРОВАНИЕ: Диагностика расхождения цены (ОТКЛЮЧЕНО для production)
   // if (overrideVolatility !== null) {
   //   console.log(`[optionPricing] 💰 ${option.action} ${option.type} Strike $${option.strike}: targetPrice=$${targetPrice}, daysRemaining=${daysRemaining}, IV=${overrideVolatility.toFixed(1)}%, theoreticalPrice=$${theoreticalPrice.toFixed(2)}, dividendYield=${dividendYield}`);
@@ -304,7 +310,7 @@ export const adjustPLByStockGroup = (basePL, classification) => {
   if (!classification || (!classification.down_mult && !classification.up_mult)) {
     return basePL;
   }
-  
+
   if (basePL < 0) {
     // Для убытков: делим на коэффициент (down_mult=0.75 → убыток × 1.33)
     // ЗАЧЕМ: Реальные убытки обычно больше расчётных для growth акций
@@ -330,7 +336,7 @@ export const adjustPLArrayByStockGroup = (plArray, classification) => {
   if (!classification || !Array.isArray(plArray)) {
     return plArray;
   }
-  
+
   return plArray.map(pl => adjustPLByStockGroup(pl, classification));
 };
 

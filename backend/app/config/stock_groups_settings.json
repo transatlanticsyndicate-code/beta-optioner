@@ -4,32 +4,32 @@
       "label": "Стабильные",
       "description": "Large-cap акции с низкой волатильностью",
       "multipliers": {
-        "down": 1.0,
-        "up": 1.0
+        "down": 1,
+        "up": 1
       }
     },
     "tech-growth": {
       "label": "Tech Growth",
       "description": "Tech-акции $10-200B (HUBS, ZS, DDOG)",
       "multipliers": {
-        "down": 0.75,
-        "up": 1.1
+        "down": 0.7,
+        "up": 0.95
       }
     },
     "growth": {
       "label": "Рост/События",
       "description": "Growth-акции, event-driven, высокая IV",
       "multipliers": {
-        "down": 0.75,
-        "up": 0.9
+        "down": 0.65,
+        "up": 0.85
       }
     },
     "illiquid": {
       "label": "Неликвидные",
       "description": "Small-cap, низкий объём, высокий beta",
       "multipliers": {
-        "down": 1.0,
-        "up": 1.2
+        "down": 0.7,
+        "up": 1.1
       }
     }
   },
@@ -39,7 +39,7 @@
     "tech_growth_min_cap": 10,
     "tech_growth_max_cap": 200,
     "illiquid_max_cap": 5,
-    "illiquid_min_beta": 2.0,
+    "illiquid_min_beta": 2,
     "illiquid_max_volume": 2,
     "mega_cap_threshold": 50,
     "high_volume_threshold": 10,

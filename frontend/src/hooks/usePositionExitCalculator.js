@@ -71,23 +71,25 @@ const calculateDaysToExpirationForOption = (option, daysPassed, oldestEntryDate 
  * @returns {number} - цена входа
  */
 const getEntryPrice = (option = {}) => {
-  // Если премия изменена вручную, используем её
+  // Если премия изменена вручную, используем её (наивысший приоритет)
   if (option.isPremiumModified && option.customPremium !== undefined) {
     return parseFloat(option.customPremium) || 0;
   }
-  
+
   const isBuy = (option.action || 'Buy').toLowerCase() === 'buy';
-  
+
   if (isBuy) {
     // Покупка: входим по ASK (цена продавца)
-    const ask = parseFloat(option.ask);
-    if (ask > 0) return ask;
+    // Учитываем ручную правку цен Bid/Ask
+    const ask = option.isAskModified && option.customAsk !== undefined ? parseFloat(option.customAsk) : parseFloat(option.ask);
+    if (!isNaN(ask) && ask > 0) return ask;
   } else {
     // Продажа: входим по BID (цена покупателя)
-    const bid = parseFloat(option.bid);
-    if (bid > 0) return bid;
+    // Учитываем ручную правку цен Bid/Ask
+    const bid = option.isBidModified && option.customBid !== undefined ? parseFloat(option.customBid) : parseFloat(option.bid);
+    if (!isNaN(bid) && bid > 0) return bid;
   }
-  
+
   // Fallback на premium если bid/ask недоступны
   return parseFloat(option.premium) || 0;
 };
@@ -241,7 +243,7 @@ const calculateExerciseScenario = ({ options, positions, underlyingPrice, curren
   positions.forEach(position => {
     const quantity = Number(position.quantity) || 0;
     const entryPrice = Number(position.price) || 0;
-    const cost = position.type === 'LONG' 
+    const cost = position.type === 'LONG'
       ? -entryPrice * quantity * positionMultiplier  // LONG: тратим на покупку
       : +entryPrice * quantity * positionMultiplier; // SHORT: получаем от продажи
     totalPL += cost;
@@ -250,11 +252,12 @@ const calculateExerciseScenario = ({ options, positions, underlyingPrice, curren
   // P&L от исполнения опционов (только ITM опционы исполняются)
   options.forEach(option => {
     // ВАЖНО: При ручной премии обнуляем ask/bid, чтобы getEntryPrice() использовал premium
-    const tempOption = { 
-      ...option, 
+    // Если нет - передаем ручные Bid/Ask, если они изменены
+    const tempOption = {
+      ...option,
       premium: option.isPremiumModified ? option.customPremium : option.premium,
-      ask: option.isPremiumModified ? 0 : option.ask,
-      bid: option.isPremiumModified ? 0 : option.bid
+      ask: option.isPremiumModified ? 0 : (option.isAskModified ? option.customAsk : option.ask),
+      bid: option.isPremiumModified ? 0 : (option.isBidModified ? option.customBid : option.bid),
     };
     // Выбираем модель расчёта в зависимости от режима калькулятора
     const pl = calculatorMode === CALCULATOR_MODES.FUTURES
@@ -280,7 +283,7 @@ const calculateExerciseScenario = ({ options, positions, underlyingPrice, curren
 
     // Формируем label с датой экспирации
     const dateLabel = option.date ? ` (${formatOptionDate(option.date)})` : '';
-    
+
     details.push({
       label: `${option.action} ${option.type} ${strike}${dateLabel}`,
       value: pl,
@@ -296,11 +299,11 @@ const calculateExerciseScenario = ({ options, positions, underlyingPrice, curren
   positions.forEach(position => {
     const quantity = Number(position.quantity) || 0;
     const entryPrice = Number(position.price) || 0;
-    
+
     let displayPL = 0; // Для отображения (разница)
     let actualPL = 0;   // Для totalPL (полная сумма продажи)
     let description = '';
-    
+
     if (position.type === 'LONG') {
       displayPL = (underlyingPrice - entryPrice) * quantity * positionMultiplier;
       actualPL = underlyingPrice * quantity * positionMultiplier;
@@ -310,14 +313,14 @@ const calculateExerciseScenario = ({ options, positions, underlyingPrice, curren
       actualPL = -underlyingPrice * quantity * positionMultiplier;
       description = `Выкупаем ${quantity} ${assetLabel}: ${entryPrice.toFixed(2)} → ${underlyingPrice.toFixed(2)}`;
     }
-    
+
     details.push({
       label: `${position.type} ${quantity} ${assetLabel} - P&L`,
       value: displayPL,
       description,
       type: 'stock-pl'
     });
-    
+
     totalPL += actualPL;
   });
 
@@ -344,7 +347,7 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
   positions.forEach(position => {
     const quantity = Number(position.quantity) || 0;
     const entryPrice = Number(position.price) || 0;
-    const cost = position.type === 'LONG' 
+    const cost = position.type === 'LONG'
       ? -entryPrice * quantity * positionMultiplier2  // LONG: тратим на покупку
       : +entryPrice * quantity * positionMultiplier2; // SHORT: получаем от продажи
     totalPL += cost;
@@ -354,38 +357,39 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
   // ВАЖНО: Каждый опцион имеет свою дату экспирации и IV из API
   // DEBUG: Закомментировано для production
   // console.log(`[Расчёт выхода] 🔍 Сценарий 2: underlyingPrice=$${underlyingPrice}, daysPassed=${daysPassed}, currentPrice=$${currentPrice}`);
-  
+
   // Вычисляем самую старую дату входа для индивидуального расчёта daysPassed
   const oldestEntryDate = getOldestEntryDate(options);
-  
+
   options.forEach(option => {
     // ВАЖНО: При ручной премии обнуляем ask/bid, чтобы getEntryPrice() использовал premium
-    const tempOption = { 
-      ...option, 
+    // Если нет - передаем ручные Bid/Ask, если они изменены
+    const tempOption = {
+      ...option,
       premium: option.isPremiumModified ? option.customPremium : option.premium,
-      ask: option.isPremiumModified ? 0 : option.ask,
-      bid: option.isPremiumModified ? 0 : option.bid
+      ask: option.isPremiumModified ? 0 : (option.isAskModified ? option.customAsk : option.ask),
+      bid: option.isPremiumModified ? 0 : (option.isBidModified ? option.customBid : option.bid),
     };
     // Цена входа: ASK для Buy, BID для Sell
     const entryPrice = getEntryPrice(option);
-    
+
     // Вычисляем индивидуальные параметры для этого опциона
     // currentDays - дни до экспирации на сегодня (без симуляции)
     // simulatedDays - дни до экспирации с учётом симуляции (daysPassed)
     // ВАЖНО: Передаём oldestEntryDate для корректного расчёта actualDaysPassed
     const currentDaysToExpiration = calculateDaysToExpirationForOption(option, 0, oldestEntryDate);
     const simulatedDaysToExpiration = calculateDaysToExpirationForOption(option, daysPassed, oldestEntryDate);
-    
+
     // Получаем прогнозируемую IV с учётом временной структуры (Volatility Surface)
     // ВАЖНО: ivSurface используется для точной интерполяции IV между датами экспирации
     let optionVolatility = getOptionVolatility(
-      option, 
-      currentDaysToExpiration, 
+      option,
+      currentDaysToExpiration,
       simulatedDaysToExpiration,
       ivSurface,
       'simple'
     );
-    
+
     // Используем AI волатильность если доступна
     if (isAIEnabled && aiVolatilityMap && selectedTicker) {
       const cacheKey = `${selectedTicker}_${option.strike}_${option.date}_${underlyingPrice.toFixed(2)}_${simulatedDaysToExpiration}`;
@@ -400,7 +404,7 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
         optionVolatility = aiVolatility;
       }
     }
-    
+
     // Выбираем модель расчёта в зависимости от режима калькулятора (Сценарий 2)
     const currentValue = calculatorMode === CALCULATOR_MODES.FUTURES
       ? calculateFuturesOptionTheoreticalPrice(tempOption, underlyingPrice, simulatedDaysToExpiration, optionVolatility)
@@ -419,7 +423,7 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
     // Показываем первоначальную IV в скобках если прошло время (daysPassed > 0)
     // ЗАЧЕМ: Пользователь должен видеть как изменилась IV даже при небольших изменениях
     const showOriginalIV = daysPassed > 0 && currentIVPercent > 0;
-    
+
     // Определяем тип цены входа: ASK для Buy, BID для Sell
     const priceType = option.action === 'Buy' ? 'ASK' : 'BID';
     // ЗАЧЕМ: Выносим IV на новую строку чтобы текст не прыгал при изменении значений
@@ -435,7 +439,7 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
     if (option.bestExitDay) {
       console.log('📅 usePositionExitCalculator: опцион с bestExitDay =', option.bestExitDay, option.action, option.type, option.strike);
     }
-    
+
     details.push({
       label: `${option.action} ${option.type} ${option.strike}${dateLabel2}`,
       value: pl,
@@ -451,11 +455,11 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
   positions.forEach(position => {
     const quantity = Number(position.quantity) || 0;
     const entryPrice = Number(position.price) || 0;
-    
+
     let displayPL = 0; // Для отображения (разница)
     let actualPL = 0;   // Для totalPL (полная сумма продажи)
     let description = '';
-    
+
     if (position.type === 'LONG') {
       displayPL = (underlyingPrice - entryPrice) * quantity * positionMultiplier2;
       actualPL = underlyingPrice * quantity * positionMultiplier2;
@@ -465,14 +469,14 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
       actualPL = -underlyingPrice * quantity * positionMultiplier2;
       description = `Выкупаем ${quantity} ${assetLabel2}: ${entryPrice.toFixed(2)} → ${underlyingPrice.toFixed(2)}`;
     }
-    
+
     details.push({
       label: `${position.type} ${quantity} ${assetLabel2} - P&L`,
       value: displayPL,
       description,
       type: 'stock-pl'
     });
-    
+
     totalPL += actualPL;
   });
 
@@ -499,7 +503,7 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
   positions.forEach(position => {
     const quantity = Number(position.quantity) || 0;
     const entryPrice = Number(position.price) || 0;
-    const cost = position.type === 'LONG' 
+    const cost = position.type === 'LONG'
       ? -entryPrice * quantity * positionMultiplier3  // LONG: тратим на покупку
       : +entryPrice * quantity * positionMultiplier3; // SHORT: получаем от продажи
     totalPL += cost;
@@ -509,35 +513,36 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
   // ВАЖНО: Каждый опцион имеет свою дату экспирации и IV из API
   // Вычисляем самую старую дату входа для индивидуального расчёта daysPassed
   const oldestEntryDate = getOldestEntryDate(options);
-  
+
   options.forEach(option => {
     // ВАЖНО: При ручной премии обнуляем ask/bid, чтобы getEntryPrice() использовал premium
-    const tempOption = { 
-      ...option, 
+    // Если нет - передаем ручные Bid/Ask, если они изменены
+    const tempOption = {
+      ...option,
       premium: option.isPremiumModified ? option.customPremium : option.premium,
-      ask: option.isPremiumModified ? 0 : option.ask,
-      bid: option.isPremiumModified ? 0 : option.bid
+      ask: option.isPremiumModified ? 0 : (option.isAskModified ? option.customAsk : option.ask),
+      bid: option.isPremiumModified ? 0 : (option.isBidModified ? option.customBid : option.bid),
     };
     // Цена входа: ASK для Buy, BID для Sell
     const entryPrice = getEntryPrice(option);
-    
+
     // Вычисляем индивидуальные параметры для этого опциона
     // currentDays - дни до экспирации на сегодня (без симуляции)
     // simulatedDays - дни до экспирации с учётом симуляции (daysPassed)
     // ВАЖНО: Передаём oldestEntryDate для корректного расчёта actualDaysPassed
     const currentDaysToExpiration = calculateDaysToExpirationForOption(option, 0, oldestEntryDate);
     const simulatedDaysToExpiration = calculateDaysToExpirationForOption(option, daysPassed, oldestEntryDate);
-    
+
     // Получаем прогнозируемую IV с учётом временной структуры (Volatility Surface)
     // ВАЖНО: ivSurface используется для точной интерполяции IV между датами экспирации
     let optionVolatility = getOptionVolatility(
-      option, 
-      currentDaysToExpiration, 
+      option,
+      currentDaysToExpiration,
       simulatedDaysToExpiration,
       ivSurface,
       'simple'
     );
-    
+
     // Используем AI волатильность если доступна
     if (isAIEnabled && aiVolatilityMap && selectedTicker) {
       const cacheKey = `${selectedTicker}_${option.strike}_${option.date}_${underlyingPrice.toFixed(2)}_${simulatedDaysToExpiration}`;
@@ -552,7 +557,7 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
         optionVolatility = aiVolatility;
       }
     }
-    
+
     // Выбираем модель расчёта в зависимости от режима калькулятора (Сценарий 3)
     const currentValue = calculatorMode === CALCULATOR_MODES.FUTURES
       ? calculateFuturesOptionTheoreticalPrice(tempOption, underlyingPrice, simulatedDaysToExpiration, optionVolatility)
@@ -571,7 +576,7 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
     // Показываем первоначальную IV в скобках если прошло время (daysPassed > 0)
     // ЗАЧЕМ: Пользователь должен видеть как изменилась IV даже при небольших изменениях
     const showOriginalIV = daysPassed > 0 && currentIVPercent > 0;
-    
+
     // К = P&L / (Цена входа * multiplier) - показывает отношение P&L к стоимости контракта
     const entryCost = entryPrice * contractMultiplier; // Стоимость контракта (цена входа * множитель)
     const kCoeffValue = entryCost !== 0 ? pl / entryCost : 0;
@@ -602,11 +607,11 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
   positions.forEach(position => {
     const quantity = Number(position.quantity) || 0;
     const entryPrice = Number(position.price) || 0;
-    
+
     let displayPL = 0; // Для отображения (разница)
     let actualPL = 0;   // Для totalPL (полная сумма продажи)
     let description = '';
-    
+
     if (position.type === 'LONG') {
       displayPL = (underlyingPrice - entryPrice) * quantity * positionMultiplier3;
       actualPL = underlyingPrice * quantity * positionMultiplier3;
@@ -616,14 +621,14 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
       actualPL = -underlyingPrice * quantity * positionMultiplier3;
       description = `Выкупаем ${quantity} ${assetLabel3}: ${entryPrice.toFixed(2)} → ${underlyingPrice.toFixed(2)}`;
     }
-    
+
     details.push({
       label: `${position.type} ${quantity} ${assetLabel3} - P&L`,
       value: displayPL,
       description,
       type: 'stock-pl'
     });
-    
+
     totalPL += actualPL;
   });
 
@@ -636,7 +641,7 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
 const formatCurrency = (value) => {
   const absValue = Math.abs(value);
   const sign = value < 0 ? '-' : '+';
-  
+
   if (absValue >= 1000000) {
     return `${sign}$${(absValue / 1000000).toFixed(2)}M`;
   } else if (absValue >= 1000) {

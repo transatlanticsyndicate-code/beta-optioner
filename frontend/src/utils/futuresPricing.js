@@ -58,9 +58,9 @@ const isBuyAction = (option = {}) => {
  */
 const getImpliedVolatility = (option = {}) => {
   // Проверяем все возможные поля для IV
-  const iv = option.impliedVolatility || option.implied_volatility || 
-             option.iv || option.askIV || option.bidIV || option.volatility;
-  
+  const iv = option.impliedVolatility || option.implied_volatility ||
+    option.iv || option.askIV || option.bidIV || option.volatility;
+
   if (iv !== undefined && iv !== null && iv !== 0) {
     const ivNum = toNumber(iv);
     // Если IV передана в процентах (>1), конвертируем в десятичный формат
@@ -72,7 +72,7 @@ const getImpliedVolatility = (option = {}) => {
       return ivNum;
     }
   }
-  
+
   return DEFAULT_VOLATILITY;
 };
 
@@ -85,18 +85,24 @@ const getImpliedVolatility = (option = {}) => {
  */
 const getEntryPrice = (option = {}) => {
   const isBuy = isBuyAction(option);
-  
+
   if (isBuy) {
     // Покупка: входим по ASK
-    const ask = toNumber(option.ask);
+    // Учитываем ручную правку, если она есть
+    const ask = option.isAskModified && option.customAsk !== undefined ? toNumber(option.customAsk) : toNumber(option.ask);
     if (ask > 0) return ask;
   } else {
     // Продажа: входим по BID
-    const bid = toNumber(option.bid);
+    // Учитываем ручную правку, если она есть
+    const bid = option.isBidModified && option.customBid !== undefined ? toNumber(option.customBid) : toNumber(option.bid);
     if (bid > 0) return bid;
   }
-  
+
   // Fallback на premium
+  // Учитываем ручную правку премии, если она есть
+  if (option.isPremiumModified && option.customPremium !== undefined) {
+    return Math.max(0, toNumber(option.customPremium));
+  }
   return Math.max(0, toNumber(option.premium));
 };
 
@@ -118,7 +124,7 @@ export const calculateFuturesOptionTheoreticalPrice = (
 ) => {
   const strike = toNumber(option.strike);
   const type = option.type || 'CALL';
-  
+
   // Используем переданную волатильность или берём из опциона
   let volatility;
   if (overrideVolatility !== null && overrideVolatility > 0) {
@@ -126,21 +132,21 @@ export const calculateFuturesOptionTheoreticalPrice = (
   } else {
     volatility = getImpliedVolatility(option);
   }
-  
+
   // Внутренняя стоимость
   const intrinsicValue = calculateIntrinsicValueBlack76(type, futuresPrice, strike);
-  
+
   // Время до экспирации в годах
   const timeToExpiryYears = Math.max(0, daysRemaining) / 365;
-  
+
   // На экспирации (T=0) возвращаем только внутреннюю стоимость
   if (timeToExpiryYears <= 0) {
     return intrinsicValue;
   }
-  
+
   // Безрисковая ставка (используется только для дисконтирования в Black-76)
   const riskFreeRate = getRiskFreeRateSync();
-  
+
   // Расчёт по Black-76
   const black76Price = calculateOptionPriceBlack76(
     futuresPrice,     // F - цена фьючерса
@@ -150,7 +156,7 @@ export const calculateFuturesOptionTheoreticalPrice = (
     volatility,       // σ - implied volatility
     type              // тип опциона (CALL/PUT)
   );
-  
+
   // Гарантируем что цена >= intrinsic value
   const timeValue = Math.max(0, black76Price - intrinsicValue);
   return intrinsicValue + timeValue;
@@ -183,7 +189,7 @@ export const calculateFuturesOptionPLValue = (
 
   // Цена входа: ASK для Buy, BID для Sell
   const entryPrice = getEntryPrice(option);
-  
+
   // Теоретическая цена опциона по Black-76
   const theoreticalPrice = calculateFuturesOptionTheoreticalPrice(
     option,
@@ -222,10 +228,10 @@ export const calculateFuturesOptionExpirationPLValue = (
 
   const strike = toNumber(option.strike);
   const type = option.type || 'CALL';
-  
+
   // Внутренняя стоимость на экспирации
   const intrinsicValue = calculateIntrinsicValueBlack76(type, futuresPrice, strike);
-  
+
   // Цена входа
   const entryPrice = getEntryPrice(option);
 
@@ -255,7 +261,7 @@ export const calculateFuturesGreeks = (
 ) => {
   const strike = toNumber(option.strike);
   const type = option.type || 'CALL';
-  
+
   // Волатильность
   let volatility;
   if (overrideVolatility !== null && overrideVolatility > 0) {
@@ -263,13 +269,13 @@ export const calculateFuturesGreeks = (
   } else {
     volatility = getImpliedVolatility(option);
   }
-  
+
   // Время до экспирации в годах
   const timeToExpiryYears = Math.max(0, daysRemaining) / 365;
-  
+
   // Безрисковая ставка
   const riskFreeRate = getRiskFreeRateSync();
-  
+
   return calculateGreeksBlack76(
     futuresPrice,
     strike,
@@ -299,7 +305,7 @@ export const calculateFuturesPortfolioPL = (
   overrideVolatility = null
 ) => {
   if (!options || options.length === 0) return 0;
-  
+
   return options
     .filter(opt => opt.visible !== false)
     .reduce((total, option) => {
@@ -329,7 +335,7 @@ export const calculateFuturesPortfolioExpirationPL = (
   pointValue = 1
 ) => {
   if (!options || options.length === 0) return 0;
-  
+
   return options
     .filter(opt => opt.visible !== false)
     .reduce((total, option) => {
@@ -357,14 +363,14 @@ export const calculateFuturesPortfolioGreeks = (
   if (!options || options.length === 0) {
     return { delta: 0, gamma: 0, theta: 0, vega: 0 };
   }
-  
+
   return options
     .filter(opt => opt.visible !== false)
     .reduce((total, option) => {
       const quantity = Math.abs(toNumber(option.quantity)) || 1;
       const multiplier = isBuyAction(option) ? 1 : -1;
       const greeks = calculateFuturesGreeks(option, futuresPrice, daysRemaining);
-      
+
       // Греки умножаются на quantity и pointValue
       return {
         delta: total.delta + (greeks.delta * quantity * multiplier * pointValue),

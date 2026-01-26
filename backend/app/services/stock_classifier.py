@@ -386,18 +386,18 @@ def _classify_by_features(features: Dict) -> Dict[str, Any]:
     
     # Mega-cap исключение для illiquid (TSLA, NVDA, COIN)
     # ЗАЧЕМ: Mega-cap с высоким объёмом не должны попадать в illiquid даже при высоком beta
-    # ВАЖНО: Пороги в JSON хранятся в миллиардах (cap) и миллионах (volume), конвертируем
-    mega_cap_threshold = thresholds["mega_cap_threshold"] * 1_000_000_000
-    high_volume_threshold = thresholds["high_volume_threshold"] * 1_000_000
+    # ВАЖНО: Пороги в thresholds уже сконвертированы в абсолютные значения в get_thresholds_config()
+    mega_cap_threshold = thresholds["mega_cap_threshold"]
+    high_volume_threshold = thresholds["high_volume_threshold"]
     is_mega_cap = market_cap > mega_cap_threshold
     is_high_volume = avg_volume > high_volume_threshold
     
     # Проверка "истинной" неликвидности (высокий beta БЕЗ mega-cap защиты)
     is_truly_illiquid_by_beta = beta > thresholds["illiquid_min_beta"] and not is_mega_cap and not is_high_volume
     
-    # Пороги для illiquid (конвертируем из миллиардов/миллионов)
-    illiquid_max_volume = thresholds["illiquid_max_volume"] * 1_000_000
-    illiquid_max_cap = thresholds["illiquid_max_cap"] * 1_000_000_000
+    # Пороги для illiquid (уже в абсолютных значениях)
+    illiquid_max_volume = thresholds["illiquid_max_volume"]
+    illiquid_max_cap = thresholds["illiquid_max_cap"]
     
     # ПРИОРИТЕТ 2: Illiquid (проверяем после tech-growth)
     # ЗАЧЕМ: Неликвидные акции имеют непредсказуемое поведение
@@ -419,7 +419,8 @@ def _classify_by_features(features: Dict) -> Dict[str, Any]:
     
     # ПРИОРИТЕТ 3: Stable (все условия должны выполняться)
     # ЗАЧЕМ: Large-cap стабильные акции — наиболее предсказуемые
-    stable_min_cap = thresholds["stable_min_cap"] * 1_000_000_000
+    # ВАЖНО: Порог уже в абсолютном значении
+    stable_min_cap = thresholds["stable_min_cap"]
     is_large_cap = market_cap > stable_min_cap
     is_low_beta = beta < thresholds["stable_max_beta"]
     

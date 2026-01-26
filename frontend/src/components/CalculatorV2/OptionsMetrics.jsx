@@ -33,7 +33,7 @@ function OptionsMetrics({ options = [], currentPrice = 0, positions = [], daysPa
   //   aiVolatilityMapKeys: Object.keys(aiVolatilityMap || {}),
   //   aiVolatilityMapSize: Object.keys(aiVolatilityMap || {}).length
   // });
-  
+
   const {
     canScrollLeft,
     canScrollRight,
@@ -44,17 +44,21 @@ function OptionsMetrics({ options = [], currentPrice = 0, positions = [], daysPa
 
   // Проверяем, что опцион полностью заполнен
   const isOptionComplete = (option) => {
-    return option.date && 
-           option.strike && 
-           option.premium !== undefined &&
-           option.premium !== null &&
-           option.visible !== false;
+    // Проверяем наличие цены (хотя бы одной: premium, bid или ask, включая ручные правки)
+    const hasPremium = (option.premium !== undefined && option.premium !== null) || (option.isPremiumModified && option.customPremium !== undefined);
+    const hasBid = (option.bid !== undefined && option.bid !== null) || (option.isBidModified && option.customBid !== undefined);
+    const hasAsk = (option.ask !== undefined && option.ask !== null) || (option.isAskModified && option.customAsk !== undefined);
+
+    return option.date &&
+      option.strike &&
+      (hasPremium || hasBid || hasAsk) &&
+      option.visible !== false;
   };
 
   // Рассчитываем метрики на основе реальных данных
   const calculatedMetrics = useMemo(() => {
     const completeOptions = options.filter(isOptionComplete);
-    
+
     // Если нет полных опционов - показываем заглушки
     if (completeOptions.length === 0) {
       return {
@@ -83,8 +87,8 @@ function OptionsMetrics({ options = [], currentPrice = 0, positions = [], daysPa
     {
       priority: 1,
       label: 'MAX убыток',
-      value: calculatedMetrics.hasCompleteOptions && calculatedMetrics.plMetrics.maxLoss < 0 
-        ? formatCurrency(calculatedMetrics.plMetrics.maxLoss) 
+      value: calculatedMetrics.hasCompleteOptions && calculatedMetrics.plMetrics.maxLoss < 0
+        ? formatCurrency(calculatedMetrics.plMetrics.maxLoss)
         : '—',
       color: 'red',
       tooltip: 'Максимальный возможный убыток стратегии.\nВНИМАНИЕ: при графике стремящемся в бесконечность сумма убытка ограничивается движением цены базового актива на 50%'
@@ -92,7 +96,7 @@ function OptionsMetrics({ options = [], currentPrice = 0, positions = [], daysPa
     {
       priority: 1,
       label: 'MAX прибыль',
-      value: calculatedMetrics.hasCompleteOptions 
+      value: calculatedMetrics.hasCompleteOptions
         ? (calculatedMetrics.plMetrics.maxProfit === Infinity ? '∞' : formatCurrency(calculatedMetrics.plMetrics.maxProfit))
         : '—',
       color: 'green',
@@ -102,15 +106,14 @@ function OptionsMetrics({ options = [], currentPrice = 0, positions = [], daysPa
       priority: 1,
       label: 'Точка безубытка',
       value: calculatedMetrics.hasCompleteOptions && calculatedMetrics.plMetrics.breakevens.length > 0
-        ? calculatedMetrics.plMetrics.breakevens.length === 1 
+        ? calculatedMetrics.plMetrics.breakevens.length === 1
           ? `$${calculatedMetrics.plMetrics.breakevens[0].toFixed(2)}`
-          : `${calculatedMetrics.plMetrics.breakevens.length} ${
-              calculatedMetrics.plMetrics.breakevens.length === 2 ? 'точки' : 
-              calculatedMetrics.plMetrics.breakevens.length >= 5 ? 'точек' : 'точки'
-            }`
+          : `${calculatedMetrics.plMetrics.breakevens.length} ${calculatedMetrics.plMetrics.breakevens.length === 2 ? 'точки' :
+            calculatedMetrics.plMetrics.breakevens.length >= 5 ? 'точек' : 'точки'
+          }`
         : '—',
       color: 'orange',
-      tooltip: calculatedMetrics.plMetrics?.breakevens?.length > 1 
+      tooltip: calculatedMetrics.plMetrics?.breakevens?.length > 1
         ? `Множественные точки безубыточности: ${calculatedMetrics.plMetrics.breakevens.map(be => `$${be.toFixed(2)}`).join(', ')}`
         : 'Цена актива, при которой стратегия не приносит ни прибыли, ни убытка (P&L = 0).'
     },
@@ -121,7 +124,7 @@ function OptionsMetrics({ options = [], currentPrice = 0, positions = [], daysPa
       color: 'blue',
       tooltip: 'Соотношение максимального риска к максимальной прибыли. Чем выше второе число, тем лучше.'
     },
-    
+
     // Уровень 2: Важные (видны при небольшом скролле)
     {
       priority: 2,
@@ -137,7 +140,7 @@ function OptionsMetrics({ options = [], currentPrice = 0, positions = [], daysPa
       color: 'gray',
       tooltip: 'Требуемый капитал для открытия позиции. Учитывает премию опционов + маржинальные требования для непокрытых опционов. Позиции базового актива снижают маржу для covered опционов.'
     },
-    
+
     // Уровень 3: Продвинутые (для опытных, справа)
     {
       priority: 3,
@@ -191,7 +194,7 @@ function OptionsMetrics({ options = [], currentPrice = 0, positions = [], daysPa
       >
         {!calculatedMetrics.hasCompleteOptions ? (
           <div className="flex items-center justify-center w-full py-4 text-sm text-gray-500">
-            {options.length === 0 
+            {options.length === 0
               ? 'Добавьте опционы для отображения метрик'
               : 'Выберите дату, страйк и премию для всех опционов'
             }
@@ -211,15 +214,14 @@ function OptionsMetrics({ options = [], currentPrice = 0, positions = [], daysPa
                     </TooltipContent>
                   </Tooltip>
                 </div>
-                <div className={`text-xl font-bold whitespace-nowrap ${
-                  metric.color === 'red' ? 'text-red-500' :
-                  metric.color === 'green' ? 'text-green-500' :
-                  metric.color === 'orange' ? 'text-orange-500' :
-                  metric.color === 'blue' ? 'text-blue-500' :
-                  metric.color === 'cyan' ? 'text-cyan-500' :
-                  metric.color === 'purple' ? 'text-purple-500' :
-                  'text-gray-700'
-                }`}>
+                <div className={`text-xl font-bold whitespace-nowrap ${metric.color === 'red' ? 'text-red-500' :
+                    metric.color === 'green' ? 'text-green-500' :
+                      metric.color === 'orange' ? 'text-orange-500' :
+                        metric.color === 'blue' ? 'text-blue-500' :
+                          metric.color === 'cyan' ? 'text-cyan-500' :
+                            metric.color === 'purple' ? 'text-purple-500' :
+                              'text-gray-700'
+                  }`}>
                   {metric.value}
                 </div>
               </div>

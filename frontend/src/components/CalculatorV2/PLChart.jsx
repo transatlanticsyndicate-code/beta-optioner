@@ -41,12 +41,12 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
   //   aiVolatilityMapKeys: Object.keys(aiVolatilityMap || {}),
   //   aiVolatilityMapSize: Object.keys(aiVolatilityMap || {}).length
   // });
-  
+
   // Отслеживание темы
   const [isDarkMode, setIsDarkMode] = useState(
     document.documentElement.classList.contains('dark')
   );
-  
+
   // Отслеживание видимого диапазона для динамического пересчета данных
   const [xAxisRange, setXAxisRange] = useState(null);
 
@@ -73,13 +73,13 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
   // Для акций P&L = разница в цене × quantity
   const calculateUnderlyingPL = useCallback((price, position) => {
     if (!position || !position.type) return 0;
-    
+
     const { type, quantity, price: entryPrice } = position;
     const entryPriceNum = Number(entryPrice) || 0;
-    
+
     // Множитель для фьючерсов (pointValue), для акций = 1
     const multiplier = calculatorMode === CALCULATOR_MODES.FUTURES ? contractMultiplier : 1;
-    
+
     if (type === 'LONG') {
       return (price - entryPriceNum) * quantity * multiplier;
     } else if (type === 'SHORT') {
@@ -115,7 +115,7 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
 
     const visibleOptions = options.filter(opt => opt.visible);
     const visiblePositions = positions.filter(pos => pos.visible !== false);
-    
+
     // График отображается, если есть видимые опционы ИЛИ видимые позиции базового актива
     if (visibleOptions.length === 0 && visiblePositions.length === 0) {
       return null;
@@ -125,7 +125,7 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
     // Если есть видимый диапазон (xAxisRange) - используем его
     // Иначе используем ±50% от текущей цены
     let minPrice, maxPrice;
-    
+
     if (xAxisRange && xAxisRange[0] !== undefined && xAxisRange[1] !== undefined) {
       // При zoom/pan используем видимый диапазон
       minPrice = xAxisRange[0];
@@ -136,7 +136,7 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
       minPrice = currentPrice * (1 - priceRange);
       maxPrice = currentPrice * (1 + priceRange);
     }
-    
+
     const chartPoints = 500; // Больше точек для гладкой кривой при zoom
     const step = (maxPrice - minPrice) / chartPoints;
 
@@ -153,18 +153,18 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
     // Сначала добавляем P&L от позиций базового актива
     visiblePositions.forEach((position) => {
       const positionPLArray = prices.map(price => calculateUnderlyingPL(price, position));
-      
+
       // Добавляем к общему P&L
       positionPLArray.forEach((pl, i) => {
         totalPLArray[i] += pl;
       });
-      
+
       // Цвет и стиль линии с прозрачностью 75%
       // Зеленая пунктирная линия для LONG позиций, красная для SHORT
       const color = position.type === 'LONG' ? 'rgba(34, 197, 94, 0.75)' : 'rgba(239, 68, 68, 0.75)';
       const positionType = position.type === 'LONG' ? 'LONG' : 'SHORT';
       const positionQty = Math.abs(parseFloat(position.quantity) || 0);
-      
+
       // Trace для позиции базового актива (только если showOptionLines = true)
       if (showOptionLines) {
         traces.push({
@@ -179,9 +179,9 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
             dash: 'dot'
           },
           hovertemplate: `<b>${positionType} ${positionQty} ${position.ticker || 'SHARES'}</b><br>` +
-                        `Entry: $${(Number(position.price) || 0).toFixed(2)}<br>` +
-                        'P&L: %{text}<br>' +
-                        '<extra></extra>',
+            `Entry: $${(Number(position.price) || 0).toFixed(2)}<br>` +
+            'P&L: %{text}<br>' +
+            '<extra></extra>',
           text: positionPLArray.map(pl => pl >= 0 ? `$${pl.toFixed(2)}` : `-$${Math.abs(pl).toFixed(2)}`)
         });
       }
@@ -207,31 +207,32 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
       // Проверяем, активен ли опцион на текущий день симуляции
       // ЗАЧЕМ: Если целевая дата раньше даты входа опциона, он ещё не куплен
       const isActive = isOptionActiveAtDay(option, daysPassed, oldestEntryDate);
-      
+
       // ВАЖНО: При ручной премии обнуляем ask/bid, чтобы getEntryPrice() использовал premium
-      const tempOption = { 
-        ...option, 
+      // Если нет - передаем ручные Bid/Ask, если они изменены
+      const tempOption = {
+        ...option,
         premium: option.isPremiumModified ? option.customPremium : option.premium,
-        ask: option.isPremiumModified ? 0 : option.ask,
-        bid: option.isPremiumModified ? 0 : option.bid
+        ask: option.isPremiumModified ? 0 : (option.isAskModified ? option.customAsk : option.ask),
+        bid: option.isPremiumModified ? 0 : (option.isBidModified ? option.customBid : option.bid),
       };
       const { action, type, strike } = option;
-      
+
       // Вычисляем индивидуальный daysRemaining для каждого опциона
       // ВАЖНО: Передаём oldestEntryDate для корректного расчёта actualDaysPassed
       const optionDaysRemaining = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntryDate);
-      
+
       // Получаем IV из API через единую функцию (как в usePositionExitCalculator)
       // currentDays = daysRemaining без daysPassed, simulatedDays = с учётом daysPassed
       // ivSurface используется для точной интерполяции IV между датами экспирации
       const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0, 30, oldestEntryDate);
       let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface, 'simple');
-      
+
       // Используем AI волатильность если доступна
       if (isAIEnabled && aiVolatilityMap && selectedTicker && targetPrice) {
         const cacheKey = `${selectedTicker}_${option.strike}_${option.date}_${targetPrice.toFixed(2)}_${optionDaysRemaining}`;
         const aiVolatility = aiVolatilityMap[cacheKey];
-        
+
         if (aiVolatility) {
           console.log('🤖 [PLChart/chartData] Используем AI волатильность:', {
             strike: option.strike,
@@ -242,10 +243,10 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
           optionVolatility = aiVolatility;
         }
       }
-      
+
       // DEBUG: Закомментировано для production
       // console.log(`🤖 [PLChart/plArray] Strike ${option.strike}: optionVolatility=${optionVolatility}, isAIEnabled=${isAIEnabled}, isActive=${isActive}`);
-      
+
       // Если опцион ещё не куплен, P/L = 0 (не участвует в расчёте)
       const plArray = prices.map((price) =>
         isActive ? calculateOptionPLValue(tempOption, price, currentPrice, optionDaysRemaining, optionVolatility, dividendYield) : 0
@@ -273,8 +274,8 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
             dash: 'solid'
           },
           hovertemplate: '<b>%{fullData.name}</b><br>' +
-                        'P&L: %{text}<br>' +
-                        '<extra></extra>',
+            'P&L: %{text}<br>' +
+            '<extra></extra>',
           text: plArray.map(pl => pl >= 0 ? `$${pl.toFixed(2)}` : `-$${Math.abs(pl).toFixed(2)}`)
         });
       }
@@ -292,14 +293,14 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
     // ЗАЧЕМ: Показать пользователю цену, при которой все опционы сходятся
     // Сохраняем данные для добавления в конце (чтобы точка была поверх всех элементов)
     let convergencePointTrace = null;
-    
+
     if (visibleOptions.length >= 2 && showOptionLines) {
       // Вычисляем P&L каждого опциона для каждой цены
       // ВАЖНО: Используем UTC для консистентности между часовыми поясами
       const optionPLArrays = visibleOptions.map(option => {
         // ВАЖНО: При ручной премии обнуляем ask/bid, чтобы getEntryPrice() использовал premium
-        const tempOption = { 
-          ...option, 
+        const tempOption = {
+          ...option,
           premium: option.isPremiumModified ? option.customPremium : option.premium,
           ask: option.isPremiumModified ? 0 : option.ask,
           bid: option.isPremiumModified ? 0 : option.bid
@@ -307,7 +308,7 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
         const optionDaysRemaining = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntryDate);
         const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0, 30, oldestEntryDate);
         let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface, 'simple');
-        
+
         // Используем AI волатильность если доступна
         if (isAIEnabled && aiVolatilityMap && options.length > 0 && targetPrice) {
           const ticker = options[0]?.ticker || '';
@@ -319,39 +320,39 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
             }
           }
         }
-        
-        return prices.map(price => 
+
+        return prices.map(price =>
           calculateOptionPLValue(tempOption, price, currentPrice, optionDaysRemaining, optionVolatility, dividendYield)
         );
       });
-      
+
       // Ищем цену с минимальным разбросом между всеми опционами
       let minSpread = Infinity;
       let bestPriceIdx = 0;
-      
+
       prices.forEach((price, idx) => {
         const plValues = optionPLArrays.map(arr => arr[idx]);
         const maxPL = Math.max(...plValues);
         const minPL = Math.min(...plValues);
         const spread = maxPL - minPL;
-        
+
         // Ищем минимальный разброс (точку схождения)
         if (spread < minSpread) {
           minSpread = spread;
           bestPriceIdx = idx;
         }
       });
-      
+
       // Сохраняем точку схождения только если разброс ≤ 10% от максимального P&L текущих опционов
       // Берём P&L опционов именно в точке схождения, а не по всему графику
       const plValuesAtConvergence = optionPLArrays.map(arr => arr[bestPriceIdx]);
       const maxAbsPL = Math.max(...plValuesAtConvergence.map(Math.abs));
       const threshold = maxAbsPL * 0.1; // 10% порог
-      
+
       if (minSpread <= threshold && maxAbsPL > 0) {
         const convergencePrice = prices[bestPriceIdx];
         const convergencePL = totalPLArray[bestPriceIdx];
-        
+
         convergencePointTrace = {
           x: [convergencePrice],
           y: [convergencePL],
@@ -368,9 +369,9 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
             }
           },
           hovertemplate: '<b>Точка схождения опционов</b><br>' +
-                        `Цена: $${convergencePrice.toFixed(2)}<br>` +
-                        `Разброс: $${minSpread.toFixed(2)}<br>` +
-                        '<extra></extra>',
+            `Цена: $${convergencePrice.toFixed(2)}<br>` +
+            `Разброс: $${minSpread.toFixed(2)}<br>` +
+            '<extra></extra>',
           showlegend: true
         };
       }
@@ -378,13 +379,13 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
 
     // Если есть опционы с оставшимися днями > 0, добавляем линию для дня экспирации с прозрачностью 50%
     // ВАЖНО: Используем UTC для консистентности между часовыми поясами
-    const hasOptionsWithDaysRemaining = visibleOptions.some(option => 
+    const hasOptionsWithDaysRemaining = visibleOptions.some(option =>
       hasRemainingDaysUTC(option, daysPassed)
     );
-    
+
     if (hasOptionsWithDaysRemaining) {
       const expirationPLArray = new Array(prices.length).fill(0);
-      
+
       // Сначала добавляем P&L от позиций базового актива (они не зависят от экспирации)
       visiblePositions.forEach((position) => {
         const positionPLArray = prices.map(price => calculateUnderlyingPL(price, position));
@@ -392,12 +393,12 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
           expirationPLArray[i] += pl;
         });
       });
-      
+
       // Затем добавляем P&L от опционов на экспирации
       visibleOptions.forEach((option) => {
         // ВАЖНО: При ручной премии обнуляем ask/bid, чтобы getEntryPrice() использовал premium
-        const tempOption = { 
-          ...option, 
+        const tempOption = {
+          ...option,
           premium: option.isPremiumModified ? option.customPremium : option.premium,
           ask: option.isPremiumModified ? 0 : option.ask,
           bid: option.isPremiumModified ? 0 : option.bid
@@ -407,7 +408,7 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
           expirationPLArray[i] += pl;
         });
       });
-      
+
       const expirationHoverArray = expirationPLArray.map(pl => Math.abs(pl) < 0.01 ? 0 : pl);
 
       // Зеленая часть экспирации (прибыль) с прозрачностью 50%
@@ -426,7 +427,7 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
         showlegend: false,
         hoverinfo: 'skip'
       });
-      
+
       // Красная часть экспирации (убыток) с прозрачностью 50%
       const expirationRedY = expirationPLArray.map(pl => pl < 0 ? pl : null);
       traces.push({
@@ -456,12 +457,12 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
         },
         customdata: expirationHoverArray,
         hovertemplate: '<b>В день экспирации</b><br>' +
-                      'P&L: $%{customdata:.2f}<br>' +
-                      '<extra></extra>',
+          'P&L: $%{customdata:.2f}<br>' +
+          '<extra></extra>',
         showlegend: false
       });
     }
-    
+
     // Trace для суммарного P&L - разделяем на зеленую (выше 0) и красную (ниже 0) части
     // Зеленая часть (прибыль)
     const greenY = totalPLArray.map(pl => pl >= 0 ? pl : null);
@@ -479,7 +480,7 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
       showlegend: true,
       hoverinfo: 'skip'
     });
-    
+
     // Красная часть (убыток)
     const redY = totalPLArray.map(pl => pl < 0 ? pl : null);
     traces.push({
@@ -508,8 +509,8 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
       },
       customdata: totalHoverArray,
       hovertemplate: '<b>Total P&L</b><br>' +
-                    'P&L: $%{customdata:.2f}<br>' +
-                    '<extra></extra>',
+        'P&L: $%{customdata:.2f}<br>' +
+        '<extra></extra>',
       showlegend: false
     });
 
@@ -547,7 +548,7 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
     for (let i = 1; i < totalPLArray.length; i++) {
       const prev = totalPLArray[i - 1];
       const curr = totalPLArray[i];
-      
+
       // Пересечение нуля
       if ((prev < 0 && curr > 0) || (prev > 0 && curr < 0)) {
         const ratio = Math.abs(prev) / (Math.abs(prev) + Math.abs(curr));
@@ -816,7 +817,7 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
       setXAxisRange(null);
       return;
     }
-    
+
     // Когда пользователь зумирует или сдвигает график,
     // обновляем видимый диапазон для пересчета данных
     if (relayoutData['xaxis.range[0]'] !== undefined && relayoutData['xaxis.range[1]'] !== undefined) {
@@ -881,7 +882,7 @@ export function calculatePLDataForMetrics(options = [], currentPrice = 0, positi
 
   const visibleOptions = options.filter(opt => opt.visible !== false);
   const visiblePositions = positions.filter(pos => pos.visible !== false);
-  
+
   if (visibleOptions.length === 0 && visiblePositions.length === 0) {
     return { prices: [], totalPLArray: [] };
   }
@@ -890,7 +891,7 @@ export function calculatePLDataForMetrics(options = [], currentPrice = 0, positi
   const priceRange = 0.50;
   const minPrice = currentPrice * (1 - priceRange);
   const maxPrice = currentPrice * (1 + priceRange);
-  
+
   const chartPoints = 500;
   const step = (maxPrice - minPrice) / chartPoints;
 
@@ -926,14 +927,14 @@ export function calculatePLDataForMetrics(options = [], currentPrice = 0, positi
   // ВАЖНО: Используем UTC для консистентности между часовыми поясами
   // Вычисляем самую старую дату входа для индивидуального расчёта daysPassed
   const oldestEntryDate = getOldestEntryDate(options);
-  
+
   visibleOptions.forEach((option) => {
     // Проверяем, активен ли опцион на текущий день симуляции
     // ЗАЧЕМ: Если целевая дата раньше даты входа опциона, он ещё не куплен
     if (!isOptionActiveAtDay(option, daysPassed, oldestEntryDate)) {
       return; // Пропускаем неактивные опционы
     }
-    
+
     // Вычисляем индивидуальный daysRemaining для этого опциона (UTC)
     // ВАЖНО: Передаём oldestEntryDate для корректного расчёта actualDaysPassed
     const optionDaysRemaining = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntryDate);
@@ -941,7 +942,7 @@ export function calculatePLDataForMetrics(options = [], currentPrice = 0, positi
     // ivSurface используется для точной интерполяции IV между датами экспирации
     const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0, 30, oldestEntryDate);
     let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface, 'simple');
-    
+
     // Используем AI волатильность если доступна
     if (isAIEnabled && aiVolatilityMap && selectedTicker && targetPrice) {
       const cacheKey = `${selectedTicker}_${option.strike}_${option.date}_${targetPrice.toFixed(2)}_${optionDaysRemaining}`;
@@ -956,14 +957,15 @@ export function calculatePLDataForMetrics(options = [], currentPrice = 0, positi
         optionVolatility = aiVolatility;
       }
     }
-    
+
     prices.forEach((price, i) => {
       // ВАЖНО: При ручной премии обнуляем ask/bid, чтобы getEntryPrice() использовал premium
-      const tempOption = { 
-        ...option, 
+      // Если нет - передаем ручные Bid/Ask, если они изменены
+      const tempOption = {
+        ...option,
         premium: option.isPremiumModified ? option.customPremium : option.premium,
-        ask: option.isPremiumModified ? 0 : option.ask,
-        bid: option.isPremiumModified ? 0 : option.bid
+        ask: option.isPremiumModified ? 0 : (option.isAskModified ? option.customAsk : option.ask),
+        bid: option.isPremiumModified ? 0 : (option.isBidModified ? option.customBid : option.bid),
       };
       // Выбираем модель расчёта в зависимости от режима калькулятора
       // ЗАЧЕМ: Режим "Фьючерсы" использует Black-76, режим "Акции" — BSM

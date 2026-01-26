@@ -426,10 +426,10 @@ function OptionsTableV3({
       {hasOptions && (
         <div className="space-y-2">
           {/* Заголовки колонок — динамическая сетка в зависимости от hideColumns */}
-          <div className="grid items-center text-xs font-medium text-muted-foreground px-2" style={{ 
-            display: 'grid', 
-            gridTemplateColumns: `30px 1fr 1fr 1fr 0.5fr ${hideColumns.includes('premium') ? '' : '1fr '}1fr 1fr ${hideColumns.includes('oi') ? '' : '0.8fr '}0.5fr 0.5fr 0.8fr 1.2fr 40px`.replace(/\s+/g, ' ').trim(), 
-            gap: '8px' 
+          <div className="grid items-center text-xs font-medium text-muted-foreground px-2" style={{
+            display: 'grid',
+            gridTemplateColumns: `30px 1fr 1fr 1fr 0.5fr ${hideColumns.includes('premium') ? '' : '1fr '}1fr 1fr ${hideColumns.includes('oi') ? '' : '0.8fr '}0.5fr 0.5fr 0.8fr 1.2fr 40px`.replace(/\s+/g, ' ').trim(),
+            gap: '8px'
           }}>
             <div></div>
             <div className="text-left">Тип</div>
@@ -451,7 +451,7 @@ function OptionsTableV3({
             // Устанавливаем дату входа по умолчанию (текущая дата в ISO формате)
             // ЗАЧЕМ: Каждая позиция должна иметь дату входа для отслеживания времени нахождения в позиции
             const entryDate = option.entryDate || new Date().toISOString().split('T')[0];
-            
+
             // Проверяем, истёк ли опцион на текущий день симуляции
             // ЗАЧЕМ: Если целевая дата больше даты экспирации, строка отображается серым
             const oldestEntry = getOldestEntryDate(options);
@@ -466,10 +466,10 @@ function OptionsTableV3({
                 key={option.id}
                 className={`items-center text-sm border rounded-md p-2 ${isGrayedOut ? "[&_*]:!text-[#AAAAAA] [&_span]:!bg-gray-100" : ""
                   }`}
-                style={{ 
-                  display: 'grid', 
-                  gridTemplateColumns: `30px 1fr 1fr 1fr 0.5fr ${hideColumns.includes('premium') ? '' : '1fr '}1fr 1fr ${hideColumns.includes('oi') ? '' : '0.8fr '}0.5fr 0.5fr 0.8fr 1.2fr 40px`.replace(/\s+/g, ' ').trim(), 
-                  gap: '8px' 
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: `30px 1fr 1fr 1fr 0.5fr ${hideColumns.includes('premium') ? '' : '1fr '}1fr 1fr ${hideColumns.includes('oi') ? '' : '0.8fr '}0.5fr 0.5fr 0.8fr 1.2fr 40px`.replace(/\s+/g, ' ').trim(),
+                  gap: '8px'
                 }}
               >
                 {/* Иконка видимости: Lock для зафиксированных позиций, Eye/EyeOff для обычных */}
@@ -489,8 +489,8 @@ function OptionsTableV3({
                     }
                   </button>
                   {option.isGoldenOption && (
-                    <Crown 
-                      className="h-3 w-3" 
+                    <Crown
+                      className="h-3 w-3"
                       style={{ color: '#eab308' }}
                       title="Подобран через золотую кнопку"
                     />
@@ -781,17 +781,17 @@ function OptionsTableV3({
                     // Вычисляем индивидуальное количество дней до экспирации для этого опциона
                     // ВАЖНО: Передаём oldestEntryDate для корректного расчёта actualDaysPassed
                     const oldestEntry = getOldestEntryDate(options);
-                    
+
                     // Проверяем, активен ли опцион на текущий день симуляции
                     // ЗАЧЕМ: Если целевая дата раньше даты входа опциона, он ещё не куплен
                     const isActive = isOptionActiveAtDay(option, daysPassed, oldestEntry);
                     // DEBUG: Закомментировано для production
                     // console.log(`📅 [OptionsTable] Проверка активности: ${option.type} ${option.strike}, entryDate=${option.entryDate}, oldestEntry=${oldestEntry?.toISOString()}, daysPassed=${daysPassed}, isActive=${isActive}`);
-                    
+
                     if (!isActive) {
                       return <span className="text-muted-foreground">—</span>;
                     }
-                    
+
                     const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0, 30, oldestEntry);
                     const optionDaysRemaining = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntry);
 
@@ -825,12 +825,15 @@ function OptionsTableV3({
 
                     // Используем customPremium если премия была изменена вручную
                     // ВАЖНО: При ручной премии обнуляем ask/bid, чтобы getEntryPrice() использовал premium
+                    // Но теперь мы также передаем ручные Bid/Ask, если они изменены
                     const effectivePremium = option.isPremiumModified ? option.customPremium : option.premium;
                     const tempOpt = {
                       ...option,
                       premium: effectivePremium,
-                      ask: option.isPremiumModified ? 0 : option.ask,
-                      bid: option.isPremiumModified ? 0 : option.bid
+                      // Если премия изменена вручную, сбрасываем Bid/Ask как и раньше
+                      // Если нет - передаем флаги модификации для Bid/Ask
+                      ask: option.isPremiumModified ? 0 : (option.isAskModified ? option.customAsk : option.ask),
+                      bid: option.isPremiumModified ? 0 : (option.isBidModified ? option.customBid : option.bid),
                     };
 
                     // DEBUG: Закомментировано для production
@@ -851,9 +854,12 @@ function OptionsTableV3({
 
                     // ПРОВЕРКА: Если Bid и Ask равны нулю — показываем иконку с восклицательным знаком
                     // ЗАЧЕМ: Расширение может добавить опцион с нулевыми ценами, что делает расчёт P&L невозможным
-                    const hasBid = option.bid !== null && option.bid !== undefined && option.bid > 0;
-                    const hasAsk = option.ask !== null && option.ask !== undefined && option.ask > 0;
-                    if (!hasBid && !hasAsk) {
+                    // Учитываем ручные правки при проверке
+                    const effectiveBid = option.isBidModified ? option.customBid : option.bid;
+                    const effectiveAsk = option.isAskModified ? option.customAsk : option.ask;
+                    const hasBid = effectiveBid !== null && effectiveBid !== undefined && effectiveBid > 0;
+                    const hasAsk = effectiveAsk !== null && effectiveAsk !== undefined && effectiveAsk > 0;
+                    if (!hasBid && !hasAsk && !option.isPremiumModified) {
                       return (
                         <span className="text-red-600 flex items-center justify-center" title="Отсутствуют цены Bid и Ask">
                           <AlertTriangle className="h-4 w-4" />
@@ -928,13 +934,13 @@ function OptionsTableV3({
                     // Вычисляем индивидуальное количество дней до экспирации для этого опциона
                     // ВАЖНО: Передаём oldestEntryDate для корректного расчёта actualDaysPassed
                     const oldestEntry = getOldestEntryDate(options);
-                    
+
                     // Проверяем, активен ли опцион на текущий день симуляции
                     // ЗАЧЕМ: Если целевая дата раньше даты входа опциона, он ещё не куплен
                     if (!isOptionActiveAtDay(opt, daysPassed, oldestEntry)) {
                       return sum; // Пропускаем неактивные опционы
                     }
-                    
+
                     const currentDaysToExp = calculateDaysRemainingUTC(opt, 0, 30, oldestEntry);
                     const optDaysRemaining = calculateDaysRemainingUTC(opt, daysPassed, 30, oldestEntry);
 
@@ -969,17 +975,17 @@ function OptionsTableV3({
                     if (isFuturesMissingSettings) {
                       return sum;
                     }
-                    
+
                     // Выбираем модель расчёта в зависимости от режима калькулятора
                     let pl = calculatorMode === CALCULATOR_MODES.FUTURES
                       ? calculateFuturesOptionPLValue(tempOpt, targetPrice || currentPrice, optDaysRemaining, contractMultiplier, optVolatility)
                       : calculateStockOptionPLValue(tempOpt, targetPrice || currentPrice, currentPrice, optDaysRemaining, optVolatility, dividendYield);
-                    
+
                     // Применяем корректировку P&L по группе акции (только для режима stocks)
                     if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
                       pl = adjustPLByStockGroup(pl, stockClassification);
                     }
-                    
+
                     return sum + pl;
                   }, 0);
 

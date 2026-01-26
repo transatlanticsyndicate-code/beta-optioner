@@ -56,10 +56,10 @@ const saveTickerToHistory = (ticker, instrumentType) => {
   try {
     const history = getTickerHistory();
     const newEntry = { ticker, instrumentType };
-    
+
     // Удалить дубликаты
     const filtered = history.filter(item => item.ticker !== ticker);
-    
+
     // Добавить в начало, максимум 10 записей
     const updated = [newEntry, ...filtered].slice(0, 10);
     localStorage.setItem(TICKER_HISTORY_KEY, JSON.stringify(updated));
@@ -87,20 +87,20 @@ const removeTickerFromHistory = (ticker) => {
 /** Автоопределение типа инструмента по тикеру */
 const detectInstrumentType = (ticker) => {
   const upperTicker = ticker.toUpperCase();
-  
+
   // Фьючерсы начинаются с /
   if (ticker.startsWith('/')) return 'futures';
-  
+
   // Криптовалюты
   const cryptoSymbols = ['BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOGE', 'DOT', 'AVAX', 'MATIC', 'LINK'];
   if (cryptoSymbols.includes(upperTicker) || upperTicker.endsWith('USD') || upperTicker.endsWith('USDT')) {
     return 'crypto';
   }
-  
+
   // Индексы
   const indexSymbols = ['SPX', 'NDX', 'DJI', 'VIX', 'RUT'];
   if (indexSymbols.includes(upperTicker)) return 'index';
-  
+
   // По умолчанию - акции
   return 'stock';
 };
@@ -119,36 +119,36 @@ const NewTikerFinder = ({
 }) => {
   // Ref для отслеживания кликов вне компонента
   const wrapperRef = useRef(null);
-  
+
   // Используем initialTicker от родителя (калькулятор сам сохраняет состояние)
   const startTicker = initialTicker || '';
   const startType = initialInstrumentType || (startTicker ? detectInstrumentType(startTicker) : 'stock');
-  
+
   // Состояние инпута тикера
   const [inputValue, setInputValue] = useState(startTicker);
   const [confirmedTicker, setConfirmedTicker] = useState(startTicker);
-  
+
   // Состояние выпадающего списка истории
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [tickerHistory, setTickerHistory] = useState([]);
-  
+
   // Состояние типа инструмента
   const [instrumentType, setInstrumentType] = useState(startType);
-  
+
   // Состояние цены
   const [priceData, setPriceData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  
+
   // Состояние классификации акции
   // ЗАЧЕМ: Для определения группы акции и применения коэффициентов P&L
   const [stockClassification, setStockClassification] = useState(null);
   const [isClassificationLoading, setIsClassificationLoading] = useState(false);
-  
+
   // Загрузка истории тикеров при монтировании
   useEffect(() => {
     setTickerHistory(getTickerHistory());
   }, []);
-  
+
   // Закрытие выпадающего списка при клике вне компонента
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -167,12 +167,12 @@ const NewTikerFinder = ({
       setStockClassification(null);
       return null;
     }
-    
+
     setIsClassificationLoading(true);
-    
+
     try {
       const response = await fetch(`/api/stock/classify?symbol=${ticker}`);
-      
+
       if (response.ok) {
         const data = await response.json();
         // Добавляем originalGroup для отслеживания исходной группы из API
@@ -202,16 +202,16 @@ const NewTikerFinder = ({
   // ЗАЧЕМ: Позволяет пользователю обновить авто-определение группы
   const refreshClassification = useCallback(async () => {
     if (!confirmedTicker || instrumentType !== 'stock') return;
-    
+
     setIsClassificationLoading(true);
-    
+
     try {
       // Очищаем кэш для этого тикера
       await fetch(`/api/stock/clear-cache?symbol=${confirmedTicker}`, { method: 'POST' });
-      
+
       // Запрашиваем классификацию заново
       await fetchClassification(confirmedTicker);
-      
+
       console.log(`🔄 Классификация ${confirmedTicker} обновлена`);
     } catch (error) {
       console.error('Ошибка обновления классификации:', error);
@@ -233,11 +233,11 @@ const NewTikerFinder = ({
       // Проверяем кеш в localStorage
       const cacheKey = `price_cache_${ticker}`;
       const cached = localStorage.getItem(cacheKey);
-      
+
       if (cached) {
         const { data, timestamp } = JSON.parse(cached);
         const cacheAge = Date.now() - timestamp;
-        
+
         // Если кеш свежий (< 1 минуты), используем его
         if (cacheAge < 60000) {
           const cachedData = { ...data, status: 'cached' };
@@ -250,15 +250,15 @@ const NewTikerFinder = ({
       // Пока реализован только Finnhub API для акций
       if (type === 'stock') {
         const response = await fetch(`/api/finnhub/quote?symbol=${ticker}`);
-        
+
         if (response.ok) {
           const data = await response.json();
-          
+
           // Определяем статус цены на основе timestamp
           // ЗАЧЕМ: Показываем актуальность данных - realtime/delayed/closed
           const now = Date.now() / 1000; // timestamp в секундах
           const timeDiff = now - data.t;
-          
+
           let status = 'realtime';
           if (timeDiff > 3600 || timeDiff < -3600) { // более 1 часа в прошлое или будущее - закрыт
             status = 'closed';
@@ -269,7 +269,7 @@ const NewTikerFinder = ({
           const previousClose = data.pc || price;
           const change = price - previousClose;
           const changePercent = previousClose ? (change / previousClose) * 100 : 0;
-          
+
           const newPriceData = {
             price,
             status,
@@ -277,9 +277,9 @@ const NewTikerFinder = ({
             changePercent,
             timestamp: data.t,
           };
-          
+
           setPriceData(newPriceData);
-          
+
           console.log(`💰 Цена для ${ticker} получена из Finnhub:`, {
             price: newPriceData.price,
             change: newPriceData.change,
@@ -290,13 +290,13 @@ const NewTikerFinder = ({
             status: status,
             source: 'Finnhub API'
           });
-          
+
           // Сохраняем в кеш
           localStorage.setItem(cacheKey, JSON.stringify({
             data: newPriceData,
             timestamp: Date.now(),
           }));
-          
+
           return newPriceData;
         } else {
           // Пробуем получить из кеша при ошибке
@@ -318,7 +318,7 @@ const NewTikerFinder = ({
       }
     } catch (error) {
       console.error('Ошибка загрузки цены:', error);
-      
+
       // Пробуем получить из кеша при ошибке
       const cacheKey = `price_cache_${ticker}`;
       const cached = localStorage.getItem(cacheKey);
@@ -338,16 +338,26 @@ const NewTikerFinder = ({
 
   // Флаг чтобы не повторять загрузку при ошибке
   const hasAttemptedLoad = useRef(false);
-  
+
   // ЗАЧЕМ: Загружаем цену при монтировании, если есть начальный тикер
   // ВАЖНО: Загружаем только ОДИН раз, не повторяем при ошибке!
   useEffect(() => {
     if (confirmedTicker && !priceData && !isLoading && !hasAttemptedLoad.current) {
       hasAttemptedLoad.current = true;
       fetchPrice(confirmedTicker, instrumentType);
+
+      // Добавлена автоматическая загрузка классификации для акций
+      // ЗАЧЕМ: Чтобы группа акции определялась сразу при загрузке страницы
+      if (instrumentType === 'stock' && !stockClassification && !isClassificationLoading) {
+        fetchClassification(confirmedTicker).then(classification => {
+          if (classification && onClassificationChange) {
+            onClassificationChange(classification);
+          }
+        });
+      }
     }
-  }, [confirmedTicker, instrumentType, fetchPrice, priceData, isLoading]);
-  
+  }, [confirmedTicker, instrumentType, fetchPrice, priceData, isLoading, stockClassification, isClassificationLoading, fetchClassification, onClassificationChange]);
+
   // Сбрасываем флаг при смене тикера
   useEffect(() => {
     hasAttemptedLoad.current = false;
@@ -359,23 +369,23 @@ const NewTikerFinder = ({
   const selectTicker = useCallback(async (ticker, type = null) => {
     const upperTicker = ticker.toUpperCase();
     const detectedType = type || detectInstrumentType(upperTicker);
-    
+
     setConfirmedTicker(upperTicker);
     setInputValue(upperTicker);
     setInstrumentType(detectedType);
     setIsHistoryOpen(false);
-    
+
     // Сохраняем в историю и обновляем локальный state
     const updatedHistory = saveTickerToHistory(upperTicker, detectedType);
     setTickerHistory(updatedHistory);
-    
+
     // Загружаем цену и классификацию параллельно
     // ЗАЧЕМ: Передаём priceData и classification в onTickerSelect
     const [loadedPriceData, loadedClassification] = await Promise.all([
       fetchPrice(upperTicker, detectedType),
       detectedType === 'stock' ? fetchClassification(upperTicker) : Promise.resolve(null)
     ]);
-    
+
     // Уведомляем родителя с загруженными данными о цене и классификации
     if (onTickerSelect) {
       onTickerSelect(upperTicker, detectedType, loadedPriceData, loadedClassification);
@@ -392,13 +402,13 @@ const NewTikerFinder = ({
       setIsHistoryOpen(false);
     }
   };
-  
+
   // Обработка выбора тикера из истории
   // ЗАЧЕМ: Быстрый выбор без необходимости нажимать Enter
   const handleHistorySelect = (historyItem) => {
     selectTicker(historyItem.ticker, historyItem.instrumentType);
   };
-  
+
   // Удаление тикера из истории
   const handleRemoveFromHistory = (e, ticker) => {
     e.stopPropagation(); // Не закрывать dropdown и не выбирать тикер
@@ -410,14 +420,14 @@ const NewTikerFinder = ({
   // ЗАЧЕМ: Пользователь может вручную изменить автоопределенный тип
   const handleInstrumentTypeChange = (value) => {
     setInstrumentType(value);
-    
+
     // Перезагружаем цену с новым типом
     if (confirmedTicker) {
       fetchPrice(confirmedTicker, value);
-      
+
       // Обновляем историю с новым типом
       saveTickerToHistory(confirmedTicker, value);
-      
+
       // Уведомляем родителя
       if (onTickerSelect) {
         onTickerSelect(confirmedTicker, value, priceData);
@@ -439,9 +449,9 @@ const NewTikerFinder = ({
   const filteredHistory = confirmedTicker && inputValue === confirmedTicker
     ? tickerHistory // Показываем всю историю при клике на выбранный тикер
     : tickerHistory.filter(item =>
-        item.ticker.toLowerCase().includes(inputValue.toLowerCase())
-      );
-  
+      item.ticker.toLowerCase().includes(inputValue.toLowerCase())
+    );
+
   // Очистка инпута
   // ЗАЧЕМ: Сбрасываем состояние и уведомляем родителя
   const handleClear = () => {
@@ -455,7 +465,7 @@ const NewTikerFinder = ({
       onTickerSelect('', 'stock', null, null);
     }
   };
-  
+
   // Обработчик изменения группы акции
   // ЗАЧЕМ: Позволяет пользователю вручную переопределить автоматическую классификацию
   // ВАЖНО: Используем onClassificationChange вместо onTickerSelect, чтобы не сбрасывать опционы
@@ -472,7 +482,7 @@ const NewTikerFinder = ({
       overridden: newGroup !== originalGroup
     };
     setStockClassification(updatedClassification);
-    
+
     // Уведомляем родителя об изменении классификации (без сброса опционов)
     if (onClassificationChange) {
       onClassificationChange(updatedClassification);
@@ -534,7 +544,7 @@ const NewTikerFinder = ({
               </button>
             )}
           </div>
-          
+
           {/* Выпадающий список истории тикеров */}
           {isHistoryOpen && filteredHistory.length > 0 && (
             <div className="absolute top-full left-0 right-0 mt-1 bg-popover border rounded-md shadow-lg z-50 max-h-60 overflow-auto">
@@ -583,8 +593,8 @@ const NewTikerFinder = ({
                   className="w-6 h-6 cursor-pointer"
                   style={{
                     filter: priceData.status === 'closed' ? 'grayscale(100%)' :
-                            priceData.status === 'delayed' ? 'sepia(100%) hue-rotate(45deg)' :
-                            'invert(21%) sepia(96%) saturate(748%) hue-rotate(94deg) brightness(102%) contrast(105%)' // realtime - яркий зеленый
+                      priceData.status === 'delayed' ? 'sepia(100%) hue-rotate(45deg)' :
+                        'invert(21%) sepia(96%) saturate(748%) hue-rotate(94deg) brightness(102%) contrast(105%)' // realtime - яркий зеленый
                   }}
                   onClick={() => window.open('https://finnhub.io', '_blank')}
                   title="Finnhub - источник данных"
@@ -596,15 +606,15 @@ const NewTikerFinder = ({
             <span className="text-muted-foreground text-sm">Нет данных</span>
           ) : null}
         </div>
-        
+
         {/* Селектор группы акции */}
         {confirmedTicker && instrumentType === 'stock' && (
           <>
-            {console.log('[NewTikerFinder] Rendering StockGroupSelector:', { 
-              confirmedTicker, 
-              instrumentType, 
+            {console.log('[NewTikerFinder] Rendering StockGroupSelector:', {
+              confirmedTicker,
+              instrumentType,
               hasClassification: !!stockClassification,
-              isLoading: isClassificationLoading 
+              isLoading: isClassificationLoading
             })}
             <StockGroupSelector
               symbol={confirmedTicker}

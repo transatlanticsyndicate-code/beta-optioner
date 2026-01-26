@@ -6,10 +6,10 @@
  */
 
 import { calculatePLDataForMetrics } from '../components/CalculatorV2/PLChart';
-import { 
-  calculateOptionPLValue, 
+import {
+  calculateOptionPLValue,
   calculateIntrinsicValue,
-  PRICING_CONSTANTS 
+  PRICING_CONSTANTS
 } from './optionPricing';
 
 /**
@@ -21,23 +21,25 @@ import {
  * @returns {number} - цена входа
  */
 function getEntryPrice(option = {}) {
-  // Если премия изменена вручную, используем её
+  // Если премия изменена вручную, используем её (наивысший приоритет)
   if (option.isPremiumModified && option.customPremium !== undefined) {
     return parseFloat(option.customPremium) || 0;
   }
-  
+
   const isBuy = (option.action || 'Buy').toLowerCase() === 'buy';
-  
+
   if (isBuy) {
     // Покупка: входим по ASK (цена продавца)
-    const ask = parseFloat(option.ask);
-    if (ask > 0) return ask;
+    // Учитываем ручную правку цен Bid/Ask
+    const ask = option.isAskModified && option.customAsk !== undefined ? parseFloat(option.customAsk) : parseFloat(option.ask);
+    if (!isNaN(ask) && ask > 0) return ask;
   } else {
     // Продажа: входим по BID (цена покупателя)
-    const bid = parseFloat(option.bid);
-    if (bid > 0) return bid;
+    // Учитываем ручную правку цен Bid/Ask
+    const bid = option.isBidModified && option.customBid !== undefined ? parseFloat(option.customBid) : parseFloat(option.bid);
+    if (!isNaN(bid) && bid > 0) return bid;
   }
-  
+
   // Fallback на premium если bid/ask недоступны
   return parseFloat(option.premium) || 0;
 }
@@ -59,7 +61,7 @@ export function calculateTotalPremium(options, contractMultiplier = 100) {
       const entryPrice = getEntryPrice(option);
       const quantity = Math.abs(parseInt(option.quantity) || 0);
       const multiplier = option.action === 'Sell' ? 1 : -1;
-      
+
       return total + (entryPrice * quantity * multiplier * contractMultiplier);
     }, 0);
 }
@@ -179,7 +181,7 @@ export function calculateRequiredCapital(options, currentPrice = 245.27, positio
  */
 function detectSpreads(options) {
   const spreads = [];
-  
+
   const groups = {};
   options.forEach(option => {
     const key = `${option.type}_${option.date}`;
@@ -190,13 +192,13 @@ function detectSpreads(options) {
   Object.values(groups).forEach(group => {
     if (group.length >= 2) {
       group.sort((a, b) => a.strike - b.strike);
-      
+
       for (let i = 0; i < group.length - 1; i++) {
         const lower = group[i];
         const upper = group[i + 1];
-        
+
         if ((lower.action === 'Buy' && upper.action === 'Sell') ||
-            (lower.action === 'Sell' && upper.action === 'Buy')) {
+          (lower.action === 'Sell' && upper.action === 'Buy')) {
           spreads.push({
             type: lower.type === 'CALL' ? 'vertical_call' : 'vertical_put',
             lower: lower,
@@ -271,11 +273,11 @@ function hasUnlimitedProfit(options, positions = []) {
  */
 export function calculateUnderlyingPLForMetrics(price, position) {
   if (!position || !position.type) return 0;
-  
+
   const { type, quantity, price: entryPrice } = position;
   const qty = parseFloat(quantity) || 0;
   const entry = parseFloat(entryPrice) || 0;
-  
+
   if (type === 'LONG') {
     return (price - entry) * qty;
   } else if (type === 'SHORT') {
@@ -309,7 +311,7 @@ export function calculatePLMetrics(options, currentPrice, positions = [], daysPa
 
   const visibleOptions = options.filter(opt => opt.visible !== false);
   const visiblePositions = positions.filter(pos => pos.visible !== false);
-  
+
   if (visibleOptions.length === 0 && visiblePositions.length === 0) {
     return {
       maxLoss: 0,
@@ -325,7 +327,7 @@ export function calculatePLMetrics(options, currentPrice, positions = [], daysPa
   // dividendYield передаётся для модели BSM
   // isAIEnabled и aiVolatilityMap передаются для использования AI волатильности
   const { prices, totalPLArray } = calculatePLDataForMetrics(options, currentPrice, positions, daysPassed, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap, targetPrice, selectedTicker, calculatorMode, contractMultiplier, 'simple');
-  
+
   if (prices.length === 0 || totalPLArray.length === 0) {
     return {
       maxLoss: 0,
@@ -344,7 +346,7 @@ export function calculatePLMetrics(options, currentPrice, positions = [], daysPa
   for (let i = 1; i < totalPLArray.length; i++) {
     const prev = totalPLArray[i - 1];
     const curr = totalPLArray[i];
-    
+
     // Пересечение нуля
     if ((prev < 0 && curr > 0) || (prev > 0 && curr < 0)) {
       // Уточняем точку линейной интерполяцией
@@ -406,18 +408,18 @@ export function calculateOptionPL(option, price, daysRemaining = 0) {
  */
 export function findBreakevens(plData, tolerance = 10) {
   const breakevens = [];
-  
+
   for (let i = 1; i < plData.length; i++) {
     const prev = plData[i - 1];
     const curr = plData[i];
-    
+
     if (prev.pl * curr.pl < 0) {
       const ratio = Math.abs(prev.pl) / (Math.abs(prev.pl) + Math.abs(curr.pl));
       const breakeven = prev.price + (curr.price - prev.price) * ratio;
       breakevens.push(breakeven);
     }
   }
-  
+
   const uniqueBreakevens = [];
   breakevens.forEach(be => {
     const rounded = Math.round(be * 100) / 100;
@@ -425,7 +427,7 @@ export function findBreakevens(plData, tolerance = 10) {
       uniqueBreakevens.push(rounded);
     }
   });
-  
+
   return uniqueBreakevens.sort((a, b) => a - b);
 }
 
@@ -499,14 +501,14 @@ export function calculateTotalGreeks(options) {
  */
 export function formatCurrency(value, showSign = false) {
   if (value === null || value === undefined || isNaN(value)) return '$0';
-  
+
   if (!isFinite(value)) {
     return value < 0 ? '-∞' : '∞';
   }
-  
+
   const absValue = Math.abs(value);
   const sign = value < 0 ? '-' : (showSign && value > 0 ? '+' : '');
-  
+
   if (absValue >= 1000000) {
     return `${sign}$${(absValue / 1000000).toFixed(2)}M`;
   } else if (absValue >= 1000) {
@@ -524,7 +526,7 @@ export function formatCurrency(value, showSign = false) {
  */
 export function formatGreek(value, decimals = 2) {
   if (value === null || value === undefined || isNaN(value)) return '0';
-  
+
   // ИСПРАВЛЕНО: Не умножаем на 100, т.к. греки из расширения уже в правильном формате
   const sign = value >= 0 ? '+' : '';
   return `${sign}${value.toFixed(decimals)}`;
@@ -538,9 +540,9 @@ export function formatGreek(value, decimals = 2) {
  */
 export function getValueColor(value, inverse = false) {
   if (value === null || value === undefined || isNaN(value)) return 'gray';
-  
+
   if (value === 0) return 'gray';
-  
+
   if (inverse) {
     return value > 0 ? 'red' : 'green';
   } else {
