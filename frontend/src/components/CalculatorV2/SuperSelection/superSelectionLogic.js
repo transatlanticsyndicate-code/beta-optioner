@@ -17,7 +17,7 @@ import { adjustPLByStockGroup } from '../../../utils/optionPricing';
  * @param {number} growthPercent - Процент роста (для сценария "Верх", по дефолту 50%)
  * @returns {Array} Отсортированный список опционов с рассчитанными P&L
  */
-export function calculateSuperSelectionScenarios(options, currentPrice, dropPercent, growthPercent = 50, targetType = 'CALL', exitDay = 0, classification = null) {
+export function calculateSuperSelectionScenarios(options, currentPrice, dropPercent, growthPercent = 50, targetType = 'CALL', exitDay = 0, classification = null, calculatorMode = 'stocks', multiplier = 100) {
     if (!options || options.length === 0 || !currentPrice) {
         return [];
     }
