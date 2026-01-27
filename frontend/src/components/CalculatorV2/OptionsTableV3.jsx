@@ -1010,6 +1010,8 @@ function OptionsTableV3({
             setSuperModalOpen(false);
           }}
           classification={stockClassification}
+          calculatorMode={calculatorMode}
+          contractMultiplier={contractMultiplier}
         />
       )}
     </div>

@@ -28,7 +28,9 @@ function SuperSelectionModal({
     options = [], // Опционы из пропсов
     onAddOption,
     selectedTicker,
-    classification = null
+    classification = null,
+    calculatorMode = 'stocks', // Режим калькулятора: 'stocks' | 'futures'
+    contractMultiplier = 100 // Множитель контракта: 100 для акций, pointValue для фьючерсов
 }) {
     // Получаем функцию для ручного обновления данных
     // ВАЖНО: Мы не можем использовать хук внутри useEffect, поэтому если он нужен, 
@@ -210,7 +212,9 @@ function SuperSelectionModal({
                         50, // Growth percent
                         targetType,
                         Number(exitDay), // День выхода (для Time Decay)
-                        classification // Тэг классификации для корректировки P&L
+                        classification, // Тэг классификации для корректировки P&L
+                        calculatorMode, // Режим калькулятора: 'stocks' | 'futures'
+                        contractMultiplier // Множитель контракта
                     );
 
                     setResults(calculated);
@@ -312,7 +316,7 @@ function SuperSelectionModal({
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
             <DialogContent
-                className={`border-0 [&>button]:text-white [&>button]:hover:text-white/80 transition-all duration-300 ${status === 'result' ? 'sm:max-w-[700px]' : 'sm:max-w-[500px]'}`}
+                className={`border-0 [&>button]:text-white [&>button]:hover:text-white/80 transition-all duration-300 max-w-[95vw] ${status === 'result' ? 'sm:max-w-[700px]' : 'sm:max-w-[500px]'}`}
                 onOpenAutoFocus={(e) => e.preventDefault()}
             >
                 <DialogHeader style={headerStyle}>

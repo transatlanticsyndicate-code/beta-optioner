@@ -1,9 +1,11 @@
 /**
  * Логика для Супер Подбора (Super Selection)
  * ЗАЧЕМ: Расчет сценариев P&L для подобранных опционов
+ * Поддерживает режимы: Акции (Black-Scholes) и Фьючерсы (Black-76)
  */
 
 import { calculateOptionPrice } from '../../../utils/blackScholes';
+import { calculateOptionPriceBlack76 } from '../../../utils/black76';
 import { getRiskFreeRateSync } from '../../../hooks/useRiskFreeRate';
 import { adjustPLByStockGroup } from '../../../utils/optionPricing';
 
@@ -14,9 +16,14 @@ import { adjustPLByStockGroup } from '../../../utils/optionPricing';
  * @param {number} currentPrice - Текущая цена актива
  * @param {number} dropPercent - Процент падения (для сценария "Низ")
  * @param {number} growthPercent - Процент роста (для сценария "Верх", по дефолту 50%)
+ * @param {string} targetType - Тип опциона ('CALL' или 'PUT')
+ * @param {number} exitDay - День выхода (для Time Decay)
+ * @param {string} classification - Классификация акции (только для stocks)
+ * @param {string} calculatorMode - Режим калькулятора: 'stocks' | 'futures'
+ * @param {number} contractMultiplier - Множитель контракта (100 для акций, pointValue для фьючерсов)
  * @returns {Array} Отсортированный список опционов с рассчитанными P&L
  */
-export function calculateSuperSelectionScenarios(options, currentPrice, dropPercent, growthPercent = 50, targetType = 'CALL', exitDay = 0, classification = null) {
+export function calculateSuperSelectionScenarios(options, currentPrice, dropPercent, growthPercent = 50, targetType = 'CALL', exitDay = 0, classification = null, calculatorMode = 'stocks', contractMultiplier = 100) {
     if (!options || options.length === 0 || !currentPrice) {
         return [];
     }
@@ -104,37 +111,62 @@ export function calculateSuperSelectionScenarios(options, currentPrice, dropPerc
         }
 
         // Расчет цены при падении (Target Down)
-        const priceDown = calculateOptionPrice(
-            targetPriceDown,
-            strike,
-            adjustedTimeToExpiration,
-            riskFreeRate,
-            iv,
-            targetType // 'CALL' or 'PUT'
-        );
-
-        // Расчет цены при росте (Target Up)
-        const priceUp = calculateOptionPrice(
-            targetPriceUp,
-            strike,
-            adjustedTimeToExpiration,
-            riskFreeRate,
-            iv,
-            targetType // 'CALL' or 'PUT'
-        );
+        // Для фьючерсов используем Black-76, для акций - Black-Scholes
+        let priceDown, priceUp;
+        
+        if (calculatorMode === 'futures') {
+            // Black-76 для фьючерсов
+            priceDown = calculateOptionPriceBlack76(
+                targetPriceDown,
+                strike,
+                adjustedTimeToExpiration,
+                riskFreeRate,
+                iv,
+                targetType
+            );
+            
+            priceUp = calculateOptionPriceBlack76(
+                targetPriceUp,
+                strike,
+                adjustedTimeToExpiration,
+                riskFreeRate,
+                iv,
+                targetType
+            );
+        } else {
+            // Black-Scholes для акций
+            priceDown = calculateOptionPrice(
+                targetPriceDown,
+                strike,
+                adjustedTimeToExpiration,
+                riskFreeRate,
+                iv,
+                targetType
+            );
+            
+            priceUp = calculateOptionPrice(
+                targetPriceUp,
+                strike,
+                adjustedTimeToExpiration,
+                riskFreeRate,
+                iv,
+                targetType
+            );
+        }
 
         // P&L
         let pnlDown = priceDown - premium;
         let pnlUp = priceUp - premium;
 
-        // Применяем корректировку по группе акций (если есть)
-        if (classification) {
+        // Применяем корректировку по группе акций (ТОЛЬКО для режима stocks)
+        if (calculatorMode === 'stocks' && classification) {
             pnlDown = adjustPLByStockGroup(pnlDown, classification);
             pnlUp = adjustPLByStockGroup(pnlUp, classification);
         }
 
-        // Умножаем на 100 (стандартный контракт)
-        const contractMultiplier = 100;
+        // Умножаем на мультипликатор контракта
+        // Для акций: 100 (стандартный контракт)
+        // Для фьючерсов: pointValue (например, 50 для ES)
         pnlDown *= contractMultiplier;
         pnlUp *= contractMultiplier;
 
