@@ -4,6 +4,7 @@
  */
 
 import { calculateOptionPrice } from '../../../utils/blackScholes';
+import { calculateFuturesOptionTheoreticalPrice } from '../../../utils/futuresPricing';
 import { getRiskFreeRateSync } from '../../../hooks/useRiskFreeRate';
 import { adjustPLByStockGroup } from '../../../utils/optionPricing';
 
@@ -103,38 +104,58 @@ export function calculateSuperSelectionScenarios(options, currentPrice, dropPerc
             adjustedTimeToExpiration = Math.max(0.0001, timeToExpiration - (exitDay / 365));
         }
 
-        // Расчет цены при падении (Target Down)
-        const priceDown = calculateOptionPrice(
-            targetPriceDown,
-            strike,
-            adjustedTimeToExpiration,
-            riskFreeRate,
-            iv,
-            targetType // 'CALL' or 'PUT'
-        );
+        let priceDown, priceUp;
 
-        // Расчет цены при росте (Target Up)
-        const priceUp = calculateOptionPrice(
-            targetPriceUp,
-            strike,
-            adjustedTimeToExpiration,
-            riskFreeRate,
-            iv,
-            targetType // 'CALL' or 'PUT'
-        );
+        if (calculatorMode === 'futures') {
+            // Для фьючерсов используем Black-76 (без дивидендов, без IV surface по умолчанию)
+            priceDown = calculateFuturesOptionTheoreticalPrice(
+                { ...option, type: targetType, strike: strike }, // Создаем временный объект опциона с нужными параметрами
+                targetPriceDown,
+                adjustedTimeToExpiration * 365, // Функция ожидает дни
+                iv
+            );
+
+            priceUp = calculateFuturesOptionTheoreticalPrice(
+                { ...option, type: targetType, strike: strike },
+                targetPriceUp,
+                adjustedTimeToExpiration * 365,
+                iv
+            );
+        } else {
+            // Для акций используем Black-Scholes
+            // Расчет цены при падении (Target Down)
+            priceDown = calculateOptionPrice(
+                targetPriceDown,
+                strike,
+                adjustedTimeToExpiration,
+                riskFreeRate,
+                iv,
+                targetType // 'CALL' or 'PUT'
+            );
+
+            // Расчет цены при росте (Target Up)
+            priceUp = calculateOptionPrice(
+                targetPriceUp,
+                strike,
+                adjustedTimeToExpiration,
+                riskFreeRate,
+                iv,
+                targetType // 'CALL' or 'PUT'
+            );
+        }
 
         // P&L
         let pnlDown = priceDown - premium;
         let pnlUp = priceUp - premium;
 
-        // Применяем корректировку по группе акций (если есть)
-        if (classification) {
+        // Применяем корректировку по группе акций (ТОЛЬКО для акций)
+        if (calculatorMode === 'stocks' && classification) {
             pnlDown = adjustPLByStockGroup(pnlDown, classification);
             pnlUp = adjustPLByStockGroup(pnlUp, classification);
         }
 
-        // Умножаем на 100 (стандартный контракт)
-        const contractMultiplier = 100;
+        // Умножаем на множитель контракта (100 для акций, pointValue для фьючерсов)
+        const contractMultiplier = multiplier || 100;
         pnlDown *= contractMultiplier;
         pnlUp *= contractMultiplier;
 
