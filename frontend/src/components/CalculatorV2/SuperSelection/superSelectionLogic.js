@@ -4,7 +4,6 @@
  */
 
 import { calculateOptionPrice } from '../../../utils/blackScholes';
-import { calculateFuturesOptionTheoreticalPrice } from '../../../utils/futuresPricing';
 import { getRiskFreeRateSync } from '../../../hooks/useRiskFreeRate';
 import { adjustPLByStockGroup } from '../../../utils/optionPricing';
 
@@ -17,7 +16,7 @@ import { adjustPLByStockGroup } from '../../../utils/optionPricing';
  * @param {number} growthPercent - Процент роста (для сценария "Верх", по дефолту 50%)
  * @returns {Array} Отсортированный список опционов с рассчитанными P&L
  */
-export function calculateSuperSelectionScenarios(options, currentPrice, dropPercent, growthPercent = 50, targetType = 'CALL', exitDay = 0, classification = null, calculatorMode = 'stocks', multiplier = 100) {
+export function calculateSuperSelectionScenarios(options, currentPrice, dropPercent, growthPercent = 50, targetType = 'CALL', exitDay = 0, classification = null) {
     if (!options || options.length === 0 || !currentPrice) {
         return [];
     }
@@ -83,32 +82,14 @@ export function calculateSuperSelectionScenarios(options, currentPrice, dropPerc
         const premium = parseFloat(option.ask || option.premium || option.last_price || 0);
 
         // IV normalization
-        // ВАЖНО: Если IV приходит как 9.97 (9.97%), то это должно стать 0.0997.
-        // Если приходит как 30 (30%), то 0.30.
-        // Граница отсечения: > 2 (200% волатильности). Редко какая акция/фьючерс имеет IV > 100-200% в нормальных условиях.
-        // А вот значение IV=0.05 (5%) - это нормально.
-
         let rawIv = parseFloat(option.askIV || option.impliedVolatility || option.iv || 0);
         if (isNaN(rawIv)) rawIv = 0;
 
         let iv = rawIv;
-        if (iv > 4) { // Изменили порог с 10 на 4. Всё что больше 4 считаем процентами (4% -> 0.04).
+        if (iv > 10) {
             iv = iv / 100;
         }
         if (iv === 0) iv = 0.5;
-
-        // DEBUG LOGGING (Временное)
-        if (results.length === 0) {
-            console.log(`💎 [SuperSelection] Debug Calculation:`, {
-                mode: calculatorMode,
-                mult: multiplier,
-                rawIv,
-                normalizedIv: iv,
-                targetType,
-                strike,
-                priceDownCalc: calculatorMode === 'futures' ? 'Black76' : 'BlackScholes'
-            });
-        }
 
         // Корректировка времени экспирации с учетом дня выхода (Time Decay)
         // Если exitDay > 0, мы как бы перемещаемся в будущее на эти дни
@@ -122,58 +103,38 @@ export function calculateSuperSelectionScenarios(options, currentPrice, dropPerc
             adjustedTimeToExpiration = Math.max(0.0001, timeToExpiration - (exitDay / 365));
         }
 
-        let priceDown, priceUp;
+        // Расчет цены при падении (Target Down)
+        const priceDown = calculateOptionPrice(
+            targetPriceDown,
+            strike,
+            adjustedTimeToExpiration,
+            riskFreeRate,
+            iv,
+            targetType // 'CALL' or 'PUT'
+        );
 
-        if (calculatorMode === 'futures') {
-            // Для фьючерсов используем Black-76 (без дивидендов, без IV surface по умолчанию)
-            priceDown = calculateFuturesOptionTheoreticalPrice(
-                { ...option, type: targetType, strike: strike }, // Создаем временный объект опциона с нужными параметрами
-                targetPriceDown,
-                adjustedTimeToExpiration * 365, // Функция ожидает дни
-                iv
-            );
-
-            priceUp = calculateFuturesOptionTheoreticalPrice(
-                { ...option, type: targetType, strike: strike },
-                targetPriceUp,
-                adjustedTimeToExpiration * 365,
-                iv
-            );
-        } else {
-            // Для акций используем Black-Scholes
-            // Расчет цены при падении (Target Down)
-            priceDown = calculateOptionPrice(
-                targetPriceDown,
-                strike,
-                adjustedTimeToExpiration,
-                riskFreeRate,
-                iv,
-                targetType // 'CALL' or 'PUT'
-            );
-
-            // Расчет цены при росте (Target Up)
-            priceUp = calculateOptionPrice(
-                targetPriceUp,
-                strike,
-                adjustedTimeToExpiration,
-                riskFreeRate,
-                iv,
-                targetType // 'CALL' or 'PUT'
-            );
-        }
+        // Расчет цены при росте (Target Up)
+        const priceUp = calculateOptionPrice(
+            targetPriceUp,
+            strike,
+            adjustedTimeToExpiration,
+            riskFreeRate,
+            iv,
+            targetType // 'CALL' or 'PUT'
+        );
 
         // P&L
         let pnlDown = priceDown - premium;
         let pnlUp = priceUp - premium;
 
-        // Применяем корректировку по группе акций (ТОЛЬКО для акций)
-        if (calculatorMode === 'stocks' && classification) {
+        // Применяем корректировку по группе акций (если есть)
+        if (classification) {
             pnlDown = adjustPLByStockGroup(pnlDown, classification);
             pnlUp = adjustPLByStockGroup(pnlUp, classification);
         }
 
-        // Умножаем на множитель контракта (100 для акций, pointValue для фьючерсов)
-        const contractMultiplier = multiplier || 100;
+        // Умножаем на 100 (стандартный контракт)
+        const contractMultiplier = 100;
         pnlDown *= contractMultiplier;
         pnlUp *= contractMultiplier;
 

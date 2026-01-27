@@ -4,7 +4,7 @@
  * Затрагивает: калькулятор опционов, позиции базового актива, таблицу опционов
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     Dialog,
     DialogContent,
@@ -28,11 +28,7 @@ function SuperSelectionModal({
     options = [], // Опционы из пропсов
     onAddOption,
     selectedTicker,
-    classification = null,
-    availableDates,
-    isFromExtension,
-    calculatorMode = 'stocks',
-    contractMultiplier = 100
+    classification = null
 }) {
     // Получаем функцию для ручного обновления данных
     // ВАЖНО: Мы не можем использовать хук внутри useEffect, поэтому если он нужен, 
@@ -51,61 +47,6 @@ function SuperSelectionModal({
         borderRadius: '8px 8px 0 0',
     };
 
-    // --- Состояния ---
-    // Шаги выбора: 1 = Выбор цели, 2 = Выбор конкретного опциона
-    const [step, setStep] = useState(1);
-
-    // Вводимые пользователем параметры
-    const [dropPercent, setDropPercent] = useState(5); // % падения (прогноз)
-    const [growthPercent, setGrowthPercent] = useState(50); // % роста (прогноз, по дефолту 50%)
-    const [exitDay, setExitDay] = useState(0); // День выхода (для Step 2)
-
-    // Рассчитанные целевые цены (для отображения и передачи в логику)
-    const [targetPriceDown, setTargetPriceDown] = useState(0);
-    const [targetPriceUp, setTargetPriceUp] = useState(0);
-
-    // Результаты расчета
-    const [results, setResults] = useState([]);
-
-    // Выбранный опцион (для Шага 2)
-    // Сохраняем весь объект опциона, чтобы иметь доступ к strike, expiration и т.д.
-    const [selectedOptionStep1, setSelectedOptionStep1] = useState(null);
-
-    // Эффект для пересчета целевых цен при изменении currentPrice или процентов
-    useEffect(() => {
-        if (currentPrice) {
-            setTargetPriceDown(currentPrice * (1 - dropPercent / 100));
-            setTargetPriceUp(currentPrice * (1 + growthPercent / 100));
-        }
-    }, [currentPrice, dropPercent, growthPercent]);
-
-    // --- Обработчики ---
-
-    // Запуск расчета подбора
-    const handleCalculate = useCallback(() => {
-        if (!options || options.length === 0) return;
-
-        // Определяем тип опциона для подбора в зависимости от шага
-        const targetType = step === 1 ? 'CALL' : 'PUT';
-
-        console.log(`💎 [SuperSelection] Запуск расчета для шага ${step} (${targetType})...`);
-
-        // Используем вынесенную логику
-        const calculatedResults = calculateSuperSelectionScenarios(
-            options,
-            currentPrice,
-            dropPercent,
-            growthPercent,
-            targetType,
-            step === 2 ? exitDay : 0, // exitDay учитываем только на Шаге 2 (PUT)
-            classification,
-            calculatorMode,
-            contractMultiplier
-        );
-
-        setResults(calculatedResults);
-    }, [options, currentPrice, dropPercent, growthPercent, step, exitDay, classification, calculatorMode, contractMultiplier]);
-
     // --- Состояния параметров (ШАГ 1) ---
 
     // Статус работы: 'idle' | 'waiting' | 'calculating' | 'result'
@@ -113,7 +54,7 @@ function SuperSelectionModal({
     const [progressMessage, setProgressMessage] = useState('');
 
     // 1. Падение актива
-    const [dropPercentOld, setDropPercentOld] = useState('5');
+    const [dropPercent, setDropPercent] = useState('5');
     const [dropPrice, setDropPrice] = useState('');
 
     // 2. Диапазон дат экспирации
@@ -125,17 +66,17 @@ function SuperSelectionModal({
     const [maxStrikePercent, setMaxStrikePercent] = useState('20');
 
     // 4. Выход на день (только для шага 2)
-    const [exitDayOld, setExitDayOld] = useState('0');
+    const [exitDay, setExitDay] = useState('0');
 
     // Результаты расчета
-    // const [results, setResults] = useState([]); // Moved up
+    const [results, setResults] = useState([]);
 
     // Определение текущего шага
     // ШАГ 2 только если:
     // 1. Есть ровно один опцион "Супер подбора"
     // 2. Его тип CALL
     const superOptions = options.filter(opt => opt.isSuperOption);
-    // const step = (superOptions.length === 1 && superOptions[0].type === 'CALL') ? 2 : 1; // Replaced by state
+    const step = (superOptions.length === 1 && superOptions[0].type === 'CALL') ? 2 : 1;
 
     // Блокировка Шага 1, если калькулятор не пуст
     const isBlocked = step === 1 && options.length > 0;
@@ -152,12 +93,12 @@ function SuperSelectionModal({
 
             if (step === 2) {
                 newDropPercent = '2.5';
-                setDropPercentOld(newDropPercent);
+                setDropPercent(newDropPercent);
                 setMinDays('8');
                 setMaxDays('100');
                 setMinStrikePercent('-5');
                 setMaxStrikePercent('20');
-                setExitDayOld('5');
+                setExitDay('5');
             } else {
                 newDropPercent = '5';
                 setDropPercent(newDropPercent);
