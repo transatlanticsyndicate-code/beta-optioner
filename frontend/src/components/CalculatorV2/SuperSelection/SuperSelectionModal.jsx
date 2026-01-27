@@ -4,7 +4,7 @@
  * Затрагивает: калькулятор опционов, позиции базового актива, таблицу опционов
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     Dialog,
     DialogContent,
@@ -28,7 +28,11 @@ function SuperSelectionModal({
     options = [], // Опционы из пропсов
     onAddOption,
     selectedTicker,
-    classification = null
+    classification = null,
+    availableDates,
+    isFromExtension,
+    calculatorMode = 'stocks',
+    contractMultiplier = 100
 }) {
     // Получаем функцию для ручного обновления данных
     // ВАЖНО: Мы не можем использовать хук внутри useEffect, поэтому если он нужен, 
