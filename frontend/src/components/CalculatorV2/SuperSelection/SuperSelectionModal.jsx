@@ -531,6 +531,7 @@ function SuperSelectionModal({
                                         <tr>
                                             <th className="px-4 py-3">Экспирация</th>
                                             <th className="px-4 py-3">Страйк</th>
+                                            <th className="px-4 py-3 text-right">ASK</th>
                                             <th className="px-4 py-3 text-right">Vol</th>
                                             <th className="px-4 py-3 text-right">P&L Низ (-{dropPercent}%)</th>
                                             <th className="px-4 py-3 text-right">P&L Верх (+50%)</th>
@@ -552,6 +553,9 @@ function SuperSelectionModal({
                                                         {opt.type}
                                                     </span>
                                                     {opt.strike}
+                                                </td>
+                                                <td className="px-4 py-3 text-right font-semibold text-cyan-700">
+                                                    {(opt.ask || 0).toFixed(2)}
                                                 </td>
                                                 <td className="px-4 py-3 text-right text-muted-foreground">
                                                     {opt.volume || 0}
