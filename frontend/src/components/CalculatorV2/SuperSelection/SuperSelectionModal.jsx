@@ -124,8 +124,6 @@ function SuperSelectionModal({
         let intervalId;
 
         if (status === 'waiting') {
-            console.log('💎 [SuperSelection] Запуск polling статуса...');
-
             intervalId = setInterval(() => {
                 const result = readExtensionResult();
 
@@ -133,7 +131,6 @@ function SuperSelectionModal({
                     if (result.status === 'collecting') {
                         setProgressMessage(result.message || `Сбор данных... ${result.progress || 0}%`);
                     } else if (result.status === 'complete') {
-                        console.log('💎 [SuperSelection] Сбор данных завершен!', result);
                         clearInterval(intervalId);
 
                         // Данные в localStorage обновлены экстеншеном.
@@ -147,7 +144,6 @@ function SuperSelectionModal({
                         setStatus('calculating');
                         setProgressMessage('Обработка данных...');
                     } else if (result.status === 'error') {
-                        console.error('💎 [SuperSelection] Ошибка от расширения:', result.message);
                         setProgressMessage(`Ошибка: ${result.message}`);
                         // Можно добавить кнопку "Попробовать снова" или сбросить статус
                         // setStatus('idle'); // Пока оставим висеть ошибку, чтобы пользователь увидел
@@ -166,12 +162,9 @@ function SuperSelectionModal({
     useEffect(() => {
         if (status === 'calculating') {
             const timer = setTimeout(() => {
-                console.log('💎 [SuperSelection] Статус calculating. Читаю localStorage напрямую...');
-
                 // Читаем данные напрямую из localStorage, чтобы не зависеть от пропсов
                 // и гарантировать получение свежих данных сразу после сигнала 'complete'
                 try {
-                    console.log('💎 [SuperSelection] Чтение данных из calculatorState...');
 
                     const savedState = localStorage.getItem('calculatorState');
                     const state = savedState ? JSON.parse(savedState) : {};
@@ -185,23 +178,11 @@ function SuperSelectionModal({
                     const result = readExtensionResult();
                     if (result && result.status === 'complete' && result.data?.options) {
                         freshOptions = result.data.options;
-                        console.log('💎 [SuperSelection] Найдено в tvc_refresh_result.data.options:', freshOptions.length);
                     } else if (state.rangeOptions && Array.isArray(state.rangeOptions)) {
                         freshOptions = state.rangeOptions;
-                        console.log('💎 [SuperSelection] Найдено в state.rangeOptions:', freshOptions.length);
                     } else if (state.options && Array.isArray(state.options)) {
                         // Fallback на обычные options, если rangeOptions пуст
                         freshOptions = state.options;
-                        console.log('💎 [SuperSelection] Fallback to state.options:', freshOptions.length);
-                    }
-
-                    if (freshOptions.length === 0) {
-                        console.warn('💎 [SuperSelection] Внимание: опционы не найдены ни в одном из источников', {
-                            hasResult: !!result,
-                            hasResultOptions: !!result?.data?.options,
-                            hasState: !!state,
-                            hasRangeOptions: !!state?.rangeOptions
-                        });
                     }
 
                     const targetType = step === 2 ? 'PUT' : 'CALL';
@@ -221,7 +202,6 @@ function SuperSelectionModal({
                     setStatus('result');
 
                 } catch (error) {
-                    console.error('💎 [SuperSelection] Ошибка чтения/расчета:', error);
                     setStatus('result'); // Показать что есть (пусто), чтобы не висеть вечно
                 }
             }, 1000);

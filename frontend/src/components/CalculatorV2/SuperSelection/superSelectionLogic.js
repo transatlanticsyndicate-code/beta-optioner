@@ -39,14 +39,11 @@ export function calculateSuperSelectionScenarios(options, currentPrice, dropPerc
 
     // Если ничего не нашли с объемом, берем все подходящего типа (даже с 0 объемом)
     if (relevantOptions.length === 0) {
-        console.log(`💎 [SuperSelection] Опционы ${targetTypeUpper} с объемом > 0 не найдены. Берем все.`);
         relevantOptions = options.filter(opt => {
             const optType = (opt.type || opt.optionType || '').toUpperCase();
             return optType === targetTypeUpper;
         });
     }
-
-    console.log(`💎 [SuperSelection] Найдено релевантных опционов (${targetTypeUpper}):`, relevantOptions.length);
 
     // Удаляем дубликаты (по страйку и дате)
     const uniqueOptions = [];
@@ -190,6 +187,5 @@ export function calculateSuperSelectionScenarios(options, currentPrice, dropPerc
     // В обоих случаях сортируем по убыванию P&L Down.
     results.sort((a, b) => b.calculated.pnlDown - a.calculated.pnlDown);
 
-    console.log(`💎 [SuperSelection] Результат расчета (${targetTypeUpper}):`, results.length);
     return results;
 }
