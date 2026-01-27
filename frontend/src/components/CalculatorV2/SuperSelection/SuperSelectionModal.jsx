@@ -27,7 +27,8 @@ function SuperSelectionModal({
     currentPrice = 0,
     options = [], // Опционы из пропсов
     onAddOption,
-    selectedTicker
+    selectedTicker,
+    classification = null
 }) {
     // Получаем функцию для ручного обновления данных
     // ВАЖНО: Мы не можем использовать хук внутри useEffect, поэтому если он нужен, 
@@ -173,10 +174,17 @@ function SuperSelectionModal({
                     const savedState = localStorage.getItem('calculatorState');
                     const state = savedState ? JSON.parse(savedState) : {};
 
-                    // ВАЖНО: Судя по скриншотам, rangeOptions лежит ВНУТРИ calculatorState
+                    // ВАЖНО: Проверяем несколько источников:
+                    // 1. Результат выполнения команды (самый свежий источник)
+                    // 2. rangeOptions в стейте
+                    // 3. обычные options в стейте
                     let freshOptions = [];
 
-                    if (state.rangeOptions && Array.isArray(state.rangeOptions)) {
+                    const result = readExtensionResult();
+                    if (result && result.status === 'complete' && result.data?.options) {
+                        freshOptions = result.data.options;
+                        console.log('💎 [SuperSelection] Найдено в tvc_refresh_result.data.options:', freshOptions.length);
+                    } else if (state.rangeOptions && Array.isArray(state.rangeOptions)) {
                         freshOptions = state.rangeOptions;
                         console.log('💎 [SuperSelection] Найдено в state.rangeOptions:', freshOptions.length);
                     } else if (state.options && Array.isArray(state.options)) {
@@ -186,7 +194,12 @@ function SuperSelectionModal({
                     }
 
                     if (freshOptions.length === 0) {
-                        console.warn('💎 [SuperSelection] Внимание: опционы не найдены в calculatorState (ни в rangeOptions, ни в options)');
+                        console.warn('💎 [SuperSelection] Внимание: опционы не найдены ни в одном из источников', {
+                            hasResult: !!result,
+                            hasResultOptions: !!result?.data?.options,
+                            hasState: !!state,
+                            hasRangeOptions: !!state?.rangeOptions
+                        });
                     }
 
                     const targetType = step === 2 ? 'PUT' : 'CALL';
@@ -196,7 +209,8 @@ function SuperSelectionModal({
                         Number(dropPercent),
                         50, // Growth percent
                         targetType,
-                        Number(exitDay) // День выхода (для Time Decay)
+                        Number(exitDay), // День выхода (для Time Decay)
+                        classification // Тэг классификации для корректировки P&L
                     );
 
                     setResults(calculated);

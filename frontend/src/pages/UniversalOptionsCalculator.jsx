@@ -543,7 +543,14 @@ function UniversalOptionsCalculator() {
 
   // Функции для сохранения и загрузки состояния калькулятора
   const saveCalculatorState = useCallback(() => {
-    const state = {
+    // Читаем текущее состояние из localStorage для объединения
+    // ЗАЧЕМ: Чтобы не затереть данные от расширения (например, rangeOptions), 
+    // которые не хранятся в React state калькулятора.
+    const savedState = localStorage.getItem('calculatorState');
+    const existingState = savedState ? JSON.parse(savedState) : {};
+
+    const newState = {
+      ...existingState, // Сохраняем все существующие поля (включая те, что от расширения)
       selectedTicker,
       currentPrice,
       priceChange,
@@ -557,12 +564,12 @@ function UniversalOptionsCalculator() {
       strikesByDate,
       expirationDates,
     };
-    localStorage.setItem('calculatorState', JSON.stringify(state));
-    console.log('💾 [Universal] Сохранение состояния:', {
+    localStorage.setItem('calculatorState', JSON.stringify(newState));
+    console.log('💾 [Universal] Сохранение состояния (merged):', {
       positionsCount: positions.length,
       optionsCount: options.length,
-      superOptions: options.filter(o => o.isSuperOption).length,
-      sampleOption: options[0] ? { type: options[0].type, isSuper: !!options[0].isSuperOption } : 'none'
+      hasRangeOptions: !!newState.rangeOptions,
+      superOptions: options.filter(o => o.isSuperOption).length
     });
   }, [selectedTicker, currentPrice, priceChange, options, positions, selectedExpirationDate, daysPassed, chartDisplayMode, showOptionLines, showProbabilityZones, strikesByDate, expirationDates]);
 
@@ -2394,23 +2401,6 @@ function UniversalOptionsCalculator() {
 
                         // ОТКЛЮЧЕНО: В универсальном калькуляторе данные приходят от расширения
                         // Не загружаем детали опционов с внешних API
-                      }}
-                      onMagicSelectionComplete={(params) => {
-                        // Сохраняем параметры волшебного подбора для OptionSelectionResult
-                        setOptionSelectionParams(params);
-                        console.log('🔮 Волшебный подбор завершён, параметры сохранены:', params);
-                      }}
-                      onSetSimulationParams={(params) => {
-                        // Устанавливаем параметры симуляции из Золотой кнопки (Сценарий 3)
-                        if (params.targetPrice) {
-                          setTargetPrice(params.targetPrice);
-                          console.log('👑 Золотая кнопка: установлена targetPrice =', params.targetPrice);
-                        }
-                        if (params.daysPassed !== undefined) {
-                          setDaysPassed(params.daysPassed);
-                          setUserAdjustedDays(true);
-                          console.log('👑 Золотая кнопка: установлено daysPassed =', params.daysPassed);
-                        }
                       }}
                       stockClassification={calculatorMode === 'stocks' ? stockClassification : null}
                     />

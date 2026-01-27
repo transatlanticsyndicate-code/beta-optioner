@@ -51,23 +51,23 @@ function TopNav() {
       <div className="font-medium text-base hidden sm:flex items-center space-x-3 truncate max-w-[600px]">
         <span className="text-foreground">{pageTitle}</span>
         {location.pathname === '/tools/options-calculator' && (
-          <span className="text-sm text-cyan-500 font-medium">v32</span>
+          <span className="text-sm text-cyan-500 font-medium">v33</span>
         )}
         {location.pathname === '/tools/universal-calculator' && (
-          <span className="text-sm text-cyan-500 font-medium">v U6</span>
+          <span className="text-sm text-cyan-500 font-medium">v U7</span>
         )}
       </div>
 
       <div className="flex items-center gap-2 sm:gap-4 ml-auto sm:ml-0">
         {/* Индикаторы статуса данных Massive API */}
         {/* УБРАНО: Индикатор Massive не показывается на странице универсального калькулятора и его сохранений */}
-        {location.pathname !== '/tools/universal-calculator' && 
-         location.pathname !== '/tools/universal-saved-configurations' && 
-         <OptionsDataIndicator />}
+        {location.pathname !== '/tools/universal-calculator' &&
+          location.pathname !== '/tools/universal-saved-configurations' &&
+          <OptionsDataIndicator />}
 
         {/* Notifications */}
-        <button 
-          type="button" 
+        <button
+          type="button"
           className="relative p-1.5 sm:p-2 hover:bg-accent rounded-full transition-colors"
           title="Уведомления"
         >

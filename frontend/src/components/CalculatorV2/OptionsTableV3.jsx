@@ -1,11 +1,9 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, ChevronDown, Trash2, Loader2, Save, RotateCcw, AlertTriangle, RefreshCw, Crown, Gem } from 'lucide-react';
-import { MagicButton, MagicSelectionModal } from './MagicSelection';
+import { Eye, EyeOff, ChevronDown, Trash2, Loader2, Save, RotateCcw, AlertTriangle, RefreshCw, Gem } from 'lucide-react';
 import { clearTickerCache } from '../../services/apiClient';
 import { invalidateOptionsForTicker } from '../../services/OptionsDataService';
 import { sendRefreshSpecificCommand } from '../../hooks/useExtensionData';
 
-import { GoldenButton, GoldenSelectionModal } from './GoldenSelection';
 import { SuperButton, SuperSelectionModal } from './SuperSelection';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -80,8 +78,6 @@ function OptionsTableV3({
   onSaveEditedConfiguration = null, // Функция сохранения изменений
   positions = [], // Позиции базового актива для волшебного подбора
   onAddMagicOption = null, // Функция добавления опциона из волшебного подбора
-  onMagicSelectionComplete = null, // Callback для передачи параметров подбора в OptionSelectionResult
-  onSetSimulationParams = null, // Callback для установки параметров симуляции (targetPrice, daysPassed)
   isAIEnabled = false, // Включен ли AI для прогнозирования волатильности
   aiVolatilityMap = {}, // Кэш AI предсказаний волатильности
   fetchAIVolatility = null, // Функция для запроса AI волатильности
@@ -104,8 +100,6 @@ function OptionsTableV3({
 
   const [customStrategyName, setCustomStrategyName] = React.useState('');
   const [saveDialogOpen, setSaveDialogOpenLocal] = React.useState(false);
-  const [magicModalOpen, setMagicModalOpen] = useState(false); // Состояние модального окна волшебного подбора
-  const [goldenModalOpen, setGoldenModalOpen] = useState(false); // Состояние модального окна золотого подбора
   const [superModalOpen, setSuperModalOpen] = useState(false); // Состояние модального окна Супер подбора
   const [showAllStrikesForOption, setShowAllStrikesForOption] = React.useState({}); // { optionId: true/false }
   const [editingPremium, setEditingPremium] = React.useState(null); // optionId для редактирования премии
@@ -323,11 +317,6 @@ function OptionsTableV3({
           )}
         </h3>
         <div className="flex items-center gap-2">
-          {/* Волшебная кнопка для автоматического подбора опционов */}
-          <MagicButton onClick={() => setMagicModalOpen(true)} />
-
-          {/* Золотая кнопка для альтернативного подбора опционов */}
-          <GoldenButton onClick={() => setGoldenModalOpen(true)} />
 
           {/* Супер кнопка для расширенного подбора опционов */}
           <SuperButton onClick={() => setSuperModalOpen(true)} />
@@ -488,13 +477,6 @@ function OptionsTableV3({
                       : (option.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />)
                     }
                   </button>
-                  {option.isGoldenOption && (
-                    <Crown
-                      className="h-3 w-3"
-                      style={{ color: '#eab308' }}
-                      title="Подобран через золотую кнопку"
-                    />
-                  )}
                   {option.isSuperOption && (
                     <Gem
                       className="h-3 w-3"
@@ -1010,49 +992,6 @@ function OptionsTableV3({
         </div>
       )}
 
-      {/* Модальное окно волшебного подбора опционов */}
-      <MagicSelectionModal
-        isOpen={magicModalOpen}
-        onClose={() => setMagicModalOpen(false)}
-        positions={positions}
-        options={options}
-        currentPrice={currentPrice}
-        targetPrice={targetPrice}
-        selectedTicker={selectedTicker}
-        availableDates={availableDates}
-        ivSurface={ivSurface}
-        dividendYield={dividendYield}
-        isFromExtension={isFromExtension}
-        onAddOption={(option) => {
-          if (onAddMagicOption) {
-            onAddMagicOption(option);
-          }
-          setMagicModalOpen(false);
-        }}
-        onSelectionComplete={onMagicSelectionComplete}
-      />
-      {/* Модальное окно золотого подбора */}
-      {goldenModalOpen && (
-        <GoldenSelectionModal
-          isOpen={goldenModalOpen}
-          onClose={() => setGoldenModalOpen(false)}
-          positions={positions}
-          options={options}
-          currentPrice={currentPrice}
-          selectedTicker={selectedTicker}
-          availableDates={availableDates}
-          isFromExtension={isFromExtension}
-          onAddOption={(option) => {
-            console.log('👑 OptionsTable.jsx: Получен опцион от GoldenModal:', option.isGoldenOption, option);
-            if (onAddMagicOption) {
-              console.log('👑 OptionsTable.jsx: Передаем в onAddMagicOption:', option);
-              onAddMagicOption(option);
-            }
-            setGoldenModalOpen(false);
-          }}
-          onSetSimulationParams={onSetSimulationParams}
-        />
-      )}
       {/* Модальное окно Супер подбора */}
       {superModalOpen && (
         <SuperSelectionModal
@@ -1070,6 +1009,7 @@ function OptionsTableV3({
             }
             setSuperModalOpen(false);
           }}
+          classification={stockClassification}
         />
       )}
     </div>
