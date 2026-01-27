@@ -795,6 +795,14 @@ function UniversalOptionsCalculator() {
       }
 
       setIsInitialized(true);
+
+      // LOG STATE AFTER INITIALIZATION
+      console.log('🏁 [Universal] Initialization Complete:', {
+        ticker,
+        detectedInstrumentType: detectInstrumentTypeByPattern(ticker),
+        futuresLookup: getFutureByTicker(ticker),
+        finalMode: detectInstrumentTypeByPattern(ticker) === 'futures' ? 'futures' : 'stocks'
+      });
       return;
     }
 
