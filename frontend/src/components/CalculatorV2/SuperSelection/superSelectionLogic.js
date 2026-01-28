@@ -95,26 +95,29 @@ export function calculateSuperSelectionScenarios(options, currentPrice, dropPerc
         if (iv === 0) iv = 0.5;
 
         // Корректировка времени экспирации с учетом дня выхода (Time Decay)
-        // Если exitDay > 0, мы как бы перемещаемся в будущее на эти дни
-        let adjustedTimeToExpiration = timeToExpiration;
-
-        // ШАГ 1 (CALL): Всегда считаем на экспирацию (остаток времени -> 0)
+        // ЗАЧЕМ: Для разных сценариев используем разное время
+        // ШАГ 1 (CALL): оба сценария на экспирацию
         // ШАГ 2 (PUT): Считаем на указанный exitDay
+        
+        let adjustedTimeDown = timeToExpiration;
+        let adjustedTimeUp = timeToExpiration;
+
         if (targetType === 'CALL') {
-            adjustedTimeToExpiration = 0.0001; // Почти экспирация
+            // Для CALL: оба сценария считаем на экспирацию
+            adjustedTimeDown = 0.0001;
+            adjustedTimeUp = 0.0001;
         } else if (exitDay > 0) {
-            adjustedTimeToExpiration = Math.max(0.0001, timeToExpiration - (exitDay / 365));
+            // Для PUT на Шаге 2: используем exitDay для обоих сценариев
+            adjustedTimeDown = Math.max(0.0001, timeToExpiration - (exitDay / 365));
+            adjustedTimeUp = adjustedTimeDown;
         }
 
         // Расчет цены опциона при целевых ценах
-        // Для фьючерсов используем внутреннюю стоимость на экспирации (как в калькуляторе)
-        // Для акций используем Black-Scholes
         let priceDown, priceUp;
         
         if (calculatorMode === 'futures') {
             // Для фьючерсов: внутренняя стоимость на экспирации
             // CALL: max(0, F - K), PUT: max(0, K - F)
-            // ЗАЧЕМ: Калькулятор показывает P&L на экспирации, суперподбор должен делать то же самое
             if (targetType === 'CALL') {
                 priceDown = Math.max(0, targetPriceDown - strike);
                 priceUp = Math.max(0, targetPriceUp - strike);
@@ -123,11 +126,11 @@ export function calculateSuperSelectionScenarios(options, currentPrice, dropPerc
                 priceUp = Math.max(0, strike - targetPriceUp);
             }
         } else {
-            // Black-Scholes для акций
+            // Black-Scholes для акций с разным временем для разных сценариев
             priceDown = calculateOptionPrice(
                 targetPriceDown,
                 strike,
-                adjustedTimeToExpiration,
+                adjustedTimeDown,
                 riskFreeRate,
                 iv,
                 targetType
@@ -136,7 +139,7 @@ export function calculateSuperSelectionScenarios(options, currentPrice, dropPerc
             priceUp = calculateOptionPrice(
                 targetPriceUp,
                 strike,
-                adjustedTimeToExpiration,
+                adjustedTimeUp,
                 riskFreeRate,
                 iv,
                 targetType

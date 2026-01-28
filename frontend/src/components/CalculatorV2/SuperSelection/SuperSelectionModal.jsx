@@ -59,15 +59,19 @@ function SuperSelectionModal({
     const [dropPercent, setDropPercent] = useState('5');
     const [dropPrice, setDropPrice] = useState('');
 
-    // 2. Диапазон дат экспирации
+    // 2. Прогноз по верху
+    const [growthPercent, setGrowthPercent] = useState('50');
+    const [growthPrice, setGrowthPrice] = useState('');
+
+    // 3. Диапазон дат экспирации
     const [minDays, setMinDays] = useState('90');
     const [maxDays, setMaxDays] = useState('300');
 
-    // 3. Диапазон страйков
+    // 4. Диапазон страйков
     const [minStrikePercent, setMinStrikePercent] = useState('-5');
     const [maxStrikePercent, setMaxStrikePercent] = useState('20');
 
-    // 4. Выход на день (только для шага 2)
+    // 5. Выход на день (только для шага 2)
     const [exitDay, setExitDay] = useState('0');
 
     // Результаты расчета
@@ -90,12 +94,14 @@ function SuperSelectionModal({
             setResults([]);
             setProgressMessage('');
 
-            // Установка дефолтных значений в зависимости от шага
+            // Установка дефолтных значений в зависимости от шага и режима калькулятора
             let newDropPercent = '5';
+            let newGrowthPercent = calculatorMode === 'futures' ? '5' : '10';
 
             if (step === 2) {
                 newDropPercent = '2.5';
                 setDropPercent(newDropPercent);
+                setGrowthPercent(newGrowthPercent);
                 setMinDays('8');
                 setMaxDays('100');
                 setMinStrikePercent('-5');
@@ -104,6 +110,7 @@ function SuperSelectionModal({
             } else {
                 newDropPercent = '5';
                 setDropPercent(newDropPercent);
+                setGrowthPercent(newGrowthPercent);
                 setMinDays('90');
                 setMaxDays('300');
                 setMinStrikePercent('-5');
@@ -111,10 +118,13 @@ function SuperSelectionModal({
                 setExitDay('0');
             }
 
-            // Обновляем цену падения
+            // Обновляем цену падения и роста
             if (currentPrice) {
-                const price = currentPrice * (1 - parseFloat(newDropPercent) / 100);
-                setDropPrice(price.toFixed(2));
+                const priceDown = currentPrice * (1 - parseFloat(newDropPercent) / 100);
+                setDropPrice(priceDown.toFixed(2));
+                
+                const priceUp = currentPrice * (1 + parseFloat(newGrowthPercent) / 100);
+                setGrowthPrice(priceUp.toFixed(2));
             }
         }
     }, [isOpen]); // step и currentPrice не добавляем в зависимости, чтобы не сбрасывать при их изменении внутри модалки (хотя они не должны меняться)
@@ -190,7 +200,7 @@ function SuperSelectionModal({
                         freshOptions,
                         currentPrice,
                         Number(dropPercent),
-                        50, // Growth percent
+                        Number(growthPercent), // Growth percent из параметров
                         targetType,
                         Number(exitDay), // День выхода (для Time Decay)
                         classification, // Тэг классификации для корректировки P&L
@@ -208,7 +218,7 @@ function SuperSelectionModal({
 
             return () => clearTimeout(timer);
         }
-    }, [status, currentPrice, dropPercent, step]); // Добавили step
+    }, [status, currentPrice, dropPercent, growthPercent, step]);
 
     // Обработчик изменения процента падения
     const handleDropPercentChange = (e) => {
@@ -230,6 +240,29 @@ function SuperSelectionModal({
             // Формула: percent = (currentPrice - targetPrice) / currentPrice * 100
             const percent = ((currentPrice - parseFloat(val)) / currentPrice) * 100;
             setDropPercent(percent.toFixed(2));
+        }
+    };
+
+    // Обработчик изменения процента роста
+    const handleGrowthPercentChange = (e) => {
+        const val = e.target.value;
+        setGrowthPercent(val);
+        if (currentPrice && !isNaN(parseFloat(val))) {
+            const price = currentPrice * (1 + parseFloat(val) / 100);
+            setGrowthPrice(price.toFixed(2));
+        } else {
+            setGrowthPrice('');
+        }
+    };
+
+    // Обработчик изменения цены роста
+    const handleGrowthPriceChange = (e) => {
+        const val = e.target.value;
+        setGrowthPrice(val);
+        if (currentPrice && !isNaN(parseFloat(val)) && parseFloat(val) > 0) {
+            // Формула: percent = (targetPrice - currentPrice) / currentPrice * 100
+            const percent = ((parseFloat(val) - currentPrice) / currentPrice) * 100;
+            setGrowthPercent(percent.toFixed(2));
         }
     };
 
@@ -396,7 +429,42 @@ function SuperSelectionModal({
                                 {/* Разделитель */}
                                 <div className="h-px bg-slate-200" />
 
-                                {/* 1.1 Выход на день (только шаг 2) */}
+                                {/* 2. Прогноз по верху */}
+                                <div className="space-y-2">
+                                    <Label className="text-sm font-medium">
+                                        Показать прогноз по верху (% и Цена)
+                                    </Label>
+                                    <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
+                                        <div className="relative">
+                                            <Input
+                                                type="number"
+                                                value={growthPercent}
+                                                onChange={handleGrowthPercentChange}
+                                                className="pr-8 bg-white"
+                                                placeholder="50"
+                                            />
+                                            <span className="absolute right-3 top-2.5 text-xs text-muted-foreground">%</span>
+                                        </div>
+
+                                        <MoveRight className="h-4 w-4 text-muted-foreground" />
+
+                                        <div className="relative">
+                                            <Input
+                                                type="number"
+                                                value={growthPrice}
+                                                onChange={handleGrowthPriceChange}
+                                                className="pr-6 bg-white"
+                                                placeholder="Цена"
+                                            />
+                                            <span className="absolute right-3 top-2.5 text-xs text-muted-foreground">$</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Разделитель */}
+                                <div className="h-px bg-slate-200" />
+
+                                {/* 2.1 Выход на день (только шаг 2) */}
                                 {step === 2 && (
                                     <>
                                         <div className="space-y-2">
@@ -518,7 +586,7 @@ function SuperSelectionModal({
                                             <th className="px-4 py-3 text-right">ASK</th>
                                             <th className="px-4 py-3 text-right">Vol</th>
                                             <th className="px-4 py-3 text-right">P&L Низ (-{dropPercent}%)</th>
-                                            <th className="px-4 py-3 text-right">P&L Верх (+50%)</th>
+                                            <th className="px-4 py-3 text-right">P&L Верх (+{growthPercent}%)</th>
                                             <th className="px-4 py-3"></th>
                                         </tr>
                                     </thead>
