@@ -129,7 +129,7 @@ function UniversalOptionsCalculator() {
 
   // Установка заголовка страницы
   useEffect(() => {
-    document.title = 'Универсальный Калькулятор Опционов | SYNDICATE Platform';
+    document.title = 'Универсальный Калькулятор Опционов vU8 | SYNDICATE Platform';
     return () => {
       document.title = 'SYNDICATE Platform';
     };
