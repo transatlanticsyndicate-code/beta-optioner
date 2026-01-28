@@ -167,15 +167,20 @@ export function isOptionActiveAtDay(option, daysPassed, oldestEntryDate) {
 export function isOptionExpiredAtDay(option, daysPassed, oldestEntryDate) {
   if (!oldestEntryDate || !option.date) return false; // Нет данных — считаем не истёкшим
   
-  // Вычисляем целевую дату = oldestEntryDate + daysPassed
-  const targetDateUTC = new Date(oldestEntryDate);
-  targetDateUTC.setUTCDate(targetDateUTC.getUTCDate() + daysPassed);
+  // Вычисляем целевую дату в UTC полночь (timestamp)
+  // ЗАЧЕМ: Сравниваем только даты без учета времени для консистентности между часовыми поясами
+  const targetDateUTC = Date.UTC(
+    oldestEntryDate.getUTCFullYear(),
+    oldestEntryDate.getUTCMonth(),
+    oldestEntryDate.getUTCDate() + daysPassed
+  );
   
-  // Парсим дату экспирации опциона
+  // Парсим дату экспирации опциона в UTC полночь (timestamp)
   const [expYear, expMonth, expDay] = option.date.split('-').map(Number);
-  const expirationDateUTC = new Date(Date.UTC(expYear, expMonth - 1, expDay));
+  const expirationDateUTC = Date.UTC(expYear, expMonth - 1, expDay);
   
   // Опцион истёк, если целевая дата > даты экспирации
+  // ВАЖНО: Используем строгое сравнение timestamp'ов UTC полночи
   return targetDateUTC > expirationDateUTC;
 }
 
