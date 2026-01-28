@@ -296,7 +296,7 @@ function SuperSelectionModal({
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
             <DialogContent
-                className={`border-0 [&>button]:text-white [&>button]:hover:text-white/80 transition-all duration-300 max-w-[95vw] ${status === 'result' ? 'sm:max-w-[700px]' : 'sm:max-w-[500px]'}`}
+                className={`border-0 overflow-hidden [&>button]:text-white [&>button]:hover:text-white/80 transition-all duration-300 max-w-[95vw] ${status === 'result' ? 'sm:max-w-[700px]' : 'sm:max-w-[500px]'}`}
                 onOpenAutoFocus={(e) => e.preventDefault()}
             >
                 <DialogHeader style={headerStyle}>
