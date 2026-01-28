@@ -33,7 +33,8 @@ export function ExitCalculator({
   fetchAIVolatility = null,
   selectedTicker = '',
   calculatorMode = 'stocks', // Режим калькулятора: 'stocks' | 'futures'
-  contractMultiplier = 100 // Множитель контракта: 100 для акций, pointValue для фьючерсов
+  contractMultiplier = 100, // Множитель контракта: 100 для акций, pointValue для фьючерсов
+  stockClassification = null // Классификация акции для применения коэффициентов группы
 }) {
   // State для UI
   // ЗАЧЕМ: Сохранение состояния сворачивания в localStorage
@@ -64,7 +65,8 @@ export function ExitCalculator({
     aiVolatilityMap,
     selectedTicker,
     calculatorMode,
-    contractMultiplier
+    contractMultiplier,
+    stockClassification
   });
 
   // Проверяем, есть ли данные для расчета

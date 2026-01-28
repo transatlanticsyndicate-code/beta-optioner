@@ -1,12 +1,12 @@
 /**
- * Универсальный Калькулятор Опционов vU8
+ * Универсальный Калькулятор Опционов vU9
  * ЗАЧЕМ: Поддержка двух режимов (Акции/Фьючерсы) с источником данных TradingView Extension
  * Затрагивает: Расчёты P&L, сохранение конфигураций, интеграция с TradingView
  * 
- * vU8: Исправлен расчет прибыли в суперподборе для фьючерсов
- * - Для фьючерсов используется внутренняя стоимость на экспирации
- * - Для акций используется Black-Scholes
- * - Исправлен баг с неровностью окна и отрисовкой кнопки закрытия
+ * vU9: Применение коэффициента группы акции в блоке расчета выхода из позиции
+ * - Коэффициент группы акции теперь применяется ко всем сценариям выхода
+ * - Исправлена логика расчета P&L для позиций акций (унифицирована с деталями)
+ * - Итоговый P&L в блоке выхода теперь совпадает с таблицей опционов
  * 
  * Отличия от оригинального калькулятора:
  * - Два режима: Акции (multiplier=100) и Фьючерсы (multiplier=pointValue)
@@ -129,7 +129,7 @@ function UniversalOptionsCalculator() {
 
   // Установка заголовка страницы
   useEffect(() => {
-    document.title = 'Универсальный Калькулятор Опционов vU8 | SYNDICATE Platform';
+    document.title = 'Универсальный Калькулятор Опционов | SYNDICATE Platform';
     return () => {
       document.title = 'SYNDICATE Platform';
     };
@@ -2539,6 +2539,7 @@ function UniversalOptionsCalculator() {
                 selectedTicker={selectedTicker}
                 calculatorMode={calculatorMode}
                 contractMultiplier={contractMultiplier}
+                stockClassification={calculatorMode === 'stocks' ? stockClassification : null}
               />
             </div>
           </div>

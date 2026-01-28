@@ -5,6 +5,7 @@ import {
   calculateOptionPLValue as calculateStockOptionPLValue,
   calculateOptionTheoreticalPrice as calculateStockOptionTheoreticalPrice,
   calculateOptionExpirationPLValue as calculateStockOptionExpirationPLValue,
+  adjustPLByStockGroup,
 } from '../utils/optionPricing';
 // Импорт из нового модуля для режима "Фьючерсы"
 import {
@@ -123,7 +124,8 @@ export const usePositionExitCalculator = ({
   fetchAIVolatility = null,
   selectedTicker = '',
   calculatorMode = 'stocks', // Режим калькулятора: 'stocks' | 'futures'
-  contractMultiplier = 100 // Множитель контракта: 100 для акций, pointValue для фьючерсов
+  contractMultiplier = 100, // Множитель контракта: 100 для акций, pointValue для фьючерсов
+  stockClassification = null // Классификация акции для применения коэффициентов группы
 }) => {
   return useMemo(() => {
     // Фильтруем видимые опционы и позиции
@@ -206,18 +208,38 @@ export const usePositionExitCalculator = ({
       })
       .filter(Boolean);
 
+    // Применяем коэффициент группы акции к итоговым P&L (только для режима stocks)
+    // ЗАЧЕМ: Обеспечиваем консистентность с таблицей опционов и графиком P&L
+    const applyGroupAdjustment = (pl) => {
+      return calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification
+        ? adjustPLByStockGroup(pl, stockClassification)
+        : pl;
+    };
+
+    // Применяем коэффициент к деталям расчета (каждому элементу в массиве)
+    // ЗАЧЕМ: Детализация в карточках сценариев должна показывать скорректированные значения
+    const applyGroupAdjustmentToDetails = (details) => {
+      if (calculatorMode !== CALCULATOR_MODES.STOCKS || !stockClassification) {
+        return details;
+      }
+      return details.map(detail => ({
+        ...detail,
+        value: adjustPLByStockGroup(detail.value, stockClassification)
+      }));
+    };
+
     return {
-      plExercise: exerciseCalculation.totalPL,
-      plCloseOptions: closeOptionsCalculation.totalPL,
-      plCloseAll: closeAllCalculation.totalPL,
+      plExercise: applyGroupAdjustment(exerciseCalculation.totalPL),
+      plCloseOptions: applyGroupAdjustment(closeOptionsCalculation.totalPL),
+      plCloseAll: applyGroupAdjustment(closeAllCalculation.totalPL),
       details: {
-        exercise: exerciseCalculation.details,
-        closeOptions: closeOptionsCalculation.details,
-        closeAll: closeAllCalculation.details
+        exercise: applyGroupAdjustmentToDetails(exerciseCalculation.details),
+        closeOptions: applyGroupAdjustmentToDetails(closeOptionsCalculation.details),
+        closeAll: applyGroupAdjustmentToDetails(closeAllCalculation.details)
       },
       liquidityWarnings // Предупреждения о низкой ликвидности
     };
-  }, [underlyingPrice, daysPassed, options, positions, currentPrice, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap, calculatorMode, contractMultiplier]);
+  }, [underlyingPrice, daysPassed, options, positions, currentPrice, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap, calculatorMode, contractMultiplier, stockClassification]);
 };
 
 /**
@@ -295,33 +317,30 @@ const calculateExerciseScenario = ({ options, positions, underlyingPrice, curren
     totalPL += pl;
   });
 
-  // P&L от продажи акций/контрактов (показываем разницу, но в totalPL учитываем полную сумму)
+  // P&L от продажи акций/контрактов
   positions.forEach(position => {
     const quantity = Number(position.quantity) || 0;
     const entryPrice = Number(position.price) || 0;
 
-    let displayPL = 0; // Для отображения (разница)
-    let actualPL = 0;   // Для totalPL (полная сумма продажи)
+    let positionPL = 0;
     let description = '';
 
     if (position.type === 'LONG') {
-      displayPL = (underlyingPrice - entryPrice) * quantity * positionMultiplier;
-      actualPL = underlyingPrice * quantity * positionMultiplier;
+      positionPL = (underlyingPrice - entryPrice) * quantity * positionMultiplier;
       description = `Продаём ${quantity} ${assetLabel}: ${entryPrice.toFixed(2)} → ${underlyingPrice.toFixed(2)}`;
     } else if (position.type === 'SHORT') {
-      displayPL = (entryPrice - underlyingPrice) * quantity * positionMultiplier;
-      actualPL = -underlyingPrice * quantity * positionMultiplier;
+      positionPL = (entryPrice - underlyingPrice) * quantity * positionMultiplier;
       description = `Выкупаем ${quantity} ${assetLabel}: ${entryPrice.toFixed(2)} → ${underlyingPrice.toFixed(2)}`;
     }
 
     details.push({
       label: `${position.type} ${quantity} ${assetLabel} - P&L`,
-      value: displayPL,
+      value: positionPL,
       description,
       type: 'stock-pl'
     });
 
-    totalPL += actualPL;
+    totalPL += positionPL;
   });
 
   return { totalPL, details };
@@ -451,33 +470,30 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
     totalPL += pl;
   });
 
-  // P&L от продажи акций/контрактов (показываем разницу, но в totalPL учитываем полную сумму)
+  // P&L от продажи акций/контрактов
   positions.forEach(position => {
     const quantity = Number(position.quantity) || 0;
     const entryPrice = Number(position.price) || 0;
 
-    let displayPL = 0; // Для отображения (разница)
-    let actualPL = 0;   // Для totalPL (полная сумма продажи)
+    let positionPL = 0;
     let description = '';
 
     if (position.type === 'LONG') {
-      displayPL = (underlyingPrice - entryPrice) * quantity * positionMultiplier2;
-      actualPL = underlyingPrice * quantity * positionMultiplier2;
+      positionPL = (underlyingPrice - entryPrice) * quantity * positionMultiplier2;
       description = `Продаём ${quantity} ${assetLabel2}: ${entryPrice.toFixed(2)} → ${underlyingPrice.toFixed(2)}`;
     } else if (position.type === 'SHORT') {
-      displayPL = (entryPrice - underlyingPrice) * quantity * positionMultiplier2;
-      actualPL = -underlyingPrice * quantity * positionMultiplier2;
+      positionPL = (entryPrice - underlyingPrice) * quantity * positionMultiplier2;
       description = `Выкупаем ${quantity} ${assetLabel2}: ${entryPrice.toFixed(2)} → ${underlyingPrice.toFixed(2)}`;
     }
 
     details.push({
       label: `${position.type} ${quantity} ${assetLabel2} - P&L`,
-      value: displayPL,
+      value: positionPL,
       description,
       type: 'stock-pl'
     });
 
-    totalPL += actualPL;
+    totalPL += positionPL;
   });
 
   return { totalPL, details };
@@ -603,33 +619,30 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
     totalPL += pl;
   });
 
-  // P&L от продажи акций/контрактов (показываем разницу, но в totalPL учитываем полную сумму)
+  // P&L от продажи акций/контрактов
   positions.forEach(position => {
     const quantity = Number(position.quantity) || 0;
     const entryPrice = Number(position.price) || 0;
 
-    let displayPL = 0; // Для отображения (разница)
-    let actualPL = 0;   // Для totalPL (полная сумма продажи)
+    let positionPL = 0;
     let description = '';
 
     if (position.type === 'LONG') {
-      displayPL = (underlyingPrice - entryPrice) * quantity * positionMultiplier3;
-      actualPL = underlyingPrice * quantity * positionMultiplier3;
+      positionPL = (underlyingPrice - entryPrice) * quantity * positionMultiplier3;
       description = `Продаём ${quantity} ${assetLabel3}: ${entryPrice.toFixed(2)} → ${underlyingPrice.toFixed(2)}`;
     } else if (position.type === 'SHORT') {
-      displayPL = (entryPrice - underlyingPrice) * quantity * positionMultiplier3;
-      actualPL = -underlyingPrice * quantity * positionMultiplier3;
+      positionPL = (entryPrice - underlyingPrice) * quantity * positionMultiplier3;
       description = `Выкупаем ${quantity} ${assetLabel3}: ${entryPrice.toFixed(2)} → ${underlyingPrice.toFixed(2)}`;
     }
 
     details.push({
       label: `${position.type} ${quantity} ${assetLabel3} - P&L`,
-      value: displayPL,
+      value: positionPL,
       description,
       type: 'stock-pl'
     });
 
-    totalPL += actualPL;
+    totalPL += positionPL;
   });
 
   return { totalPL, details };
