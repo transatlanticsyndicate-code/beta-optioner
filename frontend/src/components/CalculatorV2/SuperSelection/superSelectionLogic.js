@@ -5,7 +5,6 @@
  */
 
 import { calculateOptionPrice } from '../../../utils/blackScholes';
-import { calculateOptionPriceBlack76 } from '../../../utils/black76';
 import { getRiskFreeRateSync } from '../../../hooks/useRiskFreeRate';
 import { adjustPLByStockGroup } from '../../../utils/optionPricing';
 
@@ -107,29 +106,22 @@ export function calculateSuperSelectionScenarios(options, currentPrice, dropPerc
             adjustedTimeToExpiration = Math.max(0.0001, timeToExpiration - (exitDay / 365));
         }
 
-        // Расчет цены при падении (Target Down)
-        // Для фьючерсов используем Black-76, для акций - Black-Scholes
+        // Расчет цены опциона при целевых ценах
+        // Для фьючерсов используем внутреннюю стоимость на экспирации (как в калькуляторе)
+        // Для акций используем Black-Scholes
         let priceDown, priceUp;
         
         if (calculatorMode === 'futures') {
-            // Black-76 для фьючерсов
-            priceDown = calculateOptionPriceBlack76(
-                targetPriceDown,
-                strike,
-                adjustedTimeToExpiration,
-                riskFreeRate,
-                iv,
-                targetType
-            );
-            
-            priceUp = calculateOptionPriceBlack76(
-                targetPriceUp,
-                strike,
-                adjustedTimeToExpiration,
-                riskFreeRate,
-                iv,
-                targetType
-            );
+            // Для фьючерсов: внутренняя стоимость на экспирации
+            // CALL: max(0, F - K), PUT: max(0, K - F)
+            // ЗАЧЕМ: Калькулятор показывает P&L на экспирации, суперподбор должен делать то же самое
+            if (targetType === 'CALL') {
+                priceDown = Math.max(0, targetPriceDown - strike);
+                priceUp = Math.max(0, targetPriceUp - strike);
+            } else {
+                priceDown = Math.max(0, strike - targetPriceDown);
+                priceUp = Math.max(0, strike - targetPriceUp);
+            }
         } else {
             // Black-Scholes для акций
             priceDown = calculateOptionPrice(
