@@ -96,24 +96,20 @@ export function calculateSuperSelectionScenarios(options, currentPrice, dropPerc
 
         // Корректировка времени экспирации с учетом дня выхода (Time Decay)
         // ЗАЧЕМ: Для разных сценариев используем разное время
-        // ШАГ 1 (CALL): оба сценария на экспирацию
+        // ШАГ 1 (CALL): основные сценарии на экспирацию + дополнительные на exitDay
         // ШАГ 2 (PUT): Считаем на указанный exitDay
         
-        let adjustedTimeDown = timeToExpiration;
-        let adjustedTimeUp = timeToExpiration;
-
-        if (targetType === 'CALL') {
-            // Для CALL: оба сценария считаем на экспирацию
-            adjustedTimeDown = 0.0001;
-            adjustedTimeUp = 0.0001;
-        } else if (exitDay > 0) {
-            // Для PUT на Шаге 2: используем exitDay для обоих сценариев
-            adjustedTimeDown = Math.max(0.0001, timeToExpiration - (exitDay / 365));
-            adjustedTimeUp = adjustedTimeDown;
-        }
+        // Время на экспирацию (для основных расчетов)
+        const timeAtExpiration = 0.0001;
+        
+        // Время на указанный день выхода
+        const timeAtExitDay = exitDay > 0 
+            ? Math.max(0.0001, timeToExpiration - (exitDay / 365))
+            : timeToExpiration;
 
         // Расчет цены опциона при целевых ценах
         let priceDown, priceUp;
+        let priceDownOnDay, priceUpOnDay; // Дополнительные расчеты на конкретный день
         
         if (calculatorMode === 'futures') {
             // Для фьючерсов: внутренняя стоимость на экспирации
@@ -121,39 +117,93 @@ export function calculateSuperSelectionScenarios(options, currentPrice, dropPerc
             if (targetType === 'CALL') {
                 priceDown = Math.max(0, targetPriceDown - strike);
                 priceUp = Math.max(0, targetPriceUp - strike);
+                priceDownOnDay = priceDown; // Для фьючерсов одинаково
+                priceUpOnDay = priceUp;
             } else {
                 priceDown = Math.max(0, strike - targetPriceDown);
                 priceUp = Math.max(0, strike - targetPriceUp);
+                priceDownOnDay = priceDown;
+                priceUpOnDay = priceUp;
             }
         } else {
-            // Black-Scholes для акций с разным временем для разных сценариев
-            priceDown = calculateOptionPrice(
-                targetPriceDown,
-                strike,
-                adjustedTimeDown,
-                riskFreeRate,
-                iv,
-                targetType
-            );
-            
-            priceUp = calculateOptionPrice(
-                targetPriceUp,
-                strike,
-                adjustedTimeUp,
-                riskFreeRate,
-                iv,
-                targetType
-            );
+            if (targetType === 'CALL') {
+                // Для CALL (Шаг 1): основные расчеты на экспирацию
+                priceDown = calculateOptionPrice(
+                    targetPriceDown,
+                    strike,
+                    timeAtExpiration,
+                    riskFreeRate,
+                    iv,
+                    targetType
+                );
+                
+                priceUp = calculateOptionPrice(
+                    targetPriceUp,
+                    strike,
+                    timeAtExpiration,
+                    riskFreeRate,
+                    iv,
+                    targetType
+                );
+                
+                // Дополнительные расчеты на конкретный день (exitDay)
+                priceDownOnDay = calculateOptionPrice(
+                    targetPriceDown,
+                    strike,
+                    timeAtExitDay,
+                    riskFreeRate,
+                    iv,
+                    targetType
+                );
+                
+                priceUpOnDay = calculateOptionPrice(
+                    targetPriceUp,
+                    strike,
+                    timeAtExitDay,
+                    riskFreeRate,
+                    iv,
+                    targetType
+                );
+            } else {
+                // Для PUT (Шаг 2): все расчеты на exitDay
+                priceDown = calculateOptionPrice(
+                    targetPriceDown,
+                    strike,
+                    timeAtExitDay,
+                    riskFreeRate,
+                    iv,
+                    targetType
+                );
+                
+                priceUp = calculateOptionPrice(
+                    targetPriceUp,
+                    strike,
+                    timeAtExitDay,
+                    riskFreeRate,
+                    iv,
+                    targetType
+                );
+                
+                // Для PUT на Шаге 2 дополнительные колонки не нужны
+                priceDownOnDay = priceDown;
+                priceUpOnDay = priceUp;
+            }
         }
 
-        // P&L
+        // P&L на экспирацию
         let pnlDown = priceDown - premium;
         let pnlUp = priceUp - premium;
+        
+        // P&L на конкретный день
+        let pnlDownOnDay = priceDownOnDay - premium;
+        let pnlUpOnDay = priceUpOnDay - premium;
 
         // Применяем корректировку по группе акций (ТОЛЬКО для режима stocks)
         if (calculatorMode === 'stocks' && classification) {
             pnlDown = adjustPLByStockGroup(pnlDown, classification);
             pnlUp = adjustPLByStockGroup(pnlUp, classification);
+            pnlDownOnDay = adjustPLByStockGroup(pnlDownOnDay, classification);
+            pnlUpOnDay = adjustPLByStockGroup(pnlUpOnDay, classification);
         }
 
         // Умножаем на мультипликатор контракта
@@ -161,6 +211,8 @@ export function calculateSuperSelectionScenarios(options, currentPrice, dropPerc
         // Для фьючерсов: pointValue (например, 50 для ES)
         pnlDown *= contractMultiplier;
         pnlUp *= contractMultiplier;
+        pnlDownOnDay *= contractMultiplier;
+        pnlUpOnDay *= contractMultiplier;
 
         return {
             ...option,
@@ -169,6 +221,8 @@ export function calculateSuperSelectionScenarios(options, currentPrice, dropPerc
                 priceUp,
                 pnlDown,
                 pnlUp,
+                pnlDownOnDay,
+                pnlUpOnDay,
                 targetPriceDown,
                 targetPriceUp
             }

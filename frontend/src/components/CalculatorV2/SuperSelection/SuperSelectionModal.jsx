@@ -115,7 +115,7 @@ function SuperSelectionModal({
                 setMaxDays('300');
                 setMinStrikePercent('-5');
                 setMaxStrikePercent('20');
-                setExitDay('0');
+                setExitDay('10');
             }
 
             // Обновляем цену падения и роста
@@ -329,7 +329,7 @@ function SuperSelectionModal({
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
             <DialogContent
-                className={`border-0 overflow-hidden [&>button]:text-white [&>button]:hover:text-white/80 transition-all duration-300 max-w-[95vw] ${status === 'result' ? 'sm:max-w-[700px]' : 'sm:max-w-[500px]'}`}
+                className={`border-0 overflow-hidden [&>button]:text-white [&>button]:hover:text-white/80 transition-all duration-300 max-w-[95vw] ${status === 'result' ? (step === 1 ? 'sm:max-w-[1100px]' : 'sm:max-w-[700px]') : 'sm:max-w-[500px]'}`}
                 onOpenAutoFocus={(e) => e.preventDefault()}
             >
                 <DialogHeader style={headerStyle}>
@@ -464,28 +464,26 @@ function SuperSelectionModal({
                                 {/* Разделитель */}
                                 <div className="h-px bg-slate-200" />
 
-                                {/* 2.1 Выход на день (только шаг 2) */}
-                                {step === 2 && (
-                                    <>
-                                        <div className="space-y-2">
-                                            <Label className="text-sm font-medium">
-                                                Выход на (день)
-                                            </Label>
-                                            <div className="flex items-center gap-2">
-                                                <div className="relative w-full">
-                                                    <Input
-                                                        type="number"
-                                                        value={exitDay}
-                                                        onChange={(e) => setExitDay(e.target.value)}
-                                                        className="pr-8 bg-white"
-                                                    />
-                                                    <span className="absolute right-3 top-2.5 text-xs text-muted-foreground">дн</span>
-                                                </div>
-                                            </div>
+                                {/* 3. Выход на день (для обоих шагов) */}
+                                <div className="space-y-2">
+                                    <Label className="text-sm font-medium">
+                                        Выход на (день)
+                                    </Label>
+                                    <div className="flex items-center gap-2">
+                                        <div className="relative w-full">
+                                            <Input
+                                                type="number"
+                                                value={exitDay}
+                                                onChange={(e) => setExitDay(e.target.value)}
+                                                className="pr-8 bg-white"
+                                            />
+                                            <span className="absolute right-3 top-2.5 text-xs text-muted-foreground">дн</span>
                                         </div>
-                                        <div className="h-px bg-slate-200" />
-                                    </>
-                                )}
+                                    </div>
+                                </div>
+
+                                {/* Разделитель */}
+                                <div className="h-px bg-slate-200" />
 
                                 {/* 2. Диапазон дат экспирации */}
                                 <div className="space-y-2">
@@ -580,15 +578,31 @@ function SuperSelectionModal({
                             <div className="max-h-[400px] overflow-y-auto border rounded-lg">
                                 <table className="w-full text-sm text-left">
                                     <thead className="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
-                                        <tr>
-                                            <th className="px-4 py-3">Экспирация</th>
-                                            <th className="px-4 py-3">Страйк</th>
-                                            <th className="px-4 py-3 text-right">ASK</th>
-                                            <th className="px-4 py-3 text-right">Vol</th>
-                                            <th className="px-4 py-3 text-right">P&L Низ (-{dropPercent}%)</th>
-                                            <th className="px-4 py-3 text-right">P&L Верх (+{growthPercent}%)</th>
-                                            <th className="px-4 py-3"></th>
-                                        </tr>
+                                        {step === 1 ? (
+                                            /* Шаг 1: 6 колонок P&L (на ЭКСП. и на X день) */
+                                            <tr>
+                                                <th className="px-3 py-3">Экспирация</th>
+                                                <th className="px-3 py-3">Страйк</th>
+                                                <th className="px-3 py-3 text-right">ASK</th>
+                                                <th className="px-3 py-3 text-right">Vol</th>
+                                                <th className="px-3 py-3 text-right">P&L Низ (-{dropPercent}%)<br/>на ЭКСП.</th>
+                                                <th className="px-3 py-3 text-right bg-gray-200">P&L Низ (-{dropPercent}%)<br/>на {exitDay} день</th>
+                                                <th className="px-3 py-3 text-right">P&L Верх (+{growthPercent}%)<br/>на ЭКСП.</th>
+                                                <th className="px-3 py-3 text-right bg-gray-200">P&L Верх (+{growthPercent}%)<br/>на {exitDay} день</th>
+                                                <th className="px-3 py-3"></th>
+                                            </tr>
+                                        ) : (
+                                            /* Шаг 2: стандартные 2 колонки P&L */
+                                            <tr>
+                                                <th className="px-4 py-3">Экспирация</th>
+                                                <th className="px-4 py-3">Страйк</th>
+                                                <th className="px-4 py-3 text-right">ASK</th>
+                                                <th className="px-4 py-3 text-right">Vol</th>
+                                                <th className="px-4 py-3 text-right">P&L Низ (-{dropPercent}%)</th>
+                                                <th className="px-4 py-3 text-right">P&L Верх (+{growthPercent}%)</th>
+                                                <th className="px-4 py-3"></th>
+                                            </tr>
+                                        )}
                                     </thead>
                                     <tbody>
                                         {results.map((opt, idx) => (
@@ -597,28 +611,42 @@ function SuperSelectionModal({
                                                 onClick={() => handleAddOption(opt)}
                                                 className="bg-white border-b hover:bg-cyan-100 cursor-pointer transition-all duration-200 ease-in-out"
                                             >
-                                                <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">
+                                                <td className="px-3 py-3 font-medium text-gray-900 whitespace-nowrap">
                                                     {opt.expirationISO || opt.expiration || opt.date}
                                                 </td>
-                                                <td className="px-4 py-3 font-medium">
+                                                <td className="px-3 py-3 font-medium">
                                                     <span className={`text-[10px] px-1.5 py-0.5 rounded mr-2 font-bold ${opt.type === 'CALL' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                                                         {opt.type}
                                                     </span>
                                                     {opt.strike}
                                                 </td>
-                                                <td className="px-4 py-3 text-right font-semibold text-cyan-700">
+                                                <td className="px-3 py-3 text-right font-semibold text-cyan-700">
                                                     {(opt.ask || 0).toFixed(2)}
                                                 </td>
-                                                <td className="px-4 py-3 text-right text-muted-foreground">
+                                                <td className="px-3 py-3 text-right text-muted-foreground">
                                                     {opt.volume || 0}
                                                 </td>
-                                                <td className={`px-4 py-3 text-right font-medium ${opt.calculated.pnlDown >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                                {/* P&L Низ на экспирацию */}
+                                                <td className={`px-3 py-3 text-right font-medium ${opt.calculated.pnlDown >= 0 ? 'text-green-600' : 'text-red-500'}`}>
                                                     {opt.calculated.pnlDown > 0 ? '+' : ''}{opt.calculated.pnlDown.toFixed(2)}
                                                 </td>
-                                                <td className={`px-4 py-3 text-right font-medium ${opt.calculated.pnlUp >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                                {/* P&L Низ на X день (только для Шага 1) */}
+                                                {step === 1 && (
+                                                    <td className={`px-3 py-3 text-right font-medium bg-gray-200 ${opt.calculated.pnlDownOnDay >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                                        {opt.calculated.pnlDownOnDay > 0 ? '+' : ''}{opt.calculated.pnlDownOnDay.toFixed(2)}
+                                                    </td>
+                                                )}
+                                                {/* P&L Верх на экспирацию */}
+                                                <td className={`px-3 py-3 text-right font-medium ${opt.calculated.pnlUp >= 0 ? 'text-green-600' : 'text-red-500'}`}>
                                                     {opt.calculated.pnlUp > 0 ? '+' : ''}{opt.calculated.pnlUp.toFixed(2)}
                                                 </td>
-                                                <td className="px-4 py-3 text-right">
+                                                {/* P&L Верх на X день (только для Шага 1) */}
+                                                {step === 1 && (
+                                                    <td className={`px-3 py-3 text-right font-medium bg-gray-200 ${opt.calculated.pnlUpOnDay >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                                        {opt.calculated.pnlUpOnDay > 0 ? '+' : ''}{opt.calculated.pnlUpOnDay.toFixed(2)}
+                                                    </td>
+                                                )}
+                                                <td className="px-3 py-3 text-right">
                                                     <ArrowRight className="h-4 w-4 text-gray-400" />
                                                 </td>
                                             </tr>
@@ -626,7 +654,7 @@ function SuperSelectionModal({
 
                                         {results.length === 0 && (
                                             <tr>
-                                                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                                                <td colSpan={step === 1 ? 9 : 7} className="px-4 py-8 text-center text-muted-foreground">
                                                     Не найдено подходящих опционов
                                                 </td>
                                             </tr>
