@@ -22,13 +22,16 @@ const STORAGE_KEY = 'calculatorState';
 
 /**
  * Парсинг URL параметров
- * ЗАЧЕМ: Получение contract и price из URL при открытии калькулятора
+ * ЗАЧЕМ: Получение contract, price и config из URL при открытии калькулятора
  */
 function parseUrlParams() {
   const urlParams = new URLSearchParams(window.location.search);
   return {
     contractCode: urlParams.get('contract') || null,
-    urlPrice: urlParams.get('price') ? parseFloat(urlParams.get('price')) : null
+    urlPrice: urlParams.get('price') ? parseFloat(urlParams.get('price')) : null,
+    // Проверяем, есть ли config в URL — если да, НЕ восстанавливаем данные от расширения
+    // ЗАЧЕМ: Конфигурация из URL имеет приоритет над данными расширения
+    hasConfigInUrl: !!urlParams.get('config')
   };
 }
 
@@ -102,11 +105,28 @@ export function useExtensionData() {
   
   // Состояние данных
   // ЛОГИКА ИНИЦИАЛИЗАЦИИ:
-  // 1. Если есть URL параметр ?contract= — читаем данные от расширения (приоритет)
-  // 2. Если нет URL параметра, но в localStorage есть сохранённые данные с тикером — восстанавливаем их
+  // 1. Если есть URL параметр ?config= — НЕ восстанавливаем данные от расширения (конфигурация имеет приоритет)
+  // 2. Если есть URL параметр ?contract= — читаем данные от расширения (приоритет)
+  // 3. Если нет URL параметра, но в localStorage есть сохранённые данные с тикером — восстанавливаем их
   // ЗАЧЕМ: При навигации между страницами URL параметры теряются, но данные должны восстанавливаться
   const [state, setState] = useState(() => {
-    const { contractCode, urlPrice } = urlParamsRef.current;
+    const { contractCode, urlPrice, hasConfigInUrl } = urlParamsRef.current;
+    
+    // ВАЖНО: Если есть config в URL — НЕ восстанавливаем данные от расширения
+    // ЗАЧЕМ: Конфигурация из URL имеет приоритет, данные будут загружены через loadConfiguration
+    if (hasConfigInUrl) {
+      console.log('⏭️ [useExtensionData] Пропускаем инициализацию — есть config в URL');
+      return {
+        contractCode: null,
+        urlPrice: null,
+        underlyingPrice: 0,
+        ticker: '',
+        expirationDate: '',
+        options: [],
+        isFromExtension: false,
+        lastUpdated: null
+      };
+    }
     
     // Всегда читаем localStorage для проверки сохранённых данных
     const storageState = readStorageState();

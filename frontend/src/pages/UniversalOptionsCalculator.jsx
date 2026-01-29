@@ -137,7 +137,8 @@ function UniversalOptionsCalculator() {
 
   // === НОВОЕ: Режим калькулятора (Акции/Фьючерсы) ===
   // ЗАЧЕМ: Определяет тип инструмента и соответствующую математику P&L
-  const [calculatorMode, setCalculatorMode] = useState(CALCULATOR_MODES.FUTURES);
+  // ВАЖНО: По умолчанию STOCKS, режим FUTURES устанавливается автоматически при детекции фьючерсного тикера
+  const [calculatorMode, setCalculatorMode] = useState(CALCULATOR_MODES.STOCKS);
 
   // Информация о выбранном фьючерсе (для режима фьючерсов)
   // ЗАЧЕМ: Хранит pointValue и название фьючерса для расчётов
@@ -600,17 +601,22 @@ function UniversalOptionsCalculator() {
     setIsInitialized(false); // ВАЖНО: Сбрасываем флаг инициализации для повторной загрузки при обновлении страницы
     setCalculatorMode(CALCULATOR_MODES.STOCKS); // Сбрасываем режим калькулятора на акции
     setSelectedFuture(null); // Сбрасываем выбранный фьючерс
+    setLoadedConfigId(null); // Сбрасываем ID загруженной конфигурации
+    setIsEditMode(false); // Сбрасываем режим редактирования
+    setHasChanges(false); // Сбрасываем флаг изменений
 
     // ВАЖНО: Очищаем localStorage ПЕРЕД очисткой данных расширения
     // ЗАЧЕМ: Предотвращаем восстановление старой selectedExpirationDate из кэша
     localStorage.removeItem('calculatorState');
     console.log('🧹 [Universal] localStorage.calculatorState очищен');
 
-    // Очищаем URL параметры (contract, price)
+    // Очищаем URL параметры (contract, price, config, edit)
     // ЗАЧЕМ: Предотвращаем восстановление данных из URL при обновлении страницы
     const url = new URL(window.location.href);
     url.searchParams.delete('contract');
     url.searchParams.delete('price');
+    url.searchParams.delete('config');
+    url.searchParams.delete('edit');
     window.history.replaceState({}, '', url.pathname);
     console.log('🧹 [Universal] URL параметры очищены');
 
@@ -619,10 +625,21 @@ function UniversalOptionsCalculator() {
   }, [clearExtensionData]);
 
   // Загружаем состояние при первой загрузке страницы
-  // ПРИОРИТЕТ: Данные от расширения (URL + localStorage.calculatorState) > сохранённые конфигурации
+  // ПРИОРИТЕТ: config в URL > Данные от расширения > localStorage.calculatorState
   // ЗАЧЕМ: Универсальный калькулятор работает только с данными от Chrome Extension
   useEffect(() => {
     if (isInitialized) return;
+
+    // === ПРОВЕРКА: Есть ли config в URL ===
+    // ЗАЧЕМ: Если есть config в URL — пропускаем инициализацию из localStorage/расширения
+    // Конфигурация будет загружена отдельным useEffect через loadConfiguration
+    const searchParams = new URLSearchParams(window.location.search);
+    const configId = searchParams.get('config');
+    if (configId) {
+      console.log('⏭️ [Universal] Пропускаем инициализацию — есть config в URL:', configId);
+      setIsInitialized(true);
+      return;
+    }
 
     // === ИНТЕГРАЦИЯ С CHROME EXTENSION ===
     // Если есть данные от расширения — используем их
@@ -881,8 +898,16 @@ function UniversalOptionsCalculator() {
 
   // === СИНХРОНИЗАЦИЯ С CHROME EXTENSION ===
   // ЗАЧЕМ: Автоматическое обновление при изменении данных расширением (storage event)
+  // ВАЖНО: НЕ синхронизируем если загружена конфигурация из URL — данные конфигурации имеют приоритет
   useEffect(() => {
     if (!isInitialized) return;
+    
+    // Если загружена конфигурация — НЕ обновляем данные от расширения
+    // ЗАЧЕМ: Предотвращает перезапись тикера/опционов/цены из конфигурации данными расширения
+    if (loadedConfigId) {
+      console.log('⏭️ [Universal] Пропускаем синхронизацию с расширением — загружена конфигурация');
+      return;
+    }
 
     // Обновляем опционы при изменении от расширения с сохранением ручных изменений
     if (extensionOptions && extensionOptions.length > 0) {
@@ -972,18 +997,25 @@ function UniversalOptionsCalculator() {
         setSelectedExpirationDate(extensionExpirationDate);
       }
     }
-  }, [isInitialized, extensionLastUpdated]); // Зависимость от extensionLastUpdated для реакции на storage event
+  }, [isInitialized, extensionLastUpdated, loadedConfigId]); // Зависимость от extensionLastUpdated для реакции на storage event
 
   // === АВТОСОХРАНЕНИЕ СОСТОЯНИЯ ПРИ ИЗМЕНЕНИИ ОПЦИОНОВ И ПОЗИЦИЙ ===
   // ЗАЧЕМ: При удалении/добавлении опционов или позиций сохраняем актуальное состояние в localStorage
   // Это гарантирует, что после перезагрузки страницы восстановится правильный набор опционов и позиций
+  // ВАЖНО: НЕ сохраняем если загружена конфигурация из URL — это предотвращает конфликты между вкладками
   useEffect(() => {
     if (!isInitialized) return;
+    // НЕ сохраняем в calculatorState если загружена конфигурация
+    // ЗАЧЕМ: Предотвращает перезапись данных другой вкладки при открытии сохранённой конфигурации
+    if (loadedConfigId) {
+      console.log('⏭️ [Universal] Пропускаем автосохранение в calculatorState — загружена конфигурация');
+      return;
+    }
     // Сохраняем только если есть тикер (калькулятор активен)
     if (selectedTicker) {
       saveCalculatorState();
     }
-  }, [isInitialized, options, positions, selectedTicker, saveCalculatorState]);
+  }, [isInitialized, options, positions, selectedTicker, saveCalculatorState, loadedConfigId]);
 
   // УБРАНО: AI модель не используется в универсальном калькуляторе
   // useEffect для автоматического запроса AI прогнозов удалён
@@ -1801,6 +1833,36 @@ function UniversalOptionsCalculator() {
           setShowProbabilityZones(config.state.showProbabilityZones !== undefined ? config.state.showProbabilityZones : true);
           setChartDisplayMode(config.state.chartDisplayMode || 'profit-loss-dollar');
 
+          // Восстанавливаем режим калькулятора (акции/фьючерсы)
+          // ЗАЧЕМ: Предотвращает неправильное определение типа актива при загрузке конфигурации
+          // ВАЖНО: Если calculatorMode не сохранён — определяем по тикеру
+          let restoredMode = CALCULATOR_MODES.STOCKS;
+          if (config.state.calculatorMode) {
+            restoredMode = config.state.calculatorMode;
+            setCalculatorMode(restoredMode);
+            console.log('📊 Режим калькулятора восстановлен из конфигурации:', restoredMode);
+          } else if (ticker) {
+            // Fallback: определяем режим по тикеру для старых конфигураций
+            const detectedType = detectInstrumentTypeByPattern(ticker);
+            restoredMode = detectedType === 'futures' ? CALCULATOR_MODES.FUTURES : CALCULATOR_MODES.STOCKS;
+            setCalculatorMode(restoredMode);
+            console.log('📊 Режим калькулятора определён по тикеру:', detectedType);
+          }
+
+          // Загружаем настройки фьючерса (pointValue) если режим фьючерсов
+          // ЗАЧЕМ: Для корректного расчёта P&L фьючерсов нужен pointValue
+          if (restoredMode === CALCULATOR_MODES.FUTURES && ticker) {
+            const futureInfo = getFutureByTicker(ticker);
+            setSelectedFuture(futureInfo);
+            if (futureInfo) {
+              console.log('📊 Настройки фьючерса загружены:', futureInfo);
+            } else {
+              console.warn('⚠️ Настройки фьючерса не найдены для:', ticker);
+            }
+          } else {
+            setSelectedFuture(null);
+          }
+
           console.log(`✅ Конфигурация загружена: ${config.name}${configIsLocked ? ' (🔒 зафиксирована)' : ''}`);
         } else {
           console.warn('⚠️ Конфигурация не найдена:', configId);
@@ -2026,10 +2088,10 @@ function UniversalOptionsCalculator() {
   return (
     <div className="min-h-screen bg-background text-foreground" style={{ minWidth: '1570px', maxWidth: '1570px' }}>
       <div className="p-6">
-        {/* === ХЕДЕР С ДАННЫМИ ОТ РАСШИРЕНИЯ === */}
-        {/* ЗАЧЕМ: Отображение контракта, цены и метаданных от TradingView Parser */}
-        {/* ВАЖНО: Показываем только после инициализации, чтобы избежать мигания неправильного режима */}
-        {isInitialized && isFromExtension && (contractCode || selectedTicker) && (
+        {/* === ХЕДЕР С ДАННЫМИ ОТ РАСШИРЕНИЯ ИЛИ КОНФИГУРАЦИИ === */}
+        {/* ЗАЧЕМ: Отображение контракта, цены и метаданных от TradingView Parser или загруженной конфигурации */}
+        {/* ВАЖНО: Показываем если данные от расширения ИЛИ загружена конфигурация */}
+        {isInitialized && (isFromExtension || loadedConfigId) && (contractCode || selectedTicker) && (
           <div className="mb-6">
             <div className={`inline-flex items-center gap-4 p-3 border-2 rounded-lg ${calculatorMode === CALCULATOR_MODES.FUTURES
               ? 'border-purple-400 bg-purple-50 dark:bg-purple-950/30'
@@ -2108,7 +2170,8 @@ function UniversalOptionsCalculator() {
         )}
 
         {/* Сообщение если нет данных от расширения */}
-        {!isFromExtension && isInitialized && (
+        {/* ВАЖНО: Не показываем если загружена конфигурация из URL */}
+        {!isFromExtension && isInitialized && !loadedConfigId && (
           <div className="mb-6">
             <div className="p-4 border border-yellow-500 rounded-lg bg-yellow-50 dark:bg-yellow-950/30">
               <div className="flex items-center gap-2 text-yellow-700 dark:text-yellow-300">
