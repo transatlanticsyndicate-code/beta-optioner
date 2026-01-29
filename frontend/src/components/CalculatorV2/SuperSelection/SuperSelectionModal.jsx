@@ -391,7 +391,42 @@ function SuperSelectionModal({
                             </div>
 
                             <div className="space-y-4 border rounded-lg p-4 bg-slate-50">
-                                {/* 1. Цель падения */}
+                                {/* 1. Прогноз по верху */}
+                                <div className="space-y-2">
+                                    <Label className="text-sm font-medium">
+                                        Показать прогноз по верху (% и Цена)
+                                    </Label>
+                                    <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
+                                        <div className="relative">
+                                            <Input
+                                                type="number"
+                                                value={growthPercent}
+                                                onChange={handleGrowthPercentChange}
+                                                className="pr-8 bg-white"
+                                                placeholder="50"
+                                            />
+                                            <span className="absolute right-3 top-2.5 text-xs text-muted-foreground">%</span>
+                                        </div>
+
+                                        <MoveRight className="h-4 w-4 text-muted-foreground" />
+
+                                        <div className="relative">
+                                            <Input
+                                                type="number"
+                                                value={growthPrice}
+                                                onChange={handleGrowthPriceChange}
+                                                className="pr-6 bg-white"
+                                                placeholder="Цена"
+                                            />
+                                            <span className="absolute right-3 top-2.5 text-xs text-muted-foreground">$</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Разделитель */}
+                                <div className="h-px bg-slate-200" />
+
+                                {/* 2. Цель падения */}
                                 <div className="space-y-2">
                                     <Label className="text-sm font-medium">
                                         {step === 1
@@ -418,41 +453,6 @@ function SuperSelectionModal({
                                                 type="number"
                                                 value={dropPrice}
                                                 onChange={handleDropPriceChange}
-                                                className="pr-6 bg-white"
-                                                placeholder="Цена"
-                                            />
-                                            <span className="absolute right-3 top-2.5 text-xs text-muted-foreground">$</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Разделитель */}
-                                <div className="h-px bg-slate-200" />
-
-                                {/* 2. Прогноз по верху */}
-                                <div className="space-y-2">
-                                    <Label className="text-sm font-medium">
-                                        Показать прогноз по верху (% и Цена)
-                                    </Label>
-                                    <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
-                                        <div className="relative">
-                                            <Input
-                                                type="number"
-                                                value={growthPercent}
-                                                onChange={handleGrowthPercentChange}
-                                                className="pr-8 bg-white"
-                                                placeholder="50"
-                                            />
-                                            <span className="absolute right-3 top-2.5 text-xs text-muted-foreground">%</span>
-                                        </div>
-
-                                        <MoveRight className="h-4 w-4 text-muted-foreground" />
-
-                                        <div className="relative">
-                                            <Input
-                                                type="number"
-                                                value={growthPrice}
-                                                onChange={handleGrowthPriceChange}
                                                 className="pr-6 bg-white"
                                                 placeholder="Цена"
                                             />
