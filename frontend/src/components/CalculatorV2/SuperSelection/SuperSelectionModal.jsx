@@ -14,7 +14,7 @@ import {
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
-import { Gem, MoveRight, Loader2, ArrowRight, AlertTriangle } from 'lucide-react';
+import { Gem, MoveRight, Loader2, ArrowRight, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react';
 import { sendRefreshRangeCommand, readExtensionResult, useExtensionData } from '../../../hooks/useExtensionData';
 import { calculateSuperSelectionScenarios } from './superSelectionLogic';
 
@@ -49,7 +49,12 @@ function SuperSelectionModal({
         borderRadius: '8px 8px 0 0',
     };
 
-    // --- Состояния параметров (ШАГ 1) ---
+    // --- Состояния параметров ---
+
+    // Режим супер подбора: 'LONG' | 'SHORT'
+    // LONG: Step1=CALL (мин. убыток при падении), Step2=PUT (компенсация)
+    // SHORT: Step1=PUT (мин. убыток при росте), Step2=CALL (компенсация)
+    const [mode, setMode] = useState('LONG');
 
     // Статус работы: 'idle' | 'waiting' | 'calculating' | 'result'
     const [status, setStatus] = useState('idle');
@@ -77,12 +82,28 @@ function SuperSelectionModal({
     // Результаты расчета
     const [results, setResults] = useState([]);
 
-    // Определение текущего шага
-    // ШАГ 2 только если:
-    // 1. Есть ровно один опцион "Супер подбора"
-    // 2. Его тип CALL
+    // Определение текущего шага и автоматическое определение режима
+    // ЗАЧЕМ: Если есть супер-опцион, определяем режим по его типу
     const superOptions = options.filter(opt => opt.isSuperOption);
-    const step = (superOptions.length === 1 && superOptions[0].type === 'CALL') ? 2 : 1;
+    
+    // Автоматическое определение режима на основе существующего супер-опциона
+    // CALL → LONG режим, PUT → SHORT режим
+    const detectedMode = superOptions.length === 1 
+        ? (superOptions[0].type === 'CALL' ? 'LONG' : 'SHORT')
+        : mode;
+    
+    // ШАГ 2 только если есть ровно один опцион "Супер подбора"
+    const step = superOptions.length === 1 ? 2 : 1;
+
+    // Тип опциона для текущего шага (используем detectedMode для корректности)
+    // LONG: Step1=CALL, Step2=PUT
+    // SHORT: Step1=PUT, Step2=CALL
+    const currentOptionType = detectedMode === 'LONG'
+        ? (step === 1 ? 'CALL' : 'PUT')
+        : (step === 1 ? 'PUT' : 'CALL');
+    
+    // Активный режим для UI (используем detectedMode для Step 2)
+    const activeMode = step === 2 ? detectedMode : mode;
 
     // Блокировка Шага 1, если калькулятор не пуст
     const isBlocked = step === 1 && options.length > 0;
@@ -128,6 +149,21 @@ function SuperSelectionModal({
             }
         }
     }, [isOpen]); // step и currentPrice не добавляем в зависимости, чтобы не сбрасывать при их изменении внутри модалки (хотя они не должны меняться)
+
+    // Пересчет цен при переключении режима LONG/SHORT
+    // ЗАЧЕМ: При смене режима направление расчета цен меняется
+    useEffect(() => {
+        if (currentPrice && dropPercent) {
+            // LONG: падение (1 - percent), SHORT: рост (1 + percent)
+            const dropMultiplier = activeMode === 'LONG' ? (1 - parseFloat(dropPercent) / 100) : (1 + parseFloat(dropPercent) / 100);
+            setDropPrice((currentPrice * dropMultiplier).toFixed(2));
+        }
+        if (currentPrice && growthPercent) {
+            // LONG: рост (1 + percent), SHORT: падение (1 - percent)
+            const growthMultiplier = activeMode === 'LONG' ? (1 + parseFloat(growthPercent) / 100) : (1 - parseFloat(growthPercent) / 100);
+            setGrowthPrice((currentPrice * growthMultiplier).toFixed(2));
+        }
+    }, [mode, activeMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // --- ЛОГИКА ОЖИДАНИЯ ОТВЕТА ОТ РАСШИРЕНИЯ ---
     useEffect(() => {
@@ -195,12 +231,18 @@ function SuperSelectionModal({
                         freshOptions = state.options;
                     }
 
-                    const targetType = step === 2 ? 'PUT' : 'CALL';
+                    // Вычисляем тип опциона непосредственно здесь для гарантии актуальности
+                    // LONG: Step1=CALL, Step2=PUT
+                    // SHORT: Step1=PUT, Step2=CALL
+                    const targetType = activeMode === 'LONG'
+                        ? (step === 1 ? 'CALL' : 'PUT')
+                        : (step === 1 ? 'PUT' : 'CALL');
+                    
                     const calculated = calculateSuperSelectionScenarios(
                         freshOptions,
                         currentPrice,
                         Number(dropPercent),
-                        Number(growthPercent), // Growth percent из параметров
+                        Number(growthPercent),
                         targetType,
                         Number(exitDay), // День выхода (для Time Decay)
                         classification, // Тэг классификации для корректировки P&L
@@ -218,51 +260,65 @@ function SuperSelectionModal({
 
             return () => clearTimeout(timer);
         }
-    }, [status, currentPrice, dropPercent, growthPercent, step]);
+    }, [status, currentPrice, dropPercent, growthPercent, step, currentOptionType, mode]);
 
-    // Обработчик изменения процента падения
+    // Обработчик изменения процента для второго параметра (мин. убыток)
+    // LONG: падение → цена уменьшается
+    // SHORT: рост → цена увеличивается
     const handleDropPercentChange = (e) => {
         const val = e.target.value;
         setDropPercent(val);
         if (currentPrice && !isNaN(parseFloat(val))) {
-            const price = currentPrice * (1 - parseFloat(val) / 100);
+            // LONG: падение (1 - percent), SHORT: рост (1 + percent)
+            const multiplier = activeMode === 'LONG' ? (1 - parseFloat(val) / 100) : (1 + parseFloat(val) / 100);
+            const price = currentPrice * multiplier;
             setDropPrice(price.toFixed(2));
         } else {
             setDropPrice('');
         }
     };
 
-    // Обработчик изменения цены падения
+    // Обработчик изменения цены для второго параметра
     const handleDropPriceChange = (e) => {
         const val = e.target.value;
         setDropPrice(val);
         if (currentPrice && !isNaN(parseFloat(val)) && parseFloat(val) > 0) {
-            // Формула: percent = (currentPrice - targetPrice) / currentPrice * 100
-            const percent = ((currentPrice - parseFloat(val)) / currentPrice) * 100;
-            setDropPercent(percent.toFixed(2));
+            // LONG: percent = (currentPrice - targetPrice) / currentPrice * 100
+            // SHORT: percent = (targetPrice - currentPrice) / currentPrice * 100
+            const percent = activeMode === 'LONG'
+                ? ((currentPrice - parseFloat(val)) / currentPrice) * 100
+                : ((parseFloat(val) - currentPrice) / currentPrice) * 100;
+            setDropPercent(Math.abs(percent).toFixed(2));
         }
     };
 
-    // Обработчик изменения процента роста
+    // Обработчик изменения процента для первого параметра (прогноз)
+    // LONG: рост → цена увеличивается
+    // SHORT: падение → цена уменьшается
     const handleGrowthPercentChange = (e) => {
         const val = e.target.value;
         setGrowthPercent(val);
         if (currentPrice && !isNaN(parseFloat(val))) {
-            const price = currentPrice * (1 + parseFloat(val) / 100);
+            // LONG: рост (1 + percent), SHORT: падение (1 - percent)
+            const multiplier = activeMode === 'LONG' ? (1 + parseFloat(val) / 100) : (1 - parseFloat(val) / 100);
+            const price = currentPrice * multiplier;
             setGrowthPrice(price.toFixed(2));
         } else {
             setGrowthPrice('');
         }
     };
 
-    // Обработчик изменения цены роста
+    // Обработчик изменения цены для первого параметра
     const handleGrowthPriceChange = (e) => {
         const val = e.target.value;
         setGrowthPrice(val);
         if (currentPrice && !isNaN(parseFloat(val)) && parseFloat(val) > 0) {
-            // Формула: percent = (targetPrice - currentPrice) / currentPrice * 100
-            const percent = ((parseFloat(val) - currentPrice) / currentPrice) * 100;
-            setGrowthPercent(percent.toFixed(2));
+            // LONG: percent = (targetPrice - currentPrice) / currentPrice * 100
+            // SHORT: percent = (currentPrice - targetPrice) / currentPrice * 100
+            const percent = activeMode === 'LONG'
+                ? ((parseFloat(val) - currentPrice) / currentPrice) * 100
+                : ((currentPrice - parseFloat(val)) / currentPrice) * 100;
+            setGrowthPercent(Math.abs(percent).toFixed(2));
         }
     };
 
@@ -295,11 +351,18 @@ function SuperSelectionModal({
             if (iv > 10) iv = iv / 100;
             if (iv === 0) iv = 0.5;
 
+            // Вычисляем тип опциона для текущего шага
+            // LONG: Step1=CALL, Step2=PUT
+            // SHORT: Step1=PUT, Step2=CALL
+            const optionType = activeMode === 'LONG'
+                ? (step === 1 ? 'CALL' : 'PUT')
+                : (step === 1 ? 'PUT' : 'CALL');
+
             // Формируем готовый объект для калькулятора
             const adaptedOption = {
                 id: Date.now().toString(), // Уникальный ID
                 ticker: selectedTicker || option.ticker,
-                type: step === 2 ? 'PUT' : 'CALL',
+                type: optionType,
                 action: 'Buy',
                 strike: parseFloat(option.strike),
                 date: option.expirationISO || option.date || option.expiration, // Приоритет ISO даты
@@ -378,23 +441,62 @@ function SuperSelectionModal({
                     {/* Режим НАСТРОЙКИ (IDLE) */}
                     {status === 'idle' && !isBlocked && (
                         <>
+                            {/* Переключатель LONG / SHORT */}
+                            <div className="flex items-center justify-center gap-2 p-2 bg-slate-100 rounded-lg">
+                                <button
+                                    onClick={() => setMode('LONG')}
+                                    className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-all ${
+                                        activeMode === 'LONG'
+                                            ? 'bg-green-500 text-white shadow-md'
+                                            : 'bg-white text-gray-600 hover:bg-green-50'
+                                    }`}
+                                >
+                                    <TrendingUp className="h-4 w-4" />
+                                    LONG
+                                </button>
+                                <button
+                                    onClick={() => setMode('SHORT')}
+                                    className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-all ${
+                                        activeMode === 'SHORT'
+                                            ? 'bg-red-500 text-white shadow-md'
+                                            : 'bg-white text-gray-600 hover:bg-red-50'
+                                    }`}
+                                >
+                                    <TrendingDown className="h-4 w-4" />
+                                    SHORT
+                                </button>
+                            </div>
+
                             {/* Заголовок Шага */}
                             <div className="space-y-1">
                                 <h3 className="font-semibold text-base">ШАГ {step}</h3>
                                 <p className="text-sm text-muted-foreground">
-                                    {step === 1 ? (
-                                        <>Подбор опциона <span className="text-green-600 font-medium">BuyCALL</span> с минимальным убытком при падении актива.</>
+                                    {activeMode === 'LONG' ? (
+                                        // LONG: Step1=CALL, Step2=PUT
+                                        step === 1 ? (
+                                            <>Подбор опциона <span className="text-green-600 font-medium">BuyCALL</span> с минимальным убытком при падении актива.</>
+                                        ) : (
+                                            <>Подбор опциона <span className="text-red-500 font-medium">BuyPUT</span> для компенсации убытков при выходе по низу.</>
+                                        )
                                     ) : (
-                                        <>Подбор опциона <span className="text-red-500 font-medium">BuyPUT</span> для компенсации убытков при выходе по низу.</>
+                                        // SHORT: Step1=PUT, Step2=CALL
+                                        step === 1 ? (
+                                            <>Подбор опциона <span className="text-red-500 font-medium">BuyPUT</span> с минимальным убытком при росте актива.</>
+                                        ) : (
+                                            <>Подбор опциона <span className="text-green-600 font-medium">BuyCALL</span> для компенсации убытков при выходе по верху.</>
+                                        )
                                     )}
                                 </p>
                             </div>
 
                             <div className="space-y-4 border rounded-lg p-4 bg-slate-50">
-                                {/* 1. Прогноз по верху */}
+                                {/* 1. Прогноз (верх/низ в зависимости от режима) */}
                                 <div className="space-y-2">
                                     <Label className="text-sm font-medium">
-                                        Показать прогноз по верху (% и Цена)
+                                        {activeMode === 'LONG'
+                                            ? "Показать прогноз по верху (% и Цена)"
+                                            : "Показать прогноз по низу (% и Цена)"
+                                        }
                                     </Label>
                                     <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
                                         <div className="relative">
@@ -426,13 +528,18 @@ function SuperSelectionModal({
                                 {/* Разделитель */}
                                 <div className="h-px bg-slate-200" />
 
-                                {/* 2. Цель падения */}
+                                {/* 2. Цель падения/роста */}
                                 <div className="space-y-2">
                                     <Label className="text-sm font-medium">
-                                        {step === 1
-                                            ? "Ищем опцион с минимальным убытком при падении актива на (% и Цена)"
-                                            : "Ищем опцион с максимальной прибылью при падении актива на (% и Цена)"
-                                        }
+                                        {activeMode === 'LONG' ? (
+                                            step === 1
+                                                ? "Ищем опцион с минимальным убытком при падении актива на (% и Цена)"
+                                                : "Ищем опцион с максимальной прибылью при падении актива на (% и Цена)"
+                                        ) : (
+                                            step === 1
+                                                ? "Ищем опцион с минимальным убытком при росте актива на (% и Цена)"
+                                                : "Ищем опцион с максимальной прибылью при росте актива на (% и Цена)"
+                                        )}
                                     </Label>
                                     <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
                                         <div className="relative">
@@ -554,24 +661,48 @@ function SuperSelectionModal({
                     {status === 'result' && (
                         <>
                             <div className="space-y-2">
-                                {step === 2 ? (
-                                    <>
-                                        <h3 className="font-semibold text-base">ШАГ 2 — Результаты BuyPUT</h3>
-                                        <p className="text-sm text-muted-foreground">
-                                            Подобранные опционы с максимальной прибылью при падении актива на <span className="text-red-500 font-medium">{dropPercent}% (${dropPrice})</span>.
-                                            <br />
-                                            Клик по конкретному опциону добавит его в Калькулятор.
-                                        </p>
-                                    </>
+                                {activeMode === 'LONG' ? (
+                                    // LONG режим: Step1=CALL, Step2=PUT
+                                    step === 2 ? (
+                                        <>
+                                            <h3 className="font-semibold text-base">ШАГ 2 — Результаты BuyPUT</h3>
+                                            <p className="text-sm text-muted-foreground">
+                                                Подобранные опционы с максимальной прибылью при падении актива на <span className="text-red-500 font-medium">{dropPercent}% (${dropPrice})</span>.
+                                                <br />
+                                                Клик по конкретному опциону добавит его в Калькулятор.
+                                            </p>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <h3 className="font-semibold text-base">ШАГ 1 — Результаты BuyCALL</h3>
+                                            <p className="text-sm text-muted-foreground">
+                                                Подобранные опционы с минимальным убытком при падении актива на <span className="text-red-500 font-medium">{dropPercent}% (${dropPrice})</span>.
+                                                <br />
+                                                Клик по конкретному опциону добавит его в Калькулятор.
+                                            </p>
+                                        </>
+                                    )
                                 ) : (
-                                    <>
-                                        <h3 className="font-semibold text-base">ШАГ 1 — Результаты BuyCALL</h3>
-                                        <p className="text-sm text-muted-foreground">
-                                            Подобранные опционы с минимальным убытком при падении актива на <span className="text-red-500 font-medium">{dropPercent}% (${dropPrice})</span>.
-                                            <br />
-                                            Клик по конкретному опциону добавит его в Калькулятор.
-                                        </p>
-                                    </>
+                                    // SHORT режим: Step1=PUT, Step2=CALL
+                                    step === 2 ? (
+                                        <>
+                                            <h3 className="font-semibold text-base">ШАГ 2 — Результаты BuyCALL</h3>
+                                            <p className="text-sm text-muted-foreground">
+                                                Подобранные опционы с максимальной прибылью при росте актива на <span className="text-green-600 font-medium">{dropPercent}% (${dropPrice})</span>.
+                                                <br />
+                                                Клик по конкретному опциону добавит его в Калькулятор.
+                                            </p>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <h3 className="font-semibold text-base">ШАГ 1 — Результаты BuyPUT</h3>
+                                            <p className="text-sm text-muted-foreground">
+                                                Подобранные опционы с минимальным убытком при росте актива на <span className="text-green-600 font-medium">{dropPercent}% (${dropPrice})</span>.
+                                                <br />
+                                                Клик по конкретному опциону добавит его в Калькулятор.
+                                            </p>
+                                        </>
+                                    )
                                 )}
                             </div>
 
@@ -585,10 +716,18 @@ function SuperSelectionModal({
                                                 <th className="px-3 py-3">Страйк</th>
                                                 <th className="px-3 py-3 text-right">ASK</th>
                                                 <th className="px-3 py-3 text-right">Vol</th>
-                                                <th className="px-3 py-3 text-right">P&L Низ (-{dropPercent}%)<br/>на ЭКСП.</th>
-                                                <th className="px-3 py-3 text-right bg-gray-200">P&L Низ (-{dropPercent}%)<br/>на {exitDay} день</th>
-                                                <th className="px-3 py-3 text-right">P&L Верх (+{growthPercent}%)<br/>на ЭКСП.</th>
-                                                <th className="px-3 py-3 text-right bg-gray-200">P&L Верх (+{growthPercent}%)<br/>на {exitDay} день</th>
+                                                <th className="px-3 py-3 text-right">
+                                                    {activeMode === 'LONG' ? `P&L Низ (-${dropPercent}%)` : `P&L Верх (+${dropPercent}%)`}<br/>на ЭКСП.
+                                                </th>
+                                                <th className="px-3 py-3 text-right bg-gray-200">
+                                                    {activeMode === 'LONG' ? `P&L Низ (-${dropPercent}%)` : `P&L Верх (+${dropPercent}%)`}<br/>на {exitDay} день
+                                                </th>
+                                                <th className="px-3 py-3 text-right">
+                                                    {activeMode === 'LONG' ? `P&L Верх (+${growthPercent}%)` : `P&L Низ (-${growthPercent}%)`}<br/>на ЭКСП.
+                                                </th>
+                                                <th className="px-3 py-3 text-right bg-gray-200">
+                                                    {activeMode === 'LONG' ? `P&L Верх (+${growthPercent}%)` : `P&L Низ (-${growthPercent}%)`}<br/>на {exitDay} день
+                                                </th>
                                                 <th className="px-3 py-3"></th>
                                             </tr>
                                         ) : (
@@ -598,8 +737,12 @@ function SuperSelectionModal({
                                                 <th className="px-4 py-3">Страйк</th>
                                                 <th className="px-4 py-3 text-right">ASK</th>
                                                 <th className="px-4 py-3 text-right">Vol</th>
-                                                <th className="px-4 py-3 text-right">P&L Низ (-{dropPercent}%)</th>
-                                                <th className="px-4 py-3 text-right">P&L Верх (+{growthPercent}%)</th>
+                                                <th className="px-4 py-3 text-right">
+                                                    {activeMode === 'LONG' ? `P&L Низ (-${dropPercent}%)` : `P&L Верх (+${dropPercent}%)`}
+                                                </th>
+                                                <th className="px-4 py-3 text-right">
+                                                    {activeMode === 'LONG' ? `P&L Верх (+${growthPercent}%)` : `P&L Низ (-${growthPercent}%)`}
+                                                </th>
                                                 <th className="px-4 py-3"></th>
                                             </tr>
                                         )}

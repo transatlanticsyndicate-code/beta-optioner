@@ -208,16 +208,10 @@ export const usePositionExitCalculator = ({
       })
       .filter(Boolean);
 
-    // Применяем коэффициент группы акции к итоговым P&L (только для режима stocks)
-    // ЗАЧЕМ: Обеспечиваем консистентность с таблицей опционов и графиком P&L
-    const applyGroupAdjustment = (pl) => {
-      return calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification
-        ? adjustPLByStockGroup(pl, stockClassification)
-        : pl;
-    };
-
     // Применяем коэффициент к деталям расчета (каждому элементу в массиве)
     // ЗАЧЕМ: Детализация в карточках сценариев должна показывать скорректированные значения
+    // ВАЖНО: Коэффициенты разные для положительных и отрицательных P&L,
+    // поэтому нужно корректировать каждый элемент отдельно, а потом суммировать
     const applyGroupAdjustmentToDetails = (details) => {
       if (calculatorMode !== CALCULATOR_MODES.STOCKS || !stockClassification) {
         return details;
@@ -228,14 +222,27 @@ export const usePositionExitCalculator = ({
       }));
     };
 
+    // Суммируем скорректированные значения из details
+    // ЗАЧЕМ: adjustPLByStockGroup применяет разные коэффициенты для прибыли и убытков,
+    // поэтому нельзя корректировать итоговую сумму - нужно суммировать уже скорректированные значения
+    const sumAdjustedDetails = (details) => {
+      return details.reduce((sum, detail) => sum + detail.value, 0);
+    };
+
+    // Применяем корректировку к деталям
+    const adjustedExerciseDetails = applyGroupAdjustmentToDetails(exerciseCalculation.details);
+    const adjustedCloseOptionsDetails = applyGroupAdjustmentToDetails(closeOptionsCalculation.details);
+    const adjustedCloseAllDetails = applyGroupAdjustmentToDetails(closeAllCalculation.details);
+
     return {
-      plExercise: applyGroupAdjustment(exerciseCalculation.totalPL),
-      plCloseOptions: applyGroupAdjustment(closeOptionsCalculation.totalPL),
-      plCloseAll: applyGroupAdjustment(closeAllCalculation.totalPL),
+      // Итоговый P&L = сумма скорректированных значений из details
+      plExercise: sumAdjustedDetails(adjustedExerciseDetails),
+      plCloseOptions: sumAdjustedDetails(adjustedCloseOptionsDetails),
+      plCloseAll: sumAdjustedDetails(adjustedCloseAllDetails),
       details: {
-        exercise: applyGroupAdjustmentToDetails(exerciseCalculation.details),
-        closeOptions: applyGroupAdjustmentToDetails(closeOptionsCalculation.details),
-        closeAll: applyGroupAdjustmentToDetails(closeAllCalculation.details)
+        exercise: adjustedExerciseDetails,
+        closeOptions: adjustedCloseOptionsDetails,
+        closeAll: adjustedCloseAllDetails
       },
       liquidityWarnings // Предупреждения о низкой ликвидности
     };
