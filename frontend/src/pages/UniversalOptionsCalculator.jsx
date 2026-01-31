@@ -2427,7 +2427,9 @@ function UniversalOptionsCalculator() {
                       onAddMagicOption={(option) => {
                         // Добавляем опцион из волшебного подбора
                         console.log('👑 OptionsCalculatorBasic: Получен опцион в onAddMagicOption:', option.isGoldenOption, option);
-                        const newOptionId = Date.now().toString();
+                        // Используем ID из опциона если есть, иначе генерируем уникальный
+                        // ЗАЧЕМ: При добавлении нескольких опционов из SuperSelection Date.now() может вернуть одинаковое значение
+                        const newOptionId = option.id || `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
                         const newOption = {
                           id: newOptionId,
                           action: option.action || 'Buy',

@@ -14,7 +14,7 @@ import {
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
-import { Gem, MoveRight, Loader2, ArrowRight, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react';
+import { Gem, MoveRight, Loader2, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react';
 import { sendRefreshRangeCommand, readExtensionResult, useExtensionData } from '../../../hooks/useExtensionData';
 import { calculateSuperSelectionScenarios } from './superSelectionLogic';
 
@@ -82,6 +82,9 @@ function SuperSelectionModal({
     // Результаты расчета
     const [results, setResults] = useState([]);
 
+    // Выбранные опционы для добавления в калькулятор (только для Шага 1)
+    const [selectedOptions, setSelectedOptions] = useState(new Set());
+
     // Определение текущего шага и автоматическое определение режима
     // ЗАЧЕМ: Если есть супер-опцион, определяем режим по его типу
     const superOptions = options.filter(opt => opt.isSuperOption);
@@ -114,6 +117,7 @@ function SuperSelectionModal({
             setStatus('idle');
             setResults([]);
             setProgressMessage('');
+            setSelectedOptions(new Set()); // Сбрасываем выбранные опционы
 
             // Установка дефолтных значений в зависимости от шага и режима калькулятора
             let newDropPercent = '5';
@@ -340,6 +344,19 @@ function SuperSelectionModal({
         setProgressMessage('Инициализация...');
     };
 
+    // Переключение выбора опциона (для чекбоксов)
+    const handleToggleOption = (optionId) => {
+        setSelectedOptions(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(optionId)) {
+                newSet.delete(optionId);
+            } else {
+                newSet.add(optionId);
+            }
+            return newSet;
+        });
+    };
+
     // Добавление опциона в калькулятор
     const handleAddOption = (option) => {
         if (onAddOption) {
@@ -359,8 +376,10 @@ function SuperSelectionModal({
                 : (step === 1 ? 'PUT' : 'CALL');
 
             // Формируем готовый объект для калькулятора
+            // Уникальный ID: timestamp + случайное число + страйк + дата для гарантии уникальности
+            const uniqueId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}_${option.strike}`;
             const adaptedOption = {
-                id: Date.now().toString(), // Уникальный ID
+                id: uniqueId,
                 ticker: selectedTicker || option.ticker,
                 type: optionType,
                 action: 'Buy',
@@ -385,8 +404,23 @@ function SuperSelectionModal({
             };
 
             onAddOption(adaptedOption);
-            onClose();
         }
+    };
+
+    // Добавление всех выбранных опционов в калькулятор (для Шага 1)
+    const handleAddSelectedOptions = () => {
+        if (selectedOptions.size === 0) return;
+        
+        // Находим все выбранные опционы и добавляем их
+        results.forEach((opt, idx) => {
+            // Уникальный ID: комбинация страйка, экспирации и индекса (должен совпадать с ID в таблице)
+            const optId = `${opt.strike}_${opt.expirationISO || opt.expiration || opt.date}_${idx}`;
+            if (selectedOptions.has(optId)) {
+                handleAddOption(opt);
+            }
+        });
+        
+        onClose();
     };
 
     return (
@@ -710,7 +744,7 @@ function SuperSelectionModal({
                                 <table className="w-full text-sm text-left">
                                     <thead className="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
                                         {step === 1 ? (
-                                            /* Шаг 1: 6 колонок P&L (на ЭКСП. и на X день) */
+                                            /* Шаг 1: 4 колонки P&L (только на ЭКСП.) + чекбокс */
                                             <tr>
                                                 <th className="px-3 py-3">Экспирация</th>
                                                 <th className="px-3 py-3">Страйк</th>
@@ -719,16 +753,10 @@ function SuperSelectionModal({
                                                 <th className="px-3 py-3 text-right">
                                                     {activeMode === 'LONG' ? `P&L Низ (-${dropPercent}%)` : `P&L Верх (+${dropPercent}%)`}<br/>на ЭКСП.
                                                 </th>
-                                                <th className="px-3 py-3 text-right bg-gray-200">
-                                                    {activeMode === 'LONG' ? `P&L Низ (-${dropPercent}%)` : `P&L Верх (+${dropPercent}%)`}<br/>на {exitDay} день
-                                                </th>
                                                 <th className="px-3 py-3 text-right">
                                                     {activeMode === 'LONG' ? `P&L Верх (+${growthPercent}%)` : `P&L Низ (-${growthPercent}%)`}<br/>на ЭКСП.
                                                 </th>
-                                                <th className="px-3 py-3 text-right bg-gray-200">
-                                                    {activeMode === 'LONG' ? `P&L Верх (+${growthPercent}%)` : `P&L Низ (-${growthPercent}%)`}<br/>на {exitDay} день
-                                                </th>
-                                                <th className="px-3 py-3"></th>
+                                                <th className="px-3 py-3 text-center w-12"></th>
                                             </tr>
                                         ) : (
                                             /* Шаг 2: стандартные 2 колонки P&L */
@@ -748,56 +776,61 @@ function SuperSelectionModal({
                                         )}
                                     </thead>
                                     <tbody>
-                                        {results.map((opt, idx) => (
-                                            <tr
-                                                key={opt.id + idx}
-                                                onClick={() => handleAddOption(opt)}
-                                                className="bg-white border-b hover:bg-cyan-100 cursor-pointer transition-all duration-200 ease-in-out"
-                                            >
-                                                <td className="px-3 py-3 font-medium text-gray-900 whitespace-nowrap">
-                                                    {opt.expirationISO || opt.expiration || opt.date}
-                                                </td>
-                                                <td className="px-3 py-3 font-medium">
-                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded mr-2 font-bold ${opt.type === 'CALL' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                                        {opt.type}
-                                                    </span>
-                                                    {opt.strike}
-                                                </td>
-                                                <td className="px-3 py-3 text-right font-semibold text-cyan-700">
-                                                    {(opt.ask || 0).toFixed(2)}
-                                                </td>
-                                                <td className="px-3 py-3 text-right text-muted-foreground">
-                                                    {opt.volume || 0}
-                                                </td>
-                                                {/* P&L Низ на экспирацию */}
-                                                <td className={`px-3 py-3 text-right font-medium ${opt.calculated.pnlDown >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                                                    {opt.calculated.pnlDown > 0 ? '+' : ''}{opt.calculated.pnlDown.toFixed(2)}
-                                                </td>
-                                                {/* P&L Низ на X день (только для Шага 1) */}
-                                                {step === 1 && (
-                                                    <td className={`px-3 py-3 text-right font-medium bg-gray-200 ${opt.calculated.pnlDownOnDay >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                                                        {opt.calculated.pnlDownOnDay > 0 ? '+' : ''}{opt.calculated.pnlDownOnDay.toFixed(2)}
+                                        {results.map((opt, idx) => {
+                                            // Уникальный ID: комбинация страйка, экспирации и индекса
+                                            const optId = `${opt.strike}_${opt.expirationISO || opt.expiration || opt.date}_${idx}`;
+                                            const isSelected = selectedOptions.has(optId);
+                                            
+                                            return (
+                                                <tr
+                                                    key={optId}
+                                                    onClick={() => handleToggleOption(optId)}
+                                                    className={`border-b cursor-pointer transition-all duration-200 ease-in-out ${
+                                                        isSelected 
+                                                            ? 'bg-cyan-50 hover:bg-cyan-100' 
+                                                            : 'bg-white hover:bg-cyan-100'
+                                                    }`}
+                                                >
+                                                    <td className="px-3 py-3 font-medium text-gray-900 whitespace-nowrap">
+                                                        {opt.expirationISO || opt.expiration || opt.date}
                                                     </td>
-                                                )}
-                                                {/* P&L Верх на экспирацию */}
-                                                <td className={`px-3 py-3 text-right font-medium ${opt.calculated.pnlUp >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                                                    {opt.calculated.pnlUp > 0 ? '+' : ''}{opt.calculated.pnlUp.toFixed(2)}
-                                                </td>
-                                                {/* P&L Верх на X день (только для Шага 1) */}
-                                                {step === 1 && (
-                                                    <td className={`px-3 py-3 text-right font-medium bg-gray-200 ${opt.calculated.pnlUpOnDay >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                                                        {opt.calculated.pnlUpOnDay > 0 ? '+' : ''}{opt.calculated.pnlUpOnDay.toFixed(2)}
+                                                    <td className="px-3 py-3 font-medium">
+                                                        <span className={`text-[10px] px-1.5 py-0.5 rounded mr-2 font-bold ${opt.type === 'CALL' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                            {opt.type}
+                                                        </span>
+                                                        {opt.strike}
                                                     </td>
-                                                )}
-                                                <td className="px-3 py-3 text-right">
-                                                    <ArrowRight className="h-4 w-4 text-gray-400" />
-                                                </td>
-                                            </tr>
-                                        ))}
+                                                    <td className="px-3 py-3 text-right font-semibold text-cyan-700">
+                                                        {(opt.ask || 0).toFixed(2)}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right text-muted-foreground">
+                                                        {opt.volume || 0}
+                                                    </td>
+                                                    {/* P&L Низ на экспирацию */}
+                                                    <td className={`px-3 py-3 text-right font-medium ${opt.calculated.pnlDown >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                                        {opt.calculated.pnlDown > 0 ? '+' : ''}{opt.calculated.pnlDown.toFixed(2)}
+                                                    </td>
+                                                    {/* P&L Верх на экспирацию */}
+                                                    <td className={`px-3 py-3 text-right font-medium ${opt.calculated.pnlUp >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                                        {opt.calculated.pnlUp > 0 ? '+' : ''}{opt.calculated.pnlUp.toFixed(2)}
+                                                    </td>
+                                                    {/* Чекбокс для выбора опциона */}
+                                                    <td className="px-3 py-3 text-center">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={isSelected}
+                                                            onChange={() => handleToggleOption(optId)}
+                                                            onClick={(e) => e.stopPropagation()}
+                                                            className="w-4 h-4 text-cyan-600 bg-gray-100 border-gray-300 rounded focus:ring-cyan-500 cursor-pointer"
+                                                        />
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
 
                                         {results.length === 0 && (
                                             <tr>
-                                                <td colSpan={step === 1 ? 9 : 7} className="px-4 py-8 text-center text-muted-foreground">
+                                                <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
                                                     Не найдено подходящих опционов
                                                 </td>
                                             </tr>
@@ -806,13 +839,24 @@ function SuperSelectionModal({
                                 </table>
                             </div>
 
-                            <Button
-                                variant="outline"
-                                onClick={() => setStatus('idle')}
-                                className="w-full border-cyan-500 text-cyan-600 hover:bg-cyan-50"
-                            >
-                                Назад к параметрам
-                            </Button>
+                            {/* Кнопки навигации */}
+                            <div className="flex justify-between gap-4">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setStatus('idle')}
+                                    className="border-cyan-500 text-cyan-600 hover:bg-cyan-50"
+                                >
+                                    Назад к параметрам
+                                </Button>
+                                
+                                <Button
+                                    onClick={handleAddSelectedOptions}
+                                    disabled={selectedOptions.size === 0}
+                                    className="bg-cyan-600 hover:bg-cyan-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    Добавить выбранные в калькулятор ({selectedOptions.size})
+                                </Button>
+                            </div>
                         </>
                     )}
 
