@@ -31,7 +31,7 @@ const KNOWN_INSTRUMENTS = {
     'ES', 'NQ', 'YM', 'RTY', 'MES', 'MNQ', 'M2K', 'MYM', // E-mini индексы
     'CL', 'NG', 'RB', 'HO', 'BZ', // Энергия
     'GC', 'SI', 'HG', 'PA', 'PL', // Металлы
-    'ZC', 'ZS', 'ZW', 'ZL', 'ZM', 'ZO', 'ZR', 'KE', // Зерновые
+    'ZC', 'ZW', 'ZL', 'ZM', 'ZO', 'ZR', 'KE', // Зерновые (ZS исключена - это акция Zscaler)
     'LE', 'GF', 'HE', // Животноводство
     'ZB', 'ZN', 'ZF', 'ZT', 'UB', // Казначейские облигации
     '6E', '6B', '6J', '6A', '6C', '6S', '6N', '6M', // Валюты

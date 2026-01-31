@@ -129,7 +129,7 @@ function SuperSelectionModal({
                 setGrowthPercent(newGrowthPercent);
                 setMinDays('8');
                 setMaxDays('100');
-                setMinStrikePercent('-5');
+                setMinStrikePercent('1');
                 setMaxStrikePercent('20');
                 setExitDay('5');
             } else {
@@ -138,8 +138,8 @@ function SuperSelectionModal({
                 setGrowthPercent(newGrowthPercent);
                 setMinDays('90');
                 setMaxDays('300');
-                setMinStrikePercent('-5');
-                setMaxStrikePercent('20');
+                setMinStrikePercent('1');
+                setMaxStrikePercent('7');
                 setExitDay('10');
             }
 

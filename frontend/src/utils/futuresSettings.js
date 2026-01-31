@@ -157,7 +157,7 @@ export const isFuturesTickerByPattern = (ticker) => {
     'GC', 'SI', 'HG', 'MGC', 'SIL', // Металлы
     'CL', 'NG', 'RB', 'HO', 'MCL', // Энергия
     'ZB', 'ZN', 'ZF', 'ZT', 'ZQ', // Казначейские облигации
-    'ZC', 'ZS', 'ZW', 'ZM', 'ZL', // Зерновые
+    'ZC', 'ZW', 'ZM', 'ZL', // Зерновые (ZS исключена - это акция Zscaler)
   ];
   
   if (knownShortFutures.includes(upperTicker)) {
