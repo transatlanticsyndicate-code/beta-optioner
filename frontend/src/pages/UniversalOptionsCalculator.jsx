@@ -71,6 +71,7 @@ import OptionsTableV3 from '../components/CalculatorV2/OptionsTableV3';
 import FinancialControl from '../components/CalculatorV2/FinancialControl';
 import ExitCalculator from '../components/CalculatorV2/ExitCalculator';
 import OptionSelectionResult from '../components/CalculatorV2/OptionSelectionResult';
+import CalculatorDealTabs from '../components/CalculatorV2/CalculatorDealTabs';
 import { getDaysUntilExpirationUTC, calculateDaysRemainingUTC } from '../utils/dateUtils';
 import { WhatsNewModal, shouldShowModal } from '../components/WhatsNewModal';
 import { buildIVSurface } from '../utils/volatilitySurface';
@@ -265,6 +266,11 @@ function UniversalOptionsCalculator() {
   // State для параметров подбора опционов (из AIOptionSelectorDialog)
   // ЗАЧЕМ: Хранит параметры для отображения компонента OptionSelectionResult
   const [optionSelectionParams, setOptionSelectionParams] = useState(null);
+
+  // State для сделки
+  // ЗАЧЕМ: Управление созданной сделкой и переключением табов
+  const [dealInfo, setDealInfo] = useState(null); // { ticker, createdAt }
+  const [activeCalculatorTab, setActiveCalculatorTab] = useState('calculator'); // 'calculator' | 'deal'
 
   // УБРАНО: AI модель не используется в универсальном калькуляторе
   // Оставляем переменные как заглушки для совместимости с компонентами
@@ -523,6 +529,13 @@ function UniversalOptionsCalculator() {
 
   const [options, setOptions] = useState([]);
 
+  // Динамический расчёт количества опционов для отображения в хедере
+  // ЗАЧЕМ: При изменении quantity в таблице опционов — название сделки автоматически обновляется
+  const currentOptionsCount = useMemo(() => {
+    const visibleOptions = options.filter(opt => opt.visible !== false);
+    return visibleOptions.reduce((sum, opt) => sum + Math.abs(opt.quantity || 1), 0);
+  }, [options]);
+
   // Строим IV Surface из опционов, полученных от расширения TradingView
   // ЗАЧЕМ: IV Surface содержит IV для разных страйков и дат экспирации, что позволяет
   // интерполировать IV при симуляции времени вместо использования простой sqrt модели
@@ -622,7 +635,97 @@ function UniversalOptionsCalculator() {
 
     // Очищаем данные расширения (тикер контракта и временную метку)
     clearExtensionData();
+    
+    // Сбрасываем сделку
+    setDealInfo(null);
+    setActiveCalculatorTab('calculator');
   }, [clearExtensionData]);
+
+  // Функция создания сделки
+  // ЗАЧЕМ: Автоматически подбирает количество опционов под лимит и создаёт сделку
+  const handleCreateDeal = useCallback(() => {
+    // Получаем лимит из localStorage (FinancialControl)
+    const depositAmount = localStorage.getItem('depositAmount');
+    const instrumentCount = localStorage.getItem('instrumentCount');
+    
+    let instrumentLimit = null;
+    if (depositAmount && instrumentCount) {
+      const deposit = parseFloat(depositAmount);
+      const count = parseInt(instrumentCount);
+      if (deposit > 0 && count > 0) {
+        instrumentLimit = Math.round(deposit / count);
+      }
+    }
+
+    // Если лимит не установлен — используем текущее количество опционов
+    if (!instrumentLimit) {
+      console.log('⚠️ [Deal] Лимит не установлен, используем текущее количество опционов');
+    }
+
+    // Подсчитываем количество видимых опционов
+    const visibleOptions = options.filter(opt => opt.visible !== false);
+    let finalOptionsCount = visibleOptions.length;
+    let multiplier = 1;
+
+    // Если есть лимит — пытаемся подобрать оптимальное количество
+    // ЗАЧЕМ: Автоматически увеличиваем quantity опционов, чтобы приблизиться к лимиту
+    if (instrumentLimit && finalOptionsCount > 0) {
+      // Рассчитываем текущую стоимость позиции (премия * множитель * количество)
+      let totalCost = 0;
+      visibleOptions.forEach(opt => {
+        const premium = opt.isPremiumModified ? opt.customPremium : opt.premium;
+        if (premium) {
+          // Для покупки — затраты, для продажи — кредит
+          const cost = Math.abs(premium) * contractMultiplier * Math.abs(opt.quantity || 1);
+          if (opt.action === 'Buy') {
+            totalCost += cost;
+          } else {
+            totalCost -= cost; // Кредит уменьшает затраты
+          }
+        }
+      });
+      totalCost = Math.abs(totalCost);
+
+      // Рассчитываем, во сколько раз можно увеличить позицию
+      if (totalCost > 0) {
+        multiplier = Math.floor(instrumentLimit / totalCost);
+        if (multiplier > 1) {
+          // Увеличиваем quantity каждого опциона
+          setOptions(prevOptions => prevOptions.map(opt => ({
+            ...opt,
+            quantity: opt.quantity * multiplier
+          })));
+          // Обновляем итоговое количество контрактов
+          finalOptionsCount = visibleOptions.reduce((sum, opt) => sum + Math.abs(opt.quantity || 1) * multiplier, 0);
+          console.log(`📈 [Deal] Увеличено количество опционов в ${multiplier} раз для приближения к лимиту $${instrumentLimit}`);
+        } else {
+          // Если множитель = 1, считаем текущее количество контрактов
+          finalOptionsCount = visibleOptions.reduce((sum, opt) => sum + Math.abs(opt.quantity || 1), 0);
+        }
+      }
+    } else {
+      // Если лимит не установлен — считаем текущее количество контрактов
+      finalOptionsCount = visibleOptions.reduce((sum, opt) => sum + Math.abs(opt.quantity || 1), 0);
+    }
+
+    // Создаём информацию о сделке
+    const ticker = contractCode || selectedTicker;
+    const deal = {
+      ticker,
+      optionsCount: finalOptionsCount, // Итоговое количество контрактов после автоподбора
+      createdAt: new Date().toISOString()
+    };
+    
+    setDealInfo(deal);
+    setActiveCalculatorTab('deal'); // Переключаемся на таб "Сделка"
+    
+    // Устанавливаем целевую цену актива в блок симуляции
+    // ЗАЧЕМ: При нажатии кнопки "+ СДЕЛКА" targetPrice должен быть = currentPrice * 1.5 (50% по умолчанию)
+    const defaultTargetAssetPrice = currentPrice * 1.5; // 50% от текущей цены
+    setTargetPrice(defaultTargetAssetPrice);
+    
+    console.log('✅ [Deal] Сделка создана:', deal);
+  }, [options, contractCode, selectedTicker, contractMultiplier, currentPrice, setTargetPrice]);
 
   // Загружаем состояние при первой загрузке страницы
   // ПРИОРИТЕТ: config в URL > Данные от расширения > localStorage.calculatorState
@@ -2092,7 +2195,7 @@ function UniversalOptionsCalculator() {
         {/* ЗАЧЕМ: Отображение контракта, цены и метаданных от TradingView Parser или загруженной конфигурации */}
         {/* ВАЖНО: Показываем если данные от расширения ИЛИ загружена конфигурация */}
         {isInitialized && (isFromExtension || loadedConfigId) && (contractCode || selectedTicker) && (
-          <div className="mb-6">
+          <div className="mb-6 flex items-center gap-4">
             <div className={`inline-flex items-center gap-4 p-3 border-2 rounded-lg ${calculatorMode === CALCULATOR_MODES.FUTURES
               ? 'border-purple-400 bg-purple-50 dark:bg-purple-950/30'
               : 'border-teal-400 bg-teal-50 dark:bg-teal-950/30'
@@ -2166,6 +2269,22 @@ function UniversalOptionsCalculator() {
                 />
               )}
             </div>
+
+            {/* Кнопка "+ СДЕЛКА" или название созданной сделки */}
+            {!dealInfo ? (
+              <Button
+                className="bg-green-500 hover:bg-green-600 active:bg-green-700 active:scale-95 text-white font-medium px-4 py-2 h-auto transition-all duration-100"
+                onClick={handleCreateDeal}
+              >
+                + СДЕЛКА
+              </Button>
+            ) : (
+              <div className="inline-flex items-center gap-4 p-3 bg-green-100 dark:bg-green-900/30 border-2 border-green-500 rounded-lg" style={{ minHeight: '57px' }}>
+                <span className="text-lg font-bold text-green-700 dark:text-green-300">
+                  Сделка - {dealInfo.ticker} - опционов {currentOptionsCount}
+                </span>
+              </div>
+            )}
           </div>
         )}
 
@@ -2524,87 +2643,35 @@ function UniversalOptionsCalculator() {
                 </Card>
               )} */}
 
-              {shouldShowBlock('metrics-block') && !isFuturesMissingSettings && (
-                <Card className="w-full relative" style={{ borderColor: '#b8b8b8' }}>
-                  <OptionsMetrics
-                    options={displayOptions}
-                    currentPrice={currentPrice}
-                    positions={positions}
-                    daysPassed={daysPassed}
-                    ivSurface={ivSurface}
-                    dividendYield={useDividends ? dividendYield : 0}
-                    isAIEnabled={isAIEnabled}
-                    aiVolatilityMap={aiVolatilityMap}
-                    fetchAIVolatility={fetchAIVolatility}
-                    targetPrice={targetPrice}
-                    selectedTicker={selectedTicker}
-                    calculatorMode={calculatorMode}
-                    contractMultiplier={contractMultiplier}
-                  />
-                </Card>
-              )}
-
-              <Card className="w-full relative" style={{ borderColor: '#b8b8b8' }}>
-                <CardContent className="pt-4 pb-4 px-6">
-                  <PLChart
-                    options={displayOptions}
-                    currentPrice={currentPrice}
-                    positions={positions}
-                    showOptionLines={showOptionLines}
-                    daysPassed={daysPassed}
-                    showProbabilityZones={showProbabilityZones}
-                    targetPrice={targetPrice}
-                    ivSurface={ivSurface}
-                    dividendYield={useDividends ? dividendYield : 0}
-                    isAIEnabled={isAIEnabled}
-                    aiVolatilityMap={aiVolatilityMap}
-                    fetchAIVolatility={fetchAIVolatility}
-                    selectedTicker={selectedTicker}
-                    calculatorMode={calculatorMode}
-                    contractMultiplier={contractMultiplier}
-                    stockClassification={calculatorMode === 'stocks' ? stockClassification : null}
-                  />
-                </CardContent>
-              </Card>
-
-              {/* Результат подбора опционов - появляется после выбора опциона в ИИ подборе */}
-              <OptionSelectionResult
-                selectionParams={optionSelectionParams}
+              {/* Блок табов "Калькулятор" / "Сделка" */}
+              <CalculatorDealTabs
                 options={displayOptions}
                 positions={positions}
                 currentPrice={currentPrice}
-                ivSurface={ivSurface}
-                dividendYield={useDividends ? dividendYield : 0}
-                targetPrice={targetPrice}
+                selectedTicker={selectedTicker}
                 daysPassed={daysPassed}
-                calculatorMode={calculatorMode}
-                contractMultiplier={contractMultiplier}
-              />
-
-              {/* Калькулятор выхода из позиции */}
-              <ExitCalculator
-                options={displayOptions}
-                positions={positions}
-                currentPrice={currentPrice}
-                daysPassed={daysPassed}
-                setDaysPassed={(value) => {
-                  setDaysPassed(value);
-                  setUserAdjustedDays(true);
-                }}
-                selectedExpirationDate={selectedExpirationDate}
-                showOptionLines={showOptionLines}
+                setDaysPassed={setDaysPassed}
                 targetPrice={targetPrice}
                 setTargetPrice={setTargetPrice}
-                savedConfigDate={savedConfigDate}
                 ivSurface={ivSurface}
                 dividendYield={useDividends ? dividendYield : 0}
-                isAIEnabled={isAIEnabled}
-                aiVolatilityMap={aiVolatilityMap}
-                fetchAIVolatility={fetchAIVolatility}
-                selectedTicker={selectedTicker}
                 calculatorMode={calculatorMode}
                 contractMultiplier={contractMultiplier}
                 stockClassification={calculatorMode === 'stocks' ? stockClassification : null}
+                shouldShowBlock={shouldShowBlock}
+                isFuturesMissingSettings={isFuturesMissingSettings}
+                isAIEnabled={isAIEnabled}
+                aiVolatilityMap={aiVolatilityMap}
+                fetchAIVolatility={fetchAIVolatility}
+                showOptionLines={showOptionLines}
+                showProbabilityZones={showProbabilityZones}
+                optionSelectionParams={optionSelectionParams}
+                selectedExpirationDate={selectedExpirationDate}
+                savedConfigDate={savedConfigDate}
+                setUserAdjustedDays={setUserAdjustedDays}
+                activeTab={activeCalculatorTab}
+                onTabChange={setActiveCalculatorTab}
+                dealInfo={dealInfo}
               />
             </div>
           </div>
