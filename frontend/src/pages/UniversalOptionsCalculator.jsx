@@ -684,12 +684,13 @@ function UniversalOptionsCalculator() {
       const count = parseInt(instrumentCount);
       if (deposit > 0 && count > 0) {
         instrumentLimit = Math.round(deposit / count);
+        console.log(`💰 [Deal] Лимит на инструмент: $${instrumentLimit} (депозит: $${deposit}, инструментов: ${count})`);
       }
     }
 
     // Если лимит не установлен — используем текущее количество опционов
     if (!instrumentLimit) {
-      console.log('⚠️ [Deal] Лимит не установлен, используем текущее количество опционов');
+      console.log('⚠️ [Deal] Лимит не установлен (depositAmount:', depositAmount, ', instrumentCount:', instrumentCount, ')');
     }
 
     // Подсчитываем количество видимых опционов
@@ -702,11 +703,14 @@ function UniversalOptionsCalculator() {
     if (instrumentLimit && finalOptionsCount > 0) {
       // Рассчитываем текущую стоимость позиции (премия * множитель * количество)
       let totalCost = 0;
-      visibleOptions.forEach(opt => {
-        const premium = opt.isPremiumModified ? opt.customPremium : opt.premium;
+      console.log(`📊 [Deal] Расчёт стоимости позиции (contractMultiplier: ${contractMultiplier}):`);
+      visibleOptions.forEach((opt, idx) => {
+        const premium = opt.isPremiumModified ? opt.customPremium : (opt.action === 'Buy' ? opt.ask : opt.bid) || opt.premium;
+        const qty = Math.abs(opt.quantity || 1);
+        console.log(`  [${idx}] ${opt.action} ${opt.type} ${opt.strike}: premium=${premium}, qty=${qty}`);
         if (premium) {
           // Для покупки — затраты, для продажи — кредит
-          const cost = Math.abs(premium) * contractMultiplier * Math.abs(opt.quantity || 1);
+          const cost = Math.abs(premium) * contractMultiplier * qty;
           if (opt.action === 'Buy') {
             totalCost += cost;
           } else {
@@ -715,19 +719,21 @@ function UniversalOptionsCalculator() {
         }
       });
       totalCost = Math.abs(totalCost);
+      console.log(`📊 [Deal] Итоговая стоимость позиции: $${totalCost}`);
 
       // Рассчитываем, во сколько раз можно увеличить позицию
       if (totalCost > 0) {
         multiplier = Math.floor(instrumentLimit / totalCost);
         if (multiplier > 1) {
           // Увеличиваем quantity каждого опциона
+          // ВАЖНО: Используем (opt.quantity || 1) для fallback если quantity не задан
           setOptions(prevOptions => prevOptions.map(opt => ({
             ...opt,
-            quantity: opt.quantity * multiplier
+            quantity: (opt.quantity || (opt.action === 'Buy' ? 1 : -1)) * multiplier
           })));
           // Обновляем итоговое количество контрактов
           finalOptionsCount = visibleOptions.reduce((sum, opt) => sum + Math.abs(opt.quantity || 1) * multiplier, 0);
-          console.log(`📈 [Deal] Увеличено количество опционов в ${multiplier} раз для приближения к лимиту $${instrumentLimit}`);
+          console.log(`📈 [Deal] Увеличено количество опционов в ${multiplier} раз для приближения к лимиту $${instrumentLimit}. Текущая стоимость: $${totalCost}`);
         } else {
           // Если множитель = 1, считаем текущее количество контрактов
           finalOptionsCount = visibleOptions.reduce((sum, opt) => sum + Math.abs(opt.quantity || 1), 0);
@@ -1045,6 +1051,15 @@ function UniversalOptionsCalculator() {
     // Обновляем опционы при изменении от расширения с сохранением ручных изменений
     if (extensionOptions && extensionOptions.length > 0) {
       setOptions(prevOptions => {
+        // Проверяем, изменились ли опционы (по ключевым полям)
+        // ЗАЧЕМ: Предотвращаем бесконечный цикл обновлений
+        const prevHash = prevOptions.map(o => `${o.strike}-${o.type}-${o.date}`).sort().join(',');
+        const extHash = extensionOptions.map(o => `${o.strike}-${o.type}-${o.date}`).sort().join(',');
+        if (prevHash === extHash && prevOptions.length === extensionOptions.length) {
+          // Опционы не изменились — возвращаем предыдущее состояние без изменений
+          return prevOptions;
+        }
+
         // Сливаем данные: берем свежие данные от расширения, но сохраняем ручные изменения
         const mergedOptions = extensionOptions.map(extOption => {
           // Ищем соответствующий опцион в текущих данных с более гибким сравнением

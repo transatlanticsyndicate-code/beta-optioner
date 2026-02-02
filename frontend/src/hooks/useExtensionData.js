@@ -161,6 +161,9 @@ export function useExtensionData() {
     };
   });
 
+  // Ref для хранения последнего хэша данных (для предотвращения дублирующих обновлений)
+  const lastDataHashRef = useRef(null);
+
   /**
    * Обновление состояния из localStorage
    * ЗАЧЕМ: Вызывается при storage event или вручную
@@ -168,6 +171,21 @@ export function useExtensionData() {
   const updateFromStorage = useCallback(() => {
     const storageState = readStorageState();
     if (!storageState) return;
+
+    // Создаём хэш ключевых данных для сравнения
+    // ЗАЧЕМ: Предотвращаем бесконечный цикл обновлений если данные не изменились
+    const dataHash = JSON.stringify({
+      ticker: storageState.selectedTicker,
+      price: storageState.underlyingPrice,
+      optionsCount: storageState.options?.length || 0,
+      optionsHash: (storageState.options || []).map(o => `${o.strike}-${o.type}-${o.date}`).join(',')
+    });
+
+    if (lastDataHashRef.current === dataHash) {
+      // Данные не изменились — пропускаем обновление
+      return;
+    }
+    lastDataHashRef.current = dataHash;
 
     const { urlPrice } = urlParamsRef.current;
 

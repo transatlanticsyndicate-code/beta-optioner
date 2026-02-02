@@ -439,7 +439,18 @@ function CalculatorDealTabs({
                       
                       {/* Таблица ПЛАН ВЫХОДА */}
                       <div className="border-t pt-4">
-                        <h4 className="text-sm font-semibold mb-3">ПЛАН ВЫХОДА</h4>
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-sm font-semibold">ПЛАН ВЫХОДА</h4>
+                          <button
+                            className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-200 hover:bg-gray-300 rounded-md transition-colors"
+                            onClick={() => {
+                              // TODO: Реализовать отправку срезок на график TradingView
+                              console.log('📊 Отправка срезок на TradingView:', exitPlan);
+                            }}
+                          >
+                            Отправить срезки на график TradingView →
+                          </button>
+                        </div>
                         <div className="border rounded-lg overflow-hidden">
                           <table className="w-full text-sm">
                             <thead className="bg-gray-100 dark:bg-gray-800">
@@ -452,15 +463,20 @@ function CalculatorDealTabs({
                               </tr>
                             </thead>
                             <tbody>
-                              {exitPlan.map((row, index) => (
-                                <tr key={row.step} className={index > 0 ? 'border-t' : ''}>
-                                  <td className="px-3 py-2 font-medium">{row.step}</td>
-                                  <td className="px-3 py-2 text-right">{row.quantity}</td>
-                                  <td className="px-3 py-2 text-right">${row.optionPrice.toFixed(2)}</td>
-                                  <td className="px-3 py-2 text-right text-green-600">+${row.profit.toLocaleString()}</td>
-                                  <td className="px-3 py-2 text-right font-medium text-green-600">+${row.accumulated.toLocaleString()}</td>
-                                </tr>
-                              ))}
+                              {exitPlan.map((row, index) => {
+                                const isLastRow = index === exitPlan.length - 1;
+                                return (
+                                  <tr key={row.step} className={index > 0 ? 'border-t' : ''}>
+                                    <td className="px-3 py-2 font-medium">{row.step}</td>
+                                    <td className="px-3 py-2 text-right">{row.quantity}</td>
+                                    <td className="px-3 py-2 text-right">${row.optionPrice.toFixed(2)}</td>
+                                    <td className="px-3 py-2 text-right text-green-600">+${row.profit.toLocaleString()}</td>
+                                    <td className={`px-3 py-2 text-right font-medium ${isLastRow ? 'bg-green-500 text-white' : 'text-green-600'}`}>
+                                      +${row.accumulated.toLocaleString()}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
                             </tbody>
                           </table>
                         </div>
