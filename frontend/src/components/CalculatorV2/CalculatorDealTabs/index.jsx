@@ -19,6 +19,7 @@ import ExitCalculator from '../ExitCalculator';
 import { calculateOptionTheoreticalPrice as calculateStockOptionTheoreticalPrice } from '../../../utils/optionPricing';
 import { getOptionVolatility } from '../../../utils/volatilitySurface';
 import { calculateDaysRemainingUTC, getOldestEntryDate } from '../../../utils/dateUtils';
+import { CALCULATOR_MODES } from '../../../utils/universalPricing';
 
 /**
  * CalculatorDealTabs — контейнер с двумя табами под таблицей опционов
@@ -65,6 +66,8 @@ function CalculatorDealTabs({
   
   // Информация о сделке
   dealInfo,
+  dealSettings,
+  setDealSettings,
 }) {
   // Активный таб: 'calculator' или 'deal'
   // ЗАЧЕМ: Поддержка управления табом как изнутри, так и извне (при создании сделки)
@@ -192,6 +195,18 @@ function CalculatorDealTabs({
     return plan;
   }, [dealInfo, effectiveStepsCount, currentOptionsCount, options, targetAssetPriceDollars, daysPassed, ivSurface, dividendYield, contractMultiplier]);
   
+  // Сохраняем настройки таба Сделка при изменении
+  // ЗАЧЕМ: Передать настройки в диалог сохранения позиции
+  React.useEffect(() => {
+    if (dealInfo && setDealSettings) {
+      setDealSettings({
+        targetAssetPricePercent,
+        exitStepsCount,
+        exitPlan,
+      });
+    }
+  }, [dealInfo, targetAssetPricePercent, exitStepsCount, exitPlan, setDealSettings]);
+
   // Обработчик изменения процентов
   // ЗАЧЕМ: При изменении % — обновляем targetPrice в блоке симуляции
   const handlePercentChange = (value) => {
@@ -343,116 +358,127 @@ function CalculatorDealTabs({
 
         {/* Таб "Сделка" — данные о созданной сделке */}
         <TabsContent value="deal" className="mt-4">
-          <Card className="w-full relative" style={{ borderColor: dealInfo ? '#22c55e' : '#b8b8b8' }}>
-            {/* Инпуты настроек сделки */}
-            <div className="absolute top-4 right-4 flex items-center gap-4">
-              {/* Количество шагов выхода */}
-              <div className="flex items-center gap-2">
-                <label className="text-sm text-muted-foreground whitespace-nowrap">
-                  Шагов:
-                </label>
-                <input
-                  type="number"
-                  value={exitStepsCount}
-                  onChange={(e) => setExitStepsCount(Math.max(1, Number(e.target.value) || 1))}
-                  className="w-14 h-8 px-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-center"
-                  min="1"
-                  max="20"
-                />
-              </div>
-              
-              {/* Разделитель */}
-              <div className="h-6 w-px bg-gray-300" />
-              
-              {/* Целевая цена актива */}
-              <div className="flex items-center gap-2">
-                <label className="text-sm text-muted-foreground whitespace-nowrap">
-                  Целевая цена актива:
-                </label>
-                {/* Инпут в процентах (изменение от текущей цены) */}
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={targetAssetPricePercent}
-                    onChange={(e) => handlePercentChange(e.target.value)}
-                    className="w-20 h-8 px-2 pr-6 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-right"
-                    min="-100"
-                    max="1000"
-                  />
-                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
-                </div>
-                {/* Инпут в долларах (целевая цена актива) */}
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={targetAssetPriceDollars}
-                    onChange={(e) => handleDollarsChange(e.target.value)}
-                    className="w-28 h-8 px-2 pr-6 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-right"
-                    min="0"
-                    step="0.01"
-                  />
-                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
-                </div>
-              </div>
-            </div>
+          {(() => {
+            const isFutures = calculatorMode === CALCULATOR_MODES.FUTURES;
+            const borderColor = dealInfo ? (isFutures ? '#a855f7' : '#22c55e') : '#b8b8b8';
+            const bgColor = isFutures ? 'bg-purple-100 dark:bg-purple-900/30' : 'bg-green-100 dark:bg-green-900/30';
+            const textColor = isFutures ? 'text-purple-700 dark:text-purple-300' : 'text-green-700 dark:text-green-300';
+            const iconColor = isFutures ? 'text-purple-600' : 'text-green-600';
+            const focusRingColor = isFutures ? 'focus:ring-purple-500' : 'focus:ring-green-500';
             
-            <CardContent className="pt-6 pb-6 px-6">
-              {dealInfo ? (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
-                      <FileText size={20} className="text-green-600" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-bold text-green-700 dark:text-green-300">
-                        Сделка - {dealInfo.ticker} - опционов {currentOptionsCount}
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        Создана: {new Date(dealInfo.createdAt).toLocaleString('ru-RU')}
-                      </p>
-                    </div>
+            return (
+              <Card className="w-full relative" style={{ borderColor }}>
+                {/* Инпуты настроек сделки */}
+                <div className="absolute top-4 right-4 flex items-center gap-4">
+                  {/* Количество шагов выхода */}
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-muted-foreground whitespace-nowrap">
+                      Шагов:
+                    </label>
+                    <input
+                      type="number"
+                      value={exitStepsCount}
+                      onChange={(e) => setExitStepsCount(Math.max(1, Number(e.target.value) || 1))}
+                      className={`w-14 h-8 px-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:border-transparent text-center ${focusRingColor}`}
+                      min="1"
+                      max="20"
+                    />
                   </div>
                   
-                  {/* Таблица ПЛАН ВЫХОДА */}
-                  <div className="border-t pt-4">
-                    <h4 className="text-sm font-semibold mb-3">ПЛАН ВЫХОДА</h4>
-                    <div className="border rounded-lg overflow-hidden">
-                      <table className="w-full text-sm">
-                        <thead className="bg-gray-100 dark:bg-gray-800">
-                          <tr>
-                            <th className="px-3 py-2 text-left font-medium">Шаг</th>
-                            <th className="px-3 py-2 text-right font-medium">Количество</th>
-                            <th className="px-3 py-2 text-right font-medium">Цена опциона</th>
-                            <th className="px-3 py-2 text-right font-medium">Прибыль</th>
-                            <th className="px-3 py-2 text-right font-medium">Накопленная</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {exitPlan.map((row, index) => (
-                            <tr key={row.step} className={index > 0 ? 'border-t' : ''}>
-                              <td className="px-3 py-2 font-medium">{row.step}</td>
-                              <td className="px-3 py-2 text-right">{row.quantity}</td>
-                              <td className="px-3 py-2 text-right">${row.optionPrice.toFixed(2)}</td>
-                              <td className="px-3 py-2 text-right text-green-600">+${row.profit.toLocaleString()}</td>
-                              <td className="px-3 py-2 text-right font-medium text-green-600">+${row.accumulated.toLocaleString()}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                  {/* Разделитель */}
+                  <div className="h-6 w-px bg-gray-300" />
+                  
+                  {/* Целевая цена актива */}
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-muted-foreground whitespace-nowrap">
+                      Целевая цена актива:
+                    </label>
+                    {/* Инпут в процентах (изменение от текущей цены) */}
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={targetAssetPricePercent}
+                        onChange={(e) => handlePercentChange(e.target.value)}
+                        className={`w-20 h-8 px-2 pr-6 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:border-transparent text-right ${focusRingColor}`}
+                        min="-100"
+                        max="1000"
+                      />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
+                    </div>
+                    {/* Инпут в долларах (целевая цена актива) */}
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={targetAssetPriceDollars}
+                        onChange={(e) => handleDollarsChange(e.target.value)}
+                        className={`w-28 h-8 px-2 pr-6 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:border-transparent text-right ${focusRingColor}`}
+                        min="0"
+                        step="0.01"
+                      />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
                     </div>
                   </div>
                 </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center min-h-[200px] text-muted-foreground">
-                  <FileText size={48} className="mb-4 opacity-50" />
-                  <h3 className="text-lg font-medium mb-2">Сделка не создана</h3>
-                  <p className="text-sm text-center max-w-md">
-                    Нажмите кнопку "+ СДЕЛКА" в верхней части страницы для создания новой сделки.
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                
+                <CardContent className="pt-6 pb-6 px-6">
+                  {dealInfo ? (
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 ${bgColor} rounded-full flex items-center justify-center`}>
+                          <FileText size={20} className={iconColor} />
+                        </div>
+                        <div>
+                          <h3 className={`text-lg font-bold ${textColor}`}>
+                            Сделка - {dealInfo.ticker} - опционов {currentOptionsCount}
+                          </h3>
+                          <p className="text-sm text-muted-foreground">
+                            Создана: {new Date(dealInfo.createdAt).toLocaleString('ru-RU')}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      {/* Таблица ПЛАН ВЫХОДА */}
+                      <div className="border-t pt-4">
+                        <h4 className="text-sm font-semibold mb-3">ПЛАН ВЫХОДА</h4>
+                        <div className="border rounded-lg overflow-hidden">
+                          <table className="w-full text-sm">
+                            <thead className="bg-gray-100 dark:bg-gray-800">
+                              <tr>
+                                <th className="px-3 py-2 text-left font-medium">Шаг</th>
+                                <th className="px-3 py-2 text-right font-medium">Количество</th>
+                                <th className="px-3 py-2 text-right font-medium">Цена опциона</th>
+                                <th className="px-3 py-2 text-right font-medium">Прибыль</th>
+                                <th className="px-3 py-2 text-right font-medium">Накопленная</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {exitPlan.map((row, index) => (
+                                <tr key={row.step} className={index > 0 ? 'border-t' : ''}>
+                                  <td className="px-3 py-2 font-medium">{row.step}</td>
+                                  <td className="px-3 py-2 text-right">{row.quantity}</td>
+                                  <td className="px-3 py-2 text-right">${row.optionPrice.toFixed(2)}</td>
+                                  <td className="px-3 py-2 text-right text-green-600">+${row.profit.toLocaleString()}</td>
+                                  <td className="px-3 py-2 text-right font-medium text-green-600">+${row.accumulated.toLocaleString()}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center min-h-[200px] text-muted-foreground">
+                      <FileText size={48} className="mb-4 opacity-50" />
+                      <h3 className="text-lg font-medium mb-2">Сделка не создана</h3>
+                      <p className="text-sm text-center max-w-md">
+                        Нажмите кнопку "+ СДЕЛКА" в верхней части страницы для создания новой сделки.
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })()}
         </TabsContent>
       </Tabs>
     </div>

@@ -12,6 +12,7 @@ import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
 import { Button } from '../ui/button';
 import LockIcon from './LockIcon';
+import { Briefcase } from 'lucide-react';
 
 /**
  * Получает минимальную дату входа из опционов
@@ -124,20 +125,31 @@ const generateConfigName = (currentState, isLocked = false) => {
  * ЗАЧЕМ: Позволяет сохранить текущее состояние калькулятора для быстрого доступа
  * 
  * @param isLocked - если true, позиции будут зафиксированы (не обновляются при загрузке)
+ * @param dealInfo - информация о сделке (если существует)
+ * @param dealSettings - настройки таба Сделка (целевая цена, шаги, план выхода)
  */
-function SaveConfigurationDialog({ isOpen, onClose, onSave, currentState, isLocked = false }) {
+function SaveConfigurationDialog({ isOpen, onClose, onSave, currentState, isLocked = false, dealInfo = null, dealSettings = null }) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [author, setAuthor] = useState('');
   
   // Автозаполнение названия при открытии диалога
-  // ЗАЧЕМ: Удобное название с информацией о позициях генерируется автоматически
+  // ЗАЧЕМ: Если есть сделка — используем её название, иначе генерируем автоматически
   useEffect(() => {
     if (isOpen && currentState) {
-      const autoName = generateConfigName(currentState, isLocked);
+      // При фиксации позиции с существующей сделкой — используем название сделки
+      let autoName = '';
+      if (isLocked && dealInfo?.ticker) {
+        // Рассчитываем количество опционов как сумму всех quantity в видимых опционах
+        const visibleOptions = (currentState.options || []).filter(opt => opt.visible !== false);
+        const totalOptionsCount = visibleOptions.reduce((sum, opt) => sum + Math.abs(opt.quantity || 1), 0);
+        autoName = `💼 Сделка - ${dealInfo.ticker} - опционов ${totalOptionsCount}`;
+      } else {
+        autoName = generateConfigName(currentState, isLocked);
+      }
       setName(autoName);
     }
-  }, [isOpen, isLocked, currentState]);
+  }, [isOpen, isLocked, currentState, dealInfo]);
 
   const handleSave = () => {
     if (!name.trim()) {
@@ -192,6 +204,12 @@ function SaveConfigurationDialog({ isOpen, onClose, onSave, currentState, isLock
         chartDisplayMode: currentState.chartDisplayMode,
         calculatorMode: currentState.calculatorMode, // Режим калькулятора: 'stocks' | 'futures'
       },
+      // Сохраняем настройки таба Сделка если они есть
+      // ЗАЧЕМ: При загрузке зафиксированной позиции восстанавливаем все настройки сделки
+      dealSettings: dealSettings || null,
+      // Сохраняем информацию о сделке если она есть
+      // ЗАЧЕМ: При загрузке конфигурации восстанавливаем сделку в калькуляторе
+      dealInfo: dealInfo || null,
     };
 
     onSave(configuration);

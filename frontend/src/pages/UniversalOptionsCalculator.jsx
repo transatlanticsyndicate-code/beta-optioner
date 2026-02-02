@@ -269,8 +269,28 @@ function UniversalOptionsCalculator() {
 
   // State для сделки
   // ЗАЧЕМ: Управление созданной сделкой и переключением табов
-  const [dealInfo, setDealInfo] = useState(null); // { ticker, createdAt }
-  const [activeCalculatorTab, setActiveCalculatorTab] = useState('calculator'); // 'calculator' | 'deal'
+  // Восстанавливаем из localStorage при загрузке страницы
+  const [dealInfo, setDealInfo] = useState(() => {
+    try {
+      const saved = localStorage.getItem('optioner_deal_info');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [activeCalculatorTab, setActiveCalculatorTab] = useState(() => {
+    // Если есть сохранённая сделка — открываем таб "Сделка"
+    try {
+      const saved = localStorage.getItem('optioner_deal_info');
+      return saved ? 'deal' : 'calculator';
+    } catch {
+      return 'calculator';
+    }
+  });
+  
+  // State для сохранения настроек таба Сделка
+  // ЗАЧЕМ: Передать настройки в диалог сохранения позиции
+  const [dealSettings, setDealSettings] = useState(null); // { targetAssetPricePercent, exitStepsCount, exitPlan }
 
   // УБРАНО: AI модель не используется в универсальном калькуляторе
   // Оставляем переменные как заглушки для совместимости с компонентами
@@ -285,6 +305,16 @@ function UniversalOptionsCalculator() {
       setTargetPrice(currentPrice);
     }
   }, [currentPrice, targetPrice]);
+
+  // Сохраняем dealInfo в localStorage при изменении
+  // ЗАЧЕМ: Сделка не сбрасывается после перезагрузки страницы
+  useEffect(() => {
+    if (dealInfo) {
+      localStorage.setItem('optioner_deal_info', JSON.stringify(dealInfo));
+    } else {
+      localStorage.removeItem('optioner_deal_info');
+    }
+  }, [dealInfo]);
 
   // State для формы новой сделки
   const [dealForm, setDealForm] = useState({
@@ -1172,9 +1202,10 @@ function UniversalOptionsCalculator() {
       // Флаг userAdjustedDays НЕ сбрасываем — пользователь по-прежнему контролирует ползунок
     } else {
       // Пользователь не трогал бегунок — устанавливаем в максимум (крайнее правое положение)
+      console.log(`📅 Установка ползунка в максимум: ${maxDays} дней`);
       setDaysPassed(maxDays);
     }
-  }, [options.length, options.map(o => o.date).join(','), options.map(o => o.entryDate).join(','), savedConfigDate, isLocked]); // Добавили entryDate и isLocked в зависимости
+  }, [options.length, options.map(o => o.date).join(','), options.map(o => o.entryDate).join(','), savedConfigDate, isLocked, userAdjustedDays]); // Добавили entryDate и isLocked в зависимости
 
   const displayOptions = useMemo(() => {
     const result = showDemoData ? demoOptions : options;
@@ -1929,8 +1960,9 @@ function UniversalOptionsCalculator() {
 
           // Устанавливаем daysPassed (вычисленный выше)
           setDaysPassed(calculatedDaysPassed);
-          // Помечаем что пользователь "настроил" бегунок, чтобы useEffect не перезаписал
-          setUserAdjustedDays(true);
+          // Для сохраненной сделки ползунок должен быть в крайнем правом положении
+          // ЗАЧЕМ: При открытии сохраненной конфигурации useEffect установит daysPassed на максимум
+          setUserAdjustedDays(false);
 
           setShowOptionLines(config.state.showOptionLines !== undefined ? config.state.showOptionLines : true);
           setShowProbabilityZones(config.state.showProbabilityZones !== undefined ? config.state.showProbabilityZones : true);
@@ -1964,6 +1996,43 @@ function UniversalOptionsCalculator() {
             }
           } else {
             setSelectedFuture(null);
+          }
+
+          // Если в конфигурации есть информация о сделке — восстанавливаем её
+          // ЗАЧЕМ: При открытии сохраненной сделки восстанавливаем dealInfo в калькуляторе
+          if (config.dealInfo && config.dealInfo.ticker) {
+            setDealInfo(config.dealInfo);
+            // Активируем таб "Сделка" при загрузке конфигурации с dealInfo
+            setActiveCalculatorTab('deal');
+            // Ползунок дней должен быть в крайнем правом положении (0 дней осталось)
+            // ЗАЧЕМ: При открытии сохраненной сделки показываем максимальный временной распад
+            // Вычисляем максимальное количество дней от даты входа до экспирации
+            const baseDate = configEntryDate ? new Date(configEntryDate) : new Date();
+            baseDate.setHours(0, 0, 0, 0);
+            
+            const maxDaysForDeal = optionsToSet.reduce((max, opt) => {
+              if (!opt.date) return max;
+              const expirationDate = new Date(opt.date + 'T00:00:00');
+              const diffTime = expirationDate.getTime() - baseDate.getTime();
+              const daysUntil = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+              return Math.max(max, daysUntil);
+            }, 0);
+            
+            // Устанавливаем daysPassed на максимум (ползунок в крайнее правое положение)
+            setDaysPassed(maxDaysForDeal);
+            setUserAdjustedDays(true); // Отмечаем что пользователь "настроил" ползунок
+            console.log(`💼 Сделка восстановлена: ${config.dealInfo.ticker}, ползунок установлен на ${maxDaysForDeal} дней`);
+          }
+
+          // Если в конфигурации есть настройки таба Сделка — восстанавливаем целевую цену актива
+          // ЗАЧЕМ: При открытии сохраненной сделки цена в блоке симуляции должна соответствовать целевой цене
+          if (config.dealSettings && config.dealSettings.targetAssetPricePercent !== undefined) {
+            // Рассчитываем целевую цену на основе текущей цены и процента
+            const calculatedTargetPrice = Math.round(
+              (config.state.currentPrice || 0) * (1 + config.dealSettings.targetAssetPricePercent / 100) * 100
+            ) / 100;
+            setTargetPrice(calculatedTargetPrice);
+            console.log(`📊 Целевая цена актива восстановлена: ${calculatedTargetPrice} (${config.dealSettings.targetAssetPricePercent}%)`);
           }
 
           console.log(`✅ Конфигурация загружена: ${config.name}${configIsLocked ? ' (🔒 зафиксирована)' : ''}`);
@@ -2279,11 +2348,20 @@ function UniversalOptionsCalculator() {
                 + СДЕЛКА
               </Button>
             ) : (
-              <div className="inline-flex items-center gap-4 p-3 bg-green-100 dark:bg-green-900/30 border-2 border-green-500 rounded-lg" style={{ minHeight: '57px' }}>
-                <span className="text-lg font-bold text-green-700 dark:text-green-300">
-                  Сделка - {dealInfo.ticker} - опционов {currentOptionsCount}
-                </span>
-              </div>
+              (() => {
+                const isFutures = calculatorMode === CALCULATOR_MODES.FUTURES;
+                const bgColor = isFutures ? 'bg-purple-100 dark:bg-purple-900/30' : 'bg-green-100 dark:bg-green-900/30';
+                const borderColor = isFutures ? 'border-purple-500' : 'border-green-500';
+                const textColor = isFutures ? 'text-purple-700 dark:text-purple-300' : 'text-green-700 dark:text-green-300';
+                
+                return (
+                  <div className={`inline-flex items-center gap-4 p-3 ${bgColor} border-2 ${borderColor} rounded-lg`} style={{ minHeight: '57px' }}>
+                    <span className={`text-lg font-bold ${textColor}`}>
+                      Сделка - {dealInfo.ticker} - опционов {currentOptionsCount}
+                    </span>
+                  </div>
+                );
+              })()
             )}
           </div>
         )}
@@ -2672,6 +2750,8 @@ function UniversalOptionsCalculator() {
                 activeTab={activeCalculatorTab}
                 onTabChange={setActiveCalculatorTab}
                 dealInfo={dealInfo}
+                dealSettings={dealSettings}
+                setDealSettings={setDealSettings}
               />
             </div>
           </div>
@@ -2744,6 +2824,8 @@ function UniversalOptionsCalculator() {
           onSave={handleSaveConfiguration}
           currentState={getCurrentState()}
           isLocked={true}
+          dealInfo={dealInfo}
+          dealSettings={dealSettings}
         />
 
         {/* Модальное окно "Что нового?" */}

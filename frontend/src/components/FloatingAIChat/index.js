@@ -9,6 +9,7 @@ import { Send, Bot, User, Trash2, Loader, X, Minimize2, GripVertical } from 'luc
 import axios from 'axios';
 import { Rnd } from 'react-rnd';
 import ReactMarkdown from 'react-markdown';
+import { createElement } from 'react';
 import { loadMessages, saveMessages, loadChatState, saveChatState, loadPosition, savePosition, loadSize, saveSize } from './utils/storage';
 import { getPageContext } from './utils/context';
 import { useTextSelection } from './hooks/useTextSelection';
@@ -145,7 +146,23 @@ function FloatingAIChat() {
             <div key={idx} className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               {msg.role === 'assistant' && <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0"><Bot className="w-4 h-4 text-primary" /></div>}
               <div className={`max-w-[80%] rounded-lg p-3 ${msg.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
-                {msg.role === 'assistant' ? <ReactMarkdown className="prose prose-sm dark:prose-invert max-w-none">{msg.content}</ReactMarkdown> : <p className="text-sm whitespace-pre-wrap">{msg.content}</p>}
+                {msg.role === 'assistant' ? (
+                  <ReactMarkdown
+                    components={{
+                      p: ({node, ...props}) => createElement('p', { className: 'text-sm mb-2 last:mb-0', ...props }),
+                      ul: ({node, ...props}) => createElement('ul', { className: 'text-sm list-disc list-inside mb-2', ...props }),
+                      ol: ({node, ...props}) => createElement('ol', { className: 'text-sm list-decimal list-inside mb-2', ...props }),
+                      li: ({node, ...props}) => createElement('li', { className: 'text-sm mb-1', ...props }),
+                      code: ({node, inline, ...props}) => createElement(inline ? 'code' : 'pre', { className: inline ? 'bg-black/20 px-1 rounded text-xs' : 'bg-black/20 p-2 rounded text-xs overflow-x-auto mb-2', ...props }),
+                      strong: ({node, ...props}) => createElement('strong', { className: 'font-semibold', ...props }),
+                      em: ({node, ...props}) => createElement('em', { className: 'italic', ...props }),
+                    }}
+                  >
+                    {msg.content}
+                  </ReactMarkdown>
+                ) : (
+                  <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                )}
               </div>
               {msg.role === 'user' && <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0"><User className="w-4 h-4 text-primary-foreground" /></div>}
             </div>
