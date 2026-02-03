@@ -13,6 +13,7 @@ import { Textarea } from '../ui/textarea';
 import { Button } from '../ui/button';
 import LockIcon from './LockIcon';
 import { Briefcase } from 'lucide-react';
+import { supabase } from '../../services/supabase';
 
 /**
  * Получает минимальную дату входа из опционов
@@ -133,8 +134,9 @@ function SaveConfigurationDialog({ isOpen, onClose, onSave, currentState, isLock
   const [description, setDescription] = useState('');
   const [author, setAuthor] = useState('');
   
-  // Автозаполнение названия при открытии диалога
+  // Автозаполнение названия и автора при открытии диалога
   // ЗАЧЕМ: Если есть сделка — используем её название, иначе генерируем автоматически
+  // Автор подставляется из данных залогиненного пользователя
   useEffect(() => {
     if (isOpen && currentState) {
       // При фиксации позиции с существующей сделкой — используем название сделки
@@ -148,6 +150,20 @@ function SaveConfigurationDialog({ isOpen, onClose, onSave, currentState, isLock
         autoName = generateConfigName(currentState, isLocked);
       }
       setName(autoName);
+      
+      // Получаем имя залогиненного пользователя и подставляем в поле "автор"
+      // ЗАЧЕМ: Автоматически заполнять автора, чтобы пользователю не нужно было вводить имя вручную
+      if (supabase) {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (session?.user) {
+            const user = session.user;
+            const firstName = user.user_metadata?.first_name || user.user_metadata?.name || user.email.split('@')[0];
+            setAuthor(firstName);
+          }
+        }).catch(error => {
+          console.error('Ошибка при получении данных пользователя:', error);
+        });
+      }
     }
   }, [isOpen, isLocked, currentState, dealInfo]);
 
