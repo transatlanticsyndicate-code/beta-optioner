@@ -17,6 +17,12 @@ const SupabaseUserMenu = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
+    // Если Supabase не инициализирован, не выполняем проверку
+    if (!supabase) {
+      setLoading(false);
+      return;
+    }
+
     // Получение текущей сессии при монтировании
     // ЗАЧЕМ: Отображает корректное состояние сразу при загрузке страницы
     checkUser();

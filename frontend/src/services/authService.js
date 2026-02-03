@@ -11,6 +11,12 @@ import { supabase } from './supabase';
  * ЗАЧЕМ: Подключает слушатель изменений сессии и рендерит UI в зависимости от статуса
  */
 export function setupAuth() {
+    // Если Supabase не инициализирован, не выполняем инициализацию
+    if (!supabase) {
+        console.warn('Supabase не инициализирован. Установите переменные окружения REACT_APP_SUPABASE_URL и REACT_APP_SUPABASE_ANON_KEY');
+        return;
+    }
+
     const container = document.getElementById('auth-container');
     if (!container) {
         console.warn('Auth container not found. Add <div id="auth-container"></div> to your layout.');

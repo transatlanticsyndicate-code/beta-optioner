@@ -12,8 +12,9 @@ const supabaseKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
 /**
  * Создание Supabase клиента с настройками для SSO
  * ВАЖНО: cookieOptions.domain = '.optioner.online' (с точкой) для работы на всех поддоменах
+ * ПРИМЕЧАНИЕ: Если переменные окружения не установлены, клиент не будет инициализирован
  */
-export const supabase = createClient(supabaseUrl, supabaseKey, {
+export const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey, {
     auth: {
         flowType: 'pkce',
         autoRefreshToken: true,
@@ -26,4 +27,4 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
             secure: true,
         },
     },
-});
+}) : null;
