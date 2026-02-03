@@ -75,7 +75,7 @@ function CalculatorDealTabs({
   
   // State для целевой цены актива в %
   // ЗАЧЕМ: Позволяет задать целевую цену актива относительно текущей цены
-  const [targetAssetPricePercent, setTargetAssetPricePercent] = useState(50);
+  const [targetAssetPricePercent, setTargetAssetPricePercent] = useState(60);
   
   // State для количества шагов выхода
   // ЗАЧЕМ: Позволяет настроить количество шагов в плане выхода
@@ -489,7 +489,6 @@ function CalculatorDealTabs({
                                 <th className="px-3 py-2 text-right font-medium">Количество</th>
                                 <th className="px-3 py-2 text-right font-medium">Цена опциона</th>
                                 <th className="px-3 py-2 text-right font-medium">Прибыль</th>
-                                <th className="px-3 py-2 text-right font-medium">Накопленная</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -501,12 +500,19 @@ function CalculatorDealTabs({
                                     <td className="px-3 py-2 text-right">{row.quantity}</td>
                                     <td className="px-3 py-2 text-right">${row.optionPrice.toFixed(2)}</td>
                                     <td className="px-3 py-2 text-right text-green-600">+${row.profit.toLocaleString()}</td>
-                                    <td className={`px-3 py-2 text-right font-medium ${isLastRow ? 'bg-green-500 text-white' : 'text-green-600'}`}>
-                                      +${row.accumulated.toLocaleString()}
-                                    </td>
                                   </tr>
                                 );
                               })}
+                              <tr className="border-t-2 border-gray-300 bg-gray-50 dark:bg-gray-900 font-semibold">
+                                <td className="px-3 py-2">ИТОГО</td>
+                                <td className="px-3 py-2 text-right">
+                                  {exitPlan.reduce((sum, row) => sum + row.quantity, 0)}
+                                </td>
+                                <td className="px-3 py-2"></td>
+                                <td className="px-3 py-2 text-right text-green-600">
+                                  +${exitPlan.reduce((sum, row) => sum + row.profit, 0).toLocaleString()}
+                                </td>
+                              </tr>
                             </tbody>
                           </table>
                         </div>
