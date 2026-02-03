@@ -7,7 +7,7 @@ module.exports = {
       cwd: '/var/www/beta/backend',
       interpreter: 'none',
       env: {
-        DATABASE_URL: 'postgresql://beta_user:beta_secure_password_2025@localhost:5432/beta_optioner',
+        DATABASE_URL: 'sqlite:///./beta_options_analyzer.db',
         ENVIRONMENT: 'beta',
         HOST: '0.0.0.0',
         PORT: '8002'
