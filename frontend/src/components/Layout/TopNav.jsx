@@ -59,22 +59,18 @@ function TopNav() {
       </div>
 
       <div className="flex items-center gap-2 sm:gap-4 ml-auto sm:ml-0">
-        {/* Индикаторы статуса данных Massive API */}
-        {/* УБРАНО: Индикатор Massive не показывается на странице универсального калькулятора и его сохранений */}
-        {location.pathname !== '/tools/universal-calculator' &&
-          location.pathname !== '/tools/universal-saved-configurations' &&
-          <OptionsDataIndicator />}
+        {/* Индикаторы статуса данных Massive API - УБРАНО */}
+        {/* <OptionsDataIndicator /> */}
 
-        {/* Notifications */}
-        <button
+        {/* Notifications - УБРАНО */}
+        {/* <button
           type="button"
           className="relative p-1.5 sm:p-2 hover:bg-accent rounded-full transition-colors"
           title="Уведомления"
         >
           <Bell className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
-          {/* Badge для количества уведомлений */}
           <span className="absolute top-0 right-0 h-2 w-2 bg-primary rounded-full"></span>
-        </button>
+        </button> */}
 
         {/* Theme Toggle */}
         {/* <ThemeToggle /> */}

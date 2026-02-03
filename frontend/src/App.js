@@ -23,7 +23,7 @@ function App() {
     <AuthModal>
       <LayoutWithSidebar>
         <Routes>
-          <Route path="/" element={<HomePageNew />} />
+          <Route path="/" element={<UniversalOptionsCalculator />} />
           <Route path="/tools/options-analyzer" element={<OptionsAnalyzer />} />
           <Route path="/tools/options-calculator" element={<OptionsCalculatorBasic />} />
           <Route path="/tools/universal-calculator" element={<UniversalOptionsCalculator />} />
@@ -41,7 +41,7 @@ function App() {
       </LayoutWithSidebar>
       
       {/* Глобальный плавающий AI-чат */}
-      <FloatingAIChat />
+      {/* <FloatingAIChat /> */}
     </AuthModal>
   );
 }

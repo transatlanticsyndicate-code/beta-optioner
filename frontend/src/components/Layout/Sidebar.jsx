@@ -22,6 +22,7 @@ import {
   Coins,
   ExternalLink,
   Layers,
+  Podcast,
 } from 'lucide-react';
 
 function Sidebar() {
@@ -131,94 +132,103 @@ function Sidebar() {
 
           <div className="flex-1 overflow-y-auto py-4 px-4 bg-muted/30">
             <div className="space-y-6">
-              <div>
-                <div className="space-y-1">
-                  <NavItem to="/" icon={LayoutDashboard}>
-                    Главная
-                  </NavItem>
-                </div>
+              <div className="space-y-1">
+                <NavItem to="/tools/universal-calculator" icon={Layers} title="Универсальный калькулятор (Акции + Фьючерсы)" customColor="text-cyan-500 hover:text-cyan-600 hover:bg-accent/50">
+                  Калькулятор
+                </NavItem>
+                <NavItem to="/tools/universal-saved-configurations" icon={Save} title="Сохраненные конфигурации универсального калькулятора" customColor="text-cyan-500 hover:text-cyan-600 hover:bg-accent/50">
+                  Сохранения
+                </NavItem>
+                <ExternalNavItem href="https://crypto.optioner.online" icon={Coins} title="Крипто Менеджер - управление криптовалютными активами">
+                  Крипто Менеджер
+                </ExternalNavItem>
+                <NavItem to="/tools/crypto-rating" icon={TrendingDown}>
+                  Рейтинг криптовалют
+                </NavItem>
+                <ExternalNavItem href="https://news.optioner.online/" icon={Podcast} title="Финансовый подкаст">
+                  Финансовый подкаст
+                </ExternalNavItem>
               </div>
 
-              <div>
-                <div className={`px-3 mb-2 text-xs font-semibold uppercase tracking-wider text-cyan-500 ${isSidebarCollapsed ? 'lg:hidden' : ''}`}>
-                  СДЕЛКИ
+              {/* Скрытые разделы */}
+              <div style={{ display: 'none' }}>
+                <div>
+                  <div className="space-y-1">
+                    <NavItem to="/" icon={LayoutDashboard}>
+                      Главная
+                    </NavItem>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <NavItem to="/tools/new-deal" icon={Plus}>
-                    Сделка
-                  </NavItem>
-                  <NavItem to="/tools/deals-archive" icon={Archive}>
-                    Архив сделок
-                  </NavItem>
-                </div>
-              </div>
 
-              <div>
-                <div className={`px-3 mb-2 text-xs font-semibold uppercase tracking-wider text-cyan-500 ${isSidebarCollapsed ? 'lg:hidden' : ''}`}>
-                  КАЛЬКУЛЯТОРЫ
+                <div>
+                  <div className={`px-3 mb-2 text-xs font-semibold uppercase tracking-wider text-cyan-500 ${isSidebarCollapsed ? 'lg:hidden' : ''}`}>
+                    СДЕЛКИ
+                  </div>
+                  <div className="space-y-1">
+                    <NavItem to="/tools/new-deal" icon={Plus}>
+                      Сделка
+                    </NavItem>
+                    <NavItem to="/tools/deals-archive" icon={Archive}>
+                      Архив сделок
+                    </NavItem>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <NavItem to="/tools/options-calculator" icon={Calculator}>
-                    Калькулятор опционов
-                  </NavItem>
-                  <NavItem to="/tools/saved-configurations" icon={Save}>
-                    Сохраненные конфигурации
-                  </NavItem>
-                  <NavItem to="/tools/universal-calculator" icon={Layers} title="Универсальный калькулятор (Акции + Фьючерсы)" customColor="text-cyan-500 hover:text-cyan-600 hover:bg-accent/50">
-                    Универсальный калькулятор
-                  </NavItem>
-                  <NavItem to="/tools/universal-saved-configurations" icon={Save} title="Сохраненные конфигурации универсального калькулятора" customColor="text-cyan-500 hover:text-cyan-600 hover:bg-accent/50">
-                    Сохранения
-                  </NavItem>
-                  <NavItem to="/tools/gradual-strategy-calculator" icon={TrendingUp} title="Калькулятор градуальных стратегий">
-                    Градуальный калькулятор
-                  </NavItem>
-                  <ExternalNavItem href="https://crypto.optioner.online" icon={Coins} title="Крипто Менеджер - управление криптовалютными активами">
-                    Крипто Менеджер
-                  </ExternalNavItem>
-                </div>
-              </div>
 
-              <div>
-                <div className={`px-3 mb-2 text-xs font-semibold uppercase tracking-wider text-cyan-500 ${isSidebarCollapsed ? 'lg:hidden' : ''}`}>
-                  АНАЛИТИКА
+                <div>
+                  <div className={`px-3 mb-2 text-xs font-semibold uppercase tracking-wider text-cyan-500 ${isSidebarCollapsed ? 'lg:hidden' : ''}`}>
+                    КАЛЬКУЛЯТОРЫ
+                  </div>
+                  <div className="space-y-1">
+                    <NavItem to="/tools/options-calculator" icon={Calculator}>
+                      Калькулятор опционов
+                    </NavItem>
+                    <NavItem to="/tools/saved-configurations" icon={Save}>
+                      Сохраненные конфигурации
+                    </NavItem>
+                    <NavItem to="/tools/gradual-strategy-calculator" icon={TrendingUp} title="Калькулятор градуальных стратегий">
+                      Градуальный калькулятор
+                    </NavItem>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <NavItem to="/tools/options-analyzer" icon={FileBarChart}>
-                    Новый отчет
-                  </NavItem>
-                  <NavItem to="/reports-archive" icon={Archive}>
-                    Архив отчетов
-                  </NavItem>
-                  <NavItem to="/tools/crypto-rating" icon={TrendingDown}>
-                    Рейтинг криптовалют
-                  </NavItem>
-                </div>
-              </div>
 
-              <div>
-                <button
-                  type="button"
-                  onClick={() => setIsDevSectionCollapsed(!isDevSectionCollapsed)}
-                  className={`w-full flex items-center justify-between px-3 mb-2 text-xs font-semibold uppercase tracking-wider text-cyan-500 hover:text-cyan-600 transition-colors ${isSidebarCollapsed ? 'lg:hidden' : ''}`}
-                >
-                  <span>В РАЗРАБОТКЕ</span>
-                  {isDevSectionCollapsed ? (
-                    <ChevronDown className="h-4 w-4" />
-                  ) : (
-                    <ChevronUp className="h-4 w-4" />
-                  )}
-                </button>
-                <div
-                  className={`space-y-1 overflow-hidden transition-all duration-200 ${
-                    isDevSectionCollapsed ? 'max-h-0 opacity-0' : 'max-h-[500px] opacity-100'
-                  }`}
-                >
-                  <NavItem to="/tools/test-chart" icon={Activity}>
-                    Тестовый График
-                  </NavItem>
-                  <div className="px-3 py-2 text-sm text-muted-foreground">
-                    Скоро появятся новые инструменты...
+                <div>
+                  <div className={`px-3 mb-2 text-xs font-semibold uppercase tracking-wider text-cyan-500 ${isSidebarCollapsed ? 'lg:hidden' : ''}`}>
+                    АНАЛИТИКА
+                  </div>
+                  <div className="space-y-1">
+                    <NavItem to="/tools/options-analyzer" icon={FileBarChart}>
+                      Новый отчет
+                    </NavItem>
+                    <NavItem to="/reports-archive" icon={Archive}>
+                      Архив отчетов
+                    </NavItem>
+                  </div>
+                </div>
+
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setIsDevSectionCollapsed(!isDevSectionCollapsed)}
+                    className={`w-full flex items-center justify-between px-3 mb-2 text-xs font-semibold uppercase tracking-wider text-cyan-500 hover:text-cyan-600 transition-colors ${isSidebarCollapsed ? 'lg:hidden' : ''}`}
+                  >
+                    <span>В РАЗРАБОТКЕ</span>
+                    {isDevSectionCollapsed ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronUp className="h-4 w-4" />
+                    )}
+                  </button>
+                  <div
+                    className={`space-y-1 overflow-hidden transition-all duration-200 ${
+                      isDevSectionCollapsed ? 'max-h-0 opacity-0' : 'max-h-[500px] opacity-100'
+                    }`}
+                  >
+                    <NavItem to="/tools/test-chart" icon={Activity}>
+                      Тестовый График
+                    </NavItem>
+                    <div className="px-3 py-2 text-sm text-muted-foreground">
+                      Скоро появятся новые инструменты...
+                    </div>
                   </div>
                 </div>
               </div>

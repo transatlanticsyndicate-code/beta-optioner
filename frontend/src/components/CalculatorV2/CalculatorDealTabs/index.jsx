@@ -81,6 +81,11 @@ function CalculatorDealTabs({
   // ЗАЧЕМ: Позволяет настроить количество шагов в плане выхода
   const [exitStepsCount, setExitStepsCount] = useState(4);
   
+  // State для инпута долларов (локальный, чтобы избежать прыгающих значений при вводе)
+  // ЗАЧЕМ: При вводе в инпут значение не должно пересчитываться до потери фокуса
+  const [dollarsInputValue, setDollarsInputValue] = useState('');
+  const [isDollarsInputFocused, setIsDollarsInputFocused] = useState(false);
+  
   // Динамический расчёт количества опционов из текущего состояния
   // ЗАЧЕМ: При изменении quantity в таблице опционов — сделка автоматически обновляется
   const currentOptionsCount = useMemo(() => {
@@ -220,19 +225,40 @@ function CalculatorDealTabs({
     }
   };
   
-  // Обработчик изменения долларов (обратная связь)
-  // ЗАЧЕМ: Пересчитывает проценты из введённой целевой цены и синхронизирует с симуляцией
-  const handleDollarsChange = (value) => {
-    const dollars = Number(value) || 0;
-    if (currentPrice > 0) {
+  // Обработчик изменения долларов (только локальный state при вводе)
+  // ЗАЧЕМ: Избегаем прыгающих значений — пересчёт происходит только при потере фокуса
+  const handleDollarsInputChange = (value) => {
+    setDollarsInputValue(value);
+  };
+  
+  // Обработчик фокуса на инпуте долларов
+  const handleDollarsFocus = () => {
+    setIsDollarsInputFocused(true);
+    // При фокусе устанавливаем текущее значение в инпут
+    setDollarsInputValue(targetAssetPriceDollars.toString());
+  };
+  
+  // Обработчик потери фокуса — пересчитываем проценты
+  const handleDollarsBlur = () => {
+    setIsDollarsInputFocused(false);
+    const dollars = Number(dollarsInputValue) || 0;
+    if (currentPrice > 0 && dollars > 0) {
       // percent = ((dollars - currentPrice) / currentPrice) * 100
-      const percent = Math.round(((dollars - currentPrice) / currentPrice) * 100);
+      // Округляем до 2 знаков после запятой для точности
+      const percent = Math.round(((dollars - currentPrice) / currentPrice) * 10000) / 100;
       setTargetAssetPricePercent(percent);
+      
+      // Синхронизируем с блоком симуляции
+      if (setTargetPrice) {
+        setTargetPrice(dollars);
+      }
     }
-    
-    // Синхронизируем с блоком симуляции
-    if (setTargetPrice && dollars > 0) {
-      setTargetPrice(dollars);
+  };
+  
+  // Обработчик Enter в инпуте долларов
+  const handleDollarsKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.target.blur(); // Триггерим blur для применения значения
     }
   };
   
@@ -399,9 +425,10 @@ function CalculatorDealTabs({
                         type="number"
                         value={targetAssetPricePercent}
                         onChange={(e) => handlePercentChange(e.target.value)}
-                        className={`w-20 h-8 px-2 pr-6 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:border-transparent text-right ${focusRingColor}`}
+                        className={`w-24 h-8 px-2 pr-6 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:border-transparent text-right ${focusRingColor}`}
                         min="-100"
                         max="1000"
+                        step="0.01"
                       />
                       <span className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
                     </div>
@@ -409,8 +436,11 @@ function CalculatorDealTabs({
                     <div className="relative">
                       <input
                         type="number"
-                        value={targetAssetPriceDollars}
-                        onChange={(e) => handleDollarsChange(e.target.value)}
+                        value={isDollarsInputFocused ? dollarsInputValue : targetAssetPriceDollars}
+                        onChange={(e) => handleDollarsInputChange(e.target.value)}
+                        onFocus={handleDollarsFocus}
+                        onBlur={handleDollarsBlur}
+                        onKeyDown={handleDollarsKeyDown}
                         className={`w-28 h-8 px-2 pr-6 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:border-transparent text-right ${focusRingColor}`}
                         min="0"
                         step="0.01"
