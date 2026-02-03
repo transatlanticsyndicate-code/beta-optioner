@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import LayoutWithSidebar from './components/Layout/LayoutWithSidebar';
+import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
 import OptionsAnalyzer from './pages/OptionsAnalyzer';
 import AnalysisView from './pages/AnalysisView';
@@ -21,26 +22,28 @@ function App() {
       {/* Страница логина без Layout */}
       <Route path="/login" element={<Login />} />
       
-      {/* Остальные страницы с Layout */}
+      {/* Остальные страницы с Layout - защищены аутентификацией */}
       <Route path="/*" element={
-        <LayoutWithSidebar>
-          <Routes>
-            <Route path="/" element={<UniversalOptionsCalculator />} />
-            <Route path="/tools/options-analyzer" element={<OptionsAnalyzer />} />
-            <Route path="/tools/options-calculator" element={<OptionsCalculatorBasic />} />
-            <Route path="/tools/universal-calculator" element={<UniversalOptionsCalculator />} />
-            <Route path="/tools/gradual-strategy-calculator" element={<GradualStrategyCalculator />} />
-            <Route path="/tools/saved-configurations" element={<SavedConfigurations />} />
-            <Route path="/tools/universal-saved-configurations" element={<UniversalSavedConfigurations />} />
-            <Route path="/tools/test-chart" element={<TestChart />} />
-            <Route path="/tools/new-deal" element={<NewDeal />} />
-            <Route path="/tools/deals-archive" element={<DealsArchive />} />
-            <Route path="/tools/crypto-rating" element={<CryptoRating />} />
-            <Route path="/components" element={<Navigate to="/settings?section=components" replace />} />
-            <Route path="/analysis/:id" element={<AnalysisView />} />
-            <Route path="/settings" element={<Settings />} />
-          </Routes>
-        </LayoutWithSidebar>
+        <ProtectedRoute>
+          <LayoutWithSidebar>
+            <Routes>
+              <Route path="/" element={<UniversalOptionsCalculator />} />
+              <Route path="/tools/options-analyzer" element={<OptionsAnalyzer />} />
+              <Route path="/tools/options-calculator" element={<OptionsCalculatorBasic />} />
+              <Route path="/tools/universal-calculator" element={<UniversalOptionsCalculator />} />
+              <Route path="/tools/gradual-strategy-calculator" element={<GradualStrategyCalculator />} />
+              <Route path="/tools/saved-configurations" element={<SavedConfigurations />} />
+              <Route path="/tools/universal-saved-configurations" element={<UniversalSavedConfigurations />} />
+              <Route path="/tools/test-chart" element={<TestChart />} />
+              <Route path="/tools/new-deal" element={<NewDeal />} />
+              <Route path="/tools/deals-archive" element={<DealsArchive />} />
+              <Route path="/tools/crypto-rating" element={<CryptoRating />} />
+              <Route path="/components" element={<Navigate to="/settings?section=components" replace />} />
+              <Route path="/analysis/:id" element={<AnalysisView />} />
+              <Route path="/settings" element={<Settings />} />
+            </Routes>
+          </LayoutWithSidebar>
+        </ProtectedRoute>
       } />
     </Routes>
   );
