@@ -10,6 +10,7 @@ from typing import List
 from pydantic import BaseModel
 from datetime import datetime
 import logging
+import os
 
 from app.database import get_db
 # from app.services.crypto_scheduler import crypto_scheduler  # Больше не используется
@@ -109,13 +110,14 @@ async def create_snapshot(db: Session = Depends(get_db)):
             
             # Отправляем email
             try:
+                base_url = os.getenv("BASE_URL", "http://localhost:3000")
                 email_service.send_analysis_notification(
                     analysis_id=analysis.id,
                     dropped_count=len(analysis.dropped_cryptos),
                     added_count=len(analysis.added_cryptos),
                     dropped_cryptos=analysis.dropped_cryptos[:10],
                     added_cryptos=analysis.added_cryptos[:10],
-                    analysis_url=f"http://localhost:3000/tools/crypto-rating"
+                    analysis_url=f"{base_url}/tools/crypto-rating?analysis={analysis.id}"
                 )
             except Exception as e:
                 logger.error(f"Failed to send email: {str(e)}")

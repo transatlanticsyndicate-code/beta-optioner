@@ -5,6 +5,7 @@
 """
 
 import logging
+import os
 from datetime import datetime, timedelta
 from typing import Optional
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -208,7 +209,8 @@ class CryptoScheduler:
             )
             
             # Отправляем email уведомление
-            analysis_url = f"http://localhost:3000/tools/crypto-rating?analysis={analysis.id}"
+            base_url = os.getenv("BASE_URL", "http://localhost:3000")
+            analysis_url = f"{base_url}/tools/crypto-rating?analysis={analysis.id}"
             
             email_service.send_analysis_notification(
                 analysis_id=analysis.id,
