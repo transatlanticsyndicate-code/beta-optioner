@@ -295,3 +295,94 @@ input[type="number"] {
   -moz-appearance: textfield;
   appearance: textfield;
 }
+
+/* SSO Authentication Styles */
+#auth-container {
+  position: relative;
+}
+
+.auth-login-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--primary, #1bbacf);
+  color: var(--primary-foreground, #fff);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.auth-login-btn:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.user-avatar-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--card, #2a2a2a);
+  border: 1px solid var(--border, #3d3d3d);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.user-avatar-btn:hover {
+  background: var(--card-foreground, #3a3a3a);
+  border-color: var(--primary, #1bbacf);
+}
+
+.auth-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  background: var(--card, #1e1e1e);
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  display: none;
+  flex-direction: column;
+  padding: 4px;
+  z-index: 100;
+  min-width: 200px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.auth-dropdown.show {
+  display: flex;
+}
+
+.auth-user-info {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border, #333);
+  font-size: 0.8rem;
+  color: var(--text-secondary, #999);
+  word-break: break-all;
+}
+
+.auth-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  transition: background 0.2s ease;
+}
+
+.auth-item:hover {
+  background: var(--accent, #2d2d2d);
+}
+
+.auth-item.danger {
+  color: #ff4d4d;
+}
+
+.auth-item.danger:hover {
+  background: rgba(255, 77, 77, 0.1);
+}

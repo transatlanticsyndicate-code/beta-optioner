@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { Bell } from 'lucide-react';
 import ThemeToggle from '../ThemeToggle';
 import { Badge } from '../ui/badge';
-import UserMenu from '../UserMenu';
+import SupabaseUserMenu from '../SupabaseUserMenu';
 import OptionsDataIndicator from '../OptionsDataIndicator';
 
 function TopNav() {
@@ -54,7 +54,7 @@ function TopNav() {
           <span className="text-sm text-cyan-500 font-medium">v33</span>
         )}
         {location.pathname === '/tools/universal-calculator' && (
-          <span className="text-sm text-cyan-500 font-medium">vU13</span>
+          <span className="text-sm text-cyan-500 font-medium">vU14</span>
         )}
       </div>
 
@@ -75,8 +75,8 @@ function TopNav() {
         {/* Theme Toggle */}
         {/* <ThemeToggle /> */}
 
-        {/* User Menu */}
-        <UserMenu />
+        {/* User Menu with Supabase SSO */}
+        <SupabaseUserMenu />
       </div>
     </nav>
   );

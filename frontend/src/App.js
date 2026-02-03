@@ -1,16 +1,13 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation, Navigate } from 'react-router-dom';
-import AuthModal from './components/AuthModal';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import LayoutWithSidebar from './components/Layout/LayoutWithSidebar';
-import HomePageNew from './pages/HomePageNew';
+import Login from './pages/Login';
 import OptionsAnalyzer from './pages/OptionsAnalyzer';
 import AnalysisView from './pages/AnalysisView';
 import OptionsCalculatorBasic from './pages/OptionsCalculatorBasic';
 import UniversalOptionsCalculator from './pages/UniversalOptionsCalculator';
 import SavedConfigurations from './pages/SavedConfigurations';
 import UniversalSavedConfigurations from './pages/UniversalSavedConfigurations';
-import ComponentsShowcase from './pages/ComponentsShowcase';
-import FloatingAIChat from './components/FloatingAIChat';
 import GradualStrategyCalculator from './components/GradualStrategyCalculator/GradualStrategyCalculator';
 import Settings from './pages/Settings/Settings';
 import TestChart from './pages/TestChart';
@@ -20,29 +17,32 @@ import CryptoRating from './pages/CryptoRating';
 
 function App() {
   return (
-    <AuthModal>
-      <LayoutWithSidebar>
-        <Routes>
-          <Route path="/" element={<UniversalOptionsCalculator />} />
-          <Route path="/tools/options-analyzer" element={<OptionsAnalyzer />} />
-          <Route path="/tools/options-calculator" element={<OptionsCalculatorBasic />} />
-          <Route path="/tools/universal-calculator" element={<UniversalOptionsCalculator />} />
-          <Route path="/tools/gradual-strategy-calculator" element={<GradualStrategyCalculator />} />
-          <Route path="/tools/saved-configurations" element={<SavedConfigurations />} />
-          <Route path="/tools/universal-saved-configurations" element={<UniversalSavedConfigurations />} />
-          <Route path="/tools/test-chart" element={<TestChart />} />
-          <Route path="/tools/new-deal" element={<NewDeal />} />
-          <Route path="/tools/deals-archive" element={<DealsArchive />} />
-          <Route path="/tools/crypto-rating" element={<CryptoRating />} />
-          <Route path="/components" element={<Navigate to="/settings?section=components" replace />} />
-          <Route path="/analysis/:id" element={<AnalysisView />} />
-          <Route path="/settings" element={<Settings />} />
-        </Routes>
-      </LayoutWithSidebar>
+    <Routes>
+      {/* Страница логина без Layout */}
+      <Route path="/login" element={<Login />} />
       
-      {/* Глобальный плавающий AI-чат */}
-      {/* <FloatingAIChat /> */}
-    </AuthModal>
+      {/* Остальные страницы с Layout */}
+      <Route path="/*" element={
+        <LayoutWithSidebar>
+          <Routes>
+            <Route path="/" element={<UniversalOptionsCalculator />} />
+            <Route path="/tools/options-analyzer" element={<OptionsAnalyzer />} />
+            <Route path="/tools/options-calculator" element={<OptionsCalculatorBasic />} />
+            <Route path="/tools/universal-calculator" element={<UniversalOptionsCalculator />} />
+            <Route path="/tools/gradual-strategy-calculator" element={<GradualStrategyCalculator />} />
+            <Route path="/tools/saved-configurations" element={<SavedConfigurations />} />
+            <Route path="/tools/universal-saved-configurations" element={<UniversalSavedConfigurations />} />
+            <Route path="/tools/test-chart" element={<TestChart />} />
+            <Route path="/tools/new-deal" element={<NewDeal />} />
+            <Route path="/tools/deals-archive" element={<DealsArchive />} />
+            <Route path="/tools/crypto-rating" element={<CryptoRating />} />
+            <Route path="/components" element={<Navigate to="/settings?section=components" replace />} />
+            <Route path="/analysis/:id" element={<AnalysisView />} />
+            <Route path="/settings" element={<Settings />} />
+          </Routes>
+        </LayoutWithSidebar>
+      } />
+    </Routes>
   );
 }
 
