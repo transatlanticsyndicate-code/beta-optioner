@@ -566,19 +566,22 @@ function CalculatorDealTabs({
                   ) : (
                     <>
                       {/* Кнопка перехода на TradingView (после отправки) */}
-                      <button
-                        className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-green-100 hover:bg-green-200 rounded-md transition-colors"
-                        onClick={() => {
-                          if (tradingViewUrl) {
-                            window.open(tradingViewUrl, '_blank');
-                            console.log('🔗 Переход на график TradingView:', tradingViewUrl);
-                          } else {
+                      <a
+                        href={tradingViewUrl || '#'}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-green-100 hover:bg-green-200 rounded-md transition-colors inline-block text-center no-underline"
+                        onClick={(e) => {
+                          if (!tradingViewUrl) {
+                            e.preventDefault();
                             console.warn('⚠️ Ссылка на график TradingView не найдена');
+                          } else {
+                            console.log('🔗 Переход на график TradingView:', tradingViewUrl);
                           }
                         }}
                       >
                         Перейти на график TradingView →
-                      </button>
+                      </a>
                       
                       {/* Кнопка сброса плана выхода */}
                       <button
