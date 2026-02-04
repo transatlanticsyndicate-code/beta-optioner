@@ -382,6 +382,56 @@ export function sendRefreshSingleStrikeCommand(daysFrom, daysTo, strikePercent) 
 }
 
 /**
+ * Отправка команды send_slices_to_chart — отправка срезок плана выхода на график TradingView
+ * ЗАЧЕМ: Кнопка "Отправить срезки на график TradingView" в табе "Сделка"
+ * 
+ * @param {Array} slices - Массив срезок плана выхода
+ * @param {string} chartUrl - Ссылка на график TradingView
+ * 
+ * Формат slices: [{
+ *   price: number,          // Цена опциона
+ *   text: string            // Текст для отображения на графике
+ * }]
+ */
+export function sendSlicesToTradingViewCommand(slices, chartUrl = null) {
+  const command = {
+    type: 'send_slices_to_chart',
+    slices: slices.map(slice => ({
+      price: slice.price,
+      text: slice.text
+    })),
+    chartUrl: chartUrl,
+    timestamp: Date.now(),
+    processed: false
+  };
+
+  localStorage.setItem(COMMAND_KEY, JSON.stringify(command));
+  console.log('📤 [Extension Command] send_slices_to_chart отправлена:', command);
+  
+  return command;
+}
+
+/**
+ * Отправка команды clear_slices — удаление срезок из расширения
+ * ЗАЧЕМ: Кнопка "Сбросить план выхода" в табе "Сделка"
+ * 
+ * @param {string} chartUrl - Ссылка на график TradingView
+ */
+export function sendClearSlicesCommand(chartUrl = null) {
+  const command = {
+    type: 'clear_slices',
+    chartUrl: chartUrl,
+    timestamp: Date.now(),
+    processed: false
+  };
+
+  localStorage.setItem(COMMAND_KEY, JSON.stringify(command));
+  console.log('📤 [Extension Command] clear_slices отправлена:', command);
+  
+  return command;
+}
+
+/**
  * Чтение результата выполнения команды
  * ЗАЧЕМ: Получение прогресса и статуса от расширения
  * 

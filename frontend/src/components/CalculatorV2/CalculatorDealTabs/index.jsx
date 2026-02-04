@@ -20,6 +20,7 @@ import { calculateOptionTheoreticalPrice as calculateStockOptionTheoreticalPrice
 import { getOptionVolatility } from '../../../utils/volatilitySurface';
 import { calculateDaysRemainingUTC, getOldestEntryDate } from '../../../utils/dateUtils';
 import { CALCULATOR_MODES } from '../../../utils/universalPricing';
+import { sendSlicesToTradingViewCommand, sendClearSlicesCommand } from '../../../hooks/useExtensionData';
 
 /**
  * CalculatorDealTabs — контейнер с двумя табами под таблицей опционов
@@ -85,6 +86,18 @@ function CalculatorDealTabs({
   // ЗАЧЕМ: При вводе в инпут значение не должно пересчитываться до потери фокуса
   const [dollarsInputValue, setDollarsInputValue] = useState('');
   const [isDollarsInputFocused, setIsDollarsInputFocused] = useState(false);
+  
+  // State для отслеживания отправки срезок
+  // ЗАЧЕМ: После отправки показываем кнопку перехода на TradingView вместо кнопки отправки
+  const [slicesSent, setSlicesSent] = useState(false);
+  
+  // State для сохранения замороженного плана выхода
+  // ЗАЧЕМ: После отправки срезок план выхода не должен пересчитываться
+  const [frozenExitPlan, setFrozenExitPlan] = useState(null);
+  
+  // State для сохранения ссылки на график TradingView
+  // ЗАЧЕМ: Используется в кнопке "Перейти на график TradingView"
+  const [tradingViewUrl, setTradingViewUrl] = useState(null);
   
   // Динамический расчёт количества опционов из текущего состояния
   // ЗАЧЕМ: При изменении quantity в таблице опционов — сделка автоматически обновляется
@@ -262,6 +275,107 @@ function CalculatorDealTabs({
     }
   };
   
+  // Генерация ссылки на график TradingView для опциона
+  // ЗАЧЕМ: Формирует URL для просмотра графика опциона на TradingView
+  // Формат: https://www.tradingview.com/chart/?symbol=OPRA:MSFT260220C430.0
+  const generateTradingViewLink = () => {
+    if (!dealInfo || !options || options.length === 0) {
+      return null;
+    }
+    
+    // Получаем первый видимый опцион
+    const visibleOptions = options.filter(opt => opt.visible !== false);
+    if (visibleOptions.length === 0) return null;
+    
+    const firstOption = visibleOptions[0];
+    
+    // Тикер базового актива
+    const ticker = dealInfo.ticker || selectedTicker || '';
+    
+    // Дата экспирации в формате YYMMDD
+    const expirationDate = new Date(firstOption.date);
+    const year = String(expirationDate.getFullYear()).slice(-2);
+    const month = String(expirationDate.getMonth() + 1).padStart(2, '0');
+    const day = String(expirationDate.getDate()).padStart(2, '0');
+    const dateStr = `${year}${month}${day}`;
+    
+    // Тип опциона (C или P)
+    const optionType = firstOption.type === 'CALL' ? 'C' : 'P';
+    
+    // Страйк (если не дробный, добавляем .0)
+    const strike = firstOption.strike;
+    const strikeStr = Number.isInteger(strike) ? `${strike}.0` : String(strike);
+    
+    // Формируем ссылку
+    const symbol = `${ticker}${dateStr}${optionType}${strikeStr}`;
+    return `https://www.tradingview.com/chart/?symbol=OPRA:${symbol}`;
+  };
+  
+  // Обработчик отправки срезок на график TradingView
+  // ЗАЧЕМ: Формирует данные срезок и отправляет команду в расширение Chrome
+  const handleSendSlicesToTradingView = () => {
+    if (!dealInfo || exitPlan.length === 0) {
+      console.warn('⚠️ Нет данных для отправки срезок');
+      return;
+    }
+
+    // Генерируем ссылку на график TradingView
+    const chartUrl = generateTradingViewLink();
+    if (!chartUrl) {
+      console.warn('⚠️ Не удалось сгенерировать ссылку на график TradingView');
+      return;
+    }
+
+    // Получаем дату входа из dealInfo
+    const entryDate = dealInfo.createdAt ? new Date(dealInfo.createdAt) : new Date();
+    const formattedDate = `${String(entryDate.getDate()).padStart(2, '0')}.${String(entryDate.getMonth() + 1).padStart(2, '0')}.${String(entryDate.getFullYear()).slice(-2)}`;
+
+    // Формируем массив срезок для отправки
+    const slices = exitPlan.map(row => {
+      // Цена базового актива одинакова для всех шагов - это текущая цена актива
+      const assetPrice = currentPrice;
+
+      // Формируем текст по шаблону
+      const text = `Срезка ${row.step} - цена Акции ${assetPrice.toFixed(2)} - цена Опциона ${row.optionPrice.toFixed(2)} * ${row.quantity} - дата входа ${formattedDate}`;
+
+      return {
+        price: row.optionPrice,
+        text: text
+      };
+    });
+
+    // Отправляем команду в расширение с ссылкой на график
+    sendSlicesToTradingViewCommand(slices, chartUrl);
+    console.log('📊 Срезки отправлены на график TradingView:', slices);
+    console.log('🔗 Ссылка на график:', chartUrl);
+    
+    // Сохраняем ссылку для кнопки перехода
+    setTradingViewUrl(chartUrl);
+    
+    // Замораживаем текущий план выхода
+    setFrozenExitPlan(exitPlan);
+    
+    // Устанавливаем флаг отправки
+    setSlicesSent(true);
+  };
+
+  // Обработчик сброса плана выхода
+  // ЗАЧЕМ: Удаляет срезки из расширения и разблокирует таб "Сделка"
+  const handleResetExitPlan = () => {
+    // Отправляем команду в расширение об удалении срезок с ссылкой на график
+    sendClearSlicesCommand(tradingViewUrl);
+    console.log('🗑️ Команда на удаление срезок отправлена в расширение');
+    
+    // Очищаем замороженный план выхода
+    setFrozenExitPlan(null);
+    
+    // Очищаем ссылку на TradingView
+    setTradingViewUrl(null);
+    
+    // Сбрасываем флаг отправки (разблокируем таб)
+    setSlicesSent(false);
+  };
+
   // Используем внешний таб если передан, иначе внутренний
   const activeTab = externalActiveTab !== undefined ? externalActiveTab : internalActiveTab;
   
@@ -394,60 +508,43 @@ function CalculatorDealTabs({
             
             return (
               <Card className="w-full relative" style={{ borderColor }}>
-                {/* Инпуты настроек сделки */}
-                <div className="absolute top-4 right-4 flex items-center gap-4">
-                  {/* Количество шагов выхода */}
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm text-muted-foreground whitespace-nowrap">
-                      Шагов:
-                    </label>
-                    <input
-                      type="number"
-                      value={exitStepsCount}
-                      onChange={(e) => setExitStepsCount(Math.max(1, Number(e.target.value) || 1))}
-                      className={`w-14 h-8 px-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:border-transparent text-center ${focusRingColor}`}
-                      min="1"
-                      max="20"
-                    />
-                  </div>
-                  
-                  {/* Разделитель */}
-                  <div className="h-6 w-px bg-gray-300" />
-                  
-                  {/* Целевая цена актива */}
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm text-muted-foreground whitespace-nowrap">
-                      Целевая цена актива:
-                    </label>
-                    {/* Инпут в процентах (изменение от текущей цены) */}
-                    <div className="relative">
-                      <input
-                        type="number"
-                        value={targetAssetPricePercent}
-                        onChange={(e) => handlePercentChange(e.target.value)}
-                        className={`w-24 h-8 px-2 pr-6 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:border-transparent text-right ${focusRingColor}`}
-                        min="-100"
-                        max="1000"
-                        step="0.01"
-                      />
-                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
-                    </div>
-                    {/* Инпут в долларах (целевая цена актива) */}
-                    <div className="relative">
-                      <input
-                        type="number"
-                        value={isDollarsInputFocused ? dollarsInputValue : targetAssetPriceDollars}
-                        onChange={(e) => handleDollarsInputChange(e.target.value)}
-                        onFocus={handleDollarsFocus}
-                        onBlur={handleDollarsBlur}
-                        onKeyDown={handleDollarsKeyDown}
-                        className={`w-28 h-8 px-2 pr-6 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:border-transparent text-right ${focusRingColor}`}
-                        min="0"
-                        step="0.01"
-                      />
-                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
-                    </div>
-                  </div>
+                {/* Кнопки в правом верхнем углу */}
+                <div className="absolute right-4 flex items-center gap-2" style={{ top: '2rem' }}>
+                  {!slicesSent ? (
+                    // Кнопка отправки срезок (до отправки)
+                    <button
+                      className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-200 hover:bg-gray-300 rounded-md transition-colors"
+                      onClick={handleSendSlicesToTradingView}
+                    >
+                      Отправить срезки на график TradingView →
+                    </button>
+                  ) : (
+                    <>
+                      {/* Кнопка перехода на TradingView (после отправки) */}
+                      <button
+                        className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-green-100 hover:bg-green-200 rounded-md transition-colors"
+                        onClick={() => {
+                          if (tradingViewUrl) {
+                            window.open(tradingViewUrl, '_blank');
+                            console.log('🔗 Переход на график TradingView:', tradingViewUrl);
+                          } else {
+                            console.warn('⚠️ Ссылка на график TradingView не найдена');
+                          }
+                        }}
+                      >
+                        Перейти на график TradingView →
+                      </button>
+                      
+                      {/* Кнопка сброса плана выхода */}
+                      <button
+                        className="px-3 py-1.5 text-xs font-medium text-red-600 bg-red-100 hover:bg-red-200 rounded-md transition-colors"
+                        onClick={handleResetExitPlan}
+                        title="Сбросить план выхода"
+                      >
+                        Сбросить план выхода
+                      </button>
+                    </>
+                  )}
                 </div>
                 
                 <CardContent className="pt-6 pb-6 px-6">
@@ -467,54 +564,110 @@ function CalculatorDealTabs({
                         </div>
                       </div>
                       
-                      {/* Таблица ПЛАН ВЫХОДА */}
+                      {/* Двухколоночный layout: настройки слева (1/3), таблица справа (2/3) */}
                       <div className="border-t pt-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <h4 className="text-sm font-semibold">ПЛАН ВЫХОДА</h4>
-                          <button
-                            className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-200 hover:bg-gray-300 rounded-md transition-colors"
-                            onClick={() => {
-                              // TODO: Реализовать отправку срезок на график TradingView
-                              console.log('📊 Отправка срезок на TradingView:', exitPlan);
-                            }}
-                          >
-                            Отправить срезки на график TradingView →
-                          </button>
-                        </div>
-                        <div className="border rounded-lg overflow-hidden">
-                          <table className="w-full text-sm">
-                            <thead className="bg-gray-100 dark:bg-gray-800">
-                              <tr>
-                                <th className="px-3 py-2 text-left font-medium">Шаг</th>
-                                <th className="px-3 py-2 text-right font-medium">Количество</th>
-                                <th className="px-3 py-2 text-right font-medium">Цена опциона</th>
-                                <th className="px-3 py-2 text-right font-medium">Прибыль</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {exitPlan.map((row, index) => {
-                                const isLastRow = index === exitPlan.length - 1;
-                                return (
-                                  <tr key={row.step} className={index > 0 ? 'border-t' : ''}>
-                                    <td className="px-3 py-2 font-medium">{row.step}</td>
-                                    <td className="px-3 py-2 text-right">{row.quantity}</td>
-                                    <td className="px-3 py-2 text-right">${row.optionPrice.toFixed(2)}</td>
-                                    <td className="px-3 py-2 text-right text-green-600">+${row.profit.toLocaleString()}</td>
+                        <div className="flex gap-6">
+                          {/* Левая колонка: Настройки (1/3 ширины) */}
+                          <div className="w-1/3 space-y-4">
+                            <h4 className="text-sm font-semibold mb-4">НАСТРОЙКИ</h4>
+                            
+                            {/* Количество шагов выхода */}
+                            <div className="space-y-2">
+                              <label className="text-sm text-muted-foreground block">
+                                Количество шагов выхода:
+                              </label>
+                              <input
+                                type="number"
+                                value={exitStepsCount}
+                                onChange={(e) => setExitStepsCount(Math.max(1, Number(e.target.value) || 1))}
+                                className={`w-full h-10 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:border-transparent ${focusRingColor} ${slicesSent ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                min="1"
+                                max="20"
+                                disabled={slicesSent}
+                              />
+                            </div>
+                            
+                            {/* Целевая цена актива в процентах */}
+                            <div className="space-y-2">
+                              <label className="text-sm text-muted-foreground block">
+                                Целевая цена актива (%):
+                              </label>
+                              <div className="relative">
+                                <input
+                                  type="number"
+                                  value={targetAssetPricePercent}
+                                  onChange={(e) => handlePercentChange(e.target.value)}
+                                  className={`w-full h-10 px-3 pr-8 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:border-transparent ${focusRingColor} ${slicesSent ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                  min="-100"
+                                  max="1000"
+                                  step="0.01"
+                                  disabled={slicesSent}
+                                />
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
+                              </div>
+                            </div>
+                            
+                            {/* Целевая цена актива в долларах */}
+                            <div className="space-y-2">
+                              <label className="text-sm text-muted-foreground block">
+                                Целевая цена актива ($):
+                              </label>
+                              <div className="relative">
+                                <input
+                                  type="number"
+                                  value={isDollarsInputFocused ? dollarsInputValue : targetAssetPriceDollars}
+                                  onChange={(e) => handleDollarsInputChange(e.target.value)}
+                                  onFocus={handleDollarsFocus}
+                                  onBlur={handleDollarsBlur}
+                                  onKeyDown={handleDollarsKeyDown}
+                                  className={`w-full h-10 px-3 pr-8 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:border-transparent ${focusRingColor} ${slicesSent ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                  min="0"
+                                  step="0.01"
+                                  disabled={slicesSent}
+                                />
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Правая колонка: Таблица План выхода (2/3 ширины) */}
+                          <div className="w-2/3">
+                            <h4 className="text-sm font-semibold mb-4">ПЛАН ВЫХОДА</h4>
+                            <div className="border rounded-lg overflow-hidden">
+                              <table className="w-full text-sm">
+                                <thead className="bg-gray-100 dark:bg-gray-800">
+                                  <tr>
+                                    <th className="px-3 py-2 text-left font-medium">Шаг</th>
+                                    <th className="px-3 py-2 text-right font-medium">Количество</th>
+                                    <th className="px-3 py-2 text-right font-medium">Цена опциона</th>
+                                    <th className="px-3 py-2 text-right font-medium">Прибыль</th>
                                   </tr>
-                                );
-                              })}
-                              <tr className="border-t-2 border-gray-300 bg-gray-50 dark:bg-gray-900 font-semibold">
-                                <td className="px-3 py-2">ИТОГО</td>
-                                <td className="px-3 py-2 text-right">
-                                  {exitPlan.reduce((sum, row) => sum + row.quantity, 0)}
-                                </td>
-                                <td className="px-3 py-2"></td>
-                                <td className="px-3 py-2 text-right text-green-600">
-                                  +${exitPlan.reduce((sum, row) => sum + row.profit, 0).toLocaleString()}
-                                </td>
-                              </tr>
-                            </tbody>
-                          </table>
+                                </thead>
+                                <tbody>
+                                  {(slicesSent && frozenExitPlan ? frozenExitPlan : exitPlan).map((row, index) => {
+                                    return (
+                                      <tr key={row.step} className={index > 0 ? 'border-t' : ''}>
+                                        <td className="px-3 py-2 font-medium">{row.step}</td>
+                                        <td className="px-3 py-2 text-right">{row.quantity}</td>
+                                        <td className="px-3 py-2 text-right">${row.optionPrice.toFixed(2)}</td>
+                                        <td className="px-3 py-2 text-right text-green-600">+${row.profit.toLocaleString()}</td>
+                                      </tr>
+                                    );
+                                  })}
+                                  <tr className="border-t-2 border-gray-300 bg-gray-50 dark:bg-gray-900 font-semibold">
+                                    <td className="px-3 py-2">ИТОГО</td>
+                                    <td className="px-3 py-2 text-right">
+                                      {(slicesSent && frozenExitPlan ? frozenExitPlan : exitPlan).reduce((sum, row) => sum + row.quantity, 0)}
+                                    </td>
+                                    <td className="px-3 py-2"></td>
+                                    <td className="px-3 py-2 text-right text-green-600">
+                                      +${(slicesSent && frozenExitPlan ? frozenExitPlan : exitPlan).reduce((sum, row) => sum + row.profit, 0).toLocaleString()}
+                                    </td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
