@@ -674,6 +674,38 @@ function UniversalOptionsCalculator() {
   // Функция создания сделки
   // ЗАЧЕМ: Автоматически подбирает количество опционов под лимит и создаёт сделку
   const handleCreateDeal = useCallback(() => {
+    // Подсчитываем количество видимых опционов
+    const visibleOptions = options.filter(opt => opt.visible !== false);
+    
+    // Проверяем, что есть ровно один опцион типа Buy CALL
+    // ЗАЧЕМ: Функционал сделки поддерживает только один опцион Buy CALL
+    const buyCallOptions = visibleOptions.filter(opt => opt.action === 'Buy' && opt.type === 'CALL');
+    
+    if (visibleOptions.length === 0) {
+      alert('Добавьте опцион в таблицу для создания сделки');
+      console.warn('⚠️ [Deal] Нет опционов для создания сделки');
+      return;
+    }
+    
+    if (buyCallOptions.length === 0) {
+      alert('На данный момент функционал Сделки поддерживает работу только с одним опционом типа Buy CALL');
+      console.warn('⚠️ [Deal] В таблице нет опционов Buy CALL');
+      return;
+    }
+    
+    if (buyCallOptions.length > 1) {
+      alert('На данный момент функционал Сделки поддерживает работу только с одним опционом типа Buy CALL');
+      console.warn('⚠️ [Deal] В таблице больше одного опциона Buy CALL:', buyCallOptions.length);
+      return;
+    }
+    
+    // Проверяем, что в таблице нет других опционов кроме Buy CALL
+    if (visibleOptions.length > buyCallOptions.length) {
+      alert('На данный момент функционал Сделки поддерживает работу только с одним опционом типа Buy CALL. Удалите другие опционы из таблицы.');
+      console.warn('⚠️ [Deal] В таблице есть другие опционы кроме Buy CALL');
+      return;
+    }
+    
     // Получаем лимит из localStorage (FinancialControl)
     const depositAmount = localStorage.getItem('depositAmount');
     const instrumentCount = localStorage.getItem('instrumentCount');
@@ -692,9 +724,6 @@ function UniversalOptionsCalculator() {
     if (!instrumentLimit) {
       console.log('⚠️ [Deal] Лимит не установлен (depositAmount:', depositAmount, ', instrumentCount:', instrumentCount, ')');
     }
-
-    // Подсчитываем количество видимых опционов
-    const visibleOptions = options.filter(opt => opt.visible !== false);
     let finalOptionsCount = visibleOptions.length;
     let multiplier = 1;
 
@@ -2045,15 +2074,21 @@ function UniversalOptionsCalculator() {
             console.log('📋 Конфигурация без сделки — dealInfo сброшен');
           }
 
-          // Если в конфигурации есть настройки таба Сделка — восстанавливаем целевую цену актива
-          // ЗАЧЕМ: При открытии сохраненной сделки цена в блоке симуляции должна соответствовать целевой цене
-          if (config.dealSettings && config.dealSettings.targetAssetPricePercent !== undefined) {
-            // Рассчитываем целевую цену на основе текущей цены и процента
-            const calculatedTargetPrice = Math.round(
-              (config.state.currentPrice || 0) * (1 + config.dealSettings.targetAssetPricePercent / 100) * 100
-            ) / 100;
-            setTargetPrice(calculatedTargetPrice);
-            console.log(`📊 Целевая цена актива восстановлена: ${calculatedTargetPrice} (${config.dealSettings.targetAssetPricePercent}%)`);
+          // Если в конфигурации есть настройки таба Сделка — восстанавливаем их
+          // ЗАЧЕМ: При открытии сохраненной сделки восстанавливаем все настройки включая состояние отправки срезок
+          if (config.dealSettings) {
+            // Восстанавливаем полный объект dealSettings
+            setDealSettings(config.dealSettings);
+            console.log('📊 Настройки таба Сделка восстановлены:', config.dealSettings);
+            
+            // Восстанавливаем целевую цену актива в блоке симуляции
+            if (config.dealSettings.targetAssetPricePercent !== undefined) {
+              const calculatedTargetPrice = Math.round(
+                (config.state.currentPrice || 0) * (1 + config.dealSettings.targetAssetPricePercent / 100) * 100
+              ) / 100;
+              setTargetPrice(calculatedTargetPrice);
+              console.log(`📊 Целевая цена актива восстановлена: ${calculatedTargetPrice} (${config.dealSettings.targetAssetPricePercent}%)`);
+            }
           }
 
           console.log(`✅ Конфигурация загружена: ${config.name}${configIsLocked ? ' (🔒 зафиксирована)' : ''}`);

@@ -99,6 +99,45 @@ function CalculatorDealTabs({
   // ЗАЧЕМ: Используется в кнопке "Перейти на график TradingView"
   const [tradingViewUrl, setTradingViewUrl] = useState(null);
   
+  // Ref для хранения последнего обработанного dealSettings
+  // ЗАЧЕМ: Избежать повторной обработки того же объекта dealSettings
+  const lastProcessedSettingsRef = React.useRef(null);
+  
+  // Ref для отслеживания процесса восстановления
+  // ЗАЧЕМ: Предотвратить сохранение dealSettings во время восстановления
+  const isRestoringState = React.useRef(false);
+  
+  // Восстанавливаем состояние отправки срезок из dealSettings при загрузке позиции
+  // ЗАЧЕМ: При открытии сохраненной позиции нужно показать правильные кнопки
+  React.useEffect(() => {
+    // Восстанавливаем только если dealSettings изменился (новый объект)
+    if (dealSettings && dealSettings !== lastProcessedSettingsRef.current) {
+      isRestoringState.current = true;
+      
+      if (dealSettings.slicesSent !== undefined) {
+        setSlicesSent(dealSettings.slicesSent);
+      }
+      if (dealSettings.tradingViewUrl !== undefined) {
+        setTradingViewUrl(dealSettings.tradingViewUrl);
+      }
+      if (dealSettings.frozenExitPlan !== undefined) {
+        setFrozenExitPlan(dealSettings.frozenExitPlan);
+      }
+      
+      console.log('📊 Состояние срезок восстановлено из dealSettings:', {
+        slicesSent: dealSettings.slicesSent,
+        tradingViewUrl: dealSettings.tradingViewUrl
+      });
+      
+      lastProcessedSettingsRef.current = dealSettings;
+      
+      // Сбрасываем флаг восстановления после завершения
+      setTimeout(() => {
+        isRestoringState.current = false;
+      }, 50);
+    }
+  }, [dealSettings]);
+  
   // Динамический расчёт количества опционов из текущего состояния
   // ЗАЧЕМ: При изменении quantity в таблице опционов — сделка автоматически обновляется
   const currentOptionsCount = useMemo(() => {
@@ -216,14 +255,20 @@ function CalculatorDealTabs({
   // Сохраняем настройки таба Сделка при изменении
   // ЗАЧЕМ: Передать настройки в диалог сохранения позиции
   React.useEffect(() => {
+    // Не сохраняем во время восстановления состояния
+    if (isRestoringState.current) return;
+    
     if (dealInfo && setDealSettings) {
       setDealSettings({
         targetAssetPricePercent,
         exitStepsCount,
         exitPlan,
+        slicesSent,
+        tradingViewUrl,
+        frozenExitPlan,
       });
     }
-  }, [dealInfo, targetAssetPricePercent, exitStepsCount, exitPlan, setDealSettings]);
+  }, [dealInfo, targetAssetPricePercent, exitStepsCount, exitPlan, slicesSent, tradingViewUrl, frozenExitPlan, setDealSettings]);
 
   // Обработчик изменения процентов
   // ЗАЧЕМ: При изменении % — обновляем targetPrice в блоке симуляции
