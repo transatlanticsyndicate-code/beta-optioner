@@ -28,17 +28,17 @@ const DEFAULT_STOCK_GROUPS = {
   },
   'tech-growth': {
     label: 'Tech Growth',
-    description: 'Tech-акции $10-200B (HUBS, ZS, DDOG)',
+    description: 'Tech-акции $10-250B (HUBS, ZS, DDOG)',
     icon: 'TrendingUp',
     color: 'text-purple-500',
-    multipliers: { down: 0.75, up: 1.1 }
+    multipliers: { down: 0.70, up: 1.1 }
   },
   growth: {
     label: 'Рост/События',
     description: 'Growth-акции, event-driven, высокая IV',
     icon: 'TrendingUp',
     color: 'text-green-500',
-    multipliers: { down: 0.75, up: 0.9 }
+    multipliers: { down: 0.55, up: 1.05 }
   },
   illiquid: {
     label: 'Неликвидные',
@@ -57,7 +57,7 @@ const DEFAULT_THRESHOLDS = {
   
   // Tech-Growth пороги
   tech_growth_min_cap: 10,    // $10B — минимум для tech-growth
-  tech_growth_max_cap: 200,   // $200B — максимум для tech-growth
+  tech_growth_max_cap: 250,   // $250B — максимум для tech-growth
   
   // Illiquid пороги
   illiquid_max_cap: 5,        // $5B (в миллиардах для UI)

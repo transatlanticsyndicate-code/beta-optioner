@@ -72,13 +72,13 @@ const DEFAULT_STOCK_GROUPS = {
   },
   'tech-growth': {
     label: 'Tech Growth',
-    description: 'Tech-акции $10-200B (HUBS, ZS, DDOG)',
-    multipliers: { down: 0.75, up: 1.1 }
+    description: 'Tech-акции $10-250B (HUBS, ZS, DDOG)',
+    multipliers: { down: 0.70, up: 1.1 }
   },
   growth: {
     label: 'Рост/События',
     description: 'Growth-акции, event-driven, высокая IV',
-    multipliers: { down: 0.75, up: 0.9 }
+    multipliers: { down: 0.55, up: 1.05 }
   },
   illiquid: {
     label: 'Неликвидные',

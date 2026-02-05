@@ -17,6 +17,7 @@ import ExitCalculator from '../ExitCalculator';
 
 // Импорт функций для расчёта цены опциона
 import { calculateOptionTheoreticalPrice as calculateStockOptionTheoreticalPrice } from '../../../utils/optionPricing';
+import { calculateFuturesOptionTheoreticalPrice } from '../../../utils/futuresPricing'; // FIX: Explicit import for futures pricing
 import { getOptionVolatility } from '../../../utils/volatilitySurface';
 import { calculateDaysRemainingUTC, getOldestEntryDate } from '../../../utils/dateUtils';
 import { CALCULATOR_MODES } from '../../../utils/universalPricing';
@@ -210,13 +211,22 @@ function CalculatorDealTabs({
         premium: firstOption.isPremiumModified ? firstOption.customPremium : firstOption.premium,
       };
       
-      targetClosePrice = calculateStockOptionTheoreticalPrice(
-        tempOption,
-        targetAssetPriceDollars,
-        simulatedDaysToExpiration,
-        optionVolatility,
-        dividendYield
-      );
+      if (calculatorMode === CALCULATOR_MODES.FUTURES) {
+        targetClosePrice = calculateFuturesOptionTheoreticalPrice(
+          tempOption,
+          targetAssetPriceDollars,
+          simulatedDaysToExpiration,
+          optionVolatility
+        );
+      } else {
+        targetClosePrice = calculateStockOptionTheoreticalPrice(
+          tempOption,
+          targetAssetPriceDollars,
+          simulatedDaysToExpiration,
+          optionVolatility,
+          dividendYield
+        );
+      }
     }
     
     // Сдвиг цены для каждого шага

@@ -1,15 +1,13 @@
 """
-Калькулятор P&L для опционов на фьючерсы (ЗАГЛУШКА)
-ЗАЧЕМ: Содержит логику расчёта прибыли/убытка для опционов на фьючерсы
+Калькулятор P&L для опционов на фьючерсы
+ЗАЧЕМ: Содержит полную математику расчёта прибыли/убытка для опционов на фьючерсы (модель Black-76)
 Затрагивает: Универсальный калькулятор опционов (режим "Фьючерсы")
 
-СТАТУС: ЗАГЛУШКА — полная математика будет реализована позже
-
-Особенности расчётов для фьючерсов (отличия от акций):
-- Множитель контракта: pointValue из настроек (не фиксированный 100)
-- БЕЗ дивидендов (не применимо к фьючерсам)
-- Другая модель безрисковой ставки
-- Специфические формулы P&L (будут исследованы отдельно)
+Особенности расчётов для фьючерсов:
+- Модель: Black-76 (стандарт для опционов на фьючерсы)
+- Множитель контракта: pointValue из настроек (вместо фиксированного 100)
+- Дивиденды: Не используются
+- Базовый актив: Цена фьючерса (Futures Price)
 """
 
 from typing import Dict, List, Optional
@@ -20,9 +18,6 @@ class FuturesPLCalculator:
     """
     Калькулятор P&L для опционов на фьючерсы
     ЗАЧЕМ: Инкапсулирует всю логику расчётов для режима "Фьючерсы"
-    
-    ПРИМЕЧАНИЕ: Это заглушка. Полная математика будет реализована
-    после исследования специфики опционов на фьючерсы.
     """
     
     def __init__(self, point_value: float = 50, risk_free_rate: float = 0.05):
@@ -35,8 +30,6 @@ class FuturesPLCalculator:
         """
         self.point_value = point_value
         self.risk_free_rate = risk_free_rate
-        # Для фьючерсов дивиденды не применяются
-        self.dividend_yield = 0.0
     
     def calculate_option_pl(
         self,
@@ -55,9 +48,6 @@ class FuturesPLCalculator:
         Рассчитать P&L для одной опционной позиции на фьючерс
         ЗАЧЕМ: Основной метод расчёта прибыли/убытка
         
-        ПРИМЕЧАНИЕ: Упрощённая реализация (заглушка).
-        Полная математика будет добавлена позже.
-        
         Args:
             option_type: 'call' или 'put'
             position_type: 'long' или 'short'
@@ -68,7 +58,7 @@ class FuturesPLCalculator:
             target_price: Целевая цена для расчёта P&L
             days_to_expiry: Дней до экспирации
             iv: Implied Volatility
-            target_days: Целевое количество дней
+            target_days: Целевое количество дней (оставшихся)
             
         Returns:
             Dict с результатами расчёта P&L
@@ -83,45 +73,50 @@ class FuturesPLCalculator:
         else:  # put
             intrinsic_value = max(0, strike - target_price)
         
-        # P&L на экспирации с использованием point_value вместо 100
-        # ВАЖНО: Для фьючерсов используется pointValue из настроек
+        # P&L на экспирации с использованием point_value
+        # Formula: (Intrinsic - Premium) * Direction * Qty * PointValue
         pl_at_expiry = (intrinsic_value - premium) * direction * quantity * self.point_value
         
-        # Упрощённый расчёт с временной стоимостью (заглушка)
-        # TODO: Реализовать полную модель для фьючерсов
+        # Если указаны целевые дни, рассчитываем с учётом временной стоимости по Black-76
         if target_days is not None and target_days > 0:
-            # Линейная аппроксимация временного распада (заглушка)
-            time_decay_factor = target_days / days_to_expiry if days_to_expiry > 0 else 0
-            time_value = premium * time_decay_factor * 0.5  # Упрощённо
-            theoretical_price = intrinsic_value + time_value
+            theoretical_price = self._calculate_theoretical_price(
+                option_type=option_type,
+                strike=strike,
+                futures_price=target_price,
+                days_to_expiry=target_days,
+                iv=iv
+            )
             pl_with_time = (theoretical_price - premium) * direction * quantity * self.point_value
         else:
             pl_with_time = pl_at_expiry
             theoretical_price = intrinsic_value
         
-        # Упрощённые Greeks (заглушка)
-        # TODO: Реализовать полный расчёт Greeks для фьючерсов
-        greeks = self._calculate_greeks_stub(
+        # Рассчитываем Greeks
+        greeks = self._calculate_greeks(
             option_type=option_type,
             strike=strike,
-            underlying_price=current_price,
+            futures_price=current_price,
             days_to_expiry=days_to_expiry,
-            iv=iv,
-            direction=direction,
-            quantity=quantity
+            iv=iv
         )
+        
+        # Применяем направление, количество и point_value к Greeks
+        adjusted_greeks = {
+            'delta': greeks['delta'] * direction * quantity * self.point_value,
+            'gamma': greeks['gamma'] * quantity * self.point_value,
+            'theta': greeks['theta'] * direction * quantity * self.point_value,
+            'vega': greeks['vega'] * direction * quantity * self.point_value
+        }
         
         return {
             'pl_at_expiry': round(pl_at_expiry, 2),
             'pl_with_time': round(pl_with_time, 2),
             'theoretical_price': round(theoretical_price, 4),
             'intrinsic_value': round(intrinsic_value, 4),
-            'greeks': greeks,
+            'greeks': adjusted_greeks,
             'max_profit': self._calculate_max_profit(option_type, position_type, strike, premium, quantity),
             'max_loss': self._calculate_max_loss(option_type, position_type, strike, premium, quantity),
-            'breakeven': self._calculate_breakeven(option_type, strike, premium, position_type),
-            '_is_stub': True,  # Флаг, что это заглушка
-            '_message': 'Используется упрощённая модель. Полная математика для фьючерсов будет реализована позже.'
+            'breakeven': self._calculate_breakeven(option_type, strike, premium, position_type)
         }
     
     def calculate_portfolio_pl(
@@ -169,8 +164,7 @@ class FuturesPLCalculator:
             'total_pl_at_expiry': round(total_pl_at_expiry, 2),
             'total_pl_with_time': round(total_pl_with_time, 2),
             'total_greeks': {k: round(v, 4) for k, v in total_greeks.items()},
-            'position_details': position_details,
-            '_is_stub': True
+            'position_details': position_details
         }
     
     def generate_pl_curve(
@@ -205,58 +199,108 @@ class FuturesPLCalculator:
         
         return curve
     
-    def _calculate_greeks_stub(
+    def _calculate_theoretical_price(
         self,
         option_type: str,
         strike: float,
-        underlying_price: float,
+        futures_price: float,
         days_to_expiry: int,
-        iv: float,
-        direction: int,
-        quantity: int
+        iv: float
+    ) -> float:
+        """
+        Рассчитать теоретическую цену опциона по модели Black-76
+        ЗАЧЕМ: Для расчёта P&L с учётом временной стоимости и волатильности
+        """
+        if days_to_expiry <= 0:
+            if option_type.lower() == 'call':
+                return max(0, futures_price - strike)
+            else:
+                return max(0, strike - futures_price)
+        
+        t = days_to_expiry / 365.0
+        f = futures_price
+        k = strike
+        r = self.risk_free_rate
+        sigma = iv
+        
+        if sigma <= 0:
+            sigma = 0.0001
+            
+        sqrt_t = math.sqrt(t)
+        d1 = (math.log(f / k) + (0.5 * sigma ** 2) * t) / (sigma * sqrt_t)
+        d2 = d1 - sigma * sqrt_t
+        
+        discount = math.exp(-r * t)
+        
+        if option_type.lower() == 'call':
+            price = discount * (f * self._norm_cdf(d1) - k * self._norm_cdf(d2))
+        else:
+            price = discount * (k * self._norm_cdf(-d2) - f * self._norm_cdf(-d1))
+            
+        return max(0, price)
+    
+    def _calculate_greeks(
+        self,
+        option_type: str,
+        strike: float,
+        futures_price: float,
+        days_to_expiry: int,
+        iv: float
     ) -> Dict[str, float]:
         """
-        Упрощённый расчёт Greeks (заглушка)
-        ЗАЧЕМ: Временная реализация до полной математики
-        
-        TODO: Реализовать полный расчёт Greeks для фьючерсов
+        Рассчитать Greeks по модели Black-76
+        ЗАЧЕМ: Для оценки рисков
         """
         if days_to_expiry <= 0 or iv <= 0:
             return {'delta': 0, 'gamma': 0, 'theta': 0, 'vega': 0}
+            
+        t = days_to_expiry / 365.0
+        f = futures_price
+        k = strike
+        r = self.risk_free_rate
+        sigma = iv
         
-        # Упрощённая дельта на основе монетности
-        moneyness = underlying_price / strike if strike > 0 else 1
+        sqrt_t = math.sqrt(t)
+        d1 = (math.log(f / k) + (0.5 * sigma ** 2) * t) / (sigma * sqrt_t)
+        d2 = d1 - sigma * sqrt_t
+        
+        pdf_d1 = math.exp(-0.5 * d1 ** 2) / math.sqrt(2 * math.pi)
+        discount = math.exp(-r * t)
+        
+        # Delta
+        if option_type.lower() == 'call':
+            delta = discount * self._norm_cdf(d1)
+        else:
+            delta = -discount * self._norm_cdf(-d1)
+            
+        # Gamma
+        gamma = (discount * pdf_d1) / (f * sigma * sqrt_t)
+        
+        # Vega (per 1% volatility change)
+        vega = f * discount * pdf_d1 * sqrt_t / 100.0
+        
+        # Theta (per day)
+        # Black-76 Theta formula
+        term1 = -(f * sigma * discount * pdf_d1) / (2 * sqrt_t)
         
         if option_type.lower() == 'call':
-            if moneyness > 1.05:
-                delta = 0.8
-            elif moneyness > 0.95:
-                delta = 0.5
-            else:
-                delta = 0.2
-        else:  # put
-            if moneyness < 0.95:
-                delta = -0.8
-            elif moneyness < 1.05:
-                delta = -0.5
-            else:
-                delta = -0.2
-        
-        # Применяем направление и количество
-        adjusted_delta = delta * direction * quantity * self.point_value
-        
-        # Заглушки для остальных Greeks
-        gamma = 0.01 * quantity * self.point_value
-        theta = -0.05 * direction * quantity * self.point_value
-        vega = 0.1 * direction * quantity * self.point_value
+            term2 = r * k * discount * self._norm_cdf(d2) - r * f * discount * self._norm_cdf(d1)
+        else:
+            term2 = r * k * discount * self._norm_cdf(-d2) - r * f * discount * self._norm_cdf(-d1)
+            
+        theta = (term1 + term2) / 365.0
         
         return {
-            'delta': round(adjusted_delta, 4),
+            'delta': round(delta, 4),
             'gamma': round(gamma, 6),
             'theta': round(theta, 4),
             'vega': round(vega, 4)
         }
     
+    def _norm_cdf(self, x: float) -> float:
+        """Кумулятивная функция нормального распределения"""
+        return 0.5 * (1 + math.erf(x / math.sqrt(2)))
+        
     def _calculate_max_profit(
         self,
         option_type: str,
@@ -270,7 +314,7 @@ class FuturesPLCalculator:
         
         if is_long:
             if option_type.lower() == 'call':
-                return None  # Неограничено (JSON совместимость)
+                return None  # Неограничено
             else:
                 return (strike - premium) * quantity * self.point_value
         else:
@@ -291,7 +335,7 @@ class FuturesPLCalculator:
             return premium * quantity * self.point_value
         else:
             if option_type.lower() == 'call':
-                return None  # Неограничено (JSON совместимость)
+                return None  # Неограничено
             else:
                 return (strike - premium) * quantity * self.point_value
     

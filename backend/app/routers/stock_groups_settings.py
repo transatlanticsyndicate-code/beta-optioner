@@ -33,6 +33,8 @@ class StockGroup(BaseModel):
 class Thresholds(BaseModel):
     stable_min_cap: float = 100
     stable_max_beta: float = 1.2
+    tech_growth_min_cap: float = 10
+    tech_growth_max_cap: float = 250
     illiquid_max_cap: float = 5
     illiquid_min_beta: float = 2.0
     illiquid_max_volume: float = 2
@@ -87,10 +89,15 @@ def get_default_settings() -> Dict[str, Any]:
                 "description": "Large-cap акции с низкой волатильностью",
                 "multipliers": {"down": 1.0, "up": 1.0}
             },
+            "tech-growth": {
+                "label": "Tech Growth",
+                "description": "Tech-акции $10-250B (HUBS, ZS, DDOG)",
+                "multipliers": {"down": 0.70, "up": 1.1}
+            },
             "growth": {
                 "label": "Рост/События",
                 "description": "Growth-акции, event-driven, высокая IV",
-                "multipliers": {"down": 0.75, "up": 0.9}
+                "multipliers": {"down": 0.55, "up": 1.05}
             },
             "illiquid": {
                 "label": "Неликвидные",
@@ -101,6 +108,8 @@ def get_default_settings() -> Dict[str, Any]:
         "thresholds": {
             "stable_min_cap": 100,
             "stable_max_beta": 1.2,
+            "tech_growth_min_cap": 10,
+            "tech_growth_max_cap": 250,
             "illiquid_max_cap": 5,
             "illiquid_min_beta": 2.0,
             "illiquid_max_volume": 2,
