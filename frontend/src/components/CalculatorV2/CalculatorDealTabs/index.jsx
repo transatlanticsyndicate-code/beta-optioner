@@ -381,6 +381,20 @@ function CalculatorDealTabs({
       return;
     }
 
+    // Получаем первый видимый опцион для ASK цены
+    const visibleOptions = options.filter(opt => opt.visible !== false);
+    const firstOption = visibleOptions[0];
+    
+    // Получаем ASK цену опциона из таблицы
+    let askPrice = 0;
+    if (firstOption) {
+      if (firstOption.isPremiumModified && firstOption.customPremium !== undefined) {
+        askPrice = parseFloat(firstOption.customPremium) || 0;
+      } else {
+        askPrice = parseFloat(firstOption.ask) || parseFloat(firstOption.premium) || 0;
+      }
+    }
+
     // Получаем дату входа из dealInfo
     const entryDate = dealInfo.createdAt ? new Date(dealInfo.createdAt) : new Date();
     const formattedDate = `${String(entryDate.getDate()).padStart(2, '0')}.${String(entryDate.getMonth() + 1).padStart(2, '0')}.${String(entryDate.getFullYear()).slice(-2)}`;
@@ -390,8 +404,8 @@ function CalculatorDealTabs({
       // Цена базового актива одинакова для всех шагов - это текущая цена актива
       const assetPrice = currentPrice;
 
-      // Формируем текст по шаблону
-      const text = `Срезка ${row.step} - цена Акции ${assetPrice.toFixed(2)} - цена Опциона ${row.optionPrice.toFixed(2)} * ${row.quantity} - дата входа ${formattedDate}`;
+      // Формируем текст по шаблону с ASK ценой из таблицы опционов
+      const text = `Срезка ${row.step} - цена Акции ${assetPrice.toFixed(2)} - цена покупки Опциона ${askPrice.toFixed(2)} * ${row.quantity} - дата входа ${formattedDate}`;
 
       return {
         price: row.optionPrice,
