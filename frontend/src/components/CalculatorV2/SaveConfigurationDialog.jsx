@@ -145,7 +145,7 @@ function SaveConfigurationDialog({ isOpen, onClose, onSave, currentState, isLock
         // Рассчитываем количество опционов как сумму всех quantity в видимых опционах
         const visibleOptions = (currentState.options || []).filter(opt => opt.visible !== false);
         const totalOptionsCount = visibleOptions.reduce((sum, opt) => sum + Math.abs(opt.quantity || 1), 0);
-        autoName = `💼 Сделка - ${dealInfo.ticker} - опционов ${totalOptionsCount}`;
+        autoName = `💼 Сделка - ${dealInfo.ticker}`;
       } else {
         autoName = generateConfigName(currentState, isLocked);
       }

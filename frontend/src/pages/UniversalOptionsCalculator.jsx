@@ -290,7 +290,14 @@ function UniversalOptionsCalculator() {
   
   // State для сохранения настроек таба Сделка
   // ЗАЧЕМ: Передать настройки в диалог сохранения позиции
-  const [dealSettings, setDealSettings] = useState(null); // { targetAssetPricePercent, exitStepsCount, exitPlan }
+  const [dealSettings, setDealSettings] = useState(() => {
+    try {
+      const saved = localStorage.getItem('optioner_deal_settings');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
 
   // УБРАНО: AI модель не используется в универсальном калькуляторе
   // Оставляем переменные как заглушки для совместимости с компонентами
@@ -315,6 +322,16 @@ function UniversalOptionsCalculator() {
       localStorage.removeItem('optioner_deal_info');
     }
   }, [dealInfo]);
+
+  // Сохраняем dealSettings в localStorage при изменении
+  // ЗАЧЕМ: Настройки таба Сделка (срезки, целевые цены) не сбрасываются после перезагрузки
+  useEffect(() => {
+    if (dealSettings) {
+      localStorage.setItem('optioner_deal_settings', JSON.stringify(dealSettings));
+    } else {
+      localStorage.removeItem('optioner_deal_settings');
+    }
+  }, [dealSettings]);
 
   // State для формы новой сделки
   const [dealForm, setDealForm] = useState({
@@ -677,9 +694,11 @@ function UniversalOptionsCalculator() {
     // Подсчитываем количество видимых опционов
     const visibleOptions = options.filter(opt => opt.visible !== false);
     
-    // Проверяем, что есть ровно один опцион типа Buy CALL
-    // ЗАЧЕМ: Функционал сделки поддерживает только один опцион Buy CALL
+    // Проверяем допустимые комбинации опционов для сделки
+    // ЗАЧЕМ: Сделка поддерживает один Buy CALL (позитивный сценарий) + опционально один Buy PUT (негативный сценарий)
     const buyCallOptions = visibleOptions.filter(opt => opt.action === 'Buy' && opt.type === 'CALL');
+    const buyPutOptions = visibleOptions.filter(opt => opt.action === 'Buy' && opt.type === 'PUT');
+    const otherOptions = visibleOptions.filter(opt => !(opt.action === 'Buy' && (opt.type === 'CALL' || opt.type === 'PUT')));
     
     if (visibleOptions.length === 0) {
       alert('Добавьте опцион в таблицу для создания сделки');
@@ -688,21 +707,27 @@ function UniversalOptionsCalculator() {
     }
     
     if (buyCallOptions.length === 0) {
-      alert('На данный момент функционал Сделки поддерживает работу только с одним опционом типа Buy CALL');
+      alert('Для создания сделки необходим хотя бы один опцион типа Buy CALL (позитивный сценарий)');
       console.warn('⚠️ [Deal] В таблице нет опционов Buy CALL');
       return;
     }
     
     if (buyCallOptions.length > 1) {
-      alert('На данный момент функционал Сделки поддерживает работу только с одним опционом типа Buy CALL');
+      alert('Функционал Сделки поддерживает только один опцион Buy CALL');
       console.warn('⚠️ [Deal] В таблице больше одного опциона Buy CALL:', buyCallOptions.length);
       return;
     }
     
-    // Проверяем, что в таблице нет других опционов кроме Buy CALL
-    if (visibleOptions.length > buyCallOptions.length) {
-      alert('На данный момент функционал Сделки поддерживает работу только с одним опционом типа Buy CALL. Удалите другие опционы из таблицы.');
-      console.warn('⚠️ [Deal] В таблице есть другие опционы кроме Buy CALL');
+    if (buyPutOptions.length > 1) {
+      alert('Функционал Сделки поддерживает только один опцион Buy PUT');
+      console.warn('⚠️ [Deal] В таблице больше одного опциона Buy PUT:', buyPutOptions.length);
+      return;
+    }
+    
+    // Проверяем, что нет Sell опционов или других типов
+    if (otherOptions.length > 0) {
+      alert('Функционал Сделки поддерживает только опционы Buy CALL и Buy PUT. Удалите другие опционы из таблицы.');
+      console.warn('⚠️ [Deal] В таблице есть недопустимые опционы:', otherOptions.length);
       return;
     }
     
@@ -2413,7 +2438,7 @@ function UniversalOptionsCalculator() {
                 return (
                   <div className={`inline-flex items-center gap-4 p-3 ${bgColor} border-2 ${borderColor} rounded-lg`} style={{ minHeight: '57px' }}>
                     <span className={`text-lg font-bold ${textColor}`}>
-                      Сделка - {dealInfo.ticker} - опционов {currentOptionsCount}
+                      Сделка - {dealInfo.ticker}
                     </span>
                   </div>
                 );

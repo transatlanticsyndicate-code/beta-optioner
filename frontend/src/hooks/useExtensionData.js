@@ -401,6 +401,7 @@ export function sendSlicesToTradingViewCommand(slices, chartUrl = null) {
       text: slice.text
     })),
     chartUrl: chartUrl,
+    openTab: false,
     timestamp: Date.now(),
     processed: false
   };

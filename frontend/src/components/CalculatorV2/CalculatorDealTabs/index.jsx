@@ -15,13 +15,12 @@ import PLChart from '../PLChart';
 import OptionSelectionResult from '../OptionSelectionResult';
 import ExitCalculator from '../ExitCalculator';
 
-// Импорт функций для расчёта цены опциона
-import { calculateOptionTheoreticalPrice as calculateStockOptionTheoreticalPrice } from '../../../utils/optionPricing';
-import { calculateFuturesOptionTheoreticalPrice } from '../../../utils/futuresPricing'; // FIX: Explicit import for futures pricing
-import { getOptionVolatility } from '../../../utils/volatilitySurface';
-import { calculateDaysRemainingUTC, getOldestEntryDate } from '../../../utils/dateUtils';
-import { CALCULATOR_MODES } from '../../../utils/universalPricing';
+// Импорт функций для взаимодействия с расширением Chrome
 import { sendSlicesToTradingViewCommand, sendClearSlicesCommand } from '../../../hooks/useExtensionData';
+
+// Импорт компонентов и утилит таба Сделка
+import ScenarioBlock from './ScenarioBlock';
+import { calculateExitPlan } from './calculateExitPlan';
 
 /**
  * CalculatorDealTabs — контейнер с двумя табами под таблицей опционов
@@ -88,6 +87,18 @@ function CalculatorDealTabs({
   const [dollarsInputValue, setDollarsInputValue] = useState('');
   const [isDollarsInputFocused, setIsDollarsInputFocused] = useState(false);
   
+  // Отдельные state для негативного сценария (Buy PUT) — вход
+  // ЗАЧЕМ: Настройки % и $ для входа в PUT независимы от CALL
+  const [targetAssetPricePercentPut, setTargetAssetPricePercentPut] = useState(-10);
+  const [dollarsInputValuePut, setDollarsInputValuePut] = useState('');
+  const [isDollarsInputFocusedPut, setIsDollarsInputFocusedPut] = useState(false);
+  
+  // State для целевой цены выхода из PUT
+  // ЗАЧЕМ: Отдельная целевая цена для выхода из PUT опциона
+  const [targetAssetPricePercentPutExit, setTargetAssetPricePercentPutExit] = useState(-20);
+  const [dollarsInputValuePutExit, setDollarsInputValuePutExit] = useState('');
+  const [isDollarsInputFocusedPutExit, setIsDollarsInputFocusedPutExit] = useState(false);
+  
   // State для отслеживания отправки срезок
   // ЗАЧЕМ: После отправки показываем кнопку перехода на TradingView вместо кнопки отправки
   const [slicesSent, setSlicesSent] = useState(false);
@@ -99,6 +110,12 @@ function CalculatorDealTabs({
   // State для сохранения ссылки на график TradingView
   // ЗАЧЕМ: Используется в кнопке "Перейти на график TradingView"
   const [tradingViewUrl, setTradingViewUrl] = useState(null);
+  
+  // State для негативного сценария (Buy PUT) — аналогичные состояния
+  // ЗАЧЕМ: Негативный сценарий имеет свои собственные срезки и ссылку на график
+  const [slicesSentPut, setSlicesSentPut] = useState(false);
+  const [frozenExitPlanPut, setFrozenExitPlanPut] = useState(null);
+  const [tradingViewUrlPut, setTradingViewUrlPut] = useState(null);
   
   // Ref для хранения последнего обработанного dealSettings
   // ЗАЧЕМ: Избежать повторной обработки того же объекта dealSettings
@@ -125,9 +142,30 @@ function CalculatorDealTabs({
         setFrozenExitPlan(dealSettings.frozenExitPlan);
       }
       
+      // Восстанавливаем состояние негативного сценария (PUT)
+      if (dealSettings.slicesSentPut !== undefined) {
+        setSlicesSentPut(dealSettings.slicesSentPut);
+      }
+      if (dealSettings.tradingViewUrlPut !== undefined) {
+        setTradingViewUrlPut(dealSettings.tradingViewUrlPut);
+      }
+      if (dealSettings.frozenExitPlanPut !== undefined) {
+        setFrozenExitPlanPut(dealSettings.frozenExitPlanPut);
+      }
+      
+      // Восстанавливаем настройки целевых цен PUT
+      if (dealSettings.targetAssetPricePercentPut !== undefined) {
+        setTargetAssetPricePercentPut(dealSettings.targetAssetPricePercentPut);
+      }
+      if (dealSettings.targetAssetPricePercentPutExit !== undefined) {
+        setTargetAssetPricePercentPutExit(dealSettings.targetAssetPricePercentPutExit);
+      }
+      
       console.log('📊 Состояние срезок восстановлено из dealSettings:', {
         slicesSent: dealSettings.slicesSent,
-        tradingViewUrl: dealSettings.tradingViewUrl
+        tradingViewUrl: dealSettings.tradingViewUrl,
+        slicesSentPut: dealSettings.slicesSentPut,
+        tradingViewUrlPut: dealSettings.tradingViewUrlPut,
       });
       
       lastProcessedSettingsRef.current = dealSettings;
@@ -139,12 +177,29 @@ function CalculatorDealTabs({
     }
   }, [dealSettings]);
   
-  // Динамический расчёт количества опционов из текущего состояния
+  // Фильтрация опционов по типу для разных сценариев
+  // ЗАЧЕМ: Позитивный сценарий работает с Buy CALL, негативный — с Buy PUT
+  const buyCallOptions = useMemo(() => {
+    return options.filter(opt => opt.visible !== false && opt.action === 'Buy' && opt.type === 'CALL');
+  }, [options]);
+  
+  const buyPutOptions = useMemo(() => {
+    return options.filter(opt => opt.visible !== false && opt.action === 'Buy' && opt.type === 'PUT');
+  }, [options]);
+  
+  // Флаг наличия негативного сценария
+  const hasNegativeScenario = buyPutOptions.length > 0;
+  
+  // Динамический расчёт количества опционов Buy CALL (позитивный сценарий)
   // ЗАЧЕМ: При изменении quantity в таблице опционов — сделка автоматически обновляется
   const currentOptionsCount = useMemo(() => {
-    const visibleOptions = options.filter(opt => opt.visible !== false);
-    return visibleOptions.reduce((sum, opt) => sum + Math.abs(opt.quantity || 1), 0);
-  }, [options]);
+    return buyCallOptions.reduce((sum, opt) => sum + Math.abs(opt.quantity || 1), 0);
+  }, [buyCallOptions]);
+  
+  // Количество опционов Buy PUT (негативный сценарий)
+  const putOptionsCount = useMemo(() => {
+    return buyPutOptions.reduce((sum, opt) => sum + Math.abs(opt.quantity || 1), 0);
+  }, [buyPutOptions]);
   
   // Эффективное количество шагов (не больше количества опционов)
   // ЗАЧЕМ: Если опционов меньше чем шагов — уменьшаем шаги до количества опционов
@@ -153,6 +208,9 @@ function CalculatorDealTabs({
     return Math.min(exitStepsCount, currentOptionsCount);
   }, [exitStepsCount, currentOptionsCount]);
   
+  // Количество шагов для негативного сценария фиксировано: 2 (вход и выход)
+  const effectivePutStepsCount = 2;
+  
   // Целевая цена актива в долларах (рассчитывается из текущей цены + проценты)
   // ЗАЧЕМ: currentPrice + (currentPrice * targetAssetPricePercent / 100)
   const targetAssetPriceDollars = useMemo(() => {
@@ -160,107 +218,47 @@ function CalculatorDealTabs({
     return Math.round(currentPrice * (1 + targetAssetPricePercent / 100) * 100) / 100;
   }, [currentPrice, targetAssetPricePercent]);
   
-  // Расчёт плана выхода
+  // Целевая цена актива в $ для негативного сценария (PUT) — вход
+  const targetAssetPriceDollarsPut = useMemo(() => {
+    if (currentPrice === 0) return 0;
+    return Math.round(currentPrice * (1 + targetAssetPricePercentPut / 100) * 100) / 100;
+  }, [currentPrice, targetAssetPricePercentPut]);
+  
+  // Целевая цена актива в $ для негативного сценария (PUT) — выход
+  const targetAssetPriceDollarsPutExit = useMemo(() => {
+    if (currentPrice === 0) return 0;
+    return Math.round(currentPrice * (1 + targetAssetPricePercentPutExit / 100) * 100) / 100;
+  }, [currentPrice, targetAssetPricePercentPutExit]);
+  
+  // Общие параметры для расчёта планов выхода
+  const exitPlanParams = { daysPassed, ivSurface, dividendYield, contractMultiplier, calculatorMode, dealInfo };
+  
+  // Расчёт плана выхода для позитивного сценария (Buy CALL)
   // ЗАЧЕМ: Равномерно распределяем количество опционов на N шагов выхода
-  // Остаток распределяется по первым шагам (7 при 4 шагах → 2,2,2,1)
-  // Цена опциона рассчитывается линейно от цены входа до целевой цены закрытия
   const exitPlan = useMemo(() => {
-    if (!dealInfo || currentOptionsCount <= 0 || effectiveStepsCount <= 0) return [];
-    
-    const totalOptions = currentOptionsCount;
-    const steps = effectiveStepsCount;
-    const baseQuantity = Math.floor(totalOptions / steps);
-    const remainder = totalOptions % steps;
-    
-    // Получаем первый видимый опцион для расчёта цен
-    const visibleOptions = options.filter(opt => opt.visible !== false);
-    const firstOption = visibleOptions[0];
-    
-    // Цена входа опциона (ASK для Buy, BID для Sell)
-    let entryPrice = 0;
-    let targetClosePrice = 0;
-    
-    if (firstOption) {
-      // Цена входа
-      if (firstOption.isPremiumModified && firstOption.customPremium !== undefined) {
-        entryPrice = parseFloat(firstOption.customPremium) || 0;
-      } else if (firstOption.action === 'Buy') {
-        entryPrice = parseFloat(firstOption.ask) || parseFloat(firstOption.premium) || 0;
-      } else {
-        entryPrice = parseFloat(firstOption.bid) || parseFloat(firstOption.premium) || 0;
-      }
-      
-      // Рассчитываем целевую цену закрытия опциона при targetAssetPriceDollars
-      // ЗАЧЕМ: Используем теоретическую цену опциона при целевой цене актива
-      const oldestEntryDate = getOldestEntryDate(visibleOptions);
-      const currentDaysToExpiration = calculateDaysRemainingUTC(firstOption, 0, 30, oldestEntryDate);
-      const simulatedDaysToExpiration = calculateDaysRemainingUTC(firstOption, daysPassed, 30, oldestEntryDate);
-      
-      // Получаем IV для расчёта
-      const optionVolatility = getOptionVolatility(
-        firstOption,
-        currentDaysToExpiration,
-        simulatedDaysToExpiration,
-        ivSurface,
-        'simple'
-      );
-      
-      // Рассчитываем теоретическую цену опциона при целевой цене актива
-      const tempOption = {
-        ...firstOption,
-        premium: firstOption.isPremiumModified ? firstOption.customPremium : firstOption.premium,
-      };
-      
-      if (calculatorMode === CALCULATOR_MODES.FUTURES) {
-        targetClosePrice = calculateFuturesOptionTheoreticalPrice(
-          tempOption,
-          targetAssetPriceDollars,
-          simulatedDaysToExpiration,
-          optionVolatility
-        );
-      } else {
-        targetClosePrice = calculateStockOptionTheoreticalPrice(
-          tempOption,
-          targetAssetPriceDollars,
-          simulatedDaysToExpiration,
-          optionVolatility,
-          dividendYield
-        );
-      }
-    }
-    
-    // Сдвиг цены для каждого шага
-    const priceStep = steps > 0 ? (targetClosePrice - entryPrice) / steps : 0;
-    
-    // Остаток распределяется по первым шагам
-    // Пример: 7 опционов → baseQuantity=1, remainder=3 → 2,2,2,1
-    const plan = [];
-    let accumulatedProfit = 0;
-    
-    for (let i = 1; i <= steps; i++) {
-      // Первые remainder шагов получают +1
-      const quantity = i <= remainder 
-        ? baseQuantity + 1
-        : baseQuantity;
-      
-      // Цена опциона на этом шаге (линейная интерполяция)
-      const optionPrice = entryPrice + priceStep * i;
-      
-      // Прибыль на этом шаге = (цена выхода - цена входа) * количество * множитель
-      const stepProfit = (optionPrice - entryPrice) * quantity * contractMultiplier;
-      accumulatedProfit += stepProfit;
-      
-      plan.push({
-        step: i,
-        quantity: quantity,
-        optionPrice: Math.round(optionPrice * 100) / 100,
-        profit: Math.round(stepProfit),
-        accumulated: Math.round(accumulatedProfit)
-      });
-    }
-    
-    return plan;
-  }, [dealInfo, effectiveStepsCount, currentOptionsCount, options, targetAssetPriceDollars, daysPassed, ivSurface, dividendYield, contractMultiplier]);
+    return calculateExitPlan({
+      ...exitPlanParams,
+      filteredOptions: buyCallOptions,
+      totalOptionsCount: currentOptionsCount,
+      stepsCount: effectiveStepsCount,
+      targetAssetPriceDollars,
+    });
+  }, [dealInfo, effectiveStepsCount, currentOptionsCount, buyCallOptions, targetAssetPriceDollars, daysPassed, ivSurface, dividendYield, contractMultiplier]);
+  
+  // Расчёт плана выхода для негативного сценария (Buy PUT)
+  // ЗАЧЕМ: Отдельный план выхода для опционов Buy PUT
+  const exitPlanPut = useMemo(() => {
+    if (!hasNegativeScenario) return [];
+    return calculateExitPlan({
+      ...exitPlanParams,
+      filteredOptions: buyPutOptions,
+      totalOptionsCount: putOptionsCount,
+      stepsCount: effectivePutStepsCount,
+      targetAssetPriceDollars: targetAssetPriceDollarsPut,
+      targetAssetPriceDollarsExit: targetAssetPriceDollarsPutExit,
+      fullQuantityPerStep: true,
+    });
+  }, [dealInfo, effectivePutStepsCount, putOptionsCount, buyPutOptions, targetAssetPriceDollarsPut, targetAssetPriceDollarsPutExit, daysPassed, ivSurface, dividendYield, contractMultiplier, hasNegativeScenario]);
   
   // Сохраняем настройки таба Сделка при изменении
   // ЗАЧЕМ: Передать настройки в диалог сохранения позиции
@@ -276,73 +274,116 @@ function CalculatorDealTabs({
         slicesSent,
         tradingViewUrl,
         frozenExitPlan,
+        // Негативный сценарий (PUT)
+        slicesSentPut,
+        tradingViewUrlPut,
+        frozenExitPlanPut,
+        targetAssetPricePercentPut,
+        targetAssetPricePercentPutExit,
       });
     }
-  }, [dealInfo, targetAssetPricePercent, exitStepsCount, exitPlan, slicesSent, tradingViewUrl, frozenExitPlan, setDealSettings]);
+  }, [dealInfo, targetAssetPricePercent, exitStepsCount, exitPlan, slicesSent, tradingViewUrl, frozenExitPlan, slicesSentPut, tradingViewUrlPut, frozenExitPlanPut, targetAssetPricePercentPut, targetAssetPricePercentPutExit, setDealSettings]);
 
-  // Обработчик изменения процентов
+  // Обработчик изменения процентов (позитивный сценарий)
   // ЗАЧЕМ: При изменении % — обновляем targetPrice в блоке симуляции
   const handlePercentChange = (value) => {
     const percent = Number(value) || 0;
     setTargetAssetPricePercent(percent);
     
-    // Синхронизируем с блоком симуляции
     if (setTargetPrice && currentPrice > 0) {
       const newTargetPrice = Math.round(currentPrice * (1 + percent / 100) * 100) / 100;
       setTargetPrice(newTargetPrice);
     }
   };
   
-  // Обработчик изменения долларов (только локальный state при вводе)
-  // ЗАЧЕМ: Избегаем прыгающих значений — пересчёт происходит только при потере фокуса
+  // Обработчик изменения долларов (позитивный сценарий)
   const handleDollarsInputChange = (value) => {
     setDollarsInputValue(value);
   };
   
-  // Обработчик фокуса на инпуте долларов
   const handleDollarsFocus = () => {
     setIsDollarsInputFocused(true);
-    // При фокусе устанавливаем текущее значение в инпут
     setDollarsInputValue(targetAssetPriceDollars.toString());
   };
   
-  // Обработчик потери фокуса — пересчитываем проценты
   const handleDollarsBlur = () => {
     setIsDollarsInputFocused(false);
     const dollars = Number(dollarsInputValue) || 0;
     if (currentPrice > 0 && dollars > 0) {
-      // percent = ((dollars - currentPrice) / currentPrice) * 100
-      // Округляем до 2 знаков после запятой для точности
       const percent = Math.round(((dollars - currentPrice) / currentPrice) * 10000) / 100;
       setTargetAssetPricePercent(percent);
-      
-      // Синхронизируем с блоком симуляции
-      if (setTargetPrice) {
-        setTargetPrice(dollars);
-      }
+      if (setTargetPrice) setTargetPrice(dollars);
     }
   };
   
-  // Обработчик Enter в инпуте долларов
   const handleDollarsKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      e.target.blur(); // Триггерим blur для применения значения
+    if (e.key === 'Enter') e.target.blur();
+  };
+  
+  // Обработчики для негативного сценария (PUT)
+  const handlePercentChangePut = (value) => {
+    setTargetAssetPricePercentPut(Number(value) || 0);
+  };
+  
+  const handleDollarsInputChangePut = (value) => {
+    setDollarsInputValuePut(value);
+  };
+  
+  const handleDollarsFocusPut = () => {
+    setIsDollarsInputFocusedPut(true);
+    setDollarsInputValuePut(targetAssetPriceDollarsPut.toString());
+  };
+  
+  const handleDollarsBlurPut = () => {
+    setIsDollarsInputFocusedPut(false);
+    const dollars = Number(dollarsInputValuePut) || 0;
+    if (currentPrice > 0 && dollars > 0) {
+      const percent = Math.round(((dollars - currentPrice) / currentPrice) * 10000) / 100;
+      setTargetAssetPricePercentPut(percent);
     }
+  };
+  
+  const handleDollarsKeyDownPut = (e) => {
+    if (e.key === 'Enter') e.target.blur();
+  };
+  
+  // Обработчики для выхода из PUT
+  const handlePercentChangePutExit = (value) => {
+    setTargetAssetPricePercentPutExit(Number(value) || 0);
+  };
+  
+  const handleDollarsInputChangePutExit = (value) => {
+    setDollarsInputValuePutExit(value);
+  };
+  
+  const handleDollarsFocusPutExit = () => {
+    setIsDollarsInputFocusedPutExit(true);
+    setDollarsInputValuePutExit(targetAssetPriceDollarsPutExit.toString());
+  };
+  
+  const handleDollarsBlurPutExit = () => {
+    setIsDollarsInputFocusedPutExit(false);
+    const dollars = Number(dollarsInputValuePutExit) || 0;
+    if (currentPrice > 0 && dollars > 0) {
+      const percent = Math.round(((dollars - currentPrice) / currentPrice) * 10000) / 100;
+      setTargetAssetPricePercentPutExit(percent);
+    }
+  };
+  
+  const handleDollarsKeyDownPutExit = (e) => {
+    if (e.key === 'Enter') e.target.blur();
   };
   
   // Генерация ссылки на график TradingView для опциона
   // ЗАЧЕМ: Формирует URL для просмотра графика опциона на TradingView
   // Формат: https://www.tradingview.com/chart/?symbol=OPRA:MSFT260220C430.0
   const generateTradingViewLink = () => {
-    if (!dealInfo || !options || options.length === 0) {
+    if (!dealInfo || buyCallOptions.length === 0) {
       return null;
     }
     
-    // Получаем первый видимый опцион
-    const visibleOptions = options.filter(opt => opt.visible !== false);
-    if (visibleOptions.length === 0) return null;
-    
-    const firstOption = visibleOptions[0];
+    // Используем первый Buy CALL опцион для формирования ссылки
+    const firstOption = buyCallOptions[0];
     
     // Тикер базового актива
     const ticker = dealInfo.ticker || selectedTicker || '';
@@ -381,9 +422,8 @@ function CalculatorDealTabs({
       return;
     }
 
-    // Получаем первый видимый опцион для ASK цены
-    const visibleOptions = options.filter(opt => opt.visible !== false);
-    const firstOption = visibleOptions[0];
+    // Получаем первый Buy CALL опцион для ASK цены
+    const firstOption = buyCallOptions[0];
     
     // Получаем ASK цену опциона из таблицы
     let askPrice = 0;
@@ -428,21 +468,93 @@ function CalculatorDealTabs({
     setSlicesSent(true);
   };
 
-  // Обработчик сброса плана выхода
+  // Обработчик сброса плана выхода (позитивный сценарий)
   // ЗАЧЕМ: Удаляет срезки из расширения и разблокирует таб "Сделка"
   const handleResetExitPlan = () => {
-    // Отправляем команду в расширение об удалении срезок с ссылкой на график
     sendClearSlicesCommand(tradingViewUrl);
     console.log('🗑️ Команда на удаление срезок отправлена в расширение');
-    
-    // Очищаем замороженный план выхода
     setFrozenExitPlan(null);
-    
-    // Очищаем ссылку на TradingView
     setTradingViewUrl(null);
-    
-    // Сбрасываем флаг отправки (разблокируем таб)
     setSlicesSent(false);
+  };
+  
+  // Генерация ссылки на график TradingView для Buy PUT опциона
+  // ЗАЧЕМ: Формирует URL для просмотра графика PUT опциона на TradingView
+  const generateTradingViewLinkPut = () => {
+    if (!dealInfo || buyPutOptions.length === 0) return null;
+    
+    const firstOption = buyPutOptions[0];
+    const ticker = dealInfo.ticker || selectedTicker || '';
+    
+    const expirationDate = new Date(firstOption.date);
+    const year = String(expirationDate.getFullYear()).slice(-2);
+    const month = String(expirationDate.getMonth() + 1).padStart(2, '0');
+    const day = String(expirationDate.getDate()).padStart(2, '0');
+    const dateStr = `${year}${month}${day}`;
+    
+    const optionType = 'P';
+    const strike = firstOption.strike;
+    const strikeStr = Number.isInteger(strike) ? `${strike}.0` : String(strike);
+    
+    const symbol = `${ticker}${dateStr}${optionType}${strikeStr}`;
+    return `https://www.tradingview.com/chart/?symbol=OPRA:${symbol}`;
+  };
+  
+  // Обработчик отправки срезок для негативного сценария (Buy PUT)
+  // ЗАЧЕМ: Формирует данные срезок PUT и отправляет команду в расширение Chrome
+  const handleSendSlicesToTradingViewPut = () => {
+    if (!dealInfo || exitPlanPut.length === 0) {
+      console.warn('⚠️ Нет данных для отправки срезок (негативный сценарий)');
+      return;
+    }
+
+    const chartUrl = generateTradingViewLinkPut();
+    if (!chartUrl) {
+      console.warn('⚠️ Не удалось сгенерировать ссылку на график TradingView (PUT)');
+      return;
+    }
+
+    // Получаем первый Buy PUT опцион для ASK цены
+    const firstOption = buyPutOptions[0];
+    let askPrice = 0;
+    if (firstOption) {
+      if (firstOption.isPremiumModified && firstOption.customPremium !== undefined) {
+        askPrice = parseFloat(firstOption.customPremium) || 0;
+      } else {
+        askPrice = parseFloat(firstOption.ask) || parseFloat(firstOption.premium) || 0;
+      }
+    }
+
+    const entryDate = dealInfo.createdAt ? new Date(dealInfo.createdAt) : new Date();
+    const formattedDate = `${String(entryDate.getDate()).padStart(2, '0')}.${String(entryDate.getMonth() + 1).padStart(2, '0')}.${String(entryDate.getFullYear()).slice(-2)}`;
+
+    // Формируем срезки с надписями "Вход" и "Выход" и соответствующими целевыми ценами актива
+    const stepLabels = ['Вход', 'Выход'];
+    const stepAssetPrices = [targetAssetPriceDollarsPut, targetAssetPriceDollarsPutExit];
+    const slices = exitPlanPut.map((row, index) => {
+      const label = stepLabels[index] || `Шаг ${row.step}`;
+      const assetPrice = stepAssetPrices[index] || currentPrice;
+      const text = `${label} PUT - цена Акции ${assetPrice.toFixed(2)} - цена Опциона ${row.optionPrice.toFixed(2)} * ${row.quantity} - дата ${formattedDate}`;
+      return { price: row.optionPrice, text };
+    });
+
+    console.log('📊 [PUT] chartUrl:', chartUrl);
+    console.log('📊 [PUT] slices:', JSON.stringify(slices, null, 2));
+    sendSlicesToTradingViewCommand(slices, chartUrl);
+    console.log('📊 [PUT] Срезки PUT отправлены на график TradingView');
+    
+    setTradingViewUrlPut(chartUrl);
+    setFrozenExitPlanPut(exitPlanPut);
+    setSlicesSentPut(true);
+  };
+  
+  // Обработчик сброса плана выхода (негативный сценарий)
+  const handleResetExitPlanPut = () => {
+    sendClearSlicesCommand(tradingViewUrlPut);
+    console.log('🗑️ Команда на удаление срезок PUT отправлена в расширение');
+    setFrozenExitPlanPut(null);
+    setTradingViewUrlPut(null);
+    setSlicesSentPut(false);
   };
 
   // Используем внешний таб если передан, иначе внутренний
@@ -566,196 +678,99 @@ function CalculatorDealTabs({
         </TabsContent>
 
         {/* Таб "Сделка" — данные о созданной сделке */}
-        <TabsContent value="deal" className="mt-4">
-          {(() => {
-            const isFutures = calculatorMode === CALCULATOR_MODES.FUTURES;
-            const borderColor = dealInfo ? (isFutures ? '#a855f7' : '#22c55e') : '#b8b8b8';
-            const bgColor = isFutures ? 'bg-purple-100 dark:bg-purple-900/30' : 'bg-green-100 dark:bg-green-900/30';
-            const textColor = isFutures ? 'text-purple-700 dark:text-purple-300' : 'text-green-700 dark:text-green-300';
-            const iconColor = isFutures ? 'text-purple-600' : 'text-green-600';
-            const focusRingColor = isFutures ? 'focus:ring-purple-500' : 'focus:ring-green-500';
-            
-            return (
-              <Card className="w-full relative" style={{ borderColor }}>
-                {/* Кнопки в правом верхнем углу */}
-                <div className="absolute right-4 flex items-center gap-2" style={{ top: '2rem' }}>
-                  {!slicesSent ? (
-                    // Кнопка отправки срезок (до отправки)
-                    <button
-                      className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-200 hover:bg-gray-300 rounded-md transition-colors"
-                      onClick={handleSendSlicesToTradingView}
-                    >
-                      Отправить срезки на график TradingView →
-                    </button>
-                  ) : (
-                    <>
-                      {/* Кнопка перехода на TradingView (после отправки) */}
-                      <a
-                        href={tradingViewUrl || '#'}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-green-100 hover:bg-green-200 rounded-md transition-colors inline-block text-center no-underline"
-                        onClick={(e) => {
-                          if (!tradingViewUrl) {
-                            e.preventDefault();
-                            console.warn('⚠️ Ссылка на график TradingView не найдена');
-                          } else {
-                            console.log('🔗 Переход на график TradingView:', tradingViewUrl);
-                          }
-                        }}
-                      >
-                        Перейти на график TradingView →
-                      </a>
-                      
-                      {/* Кнопка сброса плана выхода */}
-                      <button
-                        className="px-3 py-1.5 text-xs font-medium text-red-600 bg-red-100 hover:bg-red-200 rounded-md transition-colors"
-                        onClick={handleResetExitPlan}
-                        title="Сбросить план выхода"
-                      >
-                        Сбросить план выхода
-                      </button>
-                    </>
-                  )}
+        <TabsContent value="deal" className="mt-4 space-y-4">
+          {dealInfo ? (
+            <>
+              {/* Позитивный сценарий (Buy CALL) — с кнопками срезок внутри */}
+              <ScenarioBlock
+                title="Позитивный сценарий"
+                borderColor="#22c55e"
+                bgColor="bg-green-100 dark:bg-green-900/30"
+                textColor="text-green-700 dark:text-green-300"
+                iconColor="text-green-600"
+                focusRingColor="focus:ring-green-500"
+                profitColor="text-green-600"
+                exitStepsCount={exitStepsCount}
+                setExitStepsCount={setExitStepsCount}
+                targetAssetPricePercent={targetAssetPricePercent}
+                inlineInputs
+                inputsGroupLabel="Целевая цена актива:"
+                handlePercentChange={handlePercentChange}
+                targetAssetPriceDollars={targetAssetPriceDollars}
+                dollarsInputValue={dollarsInputValue}
+                isDollarsInputFocused={isDollarsInputFocused}
+                handleDollarsInputChange={handleDollarsInputChange}
+                handleDollarsFocus={handleDollarsFocus}
+                handleDollarsBlur={handleDollarsBlur}
+                handleDollarsKeyDown={handleDollarsKeyDown}
+                exitPlan={exitPlan}
+                frozenExitPlan={frozenExitPlan}
+                slicesSent={slicesSent}
+                onSendSlices={handleSendSlicesToTradingView}
+                onResetSlices={handleResetExitPlan}
+                tradingViewUrl={tradingViewUrl}
+              />
+              
+              {/* Негативный сценарий (Buy PUT) — с кнопками срезок внутри */}
+              {hasNegativeScenario && (
+                <ScenarioBlock
+                  title="Негативный сценарий"
+                  borderColor="#ef4444"
+                  bgColor="bg-red-100 dark:bg-red-900/30"
+                  textColor="text-red-700 dark:text-red-300"
+                  iconColor="text-red-600"
+                  focusRingColor="focus:ring-red-500"
+                  profitColor="text-green-600"
+                  exitStepsCount={effectivePutStepsCount}
+                  setExitStepsCount={() => {}}
+                  targetAssetPricePercent={targetAssetPricePercentPut}
+                  handlePercentChange={handlePercentChangePut}
+                  targetAssetPriceDollars={targetAssetPriceDollarsPut}
+                  dollarsInputValue={dollarsInputValuePut}
+                  isDollarsInputFocused={isDollarsInputFocusedPut}
+                  handleDollarsInputChange={handleDollarsInputChangePut}
+                  handleDollarsFocus={handleDollarsFocusPut}
+                  handleDollarsBlur={handleDollarsBlurPut}
+                  handleDollarsKeyDown={handleDollarsKeyDownPut}
+                  exitPlan={exitPlanPut}
+                  frozenExitPlan={frozenExitPlanPut}
+                  slicesSent={slicesSentPut}
+                  onSendSlices={handleSendSlicesToTradingViewPut}
+                  onResetSlices={handleResetExitPlanPut}
+                  tradingViewUrl={tradingViewUrlPut}
+                  planTitle="ПЛАН ВХОДА И ВЫХОДА для Опциона PUT"
+                  hideStepsInput
+                  stepLabels={['Вход', 'Выход']}
+                  hideTotal
+                  warningText="ВНИМАНИЕ! При выходе из Опциона PUT необходимо также выйти из всех Опционов CALL"
+                  inlineInputs
+                  inputsGroupLabel="Целевая цена актива для входа в PUT:"
+                  secondGroupLabel="Целевая цена актива для выхода из PUT:"
+                  secondGroupPercent={targetAssetPricePercentPutExit}
+                  secondGroupHandlePercentChange={handlePercentChangePutExit}
+                  secondGroupDollars={targetAssetPriceDollarsPutExit}
+                  secondGroupDollarsInputValue={dollarsInputValuePutExit}
+                  secondGroupIsDollarsInputFocused={isDollarsInputFocusedPutExit}
+                  secondGroupHandleDollarsInputChange={handleDollarsInputChangePutExit}
+                  secondGroupHandleDollarsFocus={handleDollarsFocusPutExit}
+                  secondGroupHandleDollarsBlur={handleDollarsBlurPutExit}
+                  secondGroupHandleDollarsKeyDown={handleDollarsKeyDownPutExit}
+                />
+              )}
+            </>
+          ) : (
+            <Card className="w-full" style={{ borderColor: '#b8b8b8' }}>
+              <CardContent className="pt-6 pb-6 px-6">
+                <div className="flex flex-col items-center justify-center min-h-[200px] text-muted-foreground">
+                  <FileText size={48} className="mb-4 opacity-50" />
+                  <h3 className="text-lg font-medium mb-2">Сделка не создана</h3>
+                  <p className="text-sm text-center max-w-md">
+                    Нажмите кнопку "+ СДЕЛКА" в верхней части страницы для создания новой сделки.
+                  </p>
                 </div>
-                
-                <CardContent className="pt-6 pb-6 px-6">
-                  {dealInfo ? (
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 ${bgColor} rounded-full flex items-center justify-center`}>
-                          <FileText size={20} className={iconColor} />
-                        </div>
-                        <div>
-                          <h3 className={`text-lg font-bold ${textColor}`}>
-                            Сделка - {dealInfo.ticker} - опционов {currentOptionsCount}
-                          </h3>
-                          <p className="text-sm text-muted-foreground">
-                            Создана: {new Date(dealInfo.createdAt).toLocaleString('ru-RU')}
-                          </p>
-                        </div>
-                      </div>
-                      
-                      {/* Двухколоночный layout: настройки слева (1/3), таблица справа (2/3) */}
-                      <div className="border-t pt-4">
-                        <div className="flex gap-6">
-                          {/* Левая колонка: Настройки (1/3 ширины) */}
-                          <div className="w-1/3 space-y-4">
-                            <h4 className="text-sm font-semibold mb-4">НАСТРОЙКИ</h4>
-                            
-                            {/* Количество шагов выхода */}
-                            <div className="space-y-2">
-                              <label className="text-sm text-muted-foreground block">
-                                Количество шагов выхода:
-                              </label>
-                              <input
-                                type="number"
-                                value={exitStepsCount}
-                                onChange={(e) => setExitStepsCount(Math.max(1, Number(e.target.value) || 1))}
-                                className={`w-full h-10 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:border-transparent ${focusRingColor} ${slicesSent ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                                min="1"
-                                max="20"
-                                disabled={slicesSent}
-                              />
-                            </div>
-                            
-                            {/* Целевая цена актива в процентах */}
-                            <div className="space-y-2">
-                              <label className="text-sm text-muted-foreground block">
-                                Целевая цена актива (%):
-                              </label>
-                              <div className="relative">
-                                <input
-                                  type="number"
-                                  value={targetAssetPricePercent}
-                                  onChange={(e) => handlePercentChange(e.target.value)}
-                                  className={`w-full h-10 px-3 pr-8 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:border-transparent ${focusRingColor} ${slicesSent ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                                  min="-100"
-                                  max="1000"
-                                  step="0.01"
-                                  disabled={slicesSent}
-                                />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
-                              </div>
-                            </div>
-                            
-                            {/* Целевая цена актива в долларах */}
-                            <div className="space-y-2">
-                              <label className="text-sm text-muted-foreground block">
-                                Целевая цена актива ($):
-                              </label>
-                              <div className="relative">
-                                <input
-                                  type="number"
-                                  value={isDollarsInputFocused ? dollarsInputValue : targetAssetPriceDollars}
-                                  onChange={(e) => handleDollarsInputChange(e.target.value)}
-                                  onFocus={handleDollarsFocus}
-                                  onBlur={handleDollarsBlur}
-                                  onKeyDown={handleDollarsKeyDown}
-                                  className={`w-full h-10 px-3 pr-8 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:border-transparent ${focusRingColor} ${slicesSent ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                                  min="0"
-                                  step="0.01"
-                                  disabled={slicesSent}
-                                />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
-                              </div>
-                            </div>
-                          </div>
-                          
-                          {/* Правая колонка: Таблица План выхода (2/3 ширины) */}
-                          <div className="w-2/3">
-                            <h4 className="text-sm font-semibold mb-4">ПЛАН ВЫХОДА</h4>
-                            <div className="border rounded-lg overflow-hidden">
-                              <table className="w-full text-sm">
-                                <thead className="bg-gray-100 dark:bg-gray-800">
-                                  <tr>
-                                    <th className="px-3 py-2 text-left font-medium">Шаг</th>
-                                    <th className="px-3 py-2 text-right font-medium">Количество</th>
-                                    <th className="px-3 py-2 text-right font-medium">Цена опциона</th>
-                                    <th className="px-3 py-2 text-right font-medium">Прибыль</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {(slicesSent && frozenExitPlan ? frozenExitPlan : exitPlan).map((row, index) => {
-                                    return (
-                                      <tr key={row.step} className={index > 0 ? 'border-t' : ''}>
-                                        <td className="px-3 py-2 font-medium">{row.step}</td>
-                                        <td className="px-3 py-2 text-right">{row.quantity}</td>
-                                        <td className="px-3 py-2 text-right">${row.optionPrice.toFixed(2)}</td>
-                                        <td className="px-3 py-2 text-right text-green-600">+${row.profit.toLocaleString()}</td>
-                                      </tr>
-                                    );
-                                  })}
-                                  <tr className="border-t-2 border-gray-300 bg-gray-50 dark:bg-gray-900 font-semibold">
-                                    <td className="px-3 py-2">ИТОГО</td>
-                                    <td className="px-3 py-2 text-right">
-                                      {(slicesSent && frozenExitPlan ? frozenExitPlan : exitPlan).reduce((sum, row) => sum + row.quantity, 0)}
-                                    </td>
-                                    <td className="px-3 py-2"></td>
-                                    <td className="px-3 py-2 text-right text-green-600">
-                                      +${(slicesSent && frozenExitPlan ? frozenExitPlan : exitPlan).reduce((sum, row) => sum + row.profit, 0).toLocaleString()}
-                                    </td>
-                                  </tr>
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center min-h-[200px] text-muted-foreground">
-                      <FileText size={48} className="mb-4 opacity-50" />
-                      <h3 className="text-lg font-medium mb-2">Сделка не создана</h3>
-                      <p className="text-sm text-center max-w-md">
-                        Нажмите кнопку "+ СДЕЛКА" в верхней части страницы для создания новой сделки.
-                      </p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })()}
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
     </div>
