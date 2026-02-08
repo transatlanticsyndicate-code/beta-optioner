@@ -15,7 +15,7 @@ import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
 import { Gem, MoveRight, Loader2, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react';
-import { sendRefreshRangeCommand, readExtensionResult, useExtensionData } from '../../../hooks/useExtensionData';
+import { sendRefreshRangeCommand, sendRefreshSingleStrikeCommand, readExtensionResult, useExtensionData } from '../../../hooks/useExtensionData';
 import { calculateSuperSelectionScenarios } from './superSelectionLogic';
 
 /**
@@ -72,9 +72,15 @@ function SuperSelectionModal({
     const [minDays, setMinDays] = useState('90');
     const [maxDays, setMaxDays] = useState('300');
 
-    // 4. Диапазон страйков
+    // 4. Режим страйков: 'range' (диапазон) или 'single' (конкретный страйк)
+    const [strikeMode, setStrikeMode] = useState('range');
+
+    // 4a. Диапазон страйков (для режима 'range')
     const [minStrikePercent, setMinStrikePercent] = useState('-5');
     const [maxStrikePercent, setMaxStrikePercent] = useState('20');
+
+    // 4b. Конкретный страйк (для режима 'single')
+    const [singleStrike, setSingleStrike] = useState('');
 
     // 5. Выход на день (только для шага 2)
     const [exitDay, setExitDay] = useState('0');
@@ -118,6 +124,8 @@ function SuperSelectionModal({
             setResults([]);
             setProgressMessage('');
             setSelectedOptions(new Set()); // Сбрасываем выбранные опционы
+            setStrikeMode('range'); // Сбрасываем режим страйков
+            setSingleStrike(''); // Сбрасываем конкретный страйк
 
             // Установка дефолтных значений в зависимости от шага и режима калькулятора
             let newDropPercent = '5';
@@ -228,10 +236,16 @@ function SuperSelectionModal({
                     const result = readExtensionResult();
                     if (result && result.status === 'complete' && result.data?.options) {
                         freshOptions = result.data.options;
+                    } else if (strikeMode === 'single' && state.singleStrikeOptions && Array.isArray(state.singleStrikeOptions)) {
+                        // Режим конкретного страйка: расширение записывает данные в singleStrikeOptions
+                        freshOptions = state.singleStrikeOptions;
                     } else if (state.rangeOptions && Array.isArray(state.rangeOptions)) {
                         freshOptions = state.rangeOptions;
+                    } else if (state.singleStrikeOptions && Array.isArray(state.singleStrikeOptions)) {
+                        // Fallback: если rangeOptions пуст, пробуем singleStrikeOptions
+                        freshOptions = state.singleStrikeOptions;
                     } else if (state.options && Array.isArray(state.options)) {
-                        // Fallback на обычные options, если rangeOptions пуст
+                        // Fallback на обычные options
                         freshOptions = state.options;
                     }
 
@@ -264,7 +278,7 @@ function SuperSelectionModal({
 
             return () => clearTimeout(timer);
         }
-    }, [status, currentPrice, dropPercent, growthPercent, step, currentOptionType, mode]);
+    }, [status, currentPrice, dropPercent, growthPercent, step, currentOptionType, mode, strikeMode]);
 
     // Обработчик изменения процента для второго параметра (мин. убыток)
     // LONG: падение → цена уменьшается
@@ -327,17 +341,29 @@ function SuperSelectionModal({
     };
 
     // Запуск подбора
+    // ЗАЧЕМ: В зависимости от режима страйков отправляем разные команды расширению
     const handleStartSelection = () => {
         // Очищаем предыдущие результаты в localStorage (опционально, но полезно)
         localStorage.removeItem('tvc_refresh_result');
 
-        // Отправляем команду в расширение
-        sendRefreshRangeCommand(
-            Number(minDays),
-            Number(maxDays),
-            Number(minStrikePercent),
-            Number(maxStrikePercent)
-        );
+        if (strikeMode === 'single' && singleStrike) {
+            // Режим конкретного страйка: конвертируем абсолютный страйк в процент от текущей цены
+            // ЗАЧЕМ: Расширение TradingView принимает strikePercent, а не абсолютное значение
+            const strikePercent = ((Number(singleStrike) - currentPrice) / currentPrice) * 100;
+            sendRefreshSingleStrikeCommand(
+                Number(minDays),
+                Number(maxDays),
+                strikePercent
+            );
+        } else {
+            // Режим диапазона страйков: используем существующую логику
+            sendRefreshRangeCommand(
+                Number(minDays),
+                Number(maxDays),
+                Number(minStrikePercent),
+                Number(maxStrikePercent)
+            );
+        }
 
         // Переходим в режим ожидания
         setStatus('waiting');
@@ -652,33 +678,81 @@ function SuperSelectionModal({
                                 {/* Разделитель */}
                                 <div className="h-px bg-slate-200" />
 
-                                {/* 3. Диапазон страйков */}
-                                <div className="space-y-2">
-                                    <Label className="text-sm font-medium">
-                                        Диапазон Страйков (±%)
-                                    </Label>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-sm text-muted-foreground whitespace-nowrap">от</span>
-                                        <div className="relative w-full">
-                                            <Input
-                                                type="number"
-                                                value={minStrikePercent}
-                                                onChange={(e) => setMinStrikePercent(e.target.value)}
-                                                className="pr-6 bg-white"
-                                            />
-                                            <span className="absolute right-3 top-2.5 text-xs text-muted-foreground">%</span>
-                                        </div>
-                                        <span className="text-sm text-muted-foreground whitespace-nowrap">до</span>
-                                        <div className="relative w-full">
-                                            <Input
-                                                type="number"
-                                                value={maxStrikePercent}
-                                                onChange={(e) => setMaxStrikePercent(e.target.value)}
-                                                className="pr-6 bg-white"
-                                            />
-                                            <span className="absolute right-3 top-2.5 text-xs text-muted-foreground">%</span>
-                                        </div>
+                                {/* 3. Переключатель режима страйков */}
+                                {/* ЗАЧЕМ: Позволяет выбрать между диапазоном страйков и конкретным страйком */}
+                                <div className="space-y-3">
+                                    <Label className="text-sm font-medium">Режим подбора страйков</Label>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => setStrikeMode('range')}
+                                            className={`flex-1 px-3 py-2 text-xs font-medium rounded-md transition-all ${
+                                                strikeMode === 'range'
+                                                    ? 'bg-cyan-600 text-white shadow-md'
+                                                    : 'bg-white text-gray-600 hover:bg-cyan-50 border border-gray-200'
+                                            }`}
+                                        >
+                                            По диапазону страйков
+                                        </button>
+                                        <button
+                                            onClick={() => setStrikeMode('single')}
+                                            className={`flex-1 px-3 py-2 text-xs font-medium rounded-md transition-all ${
+                                                strikeMode === 'single'
+                                                    ? 'bg-cyan-600 text-white shadow-md'
+                                                    : 'bg-white text-gray-600 hover:bg-cyan-50 border border-gray-200'
+                                            }`}
+                                        >
+                                            По одному страйку
+                                        </button>
                                     </div>
+
+                                    {/* Условный рендеринг: диапазон или конкретный страйк */}
+                                    {strikeMode === 'range' ? (
+                                        // Режим диапазона страйков (существующий функционал)
+                                        <div className="space-y-2">
+                                            <Label className="text-sm font-medium">
+                                                Диапазон Страйков (±%)
+                                            </Label>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm text-muted-foreground whitespace-nowrap">от</span>
+                                                <div className="relative w-full">
+                                                    <Input
+                                                        type="number"
+                                                        value={minStrikePercent}
+                                                        onChange={(e) => setMinStrikePercent(e.target.value)}
+                                                        className="pr-6 bg-white"
+                                                    />
+                                                    <span className="absolute right-3 top-2.5 text-xs text-muted-foreground">%</span>
+                                                </div>
+                                                <span className="text-sm text-muted-foreground whitespace-nowrap">до</span>
+                                                <div className="relative w-full">
+                                                    <Input
+                                                        type="number"
+                                                        value={maxStrikePercent}
+                                                        onChange={(e) => setMaxStrikePercent(e.target.value)}
+                                                        className="pr-6 bg-white"
+                                                    />
+                                                    <span className="absolute right-3 top-2.5 text-xs text-muted-foreground">%</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        // Режим конкретного страйка (новый функционал)
+                                        <div className="space-y-2">
+                                            <Label className="text-sm font-medium">
+                                                Введите конкретный страйк
+                                            </Label>
+                                            <div className="relative w-full">
+                                                <Input
+                                                    type="number"
+                                                    value={singleStrike}
+                                                    onChange={(e) => setSingleStrike(e.target.value)}
+                                                    className="pr-6 bg-white"
+                                                    placeholder=""
+                                                />
+                                                <span className="absolute right-3 top-2.5 text-xs text-muted-foreground">$</span>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
