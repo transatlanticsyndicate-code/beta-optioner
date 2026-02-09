@@ -12,12 +12,25 @@ import {
   TableRow,
 } from '../../components/ui/table';
 
+// ЗАЧЕМ: Полный список фьючерсов, синхронизирован с futuresSettings.js
+// Затрагивает: Страница настроек фьючерсов, сброс к дефолтным значениям
 const DEFAULT_FUTURES = [
+  // Индексы
   { id: 1, ticker: 'ES', name: 'E-mini S&P 500', pointValue: 50 },
   { id: 2, ticker: 'NQ', name: 'E-mini Nasdaq-100', pointValue: 20 },
   { id: 3, ticker: 'YM', name: 'E-mini Dow Jones', pointValue: 5 },
+  // Metals
   { id: 4, ticker: 'GC', name: 'Gold Futures', pointValue: 100 },
+  { id: 19, ticker: 'HG', name: 'Copper', pointValue: 25000 },
+  { id: 20, ticker: 'SI', name: 'Silver', pointValue: 5000 },
+  { id: 21, ticker: 'PL', name: 'Platinum', pointValue: 50 },
+  { id: 22, ticker: 'PA', name: 'Palladium', pointValue: 100 },
+  // Energy
   { id: 5, ticker: 'CL', name: 'Crude Oil Futures', pointValue: 1000 },
+  { id: 16, ticker: 'NG', name: 'Natural Gas (Henry Hub)', pointValue: 10000 },
+  { id: 17, ticker: 'RB', name: 'RBOB Gasoline', pointValue: 42000 },
+  { id: 18, ticker: 'HO', name: 'Heating Oil', pointValue: 42000 },
+  // Agriculture
   { id: 6, ticker: 'ZC', name: 'Corn Futures', pointValue: 50 },
   { id: 7, ticker: 'ZS', name: 'Soybean Futures', pointValue: 50 },
   { id: 8, ticker: 'ZW', name: 'Wheat Futures', pointValue: 50 },
@@ -28,6 +41,26 @@ const DEFAULT_FUTURES = [
   { id: 13, ticker: 'LE', name: 'Live Cattle Futures', pointValue: 400 },
   { id: 14, ticker: 'GF', name: 'Feeder Cattle Futures', pointValue: 500 },
   { id: 15, ticker: 'LH', name: 'Lean Hog Futures', pointValue: 400 },
+  // Currencies
+  { id: 23, ticker: '6E', name: 'Euro FX', pointValue: 125000 },
+  { id: 24, ticker: '6B', name: 'British Pound', pointValue: 62500 },
+  { id: 25, ticker: '6A', name: 'Australian Dollar', pointValue: 100000 },
+  { id: 26, ticker: '6C', name: 'Canadian Dollar', pointValue: 100000 },
+  { id: 27, ticker: '6J', name: 'Japanese Yen', pointValue: 125000 },
+  { id: 28, ticker: '6S', name: 'Swiss Franc', pointValue: 125000 },
+  // Crypto
+  { id: 29, ticker: 'BTC', name: 'Bitcoin', pointValue: 5 },
+  { id: 30, ticker: 'ETH', name: 'Ether', pointValue: 50 },
+  { id: 31, ticker: 'MBT', name: 'Micro Bitcoin', pointValue: 0.1 },
+  { id: 32, ticker: 'MET', name: 'Micro Ether', pointValue: 0.50 },
+  // Micros
+  { id: 33, ticker: 'MES', name: 'Micro E-mini S&P 500', pointValue: 5 },
+  { id: 34, ticker: 'MNQ', name: 'Micro E-mini Nasdaq-100', pointValue: 2 },
+  { id: 35, ticker: 'MYM', name: 'Micro E-mini Dow', pointValue: 0.5 },
+  { id: 36, ticker: 'M2K', name: 'Micro E-mini Russell 2000', pointValue: 5 },
+  { id: 37, ticker: 'MGC', name: 'Micro Gold', pointValue: 10 },
+  { id: 38, ticker: 'SIL', name: 'Micro Silver', pointValue: 1000 },
+  { id: 39, ticker: 'MCL', name: 'Micro Crude Oil', pointValue: 100 },
 ];
 
 function SettingsFutures() {

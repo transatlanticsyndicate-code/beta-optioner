@@ -42,7 +42,7 @@ const DEFAULT_FUTURES = [
   { id: 29, ticker: 'BTC', name: 'Bitcoin', pointValue: 5 },
   { id: 30, ticker: 'ETH', name: 'Ether', pointValue: 50 },
   { id: 31, ticker: 'MBT', name: 'Micro Bitcoin', pointValue: 0.1 },
-  { id: 32, ticker: 'MET', name: 'Micro Ether', pointValue: 0.1 },
+  { id: 32, ticker: 'MET', name: 'Micro Ether', pointValue: 0.50 },
   // Micros
   { id: 33, ticker: 'MES', name: 'Micro E-mini S&P 500', pointValue: 5 },
   { id: 34, ticker: 'MNQ', name: 'Micro E-mini Nasdaq-100', pointValue: 2 },
