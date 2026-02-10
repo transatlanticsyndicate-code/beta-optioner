@@ -67,22 +67,29 @@ def _get_default_settings() -> Dict[str, Any]:
             "stable": {
                 "label": "Стабильные",
                 "description": "Large-cap акции с низкой волатильностью",
-                "multipliers": {"down": 1.0, "up": 1.0}
+                "multipliers": {"down": 1.3, "up": 1.0}
+            },
+            "tech-growth": {
+                "label": "Tech Growth",
+                "description": "Tech-акции $10-250B (HUBS, ZS, DDOG)",
+                "multipliers": {"down": 1.2, "up": 1.0}
             },
             "growth": {
                 "label": "Рост/События",
                 "description": "Growth-акции, event-driven, высокая IV",
-                "multipliers": {"down": 0.75, "up": 0.9}
+                "multipliers": {"down": 1.3, "up": 0.85}
             },
             "illiquid": {
                 "label": "Неликвидные",
                 "description": "Small-cap, низкий объём, высокий beta",
-                "multipliers": {"down": 1.0, "up": 1.2}
+                "multipliers": {"down": 1.0, "up": 1.0}
             }
         },
         "thresholds": {
             "stable_min_cap": 100,
             "stable_max_beta": 1.2,
+            "tech_growth_min_cap": 10,
+            "tech_growth_max_cap": 250,
             "illiquid_max_cap": 5,
             "illiquid_min_beta": 2.0,
             "illiquid_max_volume": 2,
@@ -128,6 +135,8 @@ def get_thresholds_config() -> Dict[str, Any]:
     return {
         "stable_min_cap": thresholds.get("stable_min_cap", 100) * 1_000_000_000,
         "stable_max_beta": thresholds.get("stable_max_beta", 1.2),
+        "tech_growth_min_cap": thresholds.get("tech_growth_min_cap", 10) * 1_000_000_000,
+        "tech_growth_max_cap": thresholds.get("tech_growth_max_cap", 250) * 1_000_000_000,
         "illiquid_max_cap": thresholds.get("illiquid_max_cap", 5) * 1_000_000_000,
         "illiquid_min_beta": thresholds.get("illiquid_min_beta", 2.0),
         "illiquid_max_volume": thresholds.get("illiquid_max_volume", 2) * 1_000_000,
@@ -366,9 +375,9 @@ def _classify_by_features(features: Dict) -> Dict[str, Any]:
     
     # ПРИОРИТЕТ 1: Tech-Growth (HUBS, ZS, DDOG и подобные)
     # ЗАЧЕМ: Tech-акции должны проверяться ПЕРВЫМИ, до illiquid
-    # ВАЖНО: Пороги в JSON хранятся в миллиардах, конвертируем в доллары
-    tech_growth_min_cap = thresholds.get("tech_growth_min_cap", 10) * 1_000_000_000
-    tech_growth_max_cap = thresholds.get("tech_growth_max_cap", 200) * 1_000_000_000
+    # ВАЖНО: Пороги уже сконвертированы в абсолютные значения в get_thresholds_config()
+    tech_growth_min_cap = thresholds.get("tech_growth_min_cap", 10_000_000_000)
+    tech_growth_max_cap = thresholds.get("tech_growth_max_cap", 250_000_000_000)
     is_tech_sector = "technology" in sector
     is_tech_growth_cap = tech_growth_min_cap <= market_cap <= tech_growth_max_cap
     
@@ -425,10 +434,16 @@ def _classify_by_features(features: Dict) -> Dict[str, Any]:
     is_low_beta = beta < thresholds["stable_max_beta"]
     
     # Проверяем сектор: stable только если НЕ growth-сектор И входит в stable-секторы
+    # ИСКЛЮЧЕНИЕ: Mega-cap Technology (AAPL, MSFT, GOOG) с cap > tech_growth_max_cap
+    # ведут себя как Stable, несмотря на Technology сектор
     is_growth_sector = any(s in sector for s in GROWTH_SECTORS)
     is_stable_sector = any(s in sector for s in STABLE_SECTORS) and not is_growth_sector
     
-    if is_large_cap and is_low_beta and is_stable_sector:
+    # Mega-cap Technology исключение: если cap превышает верхний порог tech-growth,
+    # акция слишком крупная для growth — классифицируем как stable
+    is_mega_tech_stable = is_tech_sector and market_cap > tech_growth_max_cap and is_low_beta
+    
+    if is_large_cap and is_low_beta and (is_stable_sector or is_mega_tech_stable):
         reason = f"mega-cap stable sector ({sector})"
         return {
             "group": "stable",

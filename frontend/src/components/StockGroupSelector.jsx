@@ -68,22 +68,22 @@ const DEFAULT_STOCK_GROUPS = {
   stable: {
     label: 'Стабильные',
     description: 'Large-cap акции с низкой волатильностью',
-    multipliers: { down: 1.0, up: 1.0 }
+    multipliers: { down: 1.3, up: 1.0 }
   },
   'tech-growth': {
     label: 'Tech Growth',
     description: 'Tech-акции $10-250B (HUBS, ZS, DDOG)',
-    multipliers: { down: 0.70, up: 1.1 }
+    multipliers: { down: 1.2, up: 1.0 }
   },
   growth: {
     label: 'Рост/События',
     description: 'Growth-акции, event-driven, высокая IV',
-    multipliers: { down: 0.55, up: 1.05 }
+    multipliers: { down: 1.3, up: 0.85 }
   },
   illiquid: {
     label: 'Неликвидные',
     description: 'Small-cap, низкий объём, высокий beta',
-    multipliers: { down: 1.0, up: 1.2 }
+    multipliers: { down: 1.0, up: 1.0 }
   }
 };
 
