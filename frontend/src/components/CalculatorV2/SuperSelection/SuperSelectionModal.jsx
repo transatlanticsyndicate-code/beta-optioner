@@ -347,13 +347,15 @@ function SuperSelectionModal({
         localStorage.removeItem('tvc_refresh_result');
 
         if (strikeMode === 'single' && singleStrike) {
-            // Режим конкретного страйка: конвертируем абсолютный страйк в процент от текущей цены
-            // ЗАЧЕМ: Расширение TradingView принимает strikePercent, а не абсолютное значение
+            // Режим конкретного страйка: передаём абсолютный страйк напрямую через exactStrike
+            // ЗАЧЕМ: Устраняет погрешность конвертации через проценты (currentPrice на фронте и в расширении могут отличаться)
+            // strikePercent передаётся как fallback для обратной совместимости
             const strikePercent = ((Number(singleStrike) - currentPrice) / currentPrice) * 100;
             sendRefreshSingleStrikeCommand(
                 Number(minDays),
                 Number(maxDays),
-                strikePercent
+                strikePercent,
+                Number(singleStrike) // exactStrike — расширение использует его напрямую
             );
         } else {
             // Режим диапазона страйков: используем существующую логику

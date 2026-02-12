@@ -223,11 +223,42 @@ function UniversalOptionsCalculator() {
 
   // State для отслеживания загруженной конфигурации
   // ЗАЧЕМ: Позволяет автоматически сохранять изменения (новые опционы) в localStorage
-  const [loadedConfigId, setLoadedConfigId] = useState(null);
+  // ВАЖНО: Инициализируем из localStorage — при перезагрузке расширением TradingView
+  // React state теряется, но localStorage сохраняется
+  const [loadedConfigId, setLoadedConfigIdRaw] = useState(() => {
+    return localStorage.getItem('universalCalc_loadedConfigId') || null;
+  });
+
+  // Обёртка для setLoadedConfigId — синхронно сохраняет в localStorage
+  // ЗАЧЕМ: Расширение TradingView может перезагрузить страницу в любой момент (window.location),
+  // useEffect не успеет выполниться. Синхронная запись в localStorage гарантирует сохранение.
+  const setLoadedConfigId = useCallback((value) => {
+    setLoadedConfigIdRaw(value);
+    if (value) {
+      localStorage.setItem('universalCalc_loadedConfigId', value);
+    } else {
+      localStorage.removeItem('universalCalc_loadedConfigId');
+    }
+  }, []);
 
   // State для режима редактирования конфигурации
   // ЗАЧЕМ: Позволяет редактировать сохраненную конфигурацию в разблокированном виде
-  const [isEditMode, setIsEditMode] = useState(false);
+  // ВАЖНО: Инициализируем из localStorage — при перезагрузке расширением режим редактирования должен сохраняться
+  const [isEditMode, setIsEditModeRaw] = useState(() => {
+    return localStorage.getItem('universalCalc_isEditMode') === 'true';
+  });
+
+  // Обёртка для setIsEditMode — синхронно сохраняет в localStorage
+  // ЗАЧЕМ: Расширение TradingView перезагружает страницу мгновенно,
+  // режим редактирования должен восстановиться после перезагрузки
+  const setIsEditMode = useCallback((value) => {
+    setIsEditModeRaw(value);
+    if (value) {
+      localStorage.setItem('universalCalc_isEditMode', 'true');
+    } else {
+      localStorage.removeItem('universalCalc_isEditMode');
+    }
+  }, []);
 
   // State для отслеживания изменений в режиме редактирования
   // ЗАЧЕМ: Показывать кнопку "Сохранить изменения" только при наличии изменений
@@ -823,6 +854,25 @@ function UniversalOptionsCalculator() {
   useEffect(() => {
     if (isInitialized) return;
 
+    // === ДИАГНОСТИКА: Логируем полное состояние при инициализации ===
+    // ЗАЧЕМ: Понять что именно видит калькулятор при добавлении опциона из TradingView
+    const diagSearchParams = new URLSearchParams(window.location.search);
+    const diagSessionConfigId = localStorage.getItem('universalCalc_loadedConfigId');
+    console.log('🔍 [ДИАГНОСТИКА INIT] Полное состояние при инициализации:', {
+      url: window.location.href,
+      hasConfig: diagSearchParams.has('config'),
+      configId: diagSearchParams.get('config'),
+      hasContract: diagSearchParams.has('contract'),
+      contract: diagSearchParams.get('contract'),
+      price: diagSearchParams.get('price'),
+      isFromExtension,
+      extensionTicker,
+      extensionOptionsCount: extensionOptions?.length || 0,
+      sessionStorageConfigId: diagSessionConfigId,
+      loadedConfigId,
+      isInitialized
+    });
+
     // === ПРОВЕРКА: Есть ли config в URL ===
     // ЗАЧЕМ: Если есть config в URL — пропускаем инициализацию из localStorage/расширения
     // Конфигурация будет загружена отдельным useEffect через loadConfiguration
@@ -832,6 +882,125 @@ function UniversalOptionsCalculator() {
       console.log('⏭️ [Universal] Пропускаем инициализацию — есть config в URL:', configId);
       setIsInitialized(true);
       return;
+    }
+
+    // === ЗАЩИТА: Восстановление конфигурации после перезагрузки расширением ===
+    // ЗАЧЕМ: Расширение TradingView при добавлении опциона перенаправляет страницу
+    // (window.location.href = '?contract=XXX&price=YYY'), что уничтожает React state.
+    // Если в localStorage сохранён loadedConfigId — значит до перезагрузки была открыта конфигурация.
+    // Восстанавливаем конфигурацию СИНХРОННО из localStorage, затем sync useEffect добавит новые опционы.
+    // ВАЖНО: НЕ проверяем isFromExtension — при первом рендере он может быть false
+    const savedConfigId = localStorage.getItem('universalCalc_loadedConfigId');
+    const hasContract = searchParams.has('contract');
+    if (savedConfigId && hasContract) {
+      console.log('🛡️ [Universal] Восстановление конфигурации после перезагрузки расширением:', savedConfigId);
+      
+      // Синхронно загружаем конфигурацию из localStorage
+      // ЗАЧЕМ: Избегаем race condition с async loadConfiguration — 
+      // опционы конфигурации должны быть в state ДО setIsInitialized(true)
+      try {
+        const savedConfigs = localStorage.getItem('universalCalculatorConfigurations');
+        if (savedConfigs) {
+          const configurations = JSON.parse(savedConfigs);
+          const config = configurations.find(c => c.id === savedConfigId);
+          
+          if (config && config.state) {
+            // Восстанавливаем основные данные конфигурации
+            // Восстанавливаем режим редактирования из localStorage
+            // ЗАЧЕМ: Если пользователь был в режиме редактирования до перезагрузки — сохраняем его
+            const savedEditMode = localStorage.getItem('universalCalc_isEditMode') === 'true';
+            setIsEditMode(savedEditMode);
+            
+            // В режиме редактирования конфигурация разблокирована для редактирования
+            let configIsLocked = config.isLocked === true;
+            if (savedEditMode) configIsLocked = false;
+            setIsLocked(configIsLocked);
+            
+            const ticker = config.state.selectedTicker || '';
+            if (ticker) setSelectedTicker(ticker);
+            if (config.state.currentPrice) setCurrentPrice(config.state.currentPrice);
+            if (config.state.priceChange) setPriceChange(config.state.priceChange);
+            
+            // Восстанавливаем опционы конфигурации
+            const configEntryDate = config.entryDate || config.createdAt || 
+              (config.id ? new Date(parseInt(config.id)).toISOString() : null);
+            const fallbackEntryDate = configEntryDate
+              ? new Date(configEntryDate).toISOString().split('T')[0]
+              : new Date().toISOString().split('T')[0];
+            
+            let optionsToSet = (config.state.options || []).map(opt => ({
+              ...opt,
+              entryDate: opt.entryDate || fallbackEntryDate
+            }));
+            
+            // Для зафиксированных позиций вычисляем daysPassed и initialDaysToExpiration
+            if (configIsLocked && configEntryDate) {
+              setSavedConfigDate(configEntryDate);
+              const savedDate = new Date(configEntryDate);
+              savedDate.setHours(0, 0, 0, 0);
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const diffTime = today.getTime() - savedDate.getTime();
+              const calculatedDaysPassed = Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
+              setDaysPassed(calculatedDaysPassed);
+              
+              optionsToSet = optionsToSet.map(opt => {
+                if (opt.initialDaysToExpiration !== undefined) return opt;
+                if (opt.date) {
+                  const [year, month, day] = opt.date.split('-').map(Number);
+                  const expDateUTC = Date.UTC(year, month - 1, day);
+                  const savedDateUTC = Date.UTC(savedDate.getFullYear(), savedDate.getMonth(), savedDate.getDate());
+                  return {
+                    ...opt,
+                    initialDaysToExpiration: Math.ceil((expDateUTC - savedDateUTC) / (1000 * 60 * 60 * 24)),
+                    isLockedPosition: true
+                  };
+                }
+                return { ...opt, isLockedPosition: true };
+              });
+            } else if (savedEditMode) {
+              // В режиме редактирования удаляем флаги блокировки с опционов
+              // ЗАЧЕМ: Позволяет редактировать все опционы в разблокированном виде
+              optionsToSet = optionsToSet.map(opt => {
+                const { isLockedPosition, ...rest } = opt;
+                return rest;
+              });
+            }
+            
+            setOptions(optionsToSet);
+            setPositions(config.state.positions || []);
+            if (config.state.selectedExpirationDate) setSelectedExpirationDate(config.state.selectedExpirationDate);
+            if (config.state.chartDisplayMode) setChartDisplayMode(config.state.chartDisplayMode);
+            
+            // Восстанавливаем режим калькулятора
+            if (config.state.calculatorMode) {
+              setCalculatorMode(config.state.calculatorMode);
+            } else if (ticker) {
+              const detectedType = detectInstrumentTypeByPattern(ticker);
+              setCalculatorMode(detectedType === 'futures' ? CALCULATOR_MODES.FUTURES : CALCULATOR_MODES.STOCKS);
+            }
+            
+            // Настройки фьючерса
+            if ((config.state.calculatorMode === CALCULATOR_MODES.FUTURES || 
+                 detectInstrumentTypeByPattern(ticker) === 'futures') && ticker) {
+              setSelectedFuture(getFutureByTicker(ticker));
+            }
+            
+            setLoadedConfigId(savedConfigId);
+            console.log('✅ [Universal] Конфигурация восстановлена после перезагрузки расширением:', {
+              ticker, optionsCount: optionsToSet.length, configIsLocked
+            });
+            
+            // Новые опционы от расширения будут добавлены через sync useEffect (Шаг 3)
+            setIsInitialized(true);
+            return;
+          }
+        }
+      } catch (error) {
+        console.error('❌ [Universal] Ошибка восстановления конфигурации:', error);
+      }
+      // Если конфигурация не найдена — очищаем localStorage и продолжаем обычную инициализацию
+      localStorage.removeItem('universalCalc_loadedConfigId');
     }
 
     // === ИНТЕГРАЦИЯ С CHROME EXTENSION ===
@@ -1095,10 +1264,60 @@ function UniversalOptionsCalculator() {
   useEffect(() => {
     if (!isInitialized) return;
     
-    // Если загружена конфигурация — НЕ обновляем данные от расширения
-    // ЗАЧЕМ: Предотвращает перезапись тикера/опционов/цены из конфигурации данными расширения
+    // Если загружена конфигурация — НЕ заменяем опционы данными расширения,
+    // но ДОБАВЛЯЕМ новые опционы от расширения к существующим
+    // ЗАЧЕМ: Позволяет добавлять опционы из TradingView к зафиксированной конфигурации
+    // без потери существующих опционов
     if (loadedConfigId) {
-      console.log('⏭️ [Universal] Пропускаем синхронизацию с расширением — загружена конфигурация');
+      if (extensionOptions && extensionOptions.length > 0) {
+        setOptions(prevOptions => {
+          // Находим опционы от расширения, которых ещё нет в калькуляторе
+          // ЗАЧЕМ: Добавляем только НОВЫЕ опционы, не дублируя существующие
+          const newOptions = extensionOptions.filter(extOpt => {
+            return !prevOptions.some(existing => {
+              const existingType = (existing.type || '').toUpperCase();
+              const extType = (extOpt.type || '').toUpperCase();
+              const typeMatch = existingType === extType;
+              const strikeMatch = Math.abs(parseFloat(existing.strike) - parseFloat(extOpt.strike)) < 0.001;
+              
+              // Сравнение дат с допуском 48 часов (часовые пояса)
+              let dateMatch = false;
+              try {
+                const t1 = new Date(existing.date).getTime();
+                const t2 = new Date(extOpt.date).getTime();
+                if (!isNaN(t1) && !isNaN(t2)) {
+                  dateMatch = Math.abs(t1 - t2) / (1000 * 60 * 60) < 48;
+                } else {
+                  const s1 = (existing.date || '').toString().split('T')[0];
+                  const s2 = (extOpt.date || '').toString().split('T')[0];
+                  dateMatch = s1 === s2;
+                }
+              } catch (e) {
+                dateMatch = false;
+              }
+              
+              return typeMatch && strikeMatch && dateMatch;
+            });
+          });
+          
+          if (newOptions.length > 0) {
+            // Добавляем entryDate к новым опционам
+            const enrichedNewOptions = newOptions.map(opt => ({
+              ...opt,
+              entryDate: opt.entryDate || new Date().toISOString().split('T')[0]
+            }));
+            console.log('➕ [Universal] Добавлено новых опционов к конфигурации:', enrichedNewOptions.length);
+            return [...prevOptions, ...enrichedNewOptions];
+          }
+          
+          return prevOptions; // Нет новых опционов — без изменений
+        });
+      }
+      // Обновляем цену от расширения даже при загруженной конфигурации
+      // ЗАЧЕМ: Актуальная цена нужна для корректного расчёта P&L
+      if (extensionPrice > 0 && !isLocked) {
+        setCurrentPrice(extensionPrice);
+      }
       return;
     }
 
@@ -1199,7 +1418,7 @@ function UniversalOptionsCalculator() {
         setSelectedExpirationDate(extensionExpirationDate);
       }
     }
-  }, [isInitialized, extensionLastUpdated, loadedConfigId]); // Зависимость от extensionLastUpdated для реакции на storage event
+  }, [isInitialized, extensionLastUpdated, loadedConfigId, isLocked]); // Зависимость от extensionLastUpdated для реакции на storage event
 
   // === АВТОСОХРАНЕНИЕ СОСТОЯНИЯ ПРИ ИЗМЕНЕНИИ ОПЦИОНОВ И ПОЗИЦИЙ ===
   // ЗАЧЕМ: При удалении/добавлении опционов или позиций сохраняем актуальное состояние в localStorage
@@ -1852,10 +2071,14 @@ function UniversalOptionsCalculator() {
   const location = useLocation();
 
   // Загрузка конфигурации из URL при монтировании компонента
+  // ЗАЩИТА: Не сбрасываем loadedConfigId если расширение изменило URL (добавило ?contract=)
+  // ЗАЧЕМ: Расширение TradingView при добавлении опциона обновляет URL вкладки,
+  // заменяя ?config=XXX на ?contract=YYY — это не должно сбрасывать загруженную конфигурацию
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const configId = searchParams.get('config');
     const editMode = searchParams.get('edit') === 'true';
+    const hasContract = searchParams.has('contract');
 
     if (configId) {
       loadConfiguration(configId, editMode);
@@ -1864,9 +2087,22 @@ function UniversalOptionsCalculator() {
       // Сбрасываем флаг изменений при загрузке конфигурации
       setHasChanges(false);
     } else {
-      setLoadedConfigId(null);
-      setIsEditMode(false);
-      setHasChanges(false);
+      // Проверяем localStorage — при полной перезагрузке расширением
+      // loadedConfigId в React state может быть устаревшим (батчинг setState),
+      // но в localStorage он уже сохранён синхронно
+      const sessionConfigId = localStorage.getItem('universalCalc_loadedConfigId');
+      const hasActiveConfig = loadedConfigId || sessionConfigId;
+      
+      if (!hasActiveConfig || !hasContract) {
+        // Сбрасываем ТОЛЬКО если:
+        // 1. Конфигурация НЕ загружена (ни в state, ни в localStorage)
+        // 2. ИЛИ URL изменился НЕ из-за расширения (нет ?contract= в URL)
+        setLoadedConfigId(null);
+        setIsEditMode(false);
+        setHasChanges(false);
+      } else {
+        console.log('🛡️ [Universal] Защита: loadedConfigId сохранён при изменении URL расширением:', hasActiveConfig);
+      }
     }
   }, [location.search]);
 

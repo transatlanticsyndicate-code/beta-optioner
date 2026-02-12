@@ -167,6 +167,9 @@ export function useExtensionData() {
   /**
    * Обновление состояния из localStorage
    * ЗАЧЕМ: Вызывается при storage event или вручную
+   * ВАЖНО: При загруженной конфигурации (?config=) обновляем состояние хука,
+   * но sync useEffect в UniversalOptionsCalculator решает, как использовать данные
+   * (добавить новые опционы к конфигурации, а не заменить все)
    */
   const updateFromStorage = useCallback(() => {
     const storageState = readStorageState();
@@ -359,13 +362,14 @@ export function sendRefreshRangeCommand(daysFrom, daysTo, strikeFrom, strikeTo) 
 
 /**
  * Отправка команды refresh_single_strike — запрос одного страйка
- * ЗАЧЕМ: Золотая кнопка (Golden) — подбор с конкретным страйком
+ * ЗАЧЕМ: Золотая кнопка (Golden) и Супер подбор — подбор с конкретным страйком
  * 
  * @param {number} daysFrom - Минимум дней до экспирации от сегодня
  * @param {number} daysTo - Максимум дней до экспирации от сегодня
  * @param {number} strikePercent - Процент от текущей цены (например +5 = currentPrice × 1.05)
+ * @param {number|null} exactStrike - Абсолютное значение страйка (если передано, расширение использует его вместо strikePercent)
  */
-export function sendRefreshSingleStrikeCommand(daysFrom, daysTo, strikePercent) {
+export function sendRefreshSingleStrikeCommand(daysFrom, daysTo, strikePercent, exactStrike = null) {
   const command = {
     type: 'refresh_single_strike',
     daysFrom,
@@ -374,6 +378,13 @@ export function sendRefreshSingleStrikeCommand(daysFrom, daysTo, strikePercent) 
     timestamp: Date.now(),
     processed: false
   };
+
+  // Если передан абсолютный страйк — добавляем в команду
+  // ЗАЧЕМ: Расширение использует exactStrike напрямую, без конвертации через strikePercent
+  // Это устраняет погрешность из-за разницы currentPrice на фронтенде и в расширении
+  if (exactStrike !== null && exactStrike !== undefined) {
+    command.exactStrike = exactStrike;
+  }
 
   localStorage.setItem(COMMAND_KEY, JSON.stringify(command));
   console.log('📤 [Extension Command] refresh_single_strike отправлена:', command);

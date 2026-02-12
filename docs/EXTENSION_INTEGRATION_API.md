@@ -101,15 +101,27 @@ localStorage.setItem('tvc_refresh_command', JSON.stringify({
 
 ### 3. `refresh_single_strike` — Запрос одного страйка
 
-**Когда используется**: Золотая кнопка (Golden) — подбор с конкретным страйком
+**Когда используется**: Золотая кнопка (Golden) и Супер подбор — подбор с конкретным страйком
 
 **Формат команды**:
 ```javascript
+// Вариант 1: через процент (Golden Selection)
 localStorage.setItem('tvc_refresh_command', JSON.stringify({
   type: 'refresh_single_strike',
   daysFrom: 90,
   daysTo: 300,
   strikePercent: 5,
+  timestamp: Date.now(),
+  processed: false
+}));
+
+// Вариант 2: через абсолютный страйк (Супер подбор)
+localStorage.setItem('tvc_refresh_command', JSON.stringify({
+  type: 'refresh_single_strike',
+  daysFrom: 90,
+  daysTo: 300,
+  strikePercent: 5,       // fallback, если расширение не поддерживает exactStrike
+  exactStrike: 70,        // НОВОЕ ПОЛЕ: абсолютное значение страйка
   timestamp: Date.now(),
   processed: false
 }));
@@ -122,23 +134,33 @@ localStorage.setItem('tvc_refresh_command', JSON.stringify({
 | `daysFrom` | number | Минимум дней до экспирации от сегодня |
 | `daysTo` | number | Максимум дней до экспирации от сегодня |
 | `strikePercent` | number | Процент от текущей цены. `5` = найти страйк ближайший к `currentPrice × 1.05` |
+| `exactStrike` | number \| null | **НОВОЕ (опциональное)**. Абсолютное значение страйка. Если присутствует — использовать его **вместо** вычисления через `strikePercent` |
 | `timestamp` | number | Unix timestamp команды |
 | `processed` | boolean | `false` — команда не обработана |
 
-**Пример расчета страйка**:
+**Пример 1 — через процент (старое поведение)**:
 - `currentPrice = 99`
 - `strikePercent = 5`
 - Целевая цена = 99 × 1.05 = 103.95
 - Ближайший страйк = 105
 
+**Пример 2 — через абсолютный страйк (новое поведение)**:
+- `exactStrike = 70`
+- Целевая цена = **70** (используется напрямую, без вычислений)
+- Ближайший страйк = 70
+
 **Ожидаемое поведение расширения**:
 1. Определить текущую цену базового актива
-2. Рассчитать целевую цену: `currentPrice * (1 + strikePercent/100)`
+2. **Определить целевой страйк**:
+   - Если в команде есть поле `exactStrike` → использовать его напрямую как целевую цену
+   - Если `exactStrike` отсутствует → вычислить как раньше: `currentPrice * (1 + strikePercent/100)`
 3. Найти ближайший доступный страйк к целевой цене
 4. Найти все даты экспирации в диапазоне `[сегодня + daysFrom, сегодня + daysTo]`
 5. Собрать все опционы (CALL и PUT) с этим страйком для всех дат
-6. Записать данные в `calculatorState`
+6. Записать данные в `calculatorState` (поле `singleStrikeOptions`)
 7. Записать результат в `tvc_refresh_result`
+
+> **⚠️ ВАЖНО для разработчиков расширения**: Поле `exactStrike` — опциональное. Если оно есть в команде, расширение должно использовать его как целевой страйк напрямую, без умножения на `currentPrice`. Это нужно для функции "Супер подбор по одному страйку", где пользователь вводит конкретное значение страйка (например, 70), а не процент.
 
 ---
 
@@ -151,6 +173,8 @@ localStorage.setItem('tvc_refresh_command', JSON.stringify({
 | **Magic** | 2 (BuyCALL) | `refresh_range` | `daysFrom=1`, `daysTo=100`, `strikeFrom=-20`, `strikeTo=+20` |
 | **Golden** | 1 (BuyCALL) | `refresh_single_strike` | `daysFrom=90`, `daysTo=300`, `strikePercent=+5` |
 | **Golden** | 2 (BuyPUT) | `refresh_single_strike` | `daysFrom=8`, `daysTo=100`, `strikePercent=+5` |
+| **Super** (диапазон) | 1/2 | `refresh_range` | `daysFrom=90`, `daysTo=300`, `strikeFrom=1`, `strikeTo=7` |
+| **Super** (один страйк) | 1/2 | `refresh_single_strike` | `daysFrom=90`, `daysTo=300`, `exactStrike=70` |
 
 ---
 
