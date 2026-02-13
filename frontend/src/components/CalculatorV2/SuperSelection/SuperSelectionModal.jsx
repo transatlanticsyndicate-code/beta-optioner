@@ -73,7 +73,7 @@ function SuperSelectionModal({
     const [maxDays, setMaxDays] = useState('300');
 
     // 4. Режим страйков: 'range' (диапазон) или 'single' (конкретный страйк)
-    const [strikeMode, setStrikeMode] = useState('range');
+    const [strikeMode, setStrikeMode] = useState('single');
 
     // 4a. Диапазон страйков (для режима 'range')
     const [minStrikePercent, setMinStrikePercent] = useState('-5');
@@ -124,7 +124,7 @@ function SuperSelectionModal({
             setResults([]);
             setProgressMessage('');
             setSelectedOptions(new Set()); // Сбрасываем выбранные опционы
-            setStrikeMode('range'); // Сбрасываем режим страйков
+            setStrikeMode('single'); // Сбрасываем режим страйков (по умолчанию — конкретный страйк)
             setSingleStrike(''); // Сбрасываем конкретный страйк
 
             // Установка дефолтных значений в зависимости от шага и режима калькулятора
