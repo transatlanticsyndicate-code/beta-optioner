@@ -92,17 +92,28 @@ function SuperSelectionModal({
     const [selectedOptions, setSelectedOptions] = useState(new Set());
 
     // Определение текущего шага и автоматическое определение режима
-    // ЗАЧЕМ: Если есть супер-опцион, определяем режим по его типу
+    // ЗАЧЕМ: Шаг 2 активируется, если в калькуляторе есть Buy CALL или Buy PUT
+    // (как через супер подбор, так и добавленный вручную)
     const superOptions = options.filter(opt => opt.isSuperOption);
     
-    // Автоматическое определение режима на основе существующего супер-опциона
+    // Ищем любой Buy CALL или Buy PUT в калькуляторе (включая ручные)
+    // ЗАЧЕМ: Разрешаем Шаг 2 даже если опцион добавлен вручную, а не через супер подбор
+    const buyOptions = options.filter(opt => 
+        (opt.action === 'Buy' || opt.action === 'buy') && 
+        (opt.type === 'CALL' || opt.type === 'PUT')
+    );
+    
+    // Автоматическое определение режима:
+    // 1. Приоритет: супер-опцион (isSuperOption)
+    // 2. Fallback: первый Buy-опцион в калькуляторе
     // CALL → LONG режим, PUT → SHORT режим
-    const detectedMode = superOptions.length === 1 
-        ? (superOptions[0].type === 'CALL' ? 'LONG' : 'SHORT')
+    const referenceOption = superOptions.length > 0 ? superOptions[0] : buyOptions[0];
+    const detectedMode = referenceOption
+        ? (referenceOption.type === 'CALL' ? 'LONG' : 'SHORT')
         : mode;
     
-    // ШАГ 2 только если есть ровно один опцион "Супер подбора"
-    const step = superOptions.length === 1 ? 2 : 1;
+    // ШАГ 2 если есть хотя бы один Buy-опцион (супер или ручной)
+    const step = buyOptions.length > 0 ? 2 : 1;
 
     // Тип опциона для текущего шага (используем detectedMode для корректности)
     // LONG: Step1=CALL, Step2=PUT
