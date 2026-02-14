@@ -247,6 +247,21 @@ function UniversalSavedConfigurations() {
     setImportResult(null);
   };
 
+  // Удаление всех конфигураций
+  // ЗАЧЕМ: Позволяет быстро очистить все сохраненные конфигурации после подтверждения
+  const handleDeleteAll = () => {
+    if (configurations.length === 0) {
+      alert('Нет конфигураций для удаления');
+      return;
+    }
+
+    if (window.confirm(`Вы уверены, что хотите удалить все ${configurations.length} конфигурации(й)? Это действие невозможно отменить.`)) {
+      setConfigurations([]);
+      localStorage.setItem('universalCalculatorConfigurations', JSON.stringify([]));
+      alert('Все конфигурации успешно удалены');
+    }
+  };
+
   return (
     <div className="w-full max-w-full py-6 px-4">
       {/* Фильтры */}
@@ -330,7 +345,7 @@ function UniversalSavedConfigurations() {
             Сбросить
           </Button>
           
-          {/* Кнопки экспорта/импорта */}
+          {/* Кнопки экспорта/импорта/удаления */}
           <div className="flex gap-2 ml-4 border-l pl-4 border-gray-300">
             <TooltipProvider>
               <Tooltip>
@@ -366,6 +381,26 @@ function UniversalSavedConfigurations() {
                 </TooltipTrigger>
                 <TooltipContent>
                   <p>Загрузить конфигурации из файла</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleDeleteAll}
+                    disabled={configurations.length === 0}
+                    className="text-xs text-destructive hover:text-destructive disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Удалить всё
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Удалить все конфигурации после подтверждения</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
