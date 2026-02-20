@@ -36,6 +36,9 @@ const INSTRUMENT_TYPES = [
 /** Ключ для localStorage истории тикеров */
 const TICKER_HISTORY_KEY = 'new_ticker_finder_history';
 
+/** Крипто-тикеры — для них не показываем группы акций */
+const CRYPTO_TICKERS = ['BTCUSDT', 'ETHUSDT'];
+
 
 // ============================================================================
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
@@ -164,6 +167,12 @@ const NewTikerFinder = ({
   // ЗАЧЕМ: Определяем группу акции для корректировки P&L прогнозов
   const fetchClassification = useCallback(async (ticker) => {
     if (!ticker) {
+      setStockClassification(null);
+      return null;
+    }
+
+    // Крипто-тикеры не классифицируются по группам акций
+    if (CRYPTO_TICKERS.includes(ticker.toUpperCase())) {
       setStockClassification(null);
       return null;
     }
@@ -607,8 +616,16 @@ const NewTikerFinder = ({
           ) : null}
         </div>
 
-        {/* Селектор группы акции */}
-        {confirmedTicker && instrumentType === 'stock' && (
+        {/* Плашка Крипто (вместо селектора групп акций) */}
+        {confirmedTicker && CRYPTO_TICKERS.includes(confirmedTicker.toUpperCase()) && (
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium bg-orange-500/10 border border-orange-500/30 text-orange-500">
+            <Bitcoin className="h-3.5 w-3.5" />
+            Крипто
+          </div>
+        )}
+
+        {/* Селектор группы акции (не показываем для крипто-тикеров) */}
+        {confirmedTicker && instrumentType === 'stock' && !CRYPTO_TICKERS.includes(confirmedTicker.toUpperCase()) && (
           <>
             {console.log('[NewTikerFinder] Rendering StockGroupSelector:', {
               confirmedTicker,

@@ -96,6 +96,9 @@ const CALCULATOR_MODES = {
   FUTURES: 'futures'
 };
 
+// Крипто-тикеры — для них не показываем группы акций и не запрашиваем классификацию
+const CRYPTO_TICKERS = ['BTCUSDT', 'ETHUSDT'];
+
 // Демо-данные для опционов (вынесены за пределы компонента для оптимизации)
 const demoOptions = [
   { id: "1", action: "Buy", type: "CALL", strike: 250, date: "2025-10-25", quantity: 1, premium: 5.9, bid: 5.8, ask: 6.0, volume: 2164, oi: 134514, visible: true },
@@ -429,6 +432,12 @@ function UniversalOptionsCalculator() {
   // ЗАЧЕМ: Определяем группу акции для корректировки P&L прогнозов
   const fetchClassification = useCallback(async (ticker) => {
     if (!ticker || calculatorMode !== 'stocks') {
+      setStockClassification(null);
+      return;
+    }
+
+    // Крипто-тикеры не классифицируются по группам акций
+    if (CRYPTO_TICKERS.includes(ticker.toUpperCase())) {
       setStockClassification(null);
       return;
     }
@@ -2582,28 +2591,46 @@ function UniversalOptionsCalculator() {
         {/* ВАЖНО: Показываем если данные от расширения ИЛИ загружена конфигурация */}
         {isInitialized && (isFromExtension || loadedConfigId) && (contractCode || selectedTicker) && (
           <div className="mb-6 flex items-center gap-4">
-            <div className={`inline-flex items-center gap-4 p-3 border-2 rounded-lg ${calculatorMode === CALCULATOR_MODES.FUTURES
-              ? 'border-purple-400 bg-purple-50 dark:bg-purple-950/30'
-              : 'border-teal-400 bg-teal-50 dark:bg-teal-950/30'
+            <div className={`inline-flex items-center gap-4 p-3 border-2 rounded-lg ${
+              calculatorMode === CALCULATOR_MODES.FUTURES
+                ? 'border-purple-400 bg-purple-50 dark:bg-purple-950/30'
+                : CRYPTO_TICKERS.includes((selectedTicker || '').toUpperCase())
+                  ? 'border-orange-400 bg-orange-50 dark:bg-orange-950/30'
+                  : 'border-teal-400 bg-teal-50 dark:bg-teal-950/30'
               }`}>
-              {/* Индикатор режима Акции/Фьючерсы */}
+              {/* Индикатор режима Акции/Фьючерсы/Крипто */}
               {/* ЗАЧЕМ: Отображает текущий тип инструмента */}
               <div className="flex items-center gap-1 bg-white/50 dark:bg-gray-800/50 rounded-md p-0.5">
-                <div className={`px-2 py-1 text-xs font-medium rounded ${calculatorMode === CALCULATOR_MODES.STOCKS
-                  ? 'bg-teal-500 text-white'
-                  : 'bg-purple-500 text-white'
-                  }`}>
-                  {calculatorMode === CALCULATOR_MODES.STOCKS ? 'Акции' : 'Фьючерсы'}
+                <div className={`px-2 py-1 text-xs font-medium rounded ${
+                  calculatorMode === CALCULATOR_MODES.FUTURES
+                    ? 'bg-purple-500 text-white'
+                    : CRYPTO_TICKERS.includes((selectedTicker || '').toUpperCase())
+                      ? 'bg-orange-500 text-white'
+                      : 'bg-teal-500 text-white'
+                }`}>
+                  {calculatorMode === CALCULATOR_MODES.FUTURES
+                    ? 'Фьючерсы'
+                    : CRYPTO_TICKERS.includes((selectedTicker || '').toUpperCase())
+                      ? 'Крипто'
+                      : 'Акции'}
                 </div>
               </div>
 
-              {/* Логотип TradingView */}
+              {/* Логотип источника данных (TradingView или Binance для крипто) */}
               <div className="flex items-center">
-                <img
-                  src="/images/black-full-logo.svg"
-                  alt="TradingView"
-                  style={{ height: '20px', width: 'auto' }}
-                />
+                {CRYPTO_TICKERS.includes((selectedTicker || '').toUpperCase()) ? (
+                  <img
+                    src="/images/Binance_logo.svg"
+                    alt="Binance"
+                    style={{ height: '20px', width: 'auto' }}
+                  />
+                ) : (
+                  <img
+                    src="/images/black-full-logo.svg"
+                    alt="TradingView"
+                    style={{ height: '20px', width: 'auto' }}
+                  />
+                )}
               </div>
 
               {/* Код актива */}
@@ -2630,8 +2657,8 @@ function UniversalOptionsCalculator() {
                 </div>
               )}
 
-              {/* Селектор группы акции (только для режима stocks) */}
-              {calculatorMode === CALCULATOR_MODES.STOCKS && selectedTicker && (
+              {/* Селектор группы акции (только для режима stocks, не для крипто) */}
+              {calculatorMode === CALCULATOR_MODES.STOCKS && selectedTicker && !CRYPTO_TICKERS.includes(selectedTicker.toUpperCase()) && (
                 <StockGroupSelector
                   symbol={selectedTicker}
                   classification={stockClassification}
