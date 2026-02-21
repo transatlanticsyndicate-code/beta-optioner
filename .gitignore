@@ -109,3 +109,11 @@ key_
 
 # TradingView Parser Extension (НЕ коммитить, НЕ деплоить!)
 twparser_v9*/
+
+# ThetaData — исторические данные опционов и результаты калибровки
+# ЗАЧЕМ: Большие локальные файлы данных, не нужны на сервере и в репозитории
+scripts/options_data/
+scripts/calibration_results/
+
+# Theta Terminal (локальный исполняемый файл, не нужен в репозитории)
+ThetaTerminalv3.jar

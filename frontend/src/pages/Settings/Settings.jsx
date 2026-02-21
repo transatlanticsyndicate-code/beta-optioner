@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Settings as SettingsIcon, TrendingUp, BarChart3, Palette, Layers } from 'lucide-react';
+import { Settings as SettingsIcon, TrendingUp, BarChart3, Palette, Layers, FlaskConical } from 'lucide-react';
 import SettingsGeneral from './SettingsGeneral';
 import SettingsMarketData from './SettingsMarketData';
 import SettingsFutures from './SettingsFutures';
 import SettingsComponents from './SettingsComponents';
 import SettingsStockGroups from './SettingsStockGroups';
+import SettingsCalibration from './SettingsCalibration';
 
 const SECTIONS = [
   { id: 'general', label: 'Общие', Icon: SettingsIcon },
   { id: 'market-data', label: 'Рыночные данные', Icon: BarChart3 },
   { id: 'stock-groups', label: 'Группы акций', Icon: Layers },
   { id: 'futures', label: 'Фьючерсы', Icon: TrendingUp },
+  { id: 'calibration', label: 'Калибровка P&L', Icon: FlaskConical },
   { id: 'components', label: 'Компоненты', Icon: Palette },
 ];
 
@@ -20,6 +22,7 @@ const SECTION_COMPONENTS = {
   'market-data': SettingsMarketData,
   'stock-groups': SettingsStockGroups,
   futures: SettingsFutures,
+  calibration: SettingsCalibration,
   components: SettingsComponents,
 };
 

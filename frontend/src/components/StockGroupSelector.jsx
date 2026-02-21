@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { TrendingUp, Building2, Zap, HelpCircle, RefreshCw, Check } from 'lucide-react';
+import { TrendingUp, Building2, Zap, HelpCircle, RefreshCw, Check, FlaskConical } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -441,6 +441,29 @@ function StockGroupSelector({
         </TooltipProvider>
       )}
       
+      {/* Бейдж персональной калибровки */}
+      {/* ЗАЧЕМ: Показывает что для этого тикера применены точные калиброванные коэффициенты */}
+      {classification?.ticker_override && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 cursor-help">
+                <FlaskConical className="h-3 w-3" />
+                Калибровано
+              </span>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-[220px]">
+              <p className="font-medium mb-1">Персональная калибровка</p>
+              <p className="text-xs text-muted-foreground mb-2">Коэффициенты вычислены на реальных исторических данных опционов для этого тикера</p>
+              <div className="text-xs space-y-1">
+                <p>• Убытки: ×{classification.down_mult}</p>
+                <p>• Прибыль: ×{classification.up_mult}</p>
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
+
       {/* Подсказка с коэффициентами */}
       {groupConfig && (
         <TooltipProvider>
