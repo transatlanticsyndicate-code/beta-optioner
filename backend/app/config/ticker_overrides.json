@@ -4,5 +4,15 @@
     "down_mult": 1.001,
     "up_mult": 1.076,
     "note": "Calibrated 2026-02-21, 3258 trades, 14d hold, ThetaData EOD"
+  },
+  "ADBE": {
+    "down_mult": 1.048,
+    "up_mult": 1.055,
+    "note": "Calibrated 2026-02-21, 3746 trades, 14d hold, ThetaData EOD"
+  },
+  "NVDA": {
+    "down_mult": 1.047,
+    "up_mult": 1.127,
+    "note": "Calibrated 2026-02-21, 3967 trades, 14d hold, ThetaData EOD"
   }
 }

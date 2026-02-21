@@ -482,8 +482,31 @@ def main():
         json.dump(result, f, indent=2)
 
     print(f"\n✅ Результаты сохранены: {result_file}")
-    print(f"\n📋 Для применения в калькуляторе добавьте в per-ticker overrides:")
-    print(f'   "{ticker}": {{"down_mult": {dm}, "up_mult": {um}}}')
+
+    # Автоматически обновляем ticker_overrides.json в backend/app/config/
+    # ЗАЧЕМ: Коэффициенты должны сразу применяться в калькуляторе без ручного редактирования
+    overrides_file = os.path.join(
+        script_dir, "..", "backend", "app", "config", "ticker_overrides.json"
+    )
+    try:
+        existing = {}
+        if os.path.exists(overrides_file):
+            with open(overrides_file, "r", encoding="utf-8") as f:
+                existing = json.load(f)
+
+        existing[ticker] = {
+            "down_mult": dm,
+            "up_mult": um,
+            "note": f"Calibrated {datetime.now().strftime('%Y-%m-%d')}, {len(all_trades)} trades, {hold_days}d hold, ThetaData EOD"
+        }
+
+        with open(overrides_file, "w", encoding="utf-8") as f:
+            json.dump(existing, f, indent=2, ensure_ascii=False)
+
+        print(f"✅ ticker_overrides.json обновлён: {ticker} down={dm} up={um}")
+    except Exception as e:
+        print(f"⚠️  Не удалось обновить ticker_overrides.json: {e}")
+        print(f'   Добавьте вручную: "{ticker}": {{"down_mult": {dm}, "up_mult": {um}}}')
 
 
 if __name__ == "__main__":

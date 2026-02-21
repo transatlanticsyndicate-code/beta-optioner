@@ -108,16 +108,35 @@ def _count_options_files(ticker: str) -> int:
 
 
 def _is_theta_terminal_running() -> bool:
-    """Проверяет, запущен ли Theta Terminal на порту 25503"""
-    import urllib.request
+    """
+    Проверяет, запущен ли Theta Terminal на порту 25503
+    ЗАЧЕМ: Любой HTTP ответ (даже ошибка) означает что терминал работает
+    """
+    import socket
     try:
-        urllib.request.urlopen(
-            f"http://127.0.0.1:{THETA_TERMINAL_PORT}/v3/list/roots/option",
-            timeout=2
-        )
+        sock = socket.create_connection(("127.0.0.1", THETA_TERMINAL_PORT), timeout=2)
+        sock.close()
         return True
-    except Exception:
+    except (socket.timeout, ConnectionRefusedError, OSError):
         return False
+
+
+def _find_creds_file() -> Optional[str]:
+    """
+    Ищет файл creds.txt в нескольких стандартных местах
+    ЗАЧЕМ: Credentials нужны Theta Terminal для авторизации
+    """
+    candidates = [
+        os.path.join(PROJECT_ROOT, "creds.txt"),           # корень проекта
+        os.path.expanduser("~/Downloads/creds.txt"),        # Downloads
+        os.path.expanduser("~/creds.txt"),                  # домашняя папка
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            print(f"[calibration] Найден creds.txt: {path}")
+            return path
+    print(f"[calibration] creds.txt не найден. Проверены: {candidates}")
+    return None
 
 
 def _start_theta_terminal() -> bool:
@@ -133,21 +152,54 @@ def _start_theta_terminal() -> bool:
         print(f"[calibration] Theta Terminal jar не найден: {THETA_TERMINAL_JAR}")
         return False
 
-    # Запускаем терминал в фоне (без блокировки)
+    # Ищем файл с credentials
+    creds_file = _find_creds_file()
+    if not creds_file:
+        print("[calibration] creds.txt не найден — терминал не запустится без credentials")
+        return False
+
+    # Убиваем все старые экземпляры перед запуском нового
+    # ЗАЧЕМ: Два экземпляра вызывают "Invalid session ID" на серверах ThetaData
+    # ThetaTerminal запускает дочерний jar (202602131.jar или аналогичный) — убиваем оба паттерна
     try:
+        subprocess.run(["pkill", "-9", "-f", "ThetaTerminalv3.jar"], capture_output=True)
+        subprocess.run(["pkill", "-9", "-f", "ThetaTerminal.jar"], capture_output=True)
+        # Дочерний процесс терминала (числовое имя jar)
+        subprocess.run(["pkill", "-9", "-f", "lib/2026"], capture_output=True)
+        subprocess.run(["pkill", "-9", "-f", "lib/2025"], capture_output=True)
+        time.sleep(5)  # Ждём пока сессия закроется на серверах ThetaData
+        print("[calibration] Старые экземпляры Theta Terminal остановлены")
+    except Exception:
+        pass
+
+    # Запускаем терминал в фоне с указанием файла credentials
+    # Предпочитаем запускать реальный jar из lib/ напрямую (bootstrap плодит дочерние процессы)
+    try:
+        lib_dir = os.path.join(PROJECT_ROOT, "lib")
+        real_jar = None
+        if os.path.exists(lib_dir):
+            jars = sorted([f for f in os.listdir(lib_dir) if f.endswith(".jar")], reverse=True)
+            if jars:
+                real_jar = os.path.join(lib_dir, jars[0])
+                print(f"[calibration] Используем реальный jar: {real_jar}")
+
+        jar_to_run = real_jar if real_jar else THETA_TERMINAL_JAR
+        cmd = ["java", "-jar", jar_to_run, "--creds-file", creds_file]
+        print(f"[calibration] Запуск: {' '.join(cmd)}")
         subprocess.Popen(
-            ["java", "-jar", THETA_TERMINAL_JAR],
+            cmd,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True
         )
-        # Ждём до 30 секунд пока терминал поднимется
-        for _ in range(30):
+        # Ждём до 60 секунд пока терминал поднимется и авторизуется
+        for i in range(60):
             time.sleep(1)
             if _is_theta_terminal_running():
-                print("[calibration] Theta Terminal успешно запущен")
+                time.sleep(5)  # Дополнительная пауза для полной инициализации
+                print(f"[calibration] Theta Terminal успешно запущен (за {i+1} сек)")
                 return True
-        print("[calibration] Theta Terminal не ответил за 30 секунд")
+        print("[calibration] Theta Terminal не ответил за 60 секунд")
         return False
     except Exception as e:
         print(f"[calibration] Ошибка запуска Theta Terminal: {e}")
@@ -177,7 +229,7 @@ def _run_calibration_job(job_id: str, tickers: List[str], months: int, hold_days
         with _jobs_lock:
             _jobs[job_id]["current_step"] = "Запуск Theta Terminal"
         if not _start_theta_terminal():
-            log("❌ Не удалось запустить Theta Terminal. Убедитесь что файл ~/Downloads/ThetaTerminalv3.jar существует.")
+            log(f"❌ Не удалось запустить Theta Terminal. Проверьте: jar={THETA_TERMINAL_JAR}, creds.txt в корне проекта или ~/Downloads/")
             with _jobs_lock:
                 _jobs[job_id]["status"] = "error"
                 _jobs[job_id]["error"] = "Theta Terminal недоступен"

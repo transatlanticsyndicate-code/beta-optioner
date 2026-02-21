@@ -168,6 +168,74 @@ def select_strikes_around_atm(strikes: list, current_price: float, count: int) -
 
 
 # ============================================================================
+# ЗАГРУЗКА ЦЕН АКЦИИ
+# ============================================================================
+
+def fetch_stock_prices(ticker: str, start_date: str, end_date: str, output_dir: str) -> int:
+    """
+    Загружает исторические дневные цены акции через ThetaData /v3/stock/history/eod
+    ЗАЧЕМ: Цены акции нужны бэктесту для расчёта Black-Scholes в каждый день симуляции
+    Сохраняет в формате совместимом с backtest_calibration.py (date,close)
+    """
+    url = f"{BASE_URL}/stock/history/eod"
+    params = {
+        "symbol": ticker,
+        "start_date": start_date,
+        "end_date": end_date,
+    }
+
+    try:
+        response = requests.get(url, params=params, timeout=30)
+        if response.status_code != 200:
+            print(f"  ⚠️  Ошибка загрузки цен акции: HTTP {response.status_code}")
+            return 0
+
+        lines = response.text.strip().split("\n")
+        if len(lines) < 2:
+            print(f"  ⚠️  Нет данных по ценам акции {ticker}")
+            return 0
+
+        # Парсим CSV и сохраняем в упрощённом формате date,close
+        reader = csv.DictReader(lines[0:1] + lines[1:], fieldnames=None)
+        reader = csv.DictReader(response.text.splitlines())
+
+        rows = []
+        for row in reader:
+            try:
+                # Дата из поля created (формат: 2025-08-25T17:15:03.034)
+                created = row.get("created", "")
+                date_str = created[:10] if created else ""
+                close = float(row.get("close", 0))
+                if date_str and close > 0:
+                    rows.append({"date": date_str, "close": close})
+            except (ValueError, KeyError):
+                pass
+
+        if not rows:
+            print(f"  ⚠️  Не удалось распарсить цены акции {ticker}")
+            return 0
+
+        # Сохраняем в CSV совместимом с backtest_calibration.py
+        filepath = os.path.join(output_dir, f"{ticker}_stock_daily.csv")
+        with open(filepath, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=["date", "open", "high", "low", "close", "volume", "average", "barCount"])
+            writer.writeheader()
+            for r in rows:
+                writer.writerow({
+                    "date": r["date"], "open": r["close"], "high": r["close"],
+                    "low": r["close"], "close": r["close"], "volume": 0,
+                    "average": r["close"], "barCount": 0
+                })
+
+        print(f"  ✅ Цены акции {ticker}: {len(rows)} дней → {ticker}_stock_daily.csv")
+        return len(rows)
+
+    except Exception as e:
+        print(f"  ⚠️  Ошибка загрузки цен акции {ticker}: {e}")
+        return 0
+
+
+# ============================================================================
 # ЗАГРУЗКА ДАННЫХ
 # ============================================================================
 
@@ -282,6 +350,13 @@ def main():
             print(f"   ⚠️  Не удалось определить цену\n")
     elif current_price:
         print(f"   Текущая цена: ${current_price:.2f}\n")
+
+    # Загружаем исторические цены акции (нужны для бэктестинга)
+    print(f"📈 Загружаем цены акции {ticker}...")
+    stock_days = fetch_stock_prices(ticker, start_date, end_date, output_dir)
+    if stock_days == 0:
+        print(f"   ⚠️  Цены акции не загружены (возможно нет подписки на stock data)\n")
+    print()
 
     # Загружаем данные по каждой экспирации
     total_saved = 0
