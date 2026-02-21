@@ -14,5 +14,40 @@
     "down_mult": 1.047,
     "up_mult": 1.127,
     "note": "Calibrated 2026-02-21, 3967 trades, 14d hold, ThetaData EOD"
+  },
+  "FLUT": {
+    "down_mult": 1.002,
+    "up_mult": 1.014,
+    "note": "Calibrated 2026-02-21, 2986 trades, 7d hold, ThetaData EOD"
+  },
+  "GDDY": {
+    "down_mult": 1.011,
+    "up_mult": 1.017,
+    "note": "Calibrated 2026-02-21, 2201 trades, 7d hold, ThetaData EOD"
+  },
+  "INTU": {
+    "down_mult": 0.995,
+    "up_mult": 1.002,
+    "note": "Calibrated 2026-02-21, 3058 trades, 7d hold, ThetaData EOD"
+  },
+  "PAYX": {
+    "down_mult": 0.999,
+    "up_mult": 1.094,
+    "note": "Calibrated 2026-02-21, 4503 trades, 7d hold, ThetaData EOD"
+  },
+  "SPSC": {
+    "down_mult": 1.043,
+    "up_mult": 1.025,
+    "note": "Calibrated 2026-02-21, 3224 trades, 7d hold, ThetaData EOD"
+  },
+  "TEAM": {
+    "down_mult": 1.024,
+    "up_mult": 1.038,
+    "note": "Calibrated 2026-02-21, 3854 trades, 7d hold, ThetaData EOD"
+  },
+  "WDAY": {
+    "down_mult": 1.009,
+    "up_mult": 1.005,
+    "note": "Calibrated 2026-02-21, 2740 trades, 7d hold, ThetaData EOD"
   }
 }
