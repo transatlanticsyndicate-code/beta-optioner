@@ -27,10 +27,34 @@ FINNHUB_BASE_URL = "https://finnhub.io/api/v1"
 # Путь к файлу настроек
 SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "..", "config", "stock_groups_settings.json")
 
+# Путь к файлу per-ticker overrides (калиброванные коэффициенты для конкретных акций)
+# ЗАЧЕМ: Позволяет задать точные коэффициенты для конкретного тикера, минуя групповую классификацию
+TICKER_OVERRIDES_FILE = os.path.join(os.path.dirname(__file__), "..", "config", "ticker_overrides.json")
+
 # Кэш настроек (перезагружается при каждом вызове для актуальности)
 _settings_cache: Optional[Dict] = None
 _settings_cache_time: float = 0
 SETTINGS_CACHE_TTL = 60  # Перечитывать файл раз в минуту
+
+
+def _load_ticker_overrides() -> Dict[str, Any]:
+    """
+    Загружает per-ticker overrides из JSON файла
+    ЗАЧЕМ: Калиброванные коэффициенты для конкретных тикеров имеют приоритет над групповыми
+    
+    Формат файла:
+    {
+        "AAPL": {"down_mult": 1.001, "up_mult": 1.076, "note": "Calibrated 2026-02-21"},
+        "MSFT": {"down_mult": 1.1, "up_mult": 0.95}
+    }
+    """
+    try:
+        if os.path.exists(TICKER_OVERRIDES_FILE):
+            with open(TICKER_OVERRIDES_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"[stock_classifier] Ошибка загрузки ticker overrides: {e}")
+    return {}
 
 
 def _load_settings_from_file() -> Dict[str, Any]:
@@ -538,18 +562,33 @@ async def classify_stock(symbol: str) -> Dict[str, Any]:
     stock_groups = get_stock_groups_config()
     group_config = stock_groups.get(group, stock_groups.get("growth", {}))
     
+    # Проверяем per-ticker overrides (приоритет над групповой классификацией)
+    # ЗАЧЕМ: Калиброванные коэффициенты точнее групповых — используем если есть
+    ticker_overrides = _load_ticker_overrides()
+    override = ticker_overrides.get(symbol.upper())
+
+    if override:
+        down_mult = override.get("down_mult", classification["down_mult"])
+        up_mult = override.get("up_mult", classification["up_mult"])
+        override_note = override.get("note", "")
+        print(f"[stock_classifier] {symbol} → per-ticker override applied: down:{down_mult} up:{up_mult} ({override_note})")
+    else:
+        down_mult = classification["down_mult"]
+        up_mult = classification["up_mult"]
+
     # Формируем результат
     # ВАЖНО: Используем коэффициенты из classification (могут быть модифицированы event-driven)
     result = {
         "symbol": symbol,
         "group": group,
-        "down_mult": classification["down_mult"],
-        "up_mult": classification["up_mult"],
+        "down_mult": down_mult,
+        "up_mult": up_mult,
         "label": group_config.get("label", "Unknown"),
         "description": group_config.get("description", ""),
         "reason": classification["reason"],  # Причина классификации для отладки
         "features": features,
-        "cached": False
+        "cached": False,
+        "ticker_override": bool(override)  # Флаг для UI — применён ли override
     }
     
     # Кэширование отключено

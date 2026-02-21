@@ -127,43 +127,45 @@ def get_contracts_config(ticker: str, current_price: float) -> dict:
 
 def _get_monthly_expiries(count: int) -> list:
     """
-    Вычисляет даты ближайших месячных экспираций (3-я пятница месяца)
-    ЗАЧЕМ: Месячные опционы — самые ликвидные, по ним больше данных
+    Вычисляет даты ПРОШЕДШИХ месячных экспираций (3-я пятница месяца)
+    ЗАЧЕМ: По истёкшим опционам IB даёт исторические данные даже на paper trading.
+           Берём последние N экспираций — по ним есть полная история цен.
     
     Args:
         count: Количество экспираций
     
     Returns:
-        Список строк в формате 'YYYYMMDD'
+        Список строк в формате 'YYYYMMDD' (от новых к старым)
     """
     expiries = []
     today = datetime.now()
     
-    # Начинаем с текущего месяца
+    # Начинаем с прошлого месяца и идём назад
     year = today.year
-    month = today.month
+    month = today.month - 1
+    if month == 0:
+        month = 12
+        year -= 1
     
-    for _ in range(count + 2):  # +2 запас на случай если текущая уже прошла
+    for _ in range(count + 4):  # +4 запас
         # Находим 3-ю пятницу месяца
-        # Первый день месяца
         first_day = datetime(year, month, 1)
-        # День недели первого дня (0=пн, 4=пт)
         first_friday_offset = (4 - first_day.weekday()) % 7
         first_friday = first_day + timedelta(days=first_friday_offset)
         third_friday = first_friday + timedelta(weeks=2)
         
-        # Берём только будущие экспирации (минимум через 7 дней)
-        if third_friday > today + timedelta(days=7):
+        # Берём только прошедшие экспирации
+        if third_friday < today:
             expiries.append(third_friday.strftime("%Y%m%d"))
         
         if len(expiries) >= count:
             break
         
-        # Следующий месяц
-        month += 1
-        if month > 12:
-            month = 1
-            year += 1
+        # Предыдущий месяц
+        month -= 1
+        if month == 0:
+            month = 12
+            year -= 1
     
     return expiries
 
@@ -256,37 +258,32 @@ def fetch_option_history(ib: IB, ticker: str, contract_config: dict, output_dir:
         return False
     
     # Запрашиваем исторические данные
-    # ВАЖНО: Для опционов используем MIDPOINT (среднее bid/ask)
-    # ЗАЧЕМ: TRADES может быть пустым для неликвидных контрактов
-    try:
-        bars = ib.reqHistoricalData(
-            option,
-            endDateTime="",
-            durationStr=HISTORY_DURATION,
-            barSizeSetting=BAR_SIZE,
-            whatToShow="MIDPOINT",
-            useRTH=True,
-            formatDate=1
-        )
-    except Exception as e:
-        print(f"     ⚠️  Ошибка запроса MIDPOINT: {e}")
-        # Пробуем TRADES как fallback
+    # ВАЖНО: Для истёкших опционов указываем endDateTime = дата экспирации
+    # ЗАЧЕМ: IB требует явную дату окончания для истёкших контрактов
+    end_dt = expiry + " 23:59:59"  # Конец дня экспирации
+    
+    bars = None
+    for what_to_show in ["MIDPOINT", "TRADES", "BID", "ASK"]:
         try:
             bars = ib.reqHistoricalData(
                 option,
-                endDateTime="",
+                endDateTime=end_dt,
                 durationStr=HISTORY_DURATION,
                 barSizeSetting=BAR_SIZE,
-                whatToShow="TRADES",
+                whatToShow=what_to_show,
                 useRTH=True,
                 formatDate=1
             )
-        except Exception as e2:
-            print(f"     ❌ Ошибка запроса TRADES: {e2}")
-            return False
+            if bars:
+                print(f"     ✅ Данные получены через {what_to_show}")
+                break
+            else:
+                print(f"     ⚠️  {what_to_show}: нет данных, пробуем следующий тип...")
+        except Exception as e:
+            print(f"     ⚠️  {what_to_show}: {e}")
     
     if not bars:
-        print(f"     ⚠️  Нет исторических данных")
+        print(f"     ❌ Нет данных ни по одному типу")
         return False
     
     # Сохраняем в CSV

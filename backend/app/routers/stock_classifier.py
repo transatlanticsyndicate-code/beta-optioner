@@ -6,10 +6,14 @@ API роутер для классификации акций по группа�
 Эндпоинты:
 - GET /api/stock/classify?symbol=AAPL — классификация акции
 - GET /api/stock/groups — список доступных групп
+- GET /api/stock/ticker-overrides — список per-ticker overrides
+- POST /api/stock/ticker-overrides — сохранить per-ticker overrides
 """
 
 from fastapi import APIRouter, Query, HTTPException, Request
-from typing import Optional
+from typing import Optional, Dict, Any
+import json
+import os
 
 from slowapi.util import get_remote_address
 from slowapi import Limiter
@@ -18,7 +22,8 @@ from app.services.stock_classifier import (
     classify_stock,
     get_stock_groups,
     get_group_multipliers,
-    clear_cache
+    clear_cache,
+    TICKER_OVERRIDES_FILE
 )
 
 # ============================================================================
@@ -148,6 +153,46 @@ async def get_multipliers_endpoint(
         )
     
     return get_group_multipliers(group.lower())
+
+
+@router.get("/ticker-overrides")
+async def get_ticker_overrides_endpoint():
+    """
+    Возвращает список per-ticker overrides
+    ЗАЧЕМ: Для отображения в UI настроек калибровки
+    """
+    try:
+        if os.path.exists(TICKER_OVERRIDES_FILE):
+            with open(TICKER_OVERRIDES_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            # Убираем служебный комментарий
+            return {k: v for k, v in data.items() if not k.startswith('_')}
+        return {}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/ticker-overrides")
+async def save_ticker_overrides_endpoint(overrides: Dict[str, Any]):
+    """
+    Сохраняет per-ticker overrides
+    ЗАЧЕМ: Позволяет добавлять/удалять калибровочные коэффициенты через API
+    """
+    try:
+        existing = {}
+        if os.path.exists(TICKER_OVERRIDES_FILE):
+            with open(TICKER_OVERRIDES_FILE, 'r', encoding='utf-8') as f:
+                existing = json.load(f)
+
+        # Обновляем, сохраняя служебные поля
+        existing.update({k.upper(): v for k, v in overrides.items()})
+
+        with open(TICKER_OVERRIDES_FILE, 'w', encoding='utf-8') as f:
+            json.dump(existing, f, indent=2, ensure_ascii=False)
+
+        return {"status": "ok", "saved": list(overrides.keys())}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/clear-cache")

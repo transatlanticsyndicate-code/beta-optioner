@@ -1,0 +1,8 @@
+{
+  "_comment": "Per-ticker коэффициенты калибровки. Приоритет над групповой классификацией. Формат: {down_mult, up_mult, note}",
+  "AAPL": {
+    "down_mult": 1.001,
+    "up_mult": 1.076,
+    "note": "Calibrated 2026-02-21, 3258 trades, 14d hold, ThetaData EOD"
+  }
+}
