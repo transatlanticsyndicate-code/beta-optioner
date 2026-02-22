@@ -195,7 +195,12 @@ export const getProjectedIV = (option, currentDaysToExpiration, simulatedDaysToE
   //        Это устраняет систематическую ошибку "замороженной IV".
   if (ouParams && ouParams.iv_mean != null && ouParams.iv_kappa != null) {
     const ivMean = ouParams.iv_mean;   // долгосрочное среднее (в долях, например 0.35)
-    const kappa = ouParams.iv_kappa;   // скорость возврата (1/год)
+
+    // Ограничиваем kappa: AR(1) на дневных данных даёт завышенные значения (80-100/год),
+    // что приводит к мгновенному возврату IV к среднему уже за 3-5 дней.
+    // Реалистичный диапазон для опционных IV: 5-20/год (half-life 13-50 дней).
+    // ЗАЧЕМ: При kappa=100 и dt=7дней decay=exp(-1.9)=0.15 — IV почти сразу замерзает на iv_mean.
+    const kappa = Math.min(ouParams.iv_kappa, 20.0);
 
     // dt — прошедшее время в годах
     const dt = daysPassed / 365.0;
@@ -210,9 +215,12 @@ export const getProjectedIV = (option, currentDaysToExpiration, simulatedDaysToE
     return clampedIV * 100;
   }
 
-  // FALLBACK: нет калибровочных данных — IV не меняется
-  // ЗАЧЕМ: Лучше не менять IV чем применять неверную модель для некалиброванных тикеров
-  return currentIVDecimal * 100;
+  // FALLBACK: нет калибровочных данных — консервативная модель роста IV при приближении к экспирации
+  // ЗАЧЕМ: Восстанавливаем старую логику — IV плавно растёт при уменьшении времени до экспирации
+  // Формула: 1 + 0.5 * (1 - 1/sqrt(timeRatio)), даёт рост от 1.0 до макс 1.5
+  const timeRatio = currentDaysToExpiration / Math.max(simulatedDaysToExpiration, 1);
+  const growthFactor = 1 + 0.5 * (1 - 1 / Math.sqrt(timeRatio));
+  return Math.min(currentIVDecimal * growthFactor, 3.0) * 100;
 };
 
 /**
