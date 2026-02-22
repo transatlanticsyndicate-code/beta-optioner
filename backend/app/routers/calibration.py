@@ -15,6 +15,7 @@ API роутер для управления калибровкой коэффи
 
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -339,11 +340,14 @@ async def get_calibration_status():
     """
     Возвращает список всех тикеров с результатами калибровки
     ЗАЧЕМ: Главная таблица страницы — показывает что откалиброванно, когда и с какими коэффициентами
+    Источники данных (приоритет): calibration_results/ → ticker_overrides.json (fallback)
     """
     overrides = _load_ticker_overrides()
     tickers_data = []
+    # Отслеживаем тикеры уже добавленные из calibration_results/
+    seen_tickers = set()
 
-    # Собираем данные из calibration_results/
+    # Источник 1: файлы calibration_results/ (детальные данные о сделках)
     if os.path.exists(CALIBRATION_RESULTS_DIR):
         for filename in sorted(os.listdir(CALIBRATION_RESULTS_DIR)):
             if not filename.endswith("_calibration.json"):
@@ -388,6 +392,61 @@ async def get_calibration_status():
                 "iv_std": override.get("iv_std") if has_override else None,
                 "half_life_days": override.get("half_life_days") if has_override else None,
             })
+            seen_tickers.add(ticker)
+
+    # Источник 2: ticker_overrides.json — fallback для тикеров без calibration_results/
+    # ЗАЧЕМ: calibration_results/ в .gitignore и не деплоится на сервер,
+    #        но ticker_overrides.json коммитится и содержит все откалиброванные тикеры
+    for ticker, override in sorted(overrides.items()):
+        # Пропускаем служебные ключи и уже добавленные тикеры
+        if ticker.startswith("_") or ticker in seen_tickers:
+            continue
+        # Пропускаем записи без коэффициентов (некорректные)
+        if not override.get("down_mult") or not override.get("up_mult"):
+            continue
+
+        # Парсим дату из поля note (формат: "Calibrated YYYY-MM-DD, ...")
+        calibrated_at = ""
+        days_ago = None
+        is_stale = False
+        note = override.get("note", "")
+        try:
+            # Извлекаем дату из note: "Calibrated 2026-02-22, ..."
+            date_match = re.search(r"Calibrated (\d{4}-\d{2}-\d{2})", note)
+            if date_match:
+                calibrated_at = date_match.group(1)
+                dt = datetime.fromisoformat(calibrated_at)
+                days_ago = (datetime.now() - dt).days
+                is_stale = days_ago > 30
+        except Exception:
+            pass
+
+        # Извлекаем количество сделок из note: "..., 3258 trades, ..."
+        total_trades = None
+        try:
+            trades_match = re.search(r"(\d+) trades", note)
+            if trades_match:
+                total_trades = int(trades_match.group(1))
+        except Exception:
+            pass
+
+        tickers_data.append({
+            "ticker": ticker,
+            "down_mult": override.get("down_mult"),
+            "up_mult": override.get("up_mult"),
+            "total_trades": total_trades,
+            "hold_days": None,
+            "calibrated_at": calibrated_at,
+            "days_ago": days_ago,
+            "is_stale": is_stale,
+            "contracts_count": _count_options_files(ticker),
+            "has_override": True,
+            "override_note": note,
+            "iv_mean": override.get("iv_mean"),
+            "iv_kappa": override.get("iv_kappa"),
+            "iv_std": override.get("iv_std"),
+            "half_life_days": override.get("half_life_days"),
+        })
 
     # Проверяем статус Theta Terminal
     terminal_running = _is_theta_terminal_running()
