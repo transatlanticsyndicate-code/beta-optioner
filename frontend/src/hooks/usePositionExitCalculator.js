@@ -128,6 +128,11 @@ export const usePositionExitCalculator = ({
   stockClassification = null // Классификация акции для применения коэффициентов группы
 }) => {
   return useMemo(() => {
+    // Извлекаем параметры Ornstein-Uhlenbeck из классификации тикера
+    // ЗАЧЕМ: Если тикер откалиброван — используем iv_mean/iv_kappa для прогноза IV
+    const ouParams = (stockClassification && stockClassification.iv_mean != null && stockClassification.iv_kappa != null)
+      ? { iv_mean: stockClassification.iv_mean, iv_kappa: stockClassification.iv_kappa }
+      : null;
     // Фильтруем видимые опционы и позиции
     const visibleOptions = options.filter(opt => opt.visible !== false);
     const visiblePositions = positions.filter(pos => pos.visible !== false);
@@ -172,7 +177,8 @@ export const usePositionExitCalculator = ({
       aiVolatilityMap,
       selectedTicker,
       calculatorMode,
-      contractMultiplier
+      contractMultiplier,
+      ouParams
     });
 
     // Сценарий 3: Закрыть всё (Close everything)
@@ -188,7 +194,8 @@ export const usePositionExitCalculator = ({
       aiVolatilityMap,
       selectedTicker,
       calculatorMode,
-      contractMultiplier
+      contractMultiplier,
+      ouParams
     });
 
     // Проверяем ликвидность всех опционов
@@ -358,7 +365,7 @@ const calculateExerciseScenario = ({ options, positions, underlyingPrice, curren
  * - Закрываем опционы по текущей цене (intrinsic + time value)
  * - P&L от изменения цены акций
  */
-const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, daysPassed, currentPrice, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100 }) => {
+const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, daysPassed, currentPrice, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100, ouParams = null }) => {
   const details = [];
   let totalPL = 0;
 
@@ -407,13 +414,14 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
     const simulatedDaysToExpiration = calculateDaysToExpirationForOption(option, daysPassed, oldestEntryDate);
 
     // Получаем прогнозируемую IV с учётом временной структуры (Volatility Surface)
-    // ВАЖНО: ivSurface используется для точной интерполяции IV между датами экспирации
+    // ВАЖНО: ouParams передаёт параметры OU-модели для mean reversion прогноза IV
     let optionVolatility = getOptionVolatility(
       option,
       currentDaysToExpiration,
       simulatedDaysToExpiration,
       ivSurface,
-      'simple'
+      'simple',
+      ouParams
     );
 
     // Используем AI волатильность если доступна
@@ -511,7 +519,7 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
  * - Закрываем опционы по текущей цене (intrinsic + time value)
  * - Продаем акции по текущей цене
  */
-const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPassed, currentPrice, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100 }) => {
+const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPassed, currentPrice, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100, ouParams = null }) => {
   const details = [];
   let totalPL = 0;
 
@@ -557,13 +565,14 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
     const simulatedDaysToExpiration = calculateDaysToExpirationForOption(option, daysPassed, oldestEntryDate);
 
     // Получаем прогнозируемую IV с учётом временной структуры (Volatility Surface)
-    // ВАЖНО: ivSurface используется для точной интерполяции IV между датами экспирации
+    // ВАЖНО: ouParams передаёт параметры OU-модели для mean reversion прогноза IV
     let optionVolatility = getOptionVolatility(
       option,
       currentDaysToExpiration,
       simulatedDaysToExpiration,
       ivSurface,
-      'simple'
+      'simple',
+      ouParams
     );
 
     // Используем AI волатильность если доступна

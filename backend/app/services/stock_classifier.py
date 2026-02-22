@@ -576,6 +576,12 @@ async def classify_stock(symbol: str) -> Dict[str, Any]:
         down_mult = classification["down_mult"]
         up_mult = classification["up_mult"]
 
+    # Извлекаем параметры IV mean reversion из override если есть
+    # ЗАЧЕМ: Калькулятор использует эти параметры для прогноза изменения IV (Ornstein-Uhlenbeck)
+    iv_mean = override.get("iv_mean") if override else None
+    iv_kappa = override.get("iv_kappa") if override else None
+    iv_std = override.get("iv_std") if override else None
+
     # Формируем результат
     # ВАЖНО: Используем коэффициенты из classification (могут быть модифицированы event-driven)
     result = {
@@ -588,7 +594,10 @@ async def classify_stock(symbol: str) -> Dict[str, Any]:
         "reason": classification["reason"],  # Причина классификации для отладки
         "features": features,
         "cached": False,
-        "ticker_override": bool(override)  # Флаг для UI — применён ли override
+        "ticker_override": bool(override),  # Флаг для UI — применён ли override
+        "iv_mean": iv_mean,    # Долгосрочное среднее IV (None если нет калибровки)
+        "iv_kappa": iv_kappa,  # Скорость возврата IV к среднему (Ornstein-Uhlenbeck)
+        "iv_std": iv_std,      # Стандартное отклонение IV
     }
     
     # Кэширование отключено

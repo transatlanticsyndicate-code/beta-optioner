@@ -162,47 +162,57 @@ export const interpolateIV = (surface, strike, targetDays, fallbackIV = 0.25) =>
 /**
  * Рассчитать прогнозируемую IV для опциона при симуляции времени
  * ЗАЧЕМ: Основная функция для использования в расчётах P&L
- * 
- * ВАЖНО: IV Surface содержит данные для РАЗНЫХ опционов с разными датами экспирации.
- * Мы используем Term Structure (соотношение IV между датами) для прогнозирования,
- * а не абсолютные значения IV из Surface.
- * 
+ *
+ * Использует модель Ornstein-Uhlenbeck (mean reversion) если доступны
+ * калиброванные параметры iv_mean и iv_kappa из ticker_overrides.json.
+ * Иначе — консервативный fallback (IV не меняется).
+ *
+ * Формула OU: IV(t+dt) = iv_mean + (IV(t) - iv_mean) * exp(-kappa * dt)
+ * Где dt — прошедшее время в годах (daysPassed / 365)
+ *
  * @param {Object} option - опцион с полями: strike, impliedVolatility, date
  * @param {number} currentDaysToExpiration - текущее количество дней до экспирации
  * @param {number} simulatedDaysToExpiration - симулируемое количество дней до экспирации
  * @param {Object} ivSurface - IV Surface (опционально, для определения Term Structure)
+ * @param {Object} ouParams - параметры OU модели: { iv_mean, iv_kappa } (опционально)
  * @returns {number} - прогнозируемая IV в процентах (например, 25 для 25%)
  */
-export const getProjectedIV = (option, currentDaysToExpiration, simulatedDaysToExpiration, ivSurface = null) => {
+export const getProjectedIV = (option, currentDaysToExpiration, simulatedDaysToExpiration, ivSurface = null, ouParams = null) => {
   // Получаем текущую IV опциона
   const currentIV = option.impliedVolatility || option.implied_volatility || 0.25;
   const currentIVDecimal = currentIV > 1 ? currentIV / 100 : currentIV;
-  
-  // Если симулируемое время = текущему, возвращаем текущую IV
+
+  // Если симулируемое время = текущему или нет прошедших дней — возвращаем текущую IV
   if (simulatedDaysToExpiration >= currentDaysToExpiration || simulatedDaysToExpiration <= 0) {
     return currentIVDecimal * 100;
   }
-  
-  // УПРОЩЁННАЯ МОДЕЛЬ: IV растёт плавно при приближении к экспирации
-  // ЗАЧЕМ: Избегаем резких скачков и нереалистичных значений IV
-  
-  const timeRatio = currentDaysToExpiration / Math.max(simulatedDaysToExpiration, 1);
-  
-  // Консервативная модель роста IV:
-  // Используем логарифмическую функцию для плавного роста с насыщением
-  // При ratio = 1: factor = 1.0 (без изменений)
-  // При ratio = 2: factor ≈ 1.15
-  // При ratio = 4: factor ≈ 1.30
-  // При ratio = 10: factor ≈ 1.46
-  // При ratio = 32: factor ≈ 1.50 (максимум)
-  
-  // Формула: 1 + 0.5 * (1 - 1/sqrt(timeRatio))
-  // Это даёт плавный рост от 1.0 до максимума 1.5
-  const growthFactor = 1 + 0.5 * (1 - 1 / Math.sqrt(timeRatio));
-  
-  const projectedIV = currentIVDecimal * growthFactor;
-  
-  return projectedIV * 100;
+
+  // Количество прошедших дней (от сегодня до симулируемой даты)
+  const daysPassed = currentDaysToExpiration - simulatedDaysToExpiration;
+
+  // МОДЕЛЬ ORNSTEIN-UHLENBECK (mean reversion)
+  // ЗАЧЕМ: Если IV сейчас выше среднего — она будет падать, если ниже — расти.
+  //        Это устраняет систематическую ошибку "замороженной IV".
+  if (ouParams && ouParams.iv_mean != null && ouParams.iv_kappa != null) {
+    const ivMean = ouParams.iv_mean;   // долгосрочное среднее (в долях, например 0.35)
+    const kappa = ouParams.iv_kappa;   // скорость возврата (1/год)
+
+    // dt — прошедшее время в годах
+    const dt = daysPassed / 365.0;
+
+    // OU формула: IV(t+dt) = iv_mean + (IV(t) - iv_mean) * exp(-kappa * dt)
+    const decayFactor = Math.exp(-kappa * dt);
+    const projectedIVDecimal = ivMean + (currentIVDecimal - ivMean) * decayFactor;
+
+    // Ограничиваем результат разумными пределами (5% ... 300%)
+    const clampedIV = Math.max(0.05, Math.min(3.0, projectedIVDecimal));
+
+    return clampedIV * 100;
+  }
+
+  // FALLBACK: нет калибровочных данных — IV не меняется
+  // ЗАЧЕМ: Лучше не менять IV чем применять неверную модель для некалиброванных тикеров
+  return currentIVDecimal * 100;
 };
 
 /**
@@ -351,32 +361,33 @@ export const buildIVSurfaceFromCache = (strikesByDate, optionDetailsCache) => {
  * @param {number} currentDaysToExpiration - текущее количество дней до экспирации (опционально)
  * @param {number} simulatedDaysToExpiration - симулируемое количество дней до экспирации (опционально)
  * @param {Object} ivSurface - IV Surface для интерполяции (опционально)
+ * @param {string} mode - режим расчёта (не используется, оставлен для совместимости)
+ * @param {Object} ouParams - параметры Ornstein-Uhlenbeck: { iv_mean, iv_kappa } (опционально)
  * @returns {number} - волатильность в процентах (например, 25 для 25%)
  */
-export const getOptionVolatility = (option, currentDaysToExpiration = null, simulatedDaysToExpiration = null, ivSurface = null) => {
+export const getOptionVolatility = (option, currentDaysToExpiration = null, simulatedDaysToExpiration = null, ivSurface = null, mode = null, ouParams = null) => {
   // Fallback IV если у опциона нет данных из API
   const DEFAULT_IV = 25;
   
   // Используем индивидуальную IV каждого опциона из API
   const optIV = option.impliedVolatility || option.implied_volatility;
   if (!optIV || optIV <= 0) {
-    // Fallback на стандартную волатильность если у опциона нет IV
     return DEFAULT_IV;
   }
   
   // Конвертируем в проценты если в десятичном формате
   const currentIVPercent = optIV < 1 ? optIV * 100 : optIV;
   
-  // Если есть данные о времени — используем прогнозируемую IV (Volatility Surface)
-  // ЗАЧЕМ: IV обычно растёт при приближении к экспирации
+  // Если есть данные о времени — используем прогнозируемую IV
+  // ЗАЧЕМ: Передаём ouParams для Ornstein-Uhlenbeck модели если доступны
   if (currentDaysToExpiration !== null && simulatedDaysToExpiration !== null && 
       simulatedDaysToExpiration < currentDaysToExpiration && simulatedDaysToExpiration > 0) {
-    // Используем функцию прогнозирования IV с IV Surface если доступен
     const projectedIV = getProjectedIV(
       option, 
       currentDaysToExpiration, 
       simulatedDaysToExpiration,
-      ivSurface // Передаём IV Surface для точной интерполяции
+      ivSurface,
+      ouParams  // Передаём OU параметры для mean reversion модели
     );
     return projectedIV;
   }

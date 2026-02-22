@@ -380,7 +380,13 @@ async def get_calibration_status():
                 "is_stale": is_stale,
                 "contracts_count": _count_options_files(ticker),
                 "has_override": has_override,
-                "override_note": override.get("note", "") if has_override else ""
+                "override_note": override.get("note", "") if has_override else "",
+                # Параметры IV mean reversion (Ornstein-Uhlenbeck) из ticker_overrides
+                # ЗАЧЕМ: Показываем в UI что для тикера применяется новая IV модель
+                "iv_mean": override.get("iv_mean") if has_override else None,
+                "iv_kappa": override.get("iv_kappa") if has_override else None,
+                "iv_std": override.get("iv_std") if has_override else None,
+                "half_life_days": override.get("half_life_days") if has_override else None,
             })
 
     # Проверяем статус Theta Terminal

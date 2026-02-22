@@ -360,6 +360,88 @@ def compute_multipliers(trades: list) -> dict:
 
 
 # ============================================================================
+# IV MEAN REVERSION (ORNSTEIN-UHLENBECK)
+# ============================================================================
+
+def compute_iv_mean_reversion(trades: list) -> dict:
+    """
+    Вычисляет параметры модели Ornstein-Uhlenbeck для IV mean reversion
+    ЗАЧЕМ: Позволяет калькулятору предсказывать изменение IV на период удержания позиции,
+           а не замораживать её на уровне входа. Если IV выше среднего — она будет падать,
+           если ниже — расти. Скорость возврата (kappa) определяется из исторических данных.
+
+    Модель: IV(t+dt) = iv_mean + (IV(t) - iv_mean) * exp(-kappa * dt)
+
+    Параметры:
+        iv_mean  — долгосрочное среднее IV для данного тикера (в долях, например 0.35)
+        iv_kappa — скорость возврата к среднему (в 1/год). Чем выше — тем быстрее возврат.
+                   Например, kappa=12 означает half-life ≈ 21 день (ln(2)/12 * 365)
+
+    Returns:
+        Словарь с iv_mean, iv_kappa, iv_std, half_life_days
+    """
+    # Собираем все IV из сделок — это выборка исторических IV при входе
+    iv_values = [t["iv"] for t in trades if t.get("iv") and 0.05 < t["iv"] < 3.0]
+
+    if len(iv_values) < 10:
+        # Недостаточно данных — возвращаем нейтральные значения
+        return {
+            "iv_mean": 0.30,
+            "iv_kappa": 4.0,
+            "iv_std": 0.10,
+            "half_life_days": 63,
+        }
+
+    # Среднее и стандартное отклонение IV
+    n = len(iv_values)
+    iv_mean = sum(iv_values) / n
+    iv_variance = sum((v - iv_mean) ** 2 for v in iv_values) / n
+    iv_std = math.sqrt(iv_variance)
+
+    # Оцениваем kappa через авторегрессию AR(1) на последовательных IV
+    # Сортируем сделки по дате входа и берём последовательные пары IV
+    # Логика: если IV[t+1] = iv_mean + (IV[t] - iv_mean) * phi, то phi = exp(-kappa * dt)
+    # Оцениваем phi через корреляцию последовательных IV
+    sorted_trades = sorted(trades, key=lambda t: t["entry_date"])
+    iv_seq = [t["iv"] for t in sorted_trades if t.get("iv") and 0.05 < t["iv"] < 3.0]
+
+    # Вычисляем авторегрессионный коэффициент phi через метод наименьших квадратов
+    # phi = Cov(IV[t], IV[t+1]) / Var(IV[t])
+    if len(iv_seq) >= 4:
+        pairs = [(iv_seq[i], iv_seq[i + 1]) for i in range(len(iv_seq) - 1)]
+        x_vals = [p[0] for p in pairs]
+        y_vals = [p[1] for p in pairs]
+        x_mean = sum(x_vals) / len(x_vals)
+        y_mean = sum(y_vals) / len(y_vals)
+        cov = sum((x - x_mean) * (y - y_mean) for x, y in zip(x_vals, y_vals)) / len(pairs)
+        var_x = sum((x - x_mean) ** 2 for x in x_vals) / len(x_vals)
+        phi = cov / var_x if var_x > 0 else 0.5
+        # Ограничиваем phi в разумных пределах (0.01 ... 0.99)
+        phi = max(0.01, min(0.99, phi))
+    else:
+        phi = 0.5  # дефолт: умеренный mean reversion
+
+    # Предполагаем что средний интервал между сделками ≈ 1 торговый день
+    # dt = 1/252 года (один торговый день)
+    dt = 1.0 / 252.0
+    # kappa = -ln(phi) / dt
+    kappa = -math.log(phi) / dt if phi > 0 else 4.0
+    # Ограничиваем kappa в разумных пределах (0.5 ... 100 в год)
+    kappa = max(0.5, min(100.0, kappa))
+
+    # Half-life: время за которое отклонение от среднего уменьшается вдвое
+    # half_life = ln(2) / kappa (в годах) * 365 (в днях)
+    half_life_days = round(math.log(2) / kappa * 365)
+
+    return {
+        "iv_mean": round(iv_mean, 4),
+        "iv_kappa": round(kappa, 2),
+        "iv_std": round(iv_std, 4),
+        "half_life_days": half_life_days,
+    }
+
+
+# ============================================================================
 # ГЛАВНАЯ ФУНКЦИЯ
 # ============================================================================
 
@@ -427,8 +509,12 @@ def main():
         print(f"   Попробуйте загрузить больше данных или уменьшить --min-trades")
         return
 
-    # Вычисляем коэффициенты
+    # Вычисляем коэффициенты P&L
     multipliers = compute_multipliers(all_trades)
+
+    # Вычисляем параметры IV mean reversion (Ornstein-Uhlenbeck)
+    # ЗАЧЕМ: Позволяет калькулятору предсказывать изменение IV, а не замораживать её
+    iv_params = compute_iv_mean_reversion(all_trades)
 
     print(f"\n{'='*60}")
     print(f"  РЕЗУЛЬТАТЫ КАЛИБРОВКИ для {ticker}")
@@ -440,6 +526,12 @@ def main():
     print(f"  down_mult (среднее): {multipliers['down_mult_mean']}")
     print(f"  up_mult   (медиана): {multipliers['up_mult']}")
     print(f"  up_mult   (среднее): {multipliers['up_mult_mean']}")
+    print(f"")
+    print(f"  IV Mean Reversion (Ornstein-Uhlenbeck):")
+    print(f"  iv_mean:        {iv_params['iv_mean']:.4f}  ({iv_params['iv_mean']*100:.1f}%)")
+    print(f"  iv_kappa:       {iv_params['iv_kappa']:.2f}  (скорость возврата, 1/год)")
+    print(f"  iv_std:         {iv_params['iv_std']:.4f}  ({iv_params['iv_std']*100:.1f}%)")
+    print(f"  half_life:      {iv_params['half_life_days']} дней")
     print(f"{'='*60}")
 
     # Интерпретация
@@ -497,6 +589,10 @@ def main():
         existing[ticker] = {
             "down_mult": dm,
             "up_mult": um,
+            "iv_mean": iv_params["iv_mean"],
+            "iv_kappa": iv_params["iv_kappa"],
+            "iv_std": iv_params["iv_std"],
+            "half_life_days": iv_params["half_life_days"],
             "note": f"Calibrated {datetime.now().strftime('%Y-%m-%d')}, {len(all_trades)} trades, {hold_days}d hold, ThetaData EOD"
         }
 

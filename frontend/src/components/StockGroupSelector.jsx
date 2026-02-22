@@ -452,12 +452,20 @@ function StockGroupSelector({
                 Калибровано
               </span>
             </TooltipTrigger>
-            <TooltipContent className="max-w-[220px]">
+            <TooltipContent className="max-w-[240px]">
               <p className="font-medium mb-1">Персональная калибровка</p>
               <p className="text-xs text-muted-foreground mb-2">Коэффициенты вычислены на реальных исторических данных опционов для этого тикера</p>
               <div className="text-xs space-y-1">
                 <p>• Убытки: ×{classification.down_mult}</p>
                 <p>• Прибыль: ×{classification.up_mult}</p>
+                {classification.iv_mean != null && classification.iv_kappa != null && (
+                  <>
+                    <div className="border-t border-border/50 my-1" />
+                    <p className="text-muted-foreground font-medium">IV модель (Ornstein-Uhlenbeck):</p>
+                    <p>• Среднее IV: {(classification.iv_mean * 100).toFixed(1)}%</p>
+                    <p>• Скорость возврата: κ = {classification.iv_kappa.toFixed(1)}/год</p>
+                  </>
+                )}
               </div>
             </TooltipContent>
           </Tooltip>

@@ -9,8 +9,14 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   FlaskConical, Play, Trash2, RefreshCw, Plus, CheckCircle2,
   AlertCircle, Clock, Wifi, WifiOff, ChevronDown, ChevronUp,
-  TrendingDown, TrendingUp, Database, Terminal
+  TrendingDown, TrendingUp, Database, Terminal, Activity
 } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '../../components/ui/tooltip';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -67,18 +73,59 @@ function FreshnessBadge({ daysAgo, isStale }) {
   );
 }
 
+/** Бейдж IV модели Ornstein-Uhlenbeck */
+function IVModelBadge({ ivMean, ivKappa, halfLifeDays }) {
+  if (ivMean == null || ivKappa == null) {
+    return (
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-muted border border-border text-muted-foreground">
+        <Activity className="h-3 w-3" />
+        IV: нет данных
+      </span>
+    );
+  }
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-blue-500/10 border border-blue-500/30 text-blue-500 cursor-help">
+            <Activity className="h-3 w-3" />
+            IV модель
+          </span>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-[240px]">
+          <p className="font-medium mb-1">Ornstein-Uhlenbeck IV модель</p>
+          <p className="text-xs text-muted-foreground mb-2">
+            Калькулятор предсказывает изменение IV по формуле mean reversion,
+            а не замораживает её на уровне входа
+          </p>
+          <div className="text-xs space-y-1">
+            <p>• Среднее IV: <strong>{(ivMean * 100).toFixed(1)}%</strong></p>
+            <p>• Скорость возврата: <strong>κ = {ivKappa.toFixed(1)}/год</strong></p>
+            <p>• Half-life: <strong>{halfLifeDays} дн.</strong></p>
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 /** Строка тикера в таблице */
 function TickerRow({ item, onRecalibrate, onDelete, isRunning }) {
   return (
     <tr className="border-b border-border hover:bg-muted/30 transition-colors">
       {/* Тикер */}
       <td className="py-3 px-4">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="font-mono font-semibold">{item.ticker}</span>
           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-emerald-500/10 border border-emerald-500/30 text-emerald-600">
             <FlaskConical className="h-3 w-3" />
             Калибровано
           </span>
+          <IVModelBadge
+            ivMean={item.iv_mean}
+            ivKappa={item.iv_kappa}
+            halfLifeDays={item.half_life_days}
+          />
         </div>
       </td>
 
@@ -239,7 +286,7 @@ function JobProgress({ job, onClose }) {
           {isDone && job.results?.length > 0 && (
             <div className="mt-3 space-y-1">
               {job.results.map(r => (
-                <div key={r.ticker} className="flex items-center gap-2 text-xs">
+                <div key={r.ticker} className="flex items-center gap-2 text-xs flex-wrap">
                   {r.status === 'success' ? (
                     <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
                   ) : (
@@ -249,6 +296,11 @@ function JobProgress({ job, onClose }) {
                   {r.status === 'success' ? (
                     <span className="text-muted-foreground">
                       down×{r.down_mult?.toFixed(3)} / up×{r.up_mult?.toFixed(3)} — {r.total_trades?.toLocaleString()} сделок
+                      {r.iv_mean != null && (
+                        <span className="ml-2 text-blue-400">
+                          · IV̄ {(r.iv_mean * 100).toFixed(1)}% · HL {r.half_life_days}д
+                        </span>
+                      )}
                     </span>
                   ) : (
                     <span className="text-red-500">{r.error}</span>
@@ -611,13 +663,22 @@ function SettingsCalibration() {
 
       {/* Пояснение */}
       <Card className="bg-muted/30 border-dashed">
-        <CardContent className="py-4 px-4">
+        <CardContent className="py-4 px-4 space-y-2">
           <p className="text-xs text-muted-foreground leading-relaxed">
             <strong>Как работает калибровка:</strong> скрипт загружает EOD цены опционов за выбранный период
             через ThetaData API, симулирует тысячи сделок с горизонтом удержания N дней,
             сравнивает прогноз Black-Scholes с реальными ценами и вычисляет коэффициенты
             <strong> down_mult</strong> (для убыточных сделок) и <strong>up_mult</strong> (для прибыльных).
-            Эти коэффициенты автоматически применяются в калькуляторе при выборе тикера.
+          </p>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            <span className="inline-flex items-center gap-1 text-blue-500 font-medium">
+              <Activity className="h-3 w-3" />
+              IV модель (Ornstein-Uhlenbeck):
+            </span>{' '}
+            дополнительно вычисляется <strong>iv_mean</strong> (историческое среднее IV) и <strong>iv_kappa</strong> (скорость возврата).
+            Калькулятор использует эти параметры для прогноза изменения IV на период удержания —
+            если IV выше среднего, модель предсказывает её падение, и наоборот.
+            <strong> Half-life</strong> показывает за сколько дней IV возвращается к среднему вдвое.
           </p>
         </CardContent>
       </Card>
