@@ -6,7 +6,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Save, Trash2, ExternalLink, Filter, Calendar, Download, Upload, X, AlertCircle, CheckCircle, Edit2, TrendingUp, Bitcoin } from 'lucide-react';
+import { Save, Trash2, ExternalLink, Filter, Calendar, Download, Upload, X, AlertCircle, CheckCircle, Edit2, TrendingUp, Bitcoin, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
@@ -47,6 +47,11 @@ function UniversalSavedConfigurations() {
   const [filterTicker, setFilterTicker] = useState('');
   const [filterAuthor, setFilterAuthor] = useState('');
   const [filterInstrumentType, setFilterInstrumentType] = useState('all');
+
+  // Состояние сортировки: поле и направление
+  // ЗАЧЕМ: Позволяет пользователю упорядочить список по дате или тикеру
+  const [sortField, setSortField] = useState('createdAt');
+  const [sortDirection, setSortDirection] = useState('desc');
 
   // Состояние импорта
   const [showImportModal, setShowImportModal] = useState(false);
@@ -134,6 +139,25 @@ function UniversalSavedConfigurations() {
     return result;
   };
 
+  // Обработчик клика по заголовку колонки для сортировки
+  // ЗАЧЕМ: Переключает направление или меняет поле сортировки
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  // Иконка сортировки для заголовка колонки
+  const SortIcon = ({ field }) => {
+    if (sortField !== field) return <ArrowUpDown className="h-3.5 w-3.5 ml-1 opacity-40" />;
+    return sortDirection === 'asc'
+      ? <ArrowUp className="h-3.5 w-3.5 ml-1" />
+      : <ArrowDown className="h-3.5 w-3.5 ml-1" />;
+  };
+
   // Фильтрация конфигураций
   const filteredConfigurations = useMemo(() => {
     return configurations.filter(config => {
@@ -170,8 +194,23 @@ function UniversalSavedConfigurations() {
       }
       
       return true;
+    }).sort((a, b) => {
+      // Сортировка по выбранному полю
+      let valA, valB;
+      if (sortField === 'createdAt') {
+        valA = new Date(a.createdAt).getTime();
+        valB = new Date(b.createdAt).getTime();
+      } else if (sortField === 'ticker') {
+        valA = (a.ticker || '').toLowerCase();
+        valB = (b.ticker || '').toLowerCase();
+      } else {
+        return 0;
+      }
+      if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+      if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
     });
-  }, [configurations, filterDate, filterTicker, filterAuthor, filterInstrumentType]);
+  }, [configurations, filterDate, filterTicker, filterAuthor, filterInstrumentType, sortField, sortDirection]);
 
   // Сброс всех фильтров
   const clearFilters = () => {
@@ -430,8 +469,24 @@ function UniversalSavedConfigurations() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Дата/Время</TableHead>
-                    <TableHead>Тикер</TableHead>
+                    <TableHead
+                      className="cursor-pointer select-none hover:text-foreground"
+                      onClick={() => handleSort('createdAt')}
+                    >
+                      <span className="inline-flex items-center">
+                        Дата/Время
+                        <SortIcon field="createdAt" />
+                      </span>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer select-none hover:text-foreground"
+                      onClick={() => handleSort('ticker')}
+                    >
+                      <span className="inline-flex items-center">
+                        Тикер
+                        <SortIcon field="ticker" />
+                      </span>
+                    </TableHead>
                     <TableHead>Тип инструмента</TableHead>
                     <TableHead>Название</TableHead>
                     <TableHead>Автор</TableHead>
