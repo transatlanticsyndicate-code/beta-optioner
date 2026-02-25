@@ -114,6 +114,7 @@ twparser_v9*/
 # ЗАЧЕМ: Большие локальные файлы данных, не нужны на сервере и в репозитории
 scripts/options_data/
 scripts/calibration_results/
+creds.txt
 
 # Theta Terminal (локальный исполняемый файл, не нужен в репозитории)
 ThetaTerminalv3.jar

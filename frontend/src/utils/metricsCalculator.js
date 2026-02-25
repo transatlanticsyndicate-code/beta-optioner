@@ -337,9 +337,14 @@ export function calculatePLMetrics(options, currentPrice, positions = [], daysPa
     };
   }
 
-  // Определяем MAX прибыль и MAX убыток
-  const maxProfit = Math.max(...totalPLArray);
-  const maxLoss = Math.min(...totalPLArray);
+  // MAX убыток и MAX прибыль считаем на дату экспирации (daysRemaining = 0)
+  // ЗАЧЕМ: Временна́я стоимость на дату экспирации = 0, P&L определяется только внутренней стоимостью.
+  // Это единственно корректный способ — MAX убыток не должен зависеть от ползунка дней.
+  // Передаём daysPassed = 999999 чтобы гарантированно обнулить daysRemaining для всех опционов.
+  const { totalPLArray: expirationPLArray } = calculatePLDataForMetrics(options, currentPrice, positions, 999999, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap, targetPrice, selectedTicker, calculatorMode, contractMultiplier, 'simple');
+
+  const maxProfit = expirationPLArray.length > 0 ? Math.max(...expirationPLArray) : Math.max(...totalPLArray);
+  const maxLoss = expirationPLArray.length > 0 ? Math.min(...expirationPLArray) : Math.min(...totalPLArray);
 
   // Рассчитываем Break-even точки (где P&L пересекает 0)
   const breakevens = [];
