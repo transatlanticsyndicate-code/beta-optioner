@@ -37,7 +37,8 @@ import { calculateIntrinsicValueBlack76 } from './black76';
 // Режимы калькулятора
 export const CALCULATOR_MODES = {
   STOCKS: 'stocks',
-  FUTURES: 'futures'
+  FUTURES: 'futures',
+  CRYPTO: 'crypto'
 };
 
 /**
@@ -75,13 +76,16 @@ export const calculateOptionTheoreticalPrice = (
     );
   }
 
-  // Режим "Акции" — Black-Scholes-Merton
+  // Режим "Акции" и "Крипто" — Black-Scholes-Merton
+  // Для крипто (Binance) безрисковая ставка = 0, для акций — ставка ФРС
+  const cryptoRiskFreeRate = mode === CALCULATOR_MODES.CRYPTO ? 0 : null;
   return calculateStockOptionTheoreticalPrice(
     option,
     targetPrice,
     daysRemaining,
     overrideVolatility,
-    dividendYield
+    dividendYield,
+    cryptoRiskFreeRate
   );
 };
 
@@ -124,14 +128,19 @@ export const calculateOptionPLValue = (
     );
   }
 
-  // Режим "Акции" — Black-Scholes-Merton
+  // Режим "Акции" и "Крипто" — Black-Scholes-Merton
+  // Для крипто используем множитель 1 и безрисковую ставку 0 (Binance)
+  const multiplier = mode === CALCULATOR_MODES.CRYPTO ? 1 : 100;
+  const cryptoRiskFreeRate = mode === CALCULATOR_MODES.CRYPTO ? 0 : null;
   return calculateStockOptionPLValue(
     option,
     targetPrice,
     currentPrice,
     daysRemaining,
     overrideVolatility,
-    dividendYield
+    dividendYield,
+    multiplier,
+    cryptoRiskFreeRate
   );
 };
 
@@ -160,8 +169,10 @@ export const calculateOptionExpirationPLValue = (
     return calculateFuturesOptionExpirationPLValue(option, price, pointValue);
   }
 
-  // Режим "Акции"
-  return calculateStockOptionExpirationPLValue(option, price);
+  // Режим "Акции" и "Крипто" — Black-Scholes-Merton
+  // Для крипто используем множитель 1, для акций — 100
+  const multiplier = mode === CALCULATOR_MODES.CRYPTO ? 1 : 100;
+  return calculateStockOptionExpirationPLValue(option, price, multiplier);
 };
 
 /**
@@ -363,7 +374,7 @@ export const calculatePortfolioGreeks = (
 
 /**
  * Получение множителя контракта в зависимости от режима
- * ЗАЧЕМ: Для акций = 100, для фьючерсов = pointValue
+ * ЗАЧЕМ: Для акций = 100, для крипто = 1, для фьючерсов = pointValue
  * 
  * @param {string} mode - режим калькулятора
  * @param {string} ticker - тикер (для фьючерсов)
@@ -376,6 +387,10 @@ export const getContractMultiplier = (mode, ticker = '', customPointValue = null
       return customPointValue;
     }
     return getFuturesPointValue(ticker);
+  }
+  
+  if (mode === CALCULATOR_MODES.CRYPTO) {
+    return 1; // Крипто-опционы не умножаются на 100
   }
   
   return PRICING_CONSTANTS.OPTION_CONTRACT_MULTIPLIER; // 100 для акций

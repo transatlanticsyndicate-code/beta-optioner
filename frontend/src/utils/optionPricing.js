@@ -121,7 +121,8 @@ export const calculateOptionTheoreticalPrice = (
   targetPrice = 0,
   daysRemaining = 0,
   overrideVolatility = null, // Если передано, используем это значение вместо IV из опциона
-  dividendYield = 0 // Дивидендная доходность для модели BSM
+  dividendYield = 0, // Дивидендная доходность для модели BSM
+  overrideRiskFreeRate = null // Для крипто (Binance) передаём 0, для акций — null (берём из FRED)
 ) => {
   const strike = toNumber(option.strike);
   const type = option.type || 'CALL';
@@ -147,8 +148,8 @@ export const calculateOptionTheoreticalPrice = (
   }
 
   // Расчёт по Black-Scholes-Merton
-  // ЗАЧЕМ: Используем актуальную ставку от FRED API и дивидендную доходность
-  const riskFreeRate = getRiskFreeRate();
+  // ЗАЧЕМ: Для акций — актуальная ставка ФРС, для крипто (Binance) — 0 (нет безрисковой ставки)
+  const riskFreeRate = overrideRiskFreeRate !== null ? overrideRiskFreeRate : getRiskFreeRate();
   const safeQ = Math.max(0, dividendYield); // Дивидендная доходность >= 0
 
   const bsPrice = calculateOptionPrice(
@@ -217,6 +218,7 @@ const getEntryPrice = (option = {}) => {
  * @param {number} daysRemaining - дней до экспирации
  * @param {number} overrideVolatility - переопределение волатильности (из переключателя)
  * @param {number} dividendYield - дивидендная доходность (десятичный формат, например 0.02 = 2%)
+ * @param {number} customMultiplier - кастомный множитель (опционально, для крипто используется 1)
  * @returns {number} - P&L в долларах
  */
 export const calculateOptionPLValue = (
@@ -225,14 +227,17 @@ export const calculateOptionPLValue = (
   currentPrice = 0,
   daysRemaining = 0,
   overrideVolatility = null,
-  dividendYield = 0
+  dividendYield = 0,
+  customMultiplier = null,
+  overrideRiskFreeRate = null // Для крипто (Binance) передаём 0
 ) => {
   const quantity = getQuantity(option);
   if (!quantity) return 0;
 
   // Цена входа: ASK для Buy, BID для Sell
   const entryPrice = getEntryPrice(option);
-  const multiplier = getMultiplier(option);
+  // Используем кастомный множитель если передан, иначе берём из опциона
+  const multiplier = customMultiplier !== null ? customMultiplier : getMultiplier(option);
 
   // Теоретическая цена опциона по Black-Scholes-Merton
   const theoreticalPrice = calculateOptionTheoreticalPrice(
@@ -240,7 +245,8 @@ export const calculateOptionPLValue = (
     targetPrice,
     daysRemaining,
     overrideVolatility,
-    dividendYield
+    dividendYield,
+    overrideRiskFreeRate
   );
 
   // ЛОГИРОВАНИЕ: Диагностика расхождения цены (ОТКЛЮЧЕНО для production)
@@ -267,16 +273,18 @@ export const calculateOptionPLValue = (
  * 
  * @param {object} option - объект опциона
  * @param {number} price - цена базового актива на экспирации
+ * @param {number} customMultiplier - кастомный множитель (опционально, для крипто используется 1)
  * @returns {number} - P&L в долларах
  */
-export const calculateOptionExpirationPLValue = (option = {}, price = 0) => {
+export const calculateOptionExpirationPLValue = (option = {}, price = 0, customMultiplier = null) => {
   const quantity = getQuantity(option);
   if (!quantity) return 0;
 
   const intrinsicValue = calculateIntrinsicValue(option, price);
   // Цена входа: ASK для Buy, BID для Sell
   const entryPrice = getEntryPrice(option);
-  const multiplier = getMultiplier(option);
+  // Используем кастомный множитель если передан, иначе берём из опциона
+  const multiplier = customMultiplier !== null ? customMultiplier : getMultiplier(option);
 
   if (isBuyAction(option)) {
     return (intrinsicValue - entryPrice) * quantity * multiplier;

@@ -148,11 +148,14 @@ function UniversalOptionsCalculator() {
   // ЗАЧЕМ: Хранит pointValue и название фьючерса для расчётов
   const [selectedFuture, setSelectedFuture] = useState(null);
 
-  // Множитель контракта (100 для акций, pointValue для фьючерсов)
+  // Множитель контракта (100 для акций, 1 для крипто, pointValue для фьючерсов)
   // ЗАЧЕМ: Используется в расчётах P&L
   const contractMultiplier = useMemo(() => {
     if (calculatorMode === CALCULATOR_MODES.FUTURES && selectedFuture) {
       return selectedFuture.pointValue || 1;
+    }
+    if (calculatorMode === CALCULATOR_MODES.CRYPTO) {
+      return 1; // Крипто-опционы не умножаются на 100
     }
     return 100; // Стандартный множитель для акций
   }, [calculatorMode, selectedFuture]);
@@ -431,7 +434,7 @@ function UniversalOptionsCalculator() {
   // Загрузка классификации акции при выборе тикера (только для режима stocks)
   // ЗАЧЕМ: Определяем группу акции для корректировки P&L прогнозов
   const fetchClassification = useCallback(async (ticker) => {
-    if (!ticker || calculatorMode !== 'stocks') {
+    if (!ticker || calculatorMode !== CALCULATOR_MODES.STOCKS) {
       setStockClassification(null);
       return;
     }
@@ -469,7 +472,7 @@ function UniversalOptionsCalculator() {
   // Принудительное обновление классификации (очистка кэша + повторный запрос)
   // ЗАЧЕМ: Позволяет пользователю обновить авто-определение группы
   const refreshClassification = useCallback(async () => {
-    if (!selectedTicker || calculatorMode !== 'stocks') return;
+    if (!selectedTicker || calculatorMode !== CALCULATOR_MODES.STOCKS) return;
 
     try {
       // Очищаем кэш для этого тикера
@@ -986,7 +989,13 @@ function UniversalOptionsCalculator() {
               setCalculatorMode(config.state.calculatorMode);
             } else if (ticker) {
               const detectedType = detectInstrumentTypeByPattern(ticker);
-              setCalculatorMode(detectedType === 'futures' ? CALCULATOR_MODES.FUTURES : CALCULATOR_MODES.STOCKS);
+              if (detectedType === 'futures') {
+                setCalculatorMode(CALCULATOR_MODES.FUTURES);
+              } else if (detectedType === 'crypto') {
+                setCalculatorMode(CALCULATOR_MODES.CRYPTO);
+              } else {
+                setCalculatorMode(CALCULATOR_MODES.STOCKS);
+              }
             }
             
             // Настройки фьючерса
@@ -1160,7 +1169,7 @@ function UniversalOptionsCalculator() {
       prevTickerRef.current = currentTicker;
       console.log('📝 [Universal] prevTickerRef инициализирован:', currentTicker);
 
-      // Автоматически определяем режим (фьючерсы/акции) по тикеру
+      // Автоматически определяем режим (фьючерсы/крипто/акции) по тикеру
       // ЗАЧЕМ: Паттерн-детекция работает даже для фьючерсов без настроек
       const ticker = extensionTicker || contractCode;
 
@@ -1179,6 +1188,11 @@ function UniversalOptionsCalculator() {
           } else {
             console.log('⚠️ Автоматически переключено в режим фьючерсов (настройки НЕ найдены):', ticker);
           }
+        } else if (detectedType === 'crypto') {
+          // Режим крипто (множитель = 1)
+          setCalculatorMode(CALCULATOR_MODES.CRYPTO);
+          setSelectedFuture(null);
+          console.log('📊 Автоматически переключено в режим крипто:', ticker);
         } else {
           // Режим акций
           setCalculatorMode(CALCULATOR_MODES.STOCKS);
@@ -2293,7 +2307,13 @@ function UniversalOptionsCalculator() {
           } else if (ticker) {
             // Fallback: определяем режим по тикеру для старых конфигураций
             const detectedType = detectInstrumentTypeByPattern(ticker);
-            restoredMode = detectedType === 'futures' ? CALCULATOR_MODES.FUTURES : CALCULATOR_MODES.STOCKS;
+            if (detectedType === 'futures') {
+              restoredMode = CALCULATOR_MODES.FUTURES;
+            } else if (detectedType === 'crypto') {
+              restoredMode = CALCULATOR_MODES.CRYPTO;
+            } else {
+              restoredMode = CALCULATOR_MODES.STOCKS;
+            }
             setCalculatorMode(restoredMode);
             console.log('📊 Режим калькулятора определён по тикеру:', detectedType);
           }
@@ -2684,14 +2704,15 @@ function UniversalOptionsCalculator() {
             </div>
 
             {/* Кнопка "+ СДЕЛКА" или название созданной сделки */}
-            {!dealInfo ? (
+            {/* ВРЕМЕННО скрыто для крипто-режима (Binance) */}
+            {calculatorMode !== CALCULATOR_MODES.CRYPTO && !dealInfo ? (
               <Button
                 className="bg-green-500 hover:bg-green-600 active:bg-green-700 active:scale-95 text-white font-medium px-4 py-2 h-auto transition-all duration-100"
                 onClick={handleCreateDeal}
               >
                 + СДЕЛКА
               </Button>
-            ) : (
+            ) : calculatorMode !== CALCULATOR_MODES.CRYPTO && (
               (() => {
                 const isFutures = calculatorMode === CALCULATOR_MODES.FUTURES;
                 const bgColor = isFutures ? 'bg-purple-100 dark:bg-purple-900/30' : 'bg-green-100 dark:bg-green-900/30';
@@ -3013,7 +3034,7 @@ function UniversalOptionsCalculator() {
                         // ОТКЛЮЧЕНО: В универсальном калькуляторе данные приходят от расширения
                         // Не загружаем детали опционов с внешних API
                       }}
-                      stockClassification={calculatorMode === 'stocks' ? stockClassification : null}
+                      stockClassification={calculatorMode === CALCULATOR_MODES.STOCKS ? stockClassification : null}
                     />
                   ) : (
                     <div className="w-full h-[80px] flex items-center justify-center text-muted-foreground text-sm">

@@ -244,15 +244,23 @@ export const isFuturesTickerByPattern = (ticker) => {
 };
 
 /**
- * Определяет тип инструмента по тикеру (акции или фьючерсы)
+ * Определяет тип инструмента по тикеру (акции, фьючерсы или крипто)
  * ЗАЧЕМ: Автоматическое переключение режима калькулятора
  * @param {string} ticker - Тикер для проверки
- * @returns {'stocks'|'futures'} Тип инструмента
+ * @returns {'stocks'|'futures'|'crypto'} Тип инструмента
  */
 export const detectInstrumentTypeByPattern = (ticker) => {
   if (!ticker) return 'stocks';
   
-  // Сначала проверяем по паттерну
+  const upperTicker = ticker.toUpperCase().trim();
+  
+  // Проверяем на крипто-опционы (заканчиваются на USD, USDT, BUSD и т.д.)
+  // ЗАЧЕМ: Крипто-опционы используют множитель 1, а не 100
+  if (/(USD|USDT|BUSD|USDC)$/.test(upperTicker)) {
+    return 'crypto';
+  }
+  
+  // Сначала проверяем по паттерну фьючерсов
   if (isFuturesTickerByPattern(ticker)) {
     return 'futures';
   }

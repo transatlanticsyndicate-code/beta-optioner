@@ -23,7 +23,8 @@ import LockIcon from './LockIcon';
 // Режимы калькулятора
 const CALCULATOR_MODES = {
   STOCKS: 'stocks',
-  FUTURES: 'futures'
+  FUTURES: 'futures',
+  CRYPTO: 'crypto'
 };
 
 // Helper: format ISO date (YYYY-MM-DD) to display format (DD.MM.YY)
@@ -857,12 +858,14 @@ function OptionsTableV3({
                     }
 
                     // Выбираем модель расчёта в зависимости от режима калькулятора
-                    // ЗАЧЕМ: Режим "Фьючерсы" использует Black-76, режим "Акции" — BSM
+                    // ЗАЧЕМ: Режим "Фьючерсы" использует Black-76, режимы "Акции" и "Крипто" — BSM
+                    // Для крипто (Binance) безрисковая ставка = 0, для акций — из FRED (null)
+                    const rfrOpt = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
                     let pl = calculatorMode === CALCULATOR_MODES.FUTURES
                       ? calculateFuturesOptionPLValue(tempOpt, targetPrice || currentPrice, optionDaysRemaining, contractMultiplier, optionVolatility)
-                      : calculateStockOptionPLValue(tempOpt, targetPrice || currentPrice, currentPrice, optionDaysRemaining, optionVolatility, dividendYield);
+                      : calculateStockOptionPLValue(tempOpt, targetPrice || currentPrice, currentPrice, optionDaysRemaining, optionVolatility, dividendYield, contractMultiplier, rfrOpt);
 
-                    // Применяем корректировку P&L по группе акции (только для режима stocks)
+                    // Применяем корректировку P&L по группе акции (только для режима stocks, не для крипто)
                     if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
                       pl = adjustPLByStockGroup(pl, stockClassification);
                     }
@@ -966,11 +969,13 @@ function OptionsTableV3({
                     }
 
                     // Выбираем модель расчёта в зависимости от режима калькулятора
+                    // Для крипто (Binance) безрисковая ставка = 0, для акций — из FRED (null)
+                    const rfrSum = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
                     let pl = calculatorMode === CALCULATOR_MODES.FUTURES
                       ? calculateFuturesOptionPLValue(tempOpt, targetPrice || currentPrice, optDaysRemaining, contractMultiplier, optVolatility)
-                      : calculateStockOptionPLValue(tempOpt, targetPrice || currentPrice, currentPrice, optDaysRemaining, optVolatility, dividendYield);
+                      : calculateStockOptionPLValue(tempOpt, targetPrice || currentPrice, currentPrice, optDaysRemaining, optVolatility, dividendYield, contractMultiplier, rfrSum);
 
-                    // Применяем корректировку P&L по группе акции (только для режима stocks)
+                    // Применяем корректировку P&L по группе акции (только для режима stocks, не для крипто)
                     if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
                       pl = adjustPLByStockGroup(pl, stockClassification);
                     }

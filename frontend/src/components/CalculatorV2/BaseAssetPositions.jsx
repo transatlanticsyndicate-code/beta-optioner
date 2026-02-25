@@ -22,8 +22,9 @@ function BaseAssetPositions({
   isTickerSupported = false,
   calculatorMode = CALCULATOR_MODES.STOCKS // Режим калькулятора (stocks/futures)
 }) {
-  // Для фьючерсов добавляем 1 контракт, для акций - 100 штук
+  // Для фьючерсов добавляем 1 контракт, для крипто и акций - 100 штук
   // ЗАЧЕМ: Фьючерсный контракт уже включает множитель (pointValue), поэтому quantity = 1
+  // Крипто и акции используют quantity = 100 (множитель применяется при расчёте P&L)
   const defaultQuantity = calculatorMode === CALCULATOR_MODES.FUTURES ? 1 : 100;
   // Проверяем, есть ли позиции базового актива
   const hasPositions = positions && positions.length > 0;

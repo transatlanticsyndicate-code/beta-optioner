@@ -20,7 +20,8 @@ import { getOptionVolatility } from '../../utils/volatilitySurface';
 // Режимы калькулятора
 const CALCULATOR_MODES = {
   STOCKS: 'stocks',
-  FUTURES: 'futures'
+  FUTURES: 'futures',
+  CRYPTO: 'crypto'
 };
 
 /**
@@ -70,14 +71,14 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
 
   // Функция расчета P&L для позиции базового актива
   // ЗАЧЕМ: Для фьючерсов P&L = разница в пунктах × quantity × pointValue
-  // Для акций P&L = разница в цене × quantity
+  // Для крипто и акций P&L = разница в цене × quantity
   const calculateUnderlyingPL = useCallback((price, position) => {
     if (!position || !position.type) return 0;
 
     const { type, quantity, price: entryPrice } = position;
     const entryPriceNum = Number(entryPrice) || 0;
 
-    // Множитель для фьючерсов (pointValue), для акций = 1
+    // Множитель для фьючерсов (pointValue), для крипто и акций = 1
     const multiplier = calculatorMode === CALCULATOR_MODES.FUTURES ? contractMultiplier : 1;
 
     if (type === 'LONG') {
@@ -89,14 +90,18 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
   }, [calculatorMode, contractMultiplier]);
 
   // Универсальная функция расчёта P&L опциона в зависимости от режима
-  // ЗАЧЕМ: Единая точка входа для расчётов — автоматически выбирает модель (BSM или Black-76)
+  // ЗАЧЕМ: Единая точка входа для расчётов — автоматически выбирает модель (BSM, Black-76 или крипто)
   const calculateOptionPLValue = useCallback((option, price, currentPriceVal, daysRemaining, volatility, divYield) => {
     if (calculatorMode === CALCULATOR_MODES.FUTURES) {
       // Режим "Фьючерсы" — используем Black-76 с pointValue
       return calculateFuturesOptionPLValue(option, price, daysRemaining, contractMultiplier, volatility);
     }
-    // Режим "Акции" — используем Black-Scholes-Merton с дивидендами
-    return calculateStockOptionPLValue(option, price, currentPriceVal, daysRemaining, volatility, divYield);
+    if (calculatorMode === CALCULATOR_MODES.CRYPTO) {
+      // Режим "Крипто" — множитель 1, безрисковая ставка 0 (Binance не использует ставку ФРС)
+      return calculateStockOptionPLValue(option, price, currentPriceVal, daysRemaining, volatility, divYield, contractMultiplier, 0);
+    }
+    // Режим "Акции" — множитель 100, ставка ФРС (null = берём из FRED)
+    return calculateStockOptionPLValue(option, price, currentPriceVal, daysRemaining, volatility, divYield, contractMultiplier, null);
   }, [calculatorMode, contractMultiplier]);
 
   // Универсальная функция расчёта P&L на экспирации
@@ -104,7 +109,12 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
     if (calculatorMode === CALCULATOR_MODES.FUTURES) {
       return calculateFuturesOptionExpirationPLValue(option, price, contractMultiplier);
     }
-    return calculateStockOptionExpirationPLValue(option, price);
+    if (calculatorMode === CALCULATOR_MODES.CRYPTO) {
+      // Режим "Крипто" — используем расчёт для акций с множителем 1
+      return calculateStockOptionExpirationPLValue(option, price, contractMultiplier);
+    }
+    // Режим "Акции" — используем расчёт для акций с множителем 100
+    return calculateStockOptionExpirationPLValue(option, price, contractMultiplier);
   }, [calculatorMode, contractMultiplier]);
 
   // Расчет данных для графика
@@ -968,12 +978,14 @@ export function calculatePLDataForMetrics(options = [], currentPrice = 0, positi
         bid: option.isPremiumModified ? 0 : (option.isBidModified ? option.customBid : option.bid),
       };
       // Выбираем модель расчёта в зависимости от режима калькулятора
-      // ЗАЧЕМ: Режим "Фьючерсы" использует Black-76, режим "Акции" — BSM
+      // ЗАЧЕМ: Режим "Фьючерсы" использует Black-76, режимы "Акции" и "Крипто" — BSM
       let pl;
       if (calculatorMode === CALCULATOR_MODES.FUTURES) {
         pl = calculateFuturesOptionPLValue(tempOption, price, optionDaysRemaining, contractMultiplier, optionVolatility);
       } else {
-        pl = calculateStockOptionPLValue(tempOption, price, currentPrice, optionDaysRemaining, optionVolatility, dividendYield);
+        // Для крипто (Binance) безрисковая ставка = 0, для акций — из FRED (null)
+        const rfr = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
+        pl = calculateStockOptionPLValue(tempOption, price, currentPrice, optionDaysRemaining, optionVolatility, dividendYield, contractMultiplier, rfr);
       }
       totalPLArray[i] += pl;
     });

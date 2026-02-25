@@ -43,16 +43,8 @@ const STORAGE_KEY = 'whatsNewDismissed';
  * ЗАЧЕМ: Не показывать окно, если пользователь отметил "больше не показывать"
  */
 const shouldShowModal = () => {
-  try {
-    const dismissed = localStorage.getItem(STORAGE_KEY);
-    if (!dismissed) return true;
-    
-    const data = JSON.parse(dismissed);
-    // Показываем окно, если версия изменилась
-    return data.version !== CURRENT_VERSION;
-  } catch {
-    return true;
-  }
+  // Попап временно отключён
+  return false;
 };
 
 /**

@@ -21,7 +21,8 @@ import { calculateDaysRemainingUTC, getOldestEntryDate } from '../utils/dateUtil
 // Режимы калькулятора
 const CALCULATOR_MODES = {
   STOCKS: 'stocks',
-  FUTURES: 'futures'
+  FUTURES: 'futures',
+  CRYPTO: 'crypto'
 };
 
 /**
@@ -298,7 +299,7 @@ const calculateExerciseScenario = ({ options, positions, underlyingPrice, curren
     // Выбираем модель расчёта в зависимости от режима калькулятора
     const pl = calculatorMode === CALCULATOR_MODES.FUTURES
       ? calculateFuturesOptionExpirationPLValue(tempOption, underlyingPrice, contractMultiplier)
-      : calculateStockOptionExpirationPLValue(tempOption, underlyingPrice);
+      : calculateStockOptionExpirationPLValue(tempOption, underlyingPrice, contractMultiplier);
     const strike = Number(option.strike) || 0;
     const intrinsicValue = calculatorMode === CALCULATOR_MODES.FUTURES
       ? calculateIntrinsicValueBlack76(option.type, underlyingPrice, strike)
@@ -443,9 +444,11 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
     const currentValue = calculatorMode === CALCULATOR_MODES.FUTURES
       ? calculateFuturesOptionTheoreticalPrice(tempOption, underlyingPrice, simulatedDaysToExpiration, optionVolatility)
       : calculateStockOptionTheoreticalPrice(tempOption, underlyingPrice, simulatedDaysToExpiration, optionVolatility, dividendYield);
+    // Для крипто (Binance) безрисковая ставка = 0, для акций — из FRED (null)
+    const rfrScenario2 = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
     const pl = calculatorMode === CALCULATOR_MODES.FUTURES
       ? calculateFuturesOptionPLValue(tempOption, underlyingPrice, simulatedDaysToExpiration, contractMultiplier, optionVolatility)
-      : calculateStockOptionPLValue(tempOption, underlyingPrice, currentPrice, simulatedDaysToExpiration, optionVolatility, dividendYield);
+      : calculateStockOptionPLValue(tempOption, underlyingPrice, currentPrice, simulatedDaysToExpiration, optionVolatility, dividendYield, contractMultiplier, rfrScenario2);
 
     // Добавляем IV в описание для прозрачности расчётов
     // Показываем текущую IV и прогнозируемую если они отличаются
@@ -594,9 +597,11 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
     const currentValue = calculatorMode === CALCULATOR_MODES.FUTURES
       ? calculateFuturesOptionTheoreticalPrice(tempOption, underlyingPrice, simulatedDaysToExpiration, optionVolatility)
       : calculateStockOptionTheoreticalPrice(tempOption, underlyingPrice, simulatedDaysToExpiration, optionVolatility, dividendYield);
+    // Для крипто (Binance) безрисковая ставка = 0, для акций — из FRED (null)
+    const rfrScenario3 = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
     const pl = calculatorMode === CALCULATOR_MODES.FUTURES
       ? calculateFuturesOptionPLValue(tempOption, underlyingPrice, simulatedDaysToExpiration, contractMultiplier, optionVolatility)
-      : calculateStockOptionPLValue(tempOption, underlyingPrice, currentPrice, simulatedDaysToExpiration, optionVolatility, dividendYield);
+      : calculateStockOptionPLValue(tempOption, underlyingPrice, currentPrice, simulatedDaysToExpiration, optionVolatility, dividendYield, contractMultiplier, rfrScenario3);
 
     // Добавляем IV в описание для прозрачности расчётов
     // Показываем текущую IV и прогнозируемую если они отличаются
