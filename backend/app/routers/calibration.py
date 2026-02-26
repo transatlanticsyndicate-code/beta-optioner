@@ -64,6 +64,8 @@ class RunCalibrationRequest(BaseModel):
     tickers: List[str]          # Список тикеров (например ["AAPL", "NVDA"])
     months: int = 6             # Период загрузки данных в месяцах
     hold_days: int = 14         # Горизонт удержания для бэктестинга
+    calibration_mode: str = "standard"  # Режим: standard | recent | weighted
+    recent_days: int = 7        # Дней для режима recent
 
 
 # ============================================================================
@@ -86,6 +88,36 @@ def _load_ticker_overrides() -> Dict[str, Any]:
     except Exception as e:
         print(f"[calibration] Ошибка загрузки overrides: {e}")
     return {}
+
+
+def _get_override_section(override_raw: dict, mode: str = "standard") -> dict:
+    """
+    Извлекает данные нужной секции из override записи тикера
+    ЗАЧЕМ: Поддерживает оба формата — новый {standard:{...}, recent:{...}} и старый {down_mult:...}
+    """
+    if not override_raw or not isinstance(override_raw, dict):
+        return {}
+    # Новый формат: есть секции режимов
+    if "standard" in override_raw or "recent" in override_raw or "weighted" in override_raw:
+        return override_raw.get(mode) or override_raw.get("standard") or {}
+    # Старый формат: данные прямо в корне
+    return override_raw
+
+
+def _get_available_modes(override_raw: dict) -> list:
+    """
+    Возвращает список доступных режимов калибровки для тикера
+    ЗАЧЕМ: UI показывает только те режимы которые реально откалиброваны
+    """
+    if not override_raw or not isinstance(override_raw, dict):
+        return []
+    # Новый формат
+    if "standard" in override_raw or "recent" in override_raw or "weighted" in override_raw:
+        return [m for m in ["standard", "recent", "weighted"] if m in override_raw]
+    # Старый формат — только standard
+    if override_raw.get("down_mult"):
+        return ["standard"]
+    return []
 
 
 def _load_calibration_result(ticker: str) -> Optional[Dict[str, Any]]:
@@ -207,7 +239,7 @@ def _start_theta_terminal() -> bool:
         return False
 
 
-def _run_calibration_job(job_id: str, tickers: List[str], months: int, hold_days: int):
+def _run_calibration_job(job_id: str, tickers: List[str], months: int, hold_days: int, calibration_mode: str = "standard", recent_days: int = 7):
     """
     Фоновая задача: запускает fetch + backtest для каждого тикера последовательно
     ЗАЧЕМ: Выполняется в отдельном потоке, обновляет статус задания в _jobs
@@ -252,11 +284,19 @@ def _run_calibration_job(job_id: str, tickers: List[str], months: int, hold_days
             _jobs[job_id]["progress"] = int((idx / total) * 100)
 
         # Шаг 2: Загрузка исторических данных опционов
-        log(f"📥 Загрузка данных опционов {ticker} за {months} месяцев...")
+        # Для режима recent скачиваем чуть больше чем recent_days (+ hold_days запас)
+        # ЗАЧЕМ: Нужно покрыть сделки которые открылись ДО cutoff но закрылись ВНУТРИ периода
+        # Минимум: ceil((recent_days + hold_days) / 30) месяцев, но не больше 2
+        if calibration_mode == "recent":
+            import math
+            fetch_months = min(2, max(1, math.ceil((recent_days + hold_days) / 30)))
+        else:
+            fetch_months = months
+        log(f"📥 Загрузка данных опционов {ticker} за {fetch_months} мес. (режим: {calibration_mode})...")
         fetch_script = os.path.join(SCRIPTS_DIR, "fetch_options_thetadata.py")
         try:
             proc = subprocess.run(
-                [sys.executable, fetch_script, "--ticker", ticker, "--months", str(months)],
+                [sys.executable, fetch_script, "--ticker", ticker, "--months", str(fetch_months)],
                 capture_output=True,
                 text=True,
                 timeout=300,  # 5 минут максимум на загрузку
@@ -284,11 +324,19 @@ def _run_calibration_job(job_id: str, tickers: List[str], months: int, hold_days
         # Шаг 3: Бэктестинг и калибровка
         with _jobs_lock:
             _jobs[job_id]["current_step"] = f"Бэктестинг {ticker}"
-        log(f"📊 Запуск бэктестинга {ticker} (горизонт {hold_days} дней)...")
+        log(f"📊 Запуск бэктестинга {ticker} (горизонт {hold_days} дней, режим: {calibration_mode})...")
         backtest_script = os.path.join(SCRIPTS_DIR, "backtest_calibration.py")
         try:
+            backtest_cmd = [
+                sys.executable, backtest_script,
+                "--ticker", ticker,
+                "--hold-days", str(hold_days),
+                "--mode", calibration_mode,
+            ]
+            if calibration_mode == "recent":
+                backtest_cmd += ["--recent-days", str(recent_days)]
             proc = subprocess.run(
-                [sys.executable, backtest_script, "--ticker", ticker, "--hold-days", str(hold_days)],
+                backtest_cmd,
                 capture_output=True,
                 text=True,
                 timeout=120,
@@ -370,8 +418,10 @@ async def get_calibration_status():
                     pass
 
             # Проверяем наличие override в ticker_overrides.json
-            override = overrides.get(ticker, {})
-            has_override = bool(override) and not ticker.startswith("_")
+            # Поддержка нового формата {standard: {...}, recent: {...}} и старого {down_mult: ...}
+            override_raw = overrides.get(ticker, {})
+            has_override = bool(override_raw) and not ticker.startswith("_")
+            override = _get_override_section(override_raw, "standard")
 
             tickers_data.append({
                 "ticker": ticker,
@@ -391,16 +441,21 @@ async def get_calibration_status():
                 "iv_kappa": override.get("iv_kappa") if has_override else None,
                 "iv_std": override.get("iv_std") if has_override else None,
                 "half_life_days": override.get("half_life_days") if has_override else None,
+                "available_modes": _get_available_modes(override_raw),
             })
             seen_tickers.add(ticker)
 
     # Источник 2: ticker_overrides.json — fallback для тикеров без calibration_results/
     # ЗАЧЕМ: calibration_results/ в .gitignore и не деплоится на сервер,
     #        но ticker_overrides.json коммитится и содержит все откалиброванные тикеры
-    for ticker, override in sorted(overrides.items()):
+    for ticker, override_raw in sorted(overrides.items()):
         # Пропускаем служебные ключи и уже добавленные тикеры
         if ticker.startswith("_") or ticker in seen_tickers:
             continue
+
+        # Получаем данные секции standard (fallback на корень если старый формат)
+        override = _get_override_section(override_raw, "standard")
+
         # Пропускаем записи без коэффициентов (некорректные)
         if not override.get("down_mult") or not override.get("up_mult"):
             continue
@@ -411,7 +466,6 @@ async def get_calibration_status():
         is_stale = False
         note = override.get("note", "")
         try:
-            # Извлекаем дату из note: "Calibrated 2026-02-22, ..."
             date_match = re.search(r"Calibrated (\d{4}-\d{2}-\d{2})", note)
             if date_match:
                 calibrated_at = date_match.group(1)
@@ -446,6 +500,7 @@ async def get_calibration_status():
             "iv_kappa": override.get("iv_kappa"),
             "iv_std": override.get("iv_std"),
             "half_life_days": override.get("half_life_days"),
+            "available_modes": _get_available_modes(override_raw),
         })
 
     # Проверяем статус Theta Terminal
@@ -494,7 +549,8 @@ async def run_calibration(request: RunCalibrationRequest, background_tasks: Back
     # Запускаем в фоновом потоке
     thread = threading.Thread(
         target=_run_calibration_job,
-        args=(job_id, clean_tickers, request.months, request.hold_days),
+        args=(job_id, clean_tickers, request.months, request.hold_days,
+              request.calibration_mode, request.recent_days),
         daemon=True
     )
     thread.start()

@@ -1,12 +1,12 @@
 {
   "ticker": "AAPL",
-  "hold_days": 14,
-  "total_trades": 3258,
-  "down_mult": 1.001,
-  "up_mult": 1.076,
-  "down_mult_mean": 1.141,
-  "up_mult_mean": 1.166,
-  "down_trades": 1933,
-  "up_trades": 1188,
-  "calibrated_at": "2026-02-22T14:32:43.036421"
+  "hold_days": 7,
+  "total_trades": 3490,
+  "down_mult": 1.021,
+  "up_mult": 1.053,
+  "down_mult_mean": 1.039,
+  "up_mult_mean": 1.214,
+  "down_trades": 2031,
+  "up_trades": 1339,
+  "calibrated_at": "2026-02-26T14:16:15.108046"
 }

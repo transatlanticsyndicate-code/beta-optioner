@@ -505,7 +505,7 @@ def _classify_by_features(features: Dict) -> Dict[str, Any]:
     }
 
 
-async def classify_stock(symbol: str) -> Dict[str, Any]:
+async def classify_stock(symbol: str, **kwargs) -> Dict[str, Any]:
     """
     Основная функция классификации акции
     ЗАЧЕМ: Определяет группу акции и возвращает коэффициенты корректировки
@@ -565,13 +565,27 @@ async def classify_stock(symbol: str) -> Dict[str, Any]:
     # Проверяем per-ticker overrides (приоритет над групповой классификацией)
     # ЗАЧЕМ: Калиброванные коэффициенты точнее групповых — используем если есть
     ticker_overrides = _load_ticker_overrides()
-    override = ticker_overrides.get(symbol.upper())
+    override_raw = ticker_overrides.get(symbol.upper())
+
+    # Поддержка нового формата с секциями {standard: {...}, recent: {...}, weighted: {...}}
+    # и старого формата {down_mult: ..., up_mult: ...} для обратной совместимости
+    # ЗАЧЕМ: Новый формат позволяет хранить все три набора коэффициентов для одного тикера
+    calibration_mode = kwargs.get("calibration_mode", "standard") if kwargs else "standard"
+    if override_raw and isinstance(override_raw, dict):
+        if "standard" in override_raw or "recent" in override_raw or "weighted" in override_raw:
+            # Новый формат: берём секцию нужного режима, fallback на standard
+            override = override_raw.get(calibration_mode) or override_raw.get("standard") or None
+        else:
+            # Старый формат: используем как есть (backward compatibility)
+            override = override_raw
+    else:
+        override = None
 
     if override:
         down_mult = override.get("down_mult", classification["down_mult"])
         up_mult = override.get("up_mult", classification["up_mult"])
         override_note = override.get("note", "")
-        print(f"[stock_classifier] {symbol} → per-ticker override applied: down:{down_mult} up:{up_mult} ({override_note})")
+        print(f"[stock_classifier] {symbol} → per-ticker override [{calibration_mode}]: down:{down_mult} up:{up_mult} ({override_note})")
     else:
         down_mult = classification["down_mult"]
         up_mult = classification["up_mult"]
@@ -594,10 +608,15 @@ async def classify_stock(symbol: str) -> Dict[str, Any]:
         "reason": classification["reason"],  # Причина классификации для отладки
         "features": features,
         "cached": False,
-        "ticker_override": bool(override),  # Флаг для UI — применён ли override
-        "iv_mean": iv_mean,    # Долгосрочное среднее IV (None если нет калибровки)
-        "iv_kappa": iv_kappa,  # Скорость возврата IV к среднему (Ornstein-Uhlenbeck)
-        "iv_std": iv_std,      # Стандартное отклонение IV
+        "ticker_override": bool(override),        # Флаг для UI — применён ли override
+        "iv_mean": iv_mean,                          # Долгосрочное среднее IV (None если нет калибровки)
+        "iv_kappa": iv_kappa,                        # Скорость возврата IV к среднему (Ornstein-Uhlenbeck)
+        "iv_std": iv_std,                            # Стандартное отклонение IV
+        "calibration_mode": calibration_mode,        # Активный режим калибровки
+        "available_modes": [                         # Доступные режимы для этого тикера
+            m for m in ["standard", "recent", "weighted"]
+            if override_raw and isinstance(override_raw, dict) and m in override_raw
+        ] if override_raw else [],
     }
     
     # Кэширование отключено

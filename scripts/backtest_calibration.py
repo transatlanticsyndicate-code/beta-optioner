@@ -300,7 +300,7 @@ def simulate_trades(option_data: list, stock_prices: dict, hold_days: int) -> li
     return trades
 
 
-def compute_multipliers(trades: list) -> dict:
+def compute_multipliers(trades: list, weighted: bool = False) -> dict:
     """
     Вычисляет коэффициенты down_mult и up_mult из результатов симуляции
     ЗАЧЕМ: Коэффициенты корректируют прогноз калькулятора под реальное поведение акции
@@ -310,52 +310,83 @@ def compute_multipliers(trades: list) -> dict:
       - P&L > 0: adjusted = basePL * up_mult    (up_mult < 1 → прибыль меньше)
 
     Значит нам нужно найти:
-      - down_mult = median(predicted_pl / real_pl) для убыточных сделок
-      - up_mult   = median(real_pl / predicted_pl) для прибыльных сделок
-    """
-    down_ratios = []
-    up_ratios = []
+      - down_mult = weighted_median(predicted_pl / real_pl) для убыточных сделок
+      - up_mult   = weighted_median(real_pl / predicted_pl) для прибыльных сделок
 
-    for t in trades:
+    Args:
+        trades: список сделок
+        weighted: если True — используем экспоненциальные веса (свежие сделки важнее)
+    """
+    # Для взвешенного режима вычисляем возраст каждой сделки в днях
+    # ЗАЧЕМ: Чем свежее сделка — тем больше её вес в калибровке (актуальность vs история)
+    if weighted:
+        dates = []
+        for t in trades:
+            try:
+                dates.append(datetime.fromisoformat(str(t["entry_date"])))
+            except Exception:
+                dates.append(None)
+        max_date = max((d for d in dates if d), default=None)
+    else:
+        max_date = None
+        dates = [None] * len(trades)
+
+    down_items = []  # (ratio, weight)
+    up_items = []    # (ratio, weight)
+
+    for i, t in enumerate(trades):
         if t["ratio"] is None:
             continue
 
         real = t["real_pl"]
         pred = t["predicted_pl"]
 
+        # Вычисляем вес сделки: exp(-age_days / 30) → свежие сделки весят больше
+        # При half-life=30 дней: сделка 30д назад весит 0.37, 90д — 0.05
+        if weighted and max_date and dates[i]:
+            age_days = (max_date - dates[i]).days
+            weight = math.exp(-age_days / 30.0)
+        else:
+            weight = 1.0
+
         if real < 0 and pred < 0:
-            # Убыточная сделка: насколько реальный убыток больше прогноза?
-            # down_mult = pred / real (оба отрицательные → результат положительный)
-            ratio = pred / real  # > 1 если реальный убыток больше прогноза
+            ratio = pred / real
             if 0.1 < ratio < 10:
-                down_ratios.append(ratio)
+                down_items.append((ratio, weight))
 
         elif real > 0 and pred > 0:
-            # Прибыльная сделка: насколько реальная прибыль меньше прогноза?
-            # up_mult = real / pred
             ratio = real / pred
             if 0.1 < ratio < 10:
-                up_ratios.append(ratio)
+                up_items.append((ratio, weight))
 
-    def median(lst):
-        if not lst:
+    def weighted_median(items):
+        """Взвешенная медиана: находим точку где накопленный вес = 50%"""
+        if not items:
             return 1.0
-        s = sorted(lst)
-        n = len(s)
-        return s[n // 2] if n % 2 == 1 else (s[n // 2 - 1] + s[n // 2]) / 2
+        sorted_items = sorted(items, key=lambda x: x[0])
+        total_weight = sum(w for _, w in sorted_items)
+        cumulative = 0.0
+        for ratio, w in sorted_items:
+            cumulative += w
+            if cumulative >= total_weight / 2:
+                return ratio
+        return sorted_items[-1][0]
 
-    def mean(lst):
-        return sum(lst) / len(lst) if lst else 1.0
+    def weighted_mean(items):
+        if not items:
+            return 1.0
+        total_w = sum(w for _, w in items)
+        return sum(r * w for r, w in items) / total_w if total_w > 0 else 1.0
 
     return {
-        "down_mult": round(median(down_ratios), 3),
-        "up_mult": round(median(up_ratios), 3),
-        "down_mult_mean": round(mean(down_ratios), 3),
-        "up_mult_mean": round(mean(up_ratios), 3),
-        "down_trades": len(down_ratios),
-        "up_trades": len(up_ratios),
-        "down_ratios_sample": sorted(down_ratios)[:10],
-        "up_ratios_sample": sorted(up_ratios)[:10],
+        "down_mult": round(weighted_median(down_items), 3),
+        "up_mult": round(weighted_median(up_items), 3),
+        "down_mult_mean": round(weighted_mean(down_items), 3),
+        "up_mult_mean": round(weighted_mean(up_items), 3),
+        "down_trades": len(down_items),
+        "up_trades": len(up_items),
+        "down_ratios_sample": sorted(r for r, _ in down_items)[:10],
+        "up_ratios_sample": sorted(r for r, _ in up_items)[:10],
     }
 
 
@@ -455,14 +486,21 @@ def main():
                         help=f"Дней удержания позиции (по умолчанию: {DEFAULT_HOLD_DAYS})")
     parser.add_argument("--min-trades", type=int, default=MIN_TRADES,
                         help=f"Минимум сделок для калибровки (по умолчанию: {MIN_TRADES})")
+    parser.add_argument("--mode", type=str, default="standard",
+                        choices=["standard", "recent", "weighted"],
+                        help="Режим калибровки: standard (все данные), recent (последняя неделя), weighted (с весами по возрасту)")
+    parser.add_argument("--recent-days", type=int, default=7,
+                        help="Количество последних дней для режима recent (по умолчанию: 7)")
 
     args = parser.parse_args()
     ticker = args.ticker.upper()
     hold_days = args.hold_days
+    mode = args.mode
+    recent_days = args.recent_days
 
     print(f"\n{'='*60}")
     print(f"  Backtest Calibration")
-    print(f"  Тикер: {ticker} | Удержание: {hold_days} дней")
+    print(f"  Тикер: {ticker} | Удержание: {hold_days} дней | Режим: {mode}")
     print(f"{'='*60}\n")
 
     # Находим все CSV файлы опционов
@@ -486,6 +524,13 @@ def main():
         print(f"   Запустите: python3 scripts/fetch_options_history.py --ticker {ticker} --port 7496")
         print(f"   Или используем приближение через цены опционов...\n")
 
+    # Для режима recent — вычисляем cutoff дату (только последние N дней)
+    # ЗАЧЕМ: Показывает как рынок ведёт себя прямо сейчас, а не в среднем за 6 месяцев
+    recent_cutoff = None
+    if mode == "recent":
+        recent_cutoff = datetime.now() - timedelta(days=recent_days)
+        print(f"📅 Режим recent: данные с {recent_cutoff.strftime('%Y-%m-%d')} (последние {recent_days} дней)")
+
     # Обрабатываем каждый файл
     all_trades = []
     contracts_processed = 0
@@ -498,6 +543,14 @@ def main():
             continue
 
         trades = simulate_trades(option_data, stock_prices, hold_days)
+
+        # Фильтруем по дате для режима recent
+        if recent_cutoff:
+            trades = [
+                t for t in trades
+                if t.get("entry_date") and datetime.fromisoformat(str(t["entry_date"])) >= recent_cutoff
+            ]
+
         all_trades.extend(trades)
         contracts_processed += 1
 
@@ -509,8 +562,10 @@ def main():
         print(f"   Попробуйте загрузить больше данных или уменьшить --min-trades")
         return
 
-    # Вычисляем коэффициенты P&L
-    multipliers = compute_multipliers(all_trades)
+    # Вычисляем коэффициенты P&L с учётом режима
+    # ЗАЧЕМ: weighted использует экспоненциальные веса — свежие данные важнее
+    use_weighted = (mode == "weighted")
+    multipliers = compute_multipliers(all_trades, weighted=use_weighted)
 
     # Вычисляем параметры IV mean reversion (Ornstein-Uhlenbeck)
     # ЗАЧЕМ: Позволяет калькулятору предсказывать изменение IV, а не замораживать её
@@ -576,7 +631,8 @@ def main():
     print(f"\n✅ Результаты сохранены: {result_file}")
 
     # Автоматически обновляем ticker_overrides.json в backend/app/config/
-    # ЗАЧЕМ: Коэффициенты должны сразу применяться в калькуляторе без ручного редактирования
+    # ЗАЧЕМ: Коэффициенты сохраняются в секцию режима (standard/recent/weighted)
+    #        чтобы все три набора хранились рядом и не перезаписывали друг друга
     overrides_file = os.path.join(
         script_dir, "..", "backend", "app", "config", "ticker_overrides.json"
     )
@@ -586,7 +642,11 @@ def main():
             with open(overrides_file, "r", encoding="utf-8") as f:
                 existing = json.load(f)
 
-        existing[ticker] = {
+        # Получаем текущую запись для тикера (или создаём пустую)
+        ticker_entry = existing.get(ticker, {})
+
+        # Данные режима калибровки
+        mode_data = {
             "down_mult": dm,
             "up_mult": um,
             "iv_mean": iv_params["iv_mean"],
@@ -596,13 +656,27 @@ def main():
             "note": f"Calibrated {datetime.now().strftime('%Y-%m-%d')}, {len(all_trades)} trades, {hold_days}d hold, ThetaData EOD"
         }
 
+        # Миграция: если запись в старом формате (нет секций) — переносим в standard
+        if ticker_entry and "standard" not in ticker_entry and "down_mult" in ticker_entry:
+            old_entry = {
+                k: ticker_entry[k] for k in
+                ["down_mult", "up_mult", "iv_mean", "iv_kappa", "iv_std", "half_life_days", "note"]
+                if k in ticker_entry
+            }
+            ticker_entry = {"standard": old_entry}
+            print(f"📦 Мигрирована старая запись {ticker} → секция standard")
+
+        # Сохраняем в нужную секцию
+        ticker_entry[mode] = mode_data
+        existing[ticker] = ticker_entry
+
         with open(overrides_file, "w", encoding="utf-8") as f:
             json.dump(existing, f, indent=2, ensure_ascii=False)
 
-        print(f"✅ ticker_overrides.json обновлён: {ticker} down={dm} up={um}")
+        print(f"✅ ticker_overrides.json обновлён: {ticker} [{mode}] down={dm} up={um}")
     except Exception as e:
         print(f"⚠️  Не удалось обновить ticker_overrides.json: {e}")
-        print(f'   Добавьте вручную: "{ticker}": {{"down_mult": {dm}, "up_mult": {um}}}')
+        print(f'   Добавьте вручную: "{ticker}": {{"{mode}": {{"down_mult": {dm}, "up_mult": {um}}}}}')
 
 
 if __name__ == "__main__":

@@ -1,534 +1,1705 @@
 {
   "_comment": "Per-ticker коэффициенты калибровки. Приоритет над групповой классификацией. Формат: {down_mult, up_mult, note}",
   "AAPL": {
-    "down_mult": 1.001,
-    "up_mult": 1.076,
-    "iv_mean": 0.2522,
-    "iv_kappa": 87.53,
-    "iv_std": 0.032,
-    "half_life_days": 3,
-    "note": "Calibrated 2026-02-22, 3258 trades, 14d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.001,
+      "up_mult": 1.076,
+      "iv_mean": 0.2522,
+      "iv_kappa": 87.53,
+      "iv_std": 0.032,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-22, 3258 trades, 14d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.043,
+      "up_mult": 0.998,
+      "iv_mean": 0.2752,
+      "iv_kappa": 43.58,
+      "iv_std": 0.0327,
+      "half_life_days": 6,
+      "note": "Calibrated 2026-02-25, 137 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.021,
+      "up_mult": 1.053,
+      "iv_mean": 0.2539,
+      "iv_kappa": 70.65,
+      "iv_std": 0.0401,
+      "half_life_days": 4,
+      "note": "Calibrated 2026-02-26, 3490 trades, 7d hold, ThetaData EOD"
+    }
   },
   "ADBE": {
-    "down_mult": 1.03,
-    "up_mult": 1.068,
-    "iv_mean": 0.4167,
-    "iv_kappa": 51.49,
-    "iv_std": 0.0924,
-    "half_life_days": 5,
-    "note": "Calibrated 2026-02-22, 4069 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.03,
+      "up_mult": 1.068,
+      "iv_mean": 0.4167,
+      "iv_kappa": 51.49,
+      "iv_std": 0.0924,
+      "half_life_days": 5,
+      "note": "Calibrated 2026-02-22, 4069 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.034,
+      "up_mult": 1.039,
+      "iv_mean": 0.3944,
+      "iv_kappa": 4.5,
+      "iv_std": 0.0779,
+      "half_life_days": 56,
+      "note": "Calibrated 2026-02-25, 83 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.059,
+      "up_mult": 1.097,
+      "iv_mean": 0.4152,
+      "iv_kappa": 51.9,
+      "iv_std": 0.0939,
+      "half_life_days": 5,
+      "note": "Calibrated 2026-02-26, 3830 trades, 7d hold, ThetaData EOD"
+    }
   },
   "NVDA": {
-    "down_mult": 1.061,
-    "up_mult": 1.151,
-    "iv_mean": 0.4121,
-    "iv_kappa": 12.55,
-    "iv_std": 0.0521,
-    "half_life_days": 20,
-    "note": "Calibrated 2026-02-25, 3716 trades, 14d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.061,
+      "up_mult": 1.151,
+      "iv_mean": 0.4121,
+      "iv_kappa": 12.55,
+      "iv_std": 0.0521,
+      "half_life_days": 20,
+      "note": "Calibrated 2026-02-25, 3716 trades, 14d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.012,
+      "up_mult": 1.025,
+      "iv_mean": 0.4082,
+      "iv_kappa": 87.76,
+      "iv_std": 0.0326,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-25, 133 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.033,
+      "up_mult": 1.027,
+      "iv_mean": 0.4152,
+      "iv_kappa": 15.76,
+      "iv_std": 0.0618,
+      "half_life_days": 16,
+      "note": "Calibrated 2026-02-26, 4113 trades, 7d hold, ThetaData EOD"
+    }
   },
   "FLUT": {
-    "down_mult": 1.002,
-    "up_mult": 1.014,
-    "iv_mean": 0.5681,
-    "iv_kappa": 51.7,
-    "iv_std": 0.1974,
-    "half_life_days": 5,
-    "note": "Calibrated 2026-02-22, 2954 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.002,
+      "up_mult": 1.014,
+      "iv_mean": 0.5681,
+      "iv_kappa": 51.7,
+      "iv_std": 0.1974,
+      "half_life_days": 5,
+      "note": "Calibrated 2026-02-22, 2954 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.13,
+      "up_mult": 1.001,
+      "iv_mean": 0.5334,
+      "iv_kappa": 51.41,
+      "iv_std": 0.0877,
+      "half_life_days": 5,
+      "note": "Calibrated 2026-02-25, 108 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.024,
+      "up_mult": 1.004,
+      "iv_mean": 0.5645,
+      "iv_kappa": 52.22,
+      "iv_std": 0.1936,
+      "half_life_days": 5,
+      "note": "Calibrated 2026-02-26, 2826 trades, 7d hold, ThetaData EOD"
+    }
   },
   "GDDY": {
-    "down_mult": 1.013,
-    "up_mult": 1.017,
-    "iv_mean": 0.524,
-    "iv_kappa": 100.0,
-    "iv_std": 0.1818,
-    "half_life_days": 3,
-    "note": "Calibrated 2026-02-22, 2168 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.013,
+      "up_mult": 1.017,
+      "iv_mean": 0.524,
+      "iv_kappa": 100.0,
+      "iv_std": 0.1818,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-22, 2168 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 0.926,
+      "up_mult": 1.025,
+      "iv_mean": 0.4656,
+      "iv_kappa": 90.91,
+      "iv_std": 0.0539,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-25, 86 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.001,
+      "up_mult": 1.028,
+      "iv_mean": 0.5275,
+      "iv_kappa": 100.0,
+      "iv_std": 0.1826,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-26, 2033 trades, 7d hold, ThetaData EOD"
+    }
   },
   "INTU": {
-    "down_mult": 0.995,
-    "up_mult": 1.002,
-    "iv_mean": 0.5015,
-    "iv_kappa": 63.11,
-    "iv_std": 0.1881,
-    "half_life_days": 4,
-    "note": "Calibrated 2026-02-22, 3007 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 0.995,
+      "up_mult": 1.002,
+      "iv_mean": 0.5015,
+      "iv_kappa": 63.11,
+      "iv_std": 0.1881,
+      "half_life_days": 4,
+      "note": "Calibrated 2026-02-22, 3007 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.007,
+      "up_mult": 1.01,
+      "iv_mean": 0.4701,
+      "iv_kappa": 76.23,
+      "iv_std": 0.0411,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-25, 28 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 0.999,
+      "up_mult": 1.013,
+      "iv_mean": 0.5058,
+      "iv_kappa": 63.42,
+      "iv_std": 0.1889,
+      "half_life_days": 4,
+      "note": "Calibrated 2026-02-26, 2811 trades, 7d hold, ThetaData EOD"
+    }
   },
   "PAYX": {
-    "down_mult": 0.999,
-    "up_mult": 1.091,
-    "iv_mean": 0.3204,
-    "iv_kappa": 100.0,
-    "iv_std": 0.114,
-    "half_life_days": 3,
-    "note": "Calibrated 2026-02-22, 4435 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 0.999,
+      "up_mult": 1.091,
+      "iv_mean": 0.3204,
+      "iv_kappa": 100.0,
+      "iv_std": 0.114,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-22, 4435 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.059,
+      "up_mult": 1.011,
+      "iv_mean": 0.4789,
+      "iv_kappa": 100.0,
+      "iv_std": 0.2084,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-25, 84 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.041,
+      "up_mult": 1.048,
+      "iv_mean": 0.3223,
+      "iv_kappa": 100.0,
+      "iv_std": 0.1145,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-26, 4176 trades, 7d hold, ThetaData EOD"
+    }
   },
   "SPSC": {
-    "down_mult": 1.045,
-    "up_mult": 1.026,
-    "iv_mean": 0.4876,
-    "iv_kappa": 77.71,
-    "iv_std": 0.1421,
-    "half_life_days": 3,
-    "note": "Calibrated 2026-02-22, 3190 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.045,
+      "up_mult": 1.026,
+      "iv_mean": 0.4876,
+      "iv_kappa": 77.71,
+      "iv_std": 0.1421,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-22, 3190 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.134,
+      "up_mult": 1.003,
+      "iv_mean": 0.7299,
+      "iv_kappa": 100.0,
+      "iv_std": 0.1057,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-25, 77 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.157,
+      "up_mult": 1.012,
+      "iv_mean": 0.4918,
+      "iv_kappa": 71.81,
+      "iv_std": 0.1485,
+      "half_life_days": 4,
+      "note": "Calibrated 2026-02-26, 3065 trades, 7d hold, ThetaData EOD"
+    }
   },
   "TEAM": {
-    "down_mult": 1.024,
-    "up_mult": 1.037,
-    "iv_mean": 0.6832,
-    "iv_kappa": 100.0,
-    "iv_std": 0.2049,
-    "half_life_days": 3,
-    "note": "Calibrated 2026-02-22, 3796 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.024,
+      "up_mult": 1.037,
+      "iv_mean": 0.6832,
+      "iv_kappa": 100.0,
+      "iv_std": 0.2049,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-22, 3796 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 0.994,
+      "up_mult": 0.997,
+      "iv_mean": 0.8748,
+      "iv_kappa": 73.01,
+      "iv_std": 0.1061,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-25, 83 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.053,
+      "up_mult": 1.0,
+      "iv_mean": 0.6891,
+      "iv_kappa": 100.0,
+      "iv_std": 0.2093,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-26, 3579 trades, 7d hold, ThetaData EOD"
+    }
   },
   "WDAY": {
-    "down_mult": 1.008,
-    "up_mult": 1.005,
-    "iv_mean": 0.5821,
-    "iv_kappa": 63.21,
-    "iv_std": 0.2508,
-    "half_life_days": 4,
-    "note": "Calibrated 2026-02-22, 2696 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.008,
+      "up_mult": 1.005,
+      "iv_mean": 0.5821,
+      "iv_kappa": 63.21,
+      "iv_std": 0.2508,
+      "half_life_days": 4,
+      "note": "Calibrated 2026-02-22, 2696 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.029,
+      "up_mult": 1.009,
+      "iv_mean": 0.4617,
+      "iv_kappa": 100.0,
+      "iv_std": 0.0513,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-25, 39 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.011,
+      "up_mult": 1.02,
+      "iv_mean": 0.5885,
+      "iv_kappa": 63.63,
+      "iv_std": 0.2543,
+      "half_life_days": 4,
+      "note": "Calibrated 2026-02-26, 2529 trades, 7d hold, ThetaData EOD"
+    }
   },
   "ZS": {
-    "down_mult": 1.016,
-    "up_mult": 1.02,
-    "iv_mean": 0.5353,
-    "iv_kappa": 40.26,
-    "iv_std": 0.1967,
-    "half_life_days": 6,
-    "note": "Calibrated 2026-02-22, 2862 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.016,
+      "up_mult": 1.02,
+      "iv_mean": 0.5353,
+      "iv_kappa": 40.26,
+      "iv_std": 0.1967,
+      "half_life_days": 6,
+      "note": "Calibrated 2026-02-22, 2862 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.018,
+      "up_mult": 1.021,
+      "iv_mean": 0.5162,
+      "iv_kappa": 2.53,
+      "iv_std": 0.0921,
+      "half_life_days": 100,
+      "note": "Calibrated 2026-02-25, 91 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.047,
+      "up_mult": 1.046,
+      "iv_mean": 0.5358,
+      "iv_kappa": 39.94,
+      "iv_std": 0.203,
+      "half_life_days": 6,
+      "note": "Calibrated 2026-02-26, 2662 trades, 7d hold, ThetaData EOD"
+    }
   },
   "QTWO": {
-    "down_mult": 1.059,
-    "up_mult": 1.073,
-    "iv_mean": 0.5411,
-    "iv_kappa": 91.08,
-    "iv_std": 0.2217,
-    "half_life_days": 3,
-    "note": "Calibrated 2026-02-22, 3840 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.059,
+      "up_mult": 1.073,
+      "iv_mean": 0.5411,
+      "iv_kappa": 91.08,
+      "iv_std": 0.2217,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-22, 3840 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.615,
+      "up_mult": 1.011,
+      "iv_mean": 1.0394,
+      "iv_kappa": 100.0,
+      "iv_std": 0.3399,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-25, 84 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.191,
+      "up_mult": 1.032,
+      "iv_mean": 0.5523,
+      "iv_kappa": 88.03,
+      "iv_std": 0.2299,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-26, 3607 trades, 7d hold, ThetaData EOD"
+    }
   },
   "BROS": {
-    "down_mult": 1.044,
-    "up_mult": 1.109,
-    "iv_mean": 0.6218,
-    "iv_kappa": 28.55,
-    "iv_std": 0.148,
-    "half_life_days": 9,
-    "note": "Calibrated 2026-02-22, 2314 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.044,
+      "up_mult": 1.109,
+      "iv_mean": 0.6218,
+      "iv_kappa": 28.55,
+      "iv_std": 0.148,
+      "half_life_days": 9,
+      "note": "Calibrated 2026-02-22, 2314 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 0.92,
+      "up_mult": 1.176,
+      "iv_mean": 0.8134,
+      "iv_kappa": 9.75,
+      "iv_std": 0.0957,
+      "half_life_days": 26,
+      "note": "Calibrated 2026-02-25, 107 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.085,
+      "up_mult": 1.219,
+      "iv_mean": 0.6265,
+      "iv_kappa": 28.03,
+      "iv_std": 0.1487,
+      "half_life_days": 9,
+      "note": "Calibrated 2026-02-26, 2219 trades, 7d hold, ThetaData EOD"
+    }
   },
   "ORCL": {
-    "down_mult": 1.009,
-    "up_mult": 1.009,
-    "iv_mean": 0.5786,
-    "iv_kappa": 46.48,
-    "iv_std": 0.1564,
-    "half_life_days": 5,
-    "note": "Calibrated 2026-02-22, 4015 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.009,
+      "up_mult": 1.009,
+      "iv_mean": 0.5786,
+      "iv_kappa": 46.48,
+      "iv_std": 0.1564,
+      "half_life_days": 5,
+      "note": "Calibrated 2026-02-22, 4015 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.019,
+      "up_mult": 1.027,
+      "iv_mean": 0.6371,
+      "iv_kappa": 27.65,
+      "iv_std": 0.1554,
+      "half_life_days": 9,
+      "note": "Calibrated 2026-02-25, 94 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.029,
+      "up_mult": 1.037,
+      "iv_mean": 0.5841,
+      "iv_kappa": 47.08,
+      "iv_std": 0.1596,
+      "half_life_days": 5,
+      "note": "Calibrated 2026-02-26, 3741 trades, 7d hold, ThetaData EOD"
+    }
   },
   "PAYC": {
-    "down_mult": 1.042,
-    "up_mult": 1.053,
-    "iv_mean": 0.4419,
-    "iv_kappa": 38.74,
-    "iv_std": 0.1186,
-    "half_life_days": 7,
-    "note": "Calibrated 2026-02-22, 5595 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.042,
+      "up_mult": 1.053,
+      "iv_mean": 0.4419,
+      "iv_kappa": 38.74,
+      "iv_std": 0.1186,
+      "half_life_days": 7,
+      "note": "Calibrated 2026-02-22, 5595 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.0,
+      "up_mult": 1.016,
+      "iv_mean": 0.837,
+      "iv_kappa": 71.63,
+      "iv_std": 0.2378,
+      "half_life_days": 4,
+      "note": "Calibrated 2026-02-25, 81 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.117,
+      "up_mult": 1.035,
+      "iv_mean": 0.4453,
+      "iv_kappa": 34.92,
+      "iv_std": 0.1254,
+      "half_life_days": 7,
+      "note": "Calibrated 2026-02-26, 5295 trades, 7d hold, ThetaData EOD"
+    }
   },
   "NOW": {
-    "down_mult": 0.996,
-    "up_mult": 1.042,
-    "iv_mean": 1.2451,
-    "iv_kappa": 36.56,
-    "iv_std": 0.4992,
-    "half_life_days": 7,
-    "note": "Calibrated 2026-02-22, 970 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 0.996,
+      "up_mult": 1.042,
+      "iv_mean": 1.2451,
+      "iv_kappa": 36.56,
+      "iv_std": 0.4992,
+      "half_life_days": 7,
+      "note": "Calibrated 2026-02-22, 970 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 0.995,
+      "up_mult": 1.015,
+      "iv_mean": 1.5755,
+      "iv_kappa": 7.66,
+      "iv_std": 0.2787,
+      "half_life_days": 33,
+      "note": "Calibrated 2026-02-25, 81 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.022,
+      "up_mult": 1.057,
+      "iv_mean": 1.2651,
+      "iv_kappa": 31.49,
+      "iv_std": 0.5152,
+      "half_life_days": 8,
+      "note": "Calibrated 2026-02-26, 916 trades, 7d hold, ThetaData EOD"
+    }
   },
   "HUBS": {
-    "down_mult": 1.033,
-    "up_mult": 1.031,
-    "iv_mean": 0.5834,
-    "iv_kappa": 28.56,
-    "iv_std": 0.1574,
-    "half_life_days": 9,
-    "note": "Calibrated 2026-02-22, 4854 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.033,
+      "up_mult": 1.031,
+      "iv_mean": 0.5834,
+      "iv_kappa": 28.56,
+      "iv_std": 0.1574,
+      "half_life_days": 9,
+      "note": "Calibrated 2026-02-22, 4854 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.055,
+      "up_mult": 1.021,
+      "iv_mean": 0.8994,
+      "iv_kappa": 17.6,
+      "iv_std": 0.2029,
+      "half_life_days": 14,
+      "note": "Calibrated 2026-02-25, 91 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.07,
+      "up_mult": 1.04,
+      "iv_mean": 0.5871,
+      "iv_kappa": 28.77,
+      "iv_std": 0.1598,
+      "half_life_days": 9,
+      "note": "Calibrated 2026-02-26, 4617 trades, 7d hold, ThetaData EOD"
+    }
   },
   "PCTY": {
-    "down_mult": 1.023,
-    "up_mult": 1.049,
-    "iv_mean": 0.403,
-    "iv_kappa": 28.98,
-    "iv_std": 0.1159,
-    "half_life_days": 9,
-    "note": "Calibrated 2026-02-22, 4623 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.023,
+      "up_mult": 1.049,
+      "iv_mean": 0.403,
+      "iv_kappa": 28.98,
+      "iv_std": 0.1159,
+      "half_life_days": 9,
+      "note": "Calibrated 2026-02-22, 4623 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.0,
+      "up_mult": 1.006,
+      "iv_mean": 0.6978,
+      "iv_kappa": 36.85,
+      "iv_std": 0.1729,
+      "half_life_days": 7,
+      "note": "Calibrated 2026-02-25, 81 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.058,
+      "up_mult": 1.029,
+      "iv_mean": 0.407,
+      "iv_kappa": 25.84,
+      "iv_std": 0.1233,
+      "half_life_days": 10,
+      "note": "Calibrated 2026-02-26, 4356 trades, 7d hold, ThetaData EOD"
+    }
   },
   "VEEV": {
-    "down_mult": 1.012,
-    "up_mult": 1.015,
-    "iv_mean": 0.4165,
-    "iv_kappa": 54.23,
-    "iv_std": 0.1565,
-    "half_life_days": 5,
-    "note": "Calibrated 2026-02-22, 3993 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.012,
+      "up_mult": 1.015,
+      "iv_mean": 0.4165,
+      "iv_kappa": 54.23,
+      "iv_std": 0.1565,
+      "half_life_days": 5,
+      "note": "Calibrated 2026-02-22, 3993 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.027,
+      "up_mult": 1.007,
+      "iv_mean": 0.4333,
+      "iv_kappa": 65.95,
+      "iv_std": 0.1366,
+      "half_life_days": 4,
+      "note": "Calibrated 2026-02-25, 95 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.022,
+      "up_mult": 1.021,
+      "iv_mean": 0.4154,
+      "iv_kappa": 54.89,
+      "iv_std": 0.1576,
+      "half_life_days": 5,
+      "note": "Calibrated 2026-02-26, 3783 trades, 7d hold, ThetaData EOD"
+    }
   },
   "AJG": {
-    "down_mult": 1.018,
-    "up_mult": 0.99,
-    "iv_mean": 0.3253,
-    "iv_kappa": 91.07,
-    "iv_std": 0.104,
-    "half_life_days": 3,
-    "note": "Calibrated 2026-02-22, 4617 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.018,
+      "up_mult": 0.99,
+      "iv_mean": 0.3253,
+      "iv_kappa": 91.07,
+      "iv_std": 0.104,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-22, 4617 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.024,
+      "up_mult": 1.01,
+      "iv_mean": 0.3699,
+      "iv_kappa": 100.0,
+      "iv_std": 0.0884,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-25, 101 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.041,
+      "up_mult": 1.013,
+      "iv_mean": 0.3272,
+      "iv_kappa": 90.95,
+      "iv_std": 0.1048,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-26, 4395 trades, 7d hold, ThetaData EOD"
+    }
   },
   "TYL": {
-    "down_mult": 1.005,
-    "up_mult": 1.011,
-    "iv_mean": 0.4761,
-    "iv_kappa": 69.34,
-    "iv_std": 0.1435,
-    "half_life_days": 4,
-    "note": "Calibrated 2026-02-22, 2236 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.005,
+      "up_mult": 1.011,
+      "iv_mean": 0.4761,
+      "iv_kappa": 69.34,
+      "iv_std": 0.1435,
+      "half_life_days": 4,
+      "note": "Calibrated 2026-02-22, 2236 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.024,
+      "up_mult": 1.027,
+      "iv_mean": 0.5295,
+      "iv_kappa": 100.0,
+      "iv_std": 0.0727,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-25, 105 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.015,
+      "up_mult": 1.028,
+      "iv_mean": 0.4759,
+      "iv_kappa": 64.09,
+      "iv_std": 0.144,
+      "half_life_days": 4,
+      "note": "Calibrated 2026-02-26, 2152 trades, 7d hold, ThetaData EOD"
+    }
   },
   "VRSK": {
-    "down_mult": 1.018,
-    "up_mult": 1.011,
-    "iv_mean": 0.3222,
-    "iv_kappa": 60.05,
-    "iv_std": 0.1264,
-    "half_life_days": 4,
-    "note": "Calibrated 2026-02-22, 2925 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.018,
+      "up_mult": 1.011,
+      "iv_mean": 0.3222,
+      "iv_kappa": 60.05,
+      "iv_std": 0.1264,
+      "half_life_days": 4,
+      "note": "Calibrated 2026-02-22, 2925 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.072,
+      "up_mult": 1.025,
+      "iv_mean": 0.4713,
+      "iv_kappa": 29.54,
+      "iv_std": 0.1192,
+      "half_life_days": 9,
+      "note": "Calibrated 2026-02-25, 114 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.077,
+      "up_mult": 1.046,
+      "iv_mean": 0.324,
+      "iv_kappa": 57.68,
+      "iv_std": 0.129,
+      "half_life_days": 4,
+      "note": "Calibrated 2026-02-26, 2811 trades, 7d hold, ThetaData EOD"
+    }
   },
   "SFM": {
-    "down_mult": 1.011,
-    "up_mult": 1.009,
-    "iv_mean": 0.5273,
-    "iv_kappa": 74.88,
-    "iv_std": 0.1528,
-    "half_life_days": 3,
-    "note": "Calibrated 2026-02-22, 3512 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.011,
+      "up_mult": 1.009,
+      "iv_mean": 0.5273,
+      "iv_kappa": 74.88,
+      "iv_std": 0.1528,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-22, 3512 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.555,
+      "up_mult": 1.276,
+      "iv_mean": 0.7382,
+      "iv_kappa": 100.0,
+      "iv_std": 0.1044,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-25, 121 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.223,
+      "up_mult": 1.069,
+      "iv_mean": 0.5272,
+      "iv_kappa": 70.43,
+      "iv_std": 0.1552,
+      "half_life_days": 4,
+      "note": "Calibrated 2026-02-26, 3402 trades, 7d hold, ThetaData EOD"
+    }
   },
   "HUM": {
-    "down_mult": 1.025,
-    "up_mult": 1.039,
-    "iv_mean": 0.4698,
-    "iv_kappa": 51.15,
-    "iv_std": 0.102,
-    "half_life_days": 5,
-    "note": "Calibrated 2026-02-22, 3898 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.025,
+      "up_mult": 1.039,
+      "iv_mean": 0.4698,
+      "iv_kappa": 51.15,
+      "iv_std": 0.102,
+      "half_life_days": 5,
+      "note": "Calibrated 2026-02-22, 3898 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.174,
+      "up_mult": 1.004,
+      "iv_mean": 0.7128,
+      "iv_kappa": 100.0,
+      "iv_std": 0.1234,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-25, 80 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.023,
+      "up_mult": 1.044,
+      "iv_mean": 0.4723,
+      "iv_kappa": 46.13,
+      "iv_std": 0.1019,
+      "half_life_days": 5,
+      "note": "Calibrated 2026-02-26, 3699 trades, 7d hold, ThetaData EOD"
+    }
   },
   "ZG": {
-    "down_mult": 1.054,
-    "up_mult": 1.059,
-    "iv_mean": 0.5029,
-    "iv_kappa": 52.78,
-    "iv_std": 0.158,
-    "half_life_days": 5,
-    "note": "Calibrated 2026-02-22, 4908 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.054,
+      "up_mult": 1.059,
+      "iv_mean": 0.5029,
+      "iv_kappa": 52.78,
+      "iv_std": 0.158,
+      "half_life_days": 5,
+      "note": "Calibrated 2026-02-22, 4908 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.109,
+      "up_mult": 1.016,
+      "iv_mean": 0.8125,
+      "iv_kappa": 98.87,
+      "iv_std": 0.2671,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-25, 84 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.106,
+      "up_mult": 1.026,
+      "iv_mean": 0.5106,
+      "iv_kappa": 49.18,
+      "iv_std": 0.1696,
+      "half_life_days": 5,
+      "note": "Calibrated 2026-02-26, 4600 trades, 7d hold, ThetaData EOD"
+    }
   },
   "Z": {
-    "down_mult": 1.026,
-    "up_mult": 1.063,
-    "iv_mean": 0.4849,
-    "iv_kappa": 39.78,
-    "iv_std": 0.1241,
-    "half_life_days": 6,
-    "note": "Calibrated 2026-02-22, 5578 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.026,
+      "up_mult": 1.063,
+      "iv_mean": 0.4849,
+      "iv_kappa": 39.78,
+      "iv_std": 0.1241,
+      "half_life_days": 6,
+      "note": "Calibrated 2026-02-22, 5578 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.085,
+      "up_mult": 1.017,
+      "iv_mean": 0.6997,
+      "iv_kappa": 84.9,
+      "iv_std": 0.1367,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-25, 84 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.082,
+      "up_mult": 1.044,
+      "iv_mean": 0.488,
+      "iv_kappa": 35.99,
+      "iv_std": 0.1319,
+      "half_life_days": 7,
+      "note": "Calibrated 2026-02-26, 5308 trades, 7d hold, ThetaData EOD"
+    }
   },
   "FISV": {
-    "down_mult": 0.948,
-    "up_mult": 0.957,
-    "iv_mean": 0.4979,
-    "iv_kappa": 100.0,
-    "iv_std": 0.1744,
-    "half_life_days": 3,
-    "note": "Calibrated 2026-02-22, 801 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 0.948,
+      "up_mult": 0.957,
+      "iv_mean": 0.4979,
+      "iv_kappa": 100.0,
+      "iv_std": 0.1744,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-22, 801 trades, 7d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 0.985,
+      "up_mult": 0.977,
+      "iv_mean": 0.4979,
+      "iv_kappa": 100.0,
+      "iv_std": 0.1744,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-26, 801 trades, 7d hold, ThetaData EOD"
+    }
   },
   "CRM": {
-    "down_mult": 1.035,
-    "up_mult": 1.095,
-    "iv_mean": 0.401,
-    "iv_kappa": 49.31,
-    "iv_std": 0.0883,
-    "half_life_days": 5,
-    "note": "Calibrated 2026-02-22, 2596 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.035,
+      "up_mult": 1.095,
+      "iv_mean": 0.401,
+      "iv_kappa": 49.31,
+      "iv_std": 0.0883,
+      "half_life_days": 5,
+      "note": "Calibrated 2026-02-22, 2596 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.025,
+      "up_mult": 1.018,
+      "iv_mean": 0.431,
+      "iv_kappa": 4.69,
+      "iv_std": 0.0909,
+      "half_life_days": 54,
+      "note": "Calibrated 2026-02-25, 83 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.03,
+      "up_mult": 1.053,
+      "iv_mean": 0.3992,
+      "iv_kappa": 49.73,
+      "iv_std": 0.0891,
+      "half_life_days": 5,
+      "note": "Calibrated 2026-02-26, 2433 trades, 7d hold, ThetaData EOD"
+    }
   },
   "FOUR": {
-    "down_mult": 1.013,
-    "up_mult": 1.083,
-    "iv_mean": 0.5757,
-    "iv_kappa": 100.0,
-    "iv_std": 0.162,
-    "half_life_days": 3,
-    "note": "Calibrated 2026-02-22, 4300 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.013,
+      "up_mult": 1.083,
+      "iv_mean": 0.5757,
+      "iv_kappa": 100.0,
+      "iv_std": 0.162,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-22, 4300 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.017,
+      "up_mult": 0.883,
+      "iv_mean": 0.7416,
+      "iv_kappa": 100.0,
+      "iv_std": 0.2068,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-25, 96 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.013,
+      "up_mult": 1.041,
+      "iv_mean": 0.5784,
+      "iv_kappa": 100.0,
+      "iv_std": 0.1632,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-26, 4097 trades, 7d hold, ThetaData EOD"
+    }
   },
   "DASH": {
-    "down_mult": 1.078,
-    "up_mult": 1.041,
-    "iv_mean": 0.5663,
-    "iv_kappa": 35.51,
-    "iv_std": 0.1355,
-    "half_life_days": 7,
-    "note": "Calibrated 2026-02-22, 4015 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.078,
+      "up_mult": 1.041,
+      "iv_mean": 0.5663,
+      "iv_kappa": 35.51,
+      "iv_std": 0.1355,
+      "half_life_days": 7,
+      "note": "Calibrated 2026-02-22, 4015 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.13,
+      "up_mult": 1.179,
+      "iv_mean": 0.7047,
+      "iv_kappa": 22.71,
+      "iv_std": 0.0685,
+      "half_life_days": 11,
+      "note": "Calibrated 2026-02-25, 146 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.178,
+      "up_mult": 1.174,
+      "iv_mean": 0.5723,
+      "iv_kappa": 35.66,
+      "iv_std": 0.1368,
+      "half_life_days": 7,
+      "note": "Calibrated 2026-02-26, 3776 trades, 7d hold, ThetaData EOD"
+    }
   },
   "BRO": {
-    "down_mult": 0.997,
-    "up_mult": 1.046,
-    "iv_mean": 0.3567,
-    "iv_kappa": 100.0,
-    "iv_std": 0.1805,
-    "half_life_days": 3,
-    "note": "Calibrated 2026-02-22, 2650 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 0.997,
+      "up_mult": 1.046,
+      "iv_mean": 0.3567,
+      "iv_kappa": 100.0,
+      "iv_std": 0.1805,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-22, 2650 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.101,
+      "up_mult": 1.015,
+      "iv_mean": 0.5177,
+      "iv_kappa": 100.0,
+      "iv_std": 0.2636,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-25, 86 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 0.98,
+      "up_mult": 1.069,
+      "iv_mean": 0.361,
+      "iv_kappa": 100.0,
+      "iv_std": 0.1818,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-26, 2507 trades, 7d hold, ThetaData EOD"
+    }
   },
   "FIS": {
-    "down_mult": 1.078,
-    "up_mult": 1.024,
-    "iv_mean": 0.3727,
-    "iv_kappa": 100.0,
-    "iv_std": 0.1156,
-    "half_life_days": 3,
-    "note": "Calibrated 2026-02-22, 1879 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.078,
+      "up_mult": 1.024,
+      "iv_mean": 0.3727,
+      "iv_kappa": 100.0,
+      "iv_std": 0.1156,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-22, 1879 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.0,
+      "up_mult": 1.006,
+      "iv_mean": 0.4881,
+      "iv_kappa": 100.0,
+      "iv_std": 0.0867,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-25, 63 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.065,
+      "up_mult": 1.024,
+      "iv_mean": 0.3756,
+      "iv_kappa": 100.0,
+      "iv_std": 0.1142,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-26, 1796 trades, 7d hold, ThetaData EOD"
+    }
   },
   "XYZ": {
-    "down_mult": 1.015,
-    "up_mult": 1.048,
-    "iv_mean": 0.5461,
-    "iv_kappa": 98.66,
-    "iv_std": 0.1626,
-    "half_life_days": 3,
-    "note": "Calibrated 2026-02-22, 2088 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.015,
+      "up_mult": 1.048,
+      "iv_mean": 0.5461,
+      "iv_kappa": 98.66,
+      "iv_std": 0.1626,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-22, 2088 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 0.953,
+      "up_mult": 1.003,
+      "iv_mean": 0.4915,
+      "iv_kappa": 94.39,
+      "iv_std": 0.0454,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-25, 85 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 0.994,
+      "up_mult": 1.02,
+      "iv_mean": 0.5487,
+      "iv_kappa": 95.52,
+      "iv_std": 0.1664,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-26, 1985 trades, 7d hold, ThetaData EOD"
+    }
   },
   "PCOR": {
-    "down_mult": 1.073,
-    "up_mult": 1.066,
-    "iv_mean": 0.4804,
-    "iv_kappa": 73.42,
-    "iv_std": 0.1398,
-    "half_life_days": 3,
-    "note": "Calibrated 2026-02-22, 4789 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.073,
+      "up_mult": 1.066,
+      "iv_mean": 0.4804,
+      "iv_kappa": 73.42,
+      "iv_std": 0.1398,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-22, 4789 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.118,
+      "up_mult": 1.01,
+      "iv_mean": 0.7368,
+      "iv_kappa": 80.91,
+      "iv_std": 0.1541,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-25, 93 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.051,
+      "up_mult": 1.05,
+      "iv_mean": 0.4863,
+      "iv_kappa": 75.62,
+      "iv_std": 0.1408,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-26, 4539 trades, 7d hold, ThetaData EOD"
+    }
   },
   "DOCU": {
-    "down_mult": 1.015,
-    "up_mult": 1.018,
-    "iv_mean": 0.6496,
-    "iv_kappa": 84.11,
-    "iv_std": 0.2635,
-    "half_life_days": 3,
-    "note": "Calibrated 2026-02-22, 2230 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.015,
+      "up_mult": 1.018,
+      "iv_mean": 0.6496,
+      "iv_kappa": 84.11,
+      "iv_std": 0.2635,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-22, 2230 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 0.986,
+      "up_mult": 1.042,
+      "iv_mean": 0.527,
+      "iv_kappa": 76.97,
+      "iv_std": 0.1394,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-25, 64 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 0.983,
+      "up_mult": 1.12,
+      "iv_mean": 0.6517,
+      "iv_kappa": 83.77,
+      "iv_std": 0.27,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-26, 2077 trades, 7d hold, ThetaData EOD"
+    }
   },
   "MSTR": {
-    "down_mult": 0.988,
-    "up_mult": 1.023,
-    "iv_mean": 0.9242,
-    "iv_kappa": 26.98,
-    "iv_std": 0.2057,
-    "half_life_days": 9,
-    "note": "Calibrated 2026-02-22, 4516 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 0.988,
+      "up_mult": 1.023,
+      "iv_mean": 0.9242,
+      "iv_kappa": 26.98,
+      "iv_std": 0.2057,
+      "half_life_days": 9,
+      "note": "Calibrated 2026-02-22, 4516 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.011,
+      "up_mult": 1.008,
+      "iv_mean": 0.8866,
+      "iv_kappa": 29.76,
+      "iv_std": 0.2438,
+      "half_life_days": 9,
+      "note": "Calibrated 2026-02-25, 82 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.006,
+      "up_mult": 1.023,
+      "iv_mean": 0.915,
+      "iv_kappa": 27.51,
+      "iv_std": 0.2013,
+      "half_life_days": 9,
+      "note": "Calibrated 2026-02-26, 4244 trades, 7d hold, ThetaData EOD"
+    }
   },
   "CSGP": {
-    "down_mult": 1.004,
-    "up_mult": 1.025,
-    "iv_mean": 0.4821,
-    "iv_kappa": 100.0,
-    "iv_std": 0.2442,
-    "half_life_days": 3,
-    "note": "Calibrated 2026-02-22, 3415 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.004,
+      "up_mult": 1.025,
+      "iv_mean": 0.4821,
+      "iv_kappa": 100.0,
+      "iv_std": 0.2442,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-22, 3415 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 0.929,
+      "up_mult": 1.016,
+      "iv_mean": 0.7109,
+      "iv_kappa": 56.3,
+      "iv_std": 0.3365,
+      "half_life_days": 4,
+      "note": "Calibrated 2026-02-25, 81 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.012,
+      "up_mult": 1.025,
+      "iv_mean": 0.4823,
+      "iv_kappa": 100.0,
+      "iv_std": 0.2444,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-26, 3265 trades, 7d hold, ThetaData EOD"
+    }
   },
   "DUOL": {
-    "down_mult": 1.001,
-    "up_mult": 1.011,
-    "iv_mean": 0.8348,
-    "iv_kappa": 41.99,
-    "iv_std": 0.2505,
-    "half_life_days": 6,
-    "note": "Calibrated 2026-02-22, 2413 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.001,
+      "up_mult": 1.011,
+      "iv_mean": 0.8348,
+      "iv_kappa": 41.99,
+      "iv_std": 0.2505,
+      "half_life_days": 6,
+      "note": "Calibrated 2026-02-22, 2413 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.021,
+      "up_mult": 1.014,
+      "iv_mean": 0.7408,
+      "iv_kappa": 76.65,
+      "iv_std": 0.0911,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-25, 83 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.036,
+      "up_mult": 1.028,
+      "iv_mean": 0.8358,
+      "iv_kappa": 41.96,
+      "iv_std": 0.2524,
+      "half_life_days": 6,
+      "note": "Calibrated 2026-02-26, 2375 trades, 7d hold, ThetaData EOD"
+    }
   },
   "CRCL": {
-    "down_mult": 1.083,
-    "up_mult": 1.055,
-    "iv_mean": 0.9633,
-    "iv_kappa": 42.62,
-    "iv_std": 0.2899,
-    "half_life_days": 6,
-    "note": "Calibrated 2026-02-22, 5324 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.083,
+      "up_mult": 1.055,
+      "iv_mean": 0.9633,
+      "iv_kappa": 42.62,
+      "iv_std": 0.2899,
+      "half_life_days": 6,
+      "note": "Calibrated 2026-02-22, 5324 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 0.979,
+      "up_mult": 1.018,
+      "iv_mean": 2.0225,
+      "iv_kappa": 38.92,
+      "iv_std": 0.5196,
+      "half_life_days": 7,
+      "note": "Calibrated 2026-02-25, 81 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 0.991,
+      "up_mult": 1.044,
+      "iv_mean": 0.9778,
+      "iv_kappa": 43.79,
+      "iv_std": 0.2903,
+      "half_life_days": 6,
+      "note": "Calibrated 2026-02-26, 5020 trades, 7d hold, ThetaData EOD"
+    }
   },
   "BFAM": {
-    "down_mult": 1.011,
-    "up_mult": 1.041,
-    "iv_mean": 0.3886,
-    "iv_kappa": 82.98,
-    "iv_std": 0.1441,
-    "half_life_days": 3,
-    "note": "Calibrated 2026-02-22, 2974 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.011,
+      "up_mult": 1.041,
+      "iv_mean": 0.3886,
+      "iv_kappa": 82.98,
+      "iv_std": 0.1441,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-22, 2974 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.464,
+      "up_mult": 1.004,
+      "iv_mean": 0.5991,
+      "iv_kappa": 93.4,
+      "iv_std": 0.1557,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-25, 89 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.079,
+      "up_mult": 1.015,
+      "iv_mean": 0.3927,
+      "iv_kappa": 83.58,
+      "iv_std": 0.1455,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-26, 2826 trades, 7d hold, ThetaData EOD"
+    }
   },
   "MOH": {
-    "down_mult": 1.029,
-    "up_mult": 1.067,
-    "iv_mean": 0.5723,
-    "iv_kappa": 70.1,
-    "iv_std": 0.1395,
-    "half_life_days": 4,
-    "note": "Calibrated 2026-02-22, 5149 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.029,
+      "up_mult": 1.067,
+      "iv_mean": 0.5723,
+      "iv_kappa": 70.1,
+      "iv_std": 0.1395,
+      "half_life_days": 4,
+      "note": "Calibrated 2026-02-22, 5149 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 0.983,
+      "up_mult": 1.001,
+      "iv_mean": 0.7433,
+      "iv_kappa": 100.0,
+      "iv_std": 0.1296,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-25, 107 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.036,
+      "up_mult": 1.006,
+      "iv_mean": 0.576,
+      "iv_kappa": 69.75,
+      "iv_std": 0.1429,
+      "half_life_days": 4,
+      "note": "Calibrated 2026-02-26, 4816 trades, 7d hold, ThetaData EOD"
+    }
   },
   "NFLX": {
-    "down_mult": 1.001,
-    "up_mult": 1.049,
-    "iv_mean": 0.9113,
-    "iv_kappa": 18.43,
-    "iv_std": 0.5263,
-    "half_life_days": 14,
-    "note": "Calibrated 2026-02-22, 1541 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.001,
+      "up_mult": 1.049,
+      "iv_mean": 0.9113,
+      "iv_kappa": 18.43,
+      "iv_std": 0.5263,
+      "half_life_days": 14,
+      "note": "Calibrated 2026-02-22, 1541 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.0,
+      "up_mult": 1.028,
+      "iv_mean": 1.1698,
+      "iv_kappa": 42.44,
+      "iv_std": 0.1843,
+      "half_life_days": 6,
+      "note": "Calibrated 2026-02-25, 81 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.012,
+      "up_mult": 1.064,
+      "iv_mean": 0.9012,
+      "iv_kappa": 17.5,
+      "iv_std": 0.5237,
+      "half_life_days": 14,
+      "note": "Calibrated 2026-02-26, 1497 trades, 7d hold, ThetaData EOD"
+    }
   },
   "COIN": {
-    "down_mult": 1.016,
-    "up_mult": 1.013,
-    "iv_mean": 0.799,
-    "iv_kappa": 50.62,
-    "iv_std": 0.2275,
-    "half_life_days": 5,
-    "note": "Calibrated 2026-02-22, 4026 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.016,
+      "up_mult": 1.013,
+      "iv_mean": 0.799,
+      "iv_kappa": 50.62,
+      "iv_std": 0.2275,
+      "half_life_days": 5,
+      "note": "Calibrated 2026-02-22, 4026 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.02,
+      "up_mult": 1.03,
+      "iv_mean": 0.7667,
+      "iv_kappa": 18.79,
+      "iv_std": 0.1518,
+      "half_life_days": 13,
+      "note": "Calibrated 2026-02-25, 69 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.007,
+      "up_mult": 1.029,
+      "iv_mean": 0.8053,
+      "iv_kappa": 50.84,
+      "iv_std": 0.2322,
+      "half_life_days": 5,
+      "note": "Calibrated 2026-02-26, 3768 trades, 7d hold, ThetaData EOD"
+    }
   },
   "MP": {
-    "down_mult": 0.999,
-    "up_mult": 1.01,
-    "iv_mean": 0.7487,
-    "iv_kappa": 83.46,
-    "iv_std": 0.1361,
-    "half_life_days": 3,
-    "note": "Calibrated 2026-02-22, 2173 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 0.999,
+      "up_mult": 1.01,
+      "iv_mean": 0.7487,
+      "iv_kappa": 83.46,
+      "iv_std": 0.1361,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-22, 2173 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 0.996,
+      "up_mult": 0.75,
+      "iv_mean": 0.7479,
+      "iv_kappa": 100.0,
+      "iv_std": 0.0527,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-25, 57 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.011,
+      "up_mult": 1.014,
+      "iv_mean": 0.7504,
+      "iv_kappa": 82.79,
+      "iv_std": 0.1391,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-26, 2068 trades, 7d hold, ThetaData EOD"
+    }
   },
   "RBLX": {
-    "down_mult": 1.025,
-    "up_mult": 0.998,
-    "iv_mean": 0.7107,
-    "iv_kappa": 60.96,
-    "iv_std": 0.2103,
-    "half_life_days": 4,
-    "note": "Calibrated 2026-02-22, 2955 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.025,
+      "up_mult": 0.998,
+      "iv_mean": 0.7107,
+      "iv_kappa": 60.96,
+      "iv_std": 0.2103,
+      "half_life_days": 4,
+      "note": "Calibrated 2026-02-22, 2955 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 0.907,
+      "up_mult": 0.978,
+      "iv_mean": 0.9372,
+      "iv_kappa": 68.08,
+      "iv_std": 0.1872,
+      "half_life_days": 4,
+      "note": "Calibrated 2026-02-25, 86 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.064,
+      "up_mult": 1.035,
+      "iv_mean": 0.7146,
+      "iv_kappa": 59.35,
+      "iv_std": 0.2163,
+      "half_life_days": 4,
+      "note": "Calibrated 2026-02-26, 2756 trades, 7d hold, ThetaData EOD"
+    }
   },
   "CHTR": {
-    "down_mult": 1.046,
-    "up_mult": 1.034,
-    "iv_mean": 0.5266,
-    "iv_kappa": 59.06,
-    "iv_std": 0.136,
-    "half_life_days": 4,
-    "note": "Calibrated 2026-02-22, 1881 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.046,
+      "up_mult": 1.034,
+      "iv_mean": 0.5266,
+      "iv_kappa": 59.06,
+      "iv_std": 0.136,
+      "half_life_days": 4,
+      "note": "Calibrated 2026-02-22, 1881 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 0.995,
+      "up_mult": 1.027,
+      "iv_mean": 0.53,
+      "iv_kappa": 29.94,
+      "iv_std": 0.126,
+      "half_life_days": 8,
+      "note": "Calibrated 2026-02-25, 71 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.065,
+      "up_mult": 0.989,
+      "iv_mean": 0.5301,
+      "iv_kappa": 58.2,
+      "iv_std": 0.1377,
+      "half_life_days": 4,
+      "note": "Calibrated 2026-02-26, 1782 trades, 7d hold, ThetaData EOD"
+    }
   },
   "APP": {
-    "down_mult": 1.036,
-    "up_mult": 1.021,
-    "iv_mean": 0.7277,
-    "iv_kappa": 33.38,
-    "iv_std": 0.127,
-    "half_life_days": 8,
-    "note": "Calibrated 2026-02-22, 2426 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.036,
+      "up_mult": 1.021,
+      "iv_mean": 0.7277,
+      "iv_kappa": 33.38,
+      "iv_std": 0.127,
+      "half_life_days": 8,
+      "note": "Calibrated 2026-02-22, 2426 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.023,
+      "up_mult": 1.019,
+      "iv_mean": 1.003,
+      "iv_kappa": 20.76,
+      "iv_std": 0.1594,
+      "half_life_days": 12,
+      "note": "Calibrated 2026-02-25, 29 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.026,
+      "up_mult": 1.012,
+      "iv_mean": 0.7368,
+      "iv_kappa": 35.62,
+      "iv_std": 0.1274,
+      "half_life_days": 7,
+      "note": "Calibrated 2026-02-26, 2252 trades, 7d hold, ThetaData EOD"
+    }
   },
   "RDDT": {
-    "down_mult": 1.018,
-    "up_mult": 1.028,
-    "iv_mean": 0.7846,
-    "iv_kappa": 44.2,
-    "iv_std": 0.103,
-    "half_life_days": 6,
-    "note": "Calibrated 2026-02-22, 4576 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.018,
+      "up_mult": 1.028,
+      "iv_mean": 0.7846,
+      "iv_kappa": 44.2,
+      "iv_std": 0.103,
+      "half_life_days": 6,
+      "note": "Calibrated 2026-02-22, 4576 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.0,
+      "up_mult": 1.001,
+      "iv_mean": 0.9385,
+      "iv_kappa": 33.34,
+      "iv_std": 0.0981,
+      "half_life_days": 8,
+      "note": "Calibrated 2026-02-25, 52 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.017,
+      "up_mult": 1.011,
+      "iv_mean": 0.7901,
+      "iv_kappa": 45.57,
+      "iv_std": 0.1042,
+      "half_life_days": 6,
+      "note": "Calibrated 2026-02-26, 4314 trades, 7d hold, ThetaData EOD"
+    }
   },
   "KMX": {
-    "down_mult": 1.027,
-    "up_mult": 1.07,
-    "iv_mean": 0.623,
-    "iv_kappa": 100.0,
-    "iv_std": 0.2336,
-    "half_life_days": 3,
-    "note": "Calibrated 2026-02-22, 3469 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.027,
+      "up_mult": 1.07,
+      "iv_mean": 0.623,
+      "iv_kappa": 100.0,
+      "iv_std": 0.2336,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-22, 3469 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.033,
+      "up_mult": 1.147,
+      "iv_mean": 0.6793,
+      "iv_kappa": 100.0,
+      "iv_std": 0.2583,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-25, 97 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.01,
+      "up_mult": 1.068,
+      "iv_mean": 0.6235,
+      "iv_kappa": 100.0,
+      "iv_std": 0.2349,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-26, 3346 trades, 7d hold, ThetaData EOD"
+    }
   },
   "CAVA": {
-    "down_mult": 1.12,
-    "up_mult": 1.105,
-    "iv_mean": 0.6565,
-    "iv_kappa": 46.78,
-    "iv_std": 0.2398,
-    "half_life_days": 5,
-    "note": "Calibrated 2026-02-22, 1932 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.12,
+      "up_mult": 1.105,
+      "iv_mean": 0.6565,
+      "iv_kappa": 46.78,
+      "iv_std": 0.2398,
+      "half_life_days": 5,
+      "note": "Calibrated 2026-02-22, 1932 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 0.996,
+      "up_mult": 0.704,
+      "iv_mean": 0.6572,
+      "iv_kappa": 100.0,
+      "iv_std": 0.0922,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-25, 93 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.046,
+      "up_mult": 1.066,
+      "iv_mean": 0.6698,
+      "iv_kappa": 48.97,
+      "iv_std": 0.2435,
+      "half_life_days": 5,
+      "note": "Calibrated 2026-02-26, 1801 trades, 7d hold, ThetaData EOD"
+    }
   },
   "ELF": {
-    "down_mult": 1.064,
-    "up_mult": 1.018,
-    "iv_mean": 0.7335,
-    "iv_kappa": 80.35,
-    "iv_std": 0.1874,
-    "half_life_days": 3,
-    "note": "Calibrated 2026-02-22, 2693 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.064,
+      "up_mult": 1.018,
+      "iv_mean": 0.7335,
+      "iv_kappa": 80.35,
+      "iv_std": 0.1874,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-22, 2693 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 0.923,
+      "up_mult": 0.911,
+      "iv_mean": 0.8309,
+      "iv_kappa": 30.76,
+      "iv_std": 0.1396,
+      "half_life_days": 8,
+      "note": "Calibrated 2026-02-25, 143 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.059,
+      "up_mult": 0.937,
+      "iv_mean": 0.7414,
+      "iv_kappa": 79.98,
+      "iv_std": 0.1897,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-26, 2490 trades, 7d hold, ThetaData EOD"
+    }
   },
   "LEU": {
-    "down_mult": 1.033,
-    "up_mult": 1.034,
-    "iv_mean": 0.9711,
-    "iv_kappa": 12.67,
-    "iv_std": 0.1194,
-    "half_life_days": 20,
-    "note": "Calibrated 2026-02-22, 5464 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.033,
+      "up_mult": 1.034,
+      "iv_mean": 0.9711,
+      "iv_kappa": 12.67,
+      "iv_std": 0.1194,
+      "half_life_days": 20,
+      "note": "Calibrated 2026-02-22, 5464 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.003,
+      "up_mult": 0.998,
+      "iv_mean": 1.115,
+      "iv_kappa": 22.31,
+      "iv_std": 0.0566,
+      "half_life_days": 11,
+      "note": "Calibrated 2026-02-25, 106 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.043,
+      "up_mult": 1.009,
+      "iv_mean": 0.9802,
+      "iv_kappa": 13.3,
+      "iv_std": 0.1182,
+      "half_life_days": 19,
+      "note": "Calibrated 2026-02-26, 5117 trades, 7d hold, ThetaData EOD"
+    }
   },
   "AFRM": {
-    "down_mult": 1.041,
-    "up_mult": 1.032,
-    "iv_mean": 0.7258,
-    "iv_kappa": 50.74,
-    "iv_std": 0.1131,
-    "half_life_days": 5,
-    "note": "Calibrated 2026-02-22, 2835 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.041,
+      "up_mult": 1.032,
+      "iv_mean": 0.7258,
+      "iv_kappa": 50.74,
+      "iv_std": 0.1131,
+      "half_life_days": 5,
+      "note": "Calibrated 2026-02-22, 2835 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 0.902,
+      "up_mult": 0.979,
+      "iv_mean": 0.9025,
+      "iv_kappa": 70.65,
+      "iv_std": 0.1006,
+      "half_life_days": 4,
+      "note": "Calibrated 2026-02-25, 75 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.049,
+      "up_mult": 1.013,
+      "iv_mean": 0.7261,
+      "iv_kappa": 50.78,
+      "iv_std": 0.1145,
+      "half_life_days": 5,
+      "note": "Calibrated 2026-02-26, 2686 trades, 7d hold, ThetaData EOD"
+    }
   },
   "HOOD": {
-    "down_mult": 1.022,
-    "up_mult": 1.025,
-    "iv_mean": 0.7456,
-    "iv_kappa": 60.53,
-    "iv_std": 0.1505,
-    "half_life_days": 4,
-    "note": "Calibrated 2026-02-22, 2467 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.022,
+      "up_mult": 1.025,
+      "iv_mean": 0.7456,
+      "iv_kappa": 60.53,
+      "iv_std": 0.1505,
+      "half_life_days": 4,
+      "note": "Calibrated 2026-02-22, 2467 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.09,
+      "up_mult": 1.0,
+      "iv_mean": 0.7848,
+      "iv_kappa": 13.81,
+      "iv_std": 0.1277,
+      "half_life_days": 18,
+      "note": "Calibrated 2026-02-25, 90 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.054,
+      "up_mult": 1.031,
+      "iv_mean": 0.7519,
+      "iv_kappa": 62.35,
+      "iv_std": 0.1533,
+      "half_life_days": 4,
+      "note": "Calibrated 2026-02-26, 2316 trades, 7d hold, ThetaData EOD"
+    }
   },
   "TEM": {
-    "down_mult": 1.015,
-    "up_mult": 1.006,
-    "iv_mean": 0.788,
-    "iv_kappa": 100.0,
-    "iv_std": 0.1724,
-    "half_life_days": 3,
-    "note": "Calibrated 2026-02-22, 1829 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.015,
+      "up_mult": 1.006,
+      "iv_mean": 0.788,
+      "iv_kappa": 100.0,
+      "iv_std": 0.1724,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-22, 1829 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.031,
+      "up_mult": 1.057,
+      "iv_mean": 0.7272,
+      "iv_kappa": 50.78,
+      "iv_std": 0.0995,
+      "half_life_days": 5,
+      "note": "Calibrated 2026-02-25, 103 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.027,
+      "up_mult": 1.072,
+      "iv_mean": 0.7919,
+      "iv_kappa": 100.0,
+      "iv_std": 0.1764,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-26, 1723 trades, 7d hold, ThetaData EOD"
+    }
   },
   "UNH": {
-    "down_mult": 1.013,
-    "up_mult": 0.994,
-    "iv_mean": 0.386,
-    "iv_kappa": 100.0,
-    "iv_std": 0.0872,
-    "half_life_days": 3,
-    "note": "Calibrated 2026-02-22, 2664 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.013,
+      "up_mult": 0.994,
+      "iv_mean": 0.386,
+      "iv_kappa": 100.0,
+      "iv_std": 0.0872,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-22, 2664 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.034,
+      "up_mult": 1.048,
+      "iv_mean": 0.3248,
+      "iv_kappa": 75.75,
+      "iv_std": 0.0398,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-25, 134 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.022,
+      "up_mult": 1.01,
+      "iv_mean": 0.3879,
+      "iv_kappa": 100.0,
+      "iv_std": 0.0896,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-02-26, 2480 trades, 7d hold, ThetaData EOD"
+    }
   },
   "OKLO": {
-    "down_mult": 0.998,
-    "up_mult": 1.011,
-    "iv_mean": 1.0009,
-    "iv_kappa": 44.48,
-    "iv_std": 0.224,
-    "half_life_days": 6,
-    "note": "Calibrated 2026-02-22, 1509 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 0.998,
+      "up_mult": 1.011,
+      "iv_mean": 1.0009,
+      "iv_kappa": 44.48,
+      "iv_std": 0.224,
+      "half_life_days": 6,
+      "note": "Calibrated 2026-02-22, 1509 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.058,
+      "up_mult": 0.98,
+      "iv_mean": 0.9769,
+      "iv_kappa": 40.44,
+      "iv_std": 0.0799,
+      "half_life_days": 6,
+      "note": "Calibrated 2026-02-25, 51 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.047,
+      "up_mult": 1.007,
+      "iv_mean": 1.0181,
+      "iv_kappa": 47.3,
+      "iv_std": 0.2294,
+      "half_life_days": 5,
+      "note": "Calibrated 2026-02-26, 1365 trades, 7d hold, ThetaData EOD"
+    }
   },
   "CRWV": {
-    "down_mult": 1.031,
-    "up_mult": 1.025,
-    "iv_mean": 0.9196,
-    "iv_kappa": 58.49,
-    "iv_std": 0.1474,
-    "half_life_days": 4,
-    "note": "Calibrated 2026-02-22, 2548 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.031,
+      "up_mult": 1.025,
+      "iv_mean": 0.9196,
+      "iv_kappa": 58.49,
+      "iv_std": 0.1474,
+      "half_life_days": 4,
+      "note": "Calibrated 2026-02-22, 2548 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.059,
+      "up_mult": 1.031,
+      "iv_mean": 1.0062,
+      "iv_kappa": 55.13,
+      "iv_std": 0.0581,
+      "half_life_days": 5,
+      "note": "Calibrated 2026-02-25, 113 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.037,
+      "up_mult": 1.039,
+      "iv_mean": 0.93,
+      "iv_kappa": 63.67,
+      "iv_std": 0.1458,
+      "half_life_days": 4,
+      "note": "Calibrated 2026-02-26, 2392 trades, 7d hold, ThetaData EOD"
+    }
   },
   "ALAB": {
-    "down_mult": 1.019,
-    "up_mult": 1.027,
-    "iv_mean": 0.886,
-    "iv_kappa": 37.37,
-    "iv_std": 0.1218,
-    "half_life_days": 7,
-    "note": "Calibrated 2026-02-22, 2975 trades, 7d hold, ThetaData EOD"
+    "standard": {
+      "down_mult": 1.019,
+      "up_mult": 1.027,
+      "iv_mean": 0.886,
+      "iv_kappa": 37.37,
+      "iv_std": 0.1218,
+      "half_life_days": 7,
+      "note": "Calibrated 2026-02-22, 2975 trades, 7d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 0.978,
+      "up_mult": 0.992,
+      "iv_mean": 1.0911,
+      "iv_kappa": 30.97,
+      "iv_std": 0.0618,
+      "half_life_days": 8,
+      "note": "Calibrated 2026-02-25, 37 trades, 14d hold, ThetaData EOD"
+    },
+    "weighted": {
+      "down_mult": 1.064,
+      "up_mult": 1.033,
+      "iv_mean": 0.8963,
+      "iv_kappa": 42.03,
+      "iv_std": 0.1173,
+      "half_life_days": 6,
+      "note": "Calibrated 2026-02-26, 2804 trades, 7d hold, ThetaData EOD"
+    }
   }
 }

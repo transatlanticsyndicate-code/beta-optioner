@@ -328,6 +328,8 @@ function SettingsCalibration() {
   const [tickerInput, setTickerInput] = useState('');
   const [months, setMonths] = useState(6);
   const [holdDays, setHoldDays] = useState(14);
+  const [calibrationMode, setCalibrationMode] = useState('standard');
+  const [recentDays, setRecentDays] = useState(30);
 
   // Активное задание
   const [activeJob, setActiveJob] = useState(null);
@@ -405,7 +407,7 @@ function SettingsCalibration() {
       const res = await fetch(`${API_BASE}/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tickers, months, hold_days: holdDays })
+        body: JSON.stringify({ tickers, months, hold_days: holdDays, calibration_mode: calibrationMode, recent_days: recentDays })
       });
 
       if (!res.ok) {
@@ -422,7 +424,7 @@ function SettingsCalibration() {
     } catch (e) {
       alert(`Ошибка: ${e.message}`);
     }
-  }, [months, holdDays, startPolling]);
+  }, [months, holdDays, calibrationMode, recentDays, startPolling]);
 
   /** Запуск из поля ввода */
   const handleRunNew = () => {
@@ -546,7 +548,7 @@ function SettingsCalibration() {
           </div>
 
           {/* Параметры */}
-          <div className="flex items-center gap-6 text-sm pb-4">
+          <div className="flex flex-wrap items-center gap-6 text-sm pb-2">
             <label className="flex items-center gap-2 text-muted-foreground">
               Период данных:
               <select
@@ -574,6 +576,55 @@ function SettingsCalibration() {
                 <option value={30}>30 дней</option>
               </select>
             </label>
+          </div>
+
+          {/* Режим калибровки */}
+          <div className="flex flex-wrap items-center gap-3 text-sm pb-2">
+            <span className="text-muted-foreground">Режим:</span>
+            {[
+              { id: 'standard', label: 'Стабильный', desc: 'Все данные за период — стабильные коэффициенты' },
+              { id: 'weighted', label: 'Взвешенный', desc: 'Свежие сделки важнее — эксп. веса по возрасту (half-life 30 дней)' },
+              { id: 'recent',   label: 'Свежий', desc: `Только последние ${recentDays} дней — максимально актуально` },
+            ].map(({ id, label, desc }) => (
+              <TooltipProvider key={id}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => setCalibrationMode(id)}
+                      disabled={isRunning}
+                      className={[
+                        'px-3 py-1 rounded-full border text-xs font-medium transition-all',
+                        calibrationMode === id
+                          ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-600'
+                          : 'bg-muted border-border text-muted-foreground hover:text-foreground',
+                      ].join(' ')}
+                    >
+                      {label}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[220px] text-xs">
+                    {desc}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ))}
+            {/* Выбор количества дней для режима recent */}
+            {calibrationMode === 'recent' && (
+              <label className="flex items-center gap-2 text-muted-foreground ml-2">
+                Период:
+                <select
+                  value={recentDays}
+                  onChange={e => setRecentDays(Number(e.target.value))}
+                  disabled={isRunning}
+                  className="bg-muted border border-border rounded px-2 py-1 text-foreground text-sm"
+                >
+                  <option value={14}>14 дней</option>
+                  <option value={30}>30 дней</option>
+                  <option value={60}>60 дней</option>
+                  <option value={90}>90 дней</option>
+                </select>
+              </label>
+            )}
           </div>
         </CardContent>
       </Card>

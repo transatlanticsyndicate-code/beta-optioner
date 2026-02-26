@@ -45,7 +45,8 @@ limiter = Limiter(key_func=get_remote_address)
 @limiter.limit("30/minute")
 async def classify_stock_endpoint(
     request: Request,
-    symbol: str = Query(..., min_length=1, max_length=10, description="Тикер акции")
+    symbol: str = Query(..., min_length=1, max_length=10, description="Тикер акции"),
+    calibration_mode: str = Query("standard", description="Режим калибровки: standard | recent | weighted")
 ):
     """
     Классифицирует акцию по группам и возвращает коэффициенты корректировки P&L
@@ -82,8 +83,8 @@ async def classify_stock_endpoint(
                 detail="Некорректный формат тикера"
             )
         
-        # Классифицируем акцию
-        result = await classify_stock(clean_symbol)
+        # Классифицируем акцию с учётом режима калибровки
+        result = await classify_stock(clean_symbol, calibration_mode=calibration_mode)
         
         return result
         

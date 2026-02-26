@@ -215,6 +215,10 @@ function UniversalOptionsCalculator() {
   // ВАЖНО: Применяется только в режиме stocks
   const [stockClassification, setStockClassification] = useState(null);
 
+  // Режим калибровки: standard (6 мес) | recent (1 нед) | weighted (взвешенный)
+  // ЗАЧЕМ: Позволяет мгновенно переключать набор коэффициентов и видеть разницу в P&L
+  const [calibrationMode, setCalibrationMode] = useState('standard');
+
   // State для зафиксированных позиций
   // ЗАЧЕМ: Если isLocked=true, данные НЕ обновляются с API при загрузке конфигурации
   const [isLocked, setIsLocked] = useState(false);
@@ -433,7 +437,7 @@ function UniversalOptionsCalculator() {
 
   // Загрузка классификации акции при выборе тикера (только для режима stocks)
   // ЗАЧЕМ: Определяем группу акции для корректировки P&L прогнозов
-  const fetchClassification = useCallback(async (ticker) => {
+  const fetchClassification = useCallback(async (ticker, mode) => {
     if (!ticker || calculatorMode !== CALCULATOR_MODES.STOCKS) {
       setStockClassification(null);
       return;
@@ -445,8 +449,9 @@ function UniversalOptionsCalculator() {
       return;
     }
 
+    const activeMode = mode || calibrationMode || 'standard';
     try {
-      const response = await fetch(`/api/stock/classify?symbol=${ticker}`);
+      const response = await fetch(`/api/stock/classify?symbol=${ticker}&calibration_mode=${activeMode}`);
       if (response.ok) {
         const data = await response.json();
         // Добавляем originalGroup для отслеживания исходной группы из API
@@ -455,7 +460,7 @@ function UniversalOptionsCalculator() {
           originalGroup: data.group
         };
         setStockClassification(classificationWithOriginal);
-        console.log(`📊 Классификация ${ticker}:`, classificationWithOriginal);
+        console.log(`📊 Классификация ${ticker} [${activeMode}]:`, classificationWithOriginal);
       } else {
         setStockClassification(null);
       }
@@ -463,11 +468,19 @@ function UniversalOptionsCalculator() {
       console.error('Ошибка загрузки классификации:', error);
       setStockClassification(null);
     }
-  }, [calculatorMode]);
+  }, [calculatorMode, calibrationMode]);
 
   useEffect(() => {
     fetchClassification(selectedTicker);
   }, [selectedTicker, fetchClassification]);
+
+  // Перезагружаем классификацию при смене режима калибровки
+  // ЗАЧЕМ: Разные режимы дают разные коэффициенты — P&L пересчитывается мгновенно
+  useEffect(() => {
+    if (selectedTicker) {
+      fetchClassification(selectedTicker, calibrationMode);
+    }
+  }, [calibrationMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Принудительное обновление классификации (очистка кэша + повторный запрос)
   // ЗАЧЕМ: Позволяет пользователю обновить авто-определение группы
@@ -2700,6 +2713,45 @@ function UniversalOptionsCalculator() {
                   compact={false}
                   disabled={false}
                 />
+              )}
+
+              {/* Переключатель режима калибровки (только для откалиброванных тикеров) */}
+              {calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification?.ticker_override && (
+                <TooltipProvider>
+                  <div className="flex items-center gap-1 rounded-lg border border-border bg-muted/30 p-0.5">
+                    {[
+                      { id: 'standard', label: 'Стабильный', hint: '6 месяцев данных — стабильные коэффициенты' },
+                      { id: 'weighted', label: 'Взвешенный', hint: 'Свежие данные важнее — акцент на последних неделях' },
+                      { id: 'recent',   label: 'Свежий',     hint: 'Только последняя неделя — максимально актуально' },
+                    ].map(({ id, label, hint }) => {
+                      const available = stockClassification?.available_modes?.includes(id);
+                      const isActive = calibrationMode === id;
+                      return (
+                        <Tooltip key={id}>
+                          <TooltipTrigger asChild>
+                            <button
+                              onClick={() => available && setCalibrationMode(id)}
+                              disabled={!available}
+                              className={[
+                                'px-2 py-0.5 rounded text-xs font-medium transition-all',
+                                isActive
+                                  ? 'bg-background shadow text-foreground'
+                                  : available
+                                    ? 'text-muted-foreground hover:text-foreground'
+                                    : 'text-muted-foreground/40 cursor-not-allowed',
+                              ].join(' ')}
+                            >
+                              {label}
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" className="max-w-[200px] text-xs">
+                            {available ? hint : `Режим «${label}» не откалиброван для ${selectedTicker}`}
+                          </TooltipContent>
+                        </Tooltip>
+                      );
+                    })}
+                  </div>
+                </TooltipProvider>
               )}
             </div>
 
