@@ -62,12 +62,10 @@ function adaptOption(option) {
     : (option.bid || option.premium || 0);
 
   // Определяем IV: при покупке используем askIV, при продаже — bidIV
-  // ЗАЧЕМ: Волатильность должна соответствовать цене входа в позицию
-  // askIV — волатильность по цене ask (для покупки)
-  // bidIV — волатильность по цене bid (для продажи)
-  const effectiveIV = isBuy 
-    ? (option.askIV || option.impliedVolatility || option.iv || 0) 
-    : (option.bidIV || option.impliedVolatility || option.iv || 0);
+  // ЗАЧЕМ: impliedVolatility = markIV от Binance (волатильность по Mark Price) — наиболее точная.
+  // askIV/bidIV — волатильность bid/ask стакана, используем как fallback для других источников (TradingView).
+  const effectiveIV = option.impliedVolatility || option.iv ||
+    (isBuy ? option.askIV : option.bidIV) || 0;
 
   return {
     id: option.id || Date.now().toString(),
