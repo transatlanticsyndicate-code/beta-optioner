@@ -118,8 +118,9 @@ function UniversalSavedConfigurations() {
   const getInstrumentType = (config) => {
     // Проверяем наличие calculatorMode в состоянии
     if (config.state?.calculatorMode) {
-      const result = config.state.calculatorMode === 'stocks' ? 'Акции' : 'Фьючерсы';
-      console.log(`🔍 [getInstrumentType] Определен по calculatorMode: ${config.state.calculatorMode} -> ${result}`, config.name);
+      const mode = config.state.calculatorMode;
+      const result = mode === 'stocks' ? 'Акции' : mode === 'crypto' ? 'Крипто' : 'Фьючерсы';
+      console.log(`🔍 [getInstrumentType] Определен по calculatorMode: ${mode} -> ${result}`, config.name);
       return result;
     }
     
@@ -497,6 +498,7 @@ function UniversalSavedConfigurations() {
                   {filteredConfigurations.map((config) => {
                     const instrumentType = getInstrumentType(config);
                     const isStocks = instrumentType === 'Акции';
+                    const isCrypto = instrumentType === 'Крипто';
                     
                     return (
                       <TableRow key={config.id} className="hover:bg-gray-50">
@@ -508,8 +510,10 @@ function UniversalSavedConfigurations() {
                         </TableCell>
                         <TableCell>
                           <div className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium ${
-                            isStocks 
+                            isStocks
                               ? 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300'
+                              : isCrypto
+                              ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300'
                               : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
                           }`}>
                             {instrumentType}

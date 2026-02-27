@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Options Calculator</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f4f4f0;
+    --surface: #ffffff;
+    --border: #dcdcd4;
+    --accent: #007a52;
+    --accent2: #d95a1e;
+    --text: #1a1a2e;
+    --muted: #8888a0;
+    --profit: #007a52;
+    --loss: #cc1133;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,122,82,0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,122,82,0.06) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 40px 20px;
+  }
+
+  header {
+    margin-bottom: 40px;
+    animation: fadeIn 0.6s ease;
+  }
+
+  .tag {
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(28px, 4vw, 48px);
+    line-height: 1.1;
+    background: linear-gradient(135deg, #1a1a2e, #007a52);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px 28px;
+    margin-bottom: 16px;
+    animation: slideUp 0.5s ease backwards;
+  }
+
+  .card-title {
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 18px;
+  }
+
+  /* Params card: all fields in one row */
+  .params-grid {
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    gap: 12px;
+    align-items: end;
+  }
+
+  @media (max-width: 900px) { .params-grid { grid-template-columns: repeat(4, 1fr); } }
+  @media (max-width: 500px)  { .params-grid { grid-template-columns: repeat(2, 1fr); } }
+
+  /* Slice card */
+  .slice-card {
+    border-left: 3px solid var(--accent);
+  }
+
+  .slice-inner {
+    display: grid;
+    grid-template-columns: 40px 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+
+  .slice-number {
+    font-family: 'DM Serif Display', serif;
+    font-size: 34px;
+    color: #d8d8d0;
+    line-height: 1;
+    padding-top: 2px;
+  }
+
+  .slice-body {
+    display: grid;
+    grid-template-columns: 110px 150px 1fr;
+    gap: 14px;
+    align-items: end;
+  }
+
+  @media (max-width: 700px) { .slice-body { grid-template-columns: 1fr 1fr; } }
+
+  label {
+    display: block;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    margin-bottom: 5px;
+    text-transform: uppercase;
+  }
+
+  input, select {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    padding: 9px 12px;
+    transition: border-color 0.2s;
+    outline: none;
+  }
+
+  input:focus, select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(0,122,82,0.12);
+  }
+
+  select option { background: #fff; color: #1a1a2e; }
+
+  .date-days {
+    display: grid;
+    grid-template-columns: 1fr 72px;
+    gap: 6px;
+  }
+
+  /* Results row */
+  .slice-results {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 12px 16px;
+    background: var(--bg);
+    border-radius: 8px;
+    margin-top: 14px;
+    border: 1px solid var(--border);
+  }
+
+  .metric { text-align: center; min-width: 100px; }
+
+  .metric-label {
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 3px;
+  }
+
+  .metric-value { font-size: 15px; font-weight: 700; }
+  .metric-value.profit  { color: var(--profit); }
+  .metric-value.loss    { color: var(--loss); }
+  .metric-value.neutral { color: var(--text); }
+
+  .divider {
+    width: 1px;
+    height: 32px;
+    background: var(--border);
+    flex-shrink: 0;
+  }
+
+  .breakeven-inline {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.8px;
+    margin-left: auto;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .breakeven-inline span { color: var(--accent); font-weight: 700; }
+
+
+
+  @keyframes fadeIn  { from { opacity:0 } to { opacity:1 } }
+  @keyframes slideUp { from { opacity:0; transform:translateY(14px) } to { opacity:1; transform:translateY(0) } }
+</style>
+</head>
+<body>
+<div class="container">
+  <!-- ПАРАМЕТРЫ ПОЗИЦИИ -->
+  <div class="card" style="animation-delay:0.05s">
+    <div class="card-title">// Параметры позиции</div>
+    <div class="params-grid">
+      <div>
+        <label>Тип</label>
+        <select id="optType">
+          <option value="call">CALL</option>
+          <option value="put">PUT</option>
+        </select>
+      </div>
+      <div>
+        <label>Цена актива</label>
+        <input type="number" id="spot" value="" step="1">
+      </div>
+      <div>
+        <label>Страйк</label>
+        <input type="number" id="strike" value="" step="1">
+      </div>
+      <div>
+        <label>Дата покупки</label>
+        <input type="date" id="buyDate" value="">
+      </div>
+      <div>
+        <label>Дата экспирации</label>
+        <input type="date" id="expiry" value="">
+      </div>
+      <div>
+        <label>Премия (USDT)</label>
+        <input type="number" id="premium" value="" step="0.01">
+      </div>
+      <div>
+        <label>IV (% год.)</label>
+        <input type="number" id="iv" value="" step="1" min="1" max="500">
+      </div>
+      <div>
+        <label>Ставка (%)</label>
+        <input type="number" id="rf" value="3.7" step="0.1">
+      </div>
+      <div>
+        <label>Кол-во контр.</label>
+        <input type="number" id="qtyGlobal" value="" step="1" min="1">
+      </div>
+    </div>
+  </div>
+
+  <!-- 4 СРЕЗКИ -->
+  <div id="slices"></div>
+
+
+</div>
+
+
+<script>
+function erf(x) {
+  const a1=0.254829592,a2=-0.284496736,a3=1.421413741,a4=-1.453152027,a5=1.061405429,p=0.3275911;
+  const sign=x<0?-1:1; x=Math.abs(x);
+  const t=1/(1+p*x);
+  return sign*(1-(((((a5*t+a4)*t+a3)*t+a2)*t+a1)*t)*Math.exp(-x*x));
+}
+function normCDF(x) { return 0.5*(1+erf(x/Math.sqrt(2))); }
+
+function bs(S, K, T, r, sigma, type) {
+  if (T <= 0) return type==='call'?Math.max(S-K,0):Math.max(K-S,0);
+  const d1=(Math.log(S/K)+(r+0.5*sigma*sigma)*T)/(sigma*Math.sqrt(T));
+  const d2=d1-sigma*Math.sqrt(T);
+  return type==='call'
+    ? S*normCDF(d1)-K*Math.exp(-r*T)*normCDF(d2)
+    : K*Math.exp(-r*T)*normCDF(-d2)-S*normCDF(-d1);
+}
+
+function toYMD(d) { return d.toISOString().split('T')[0]; }
+function today()  { const d=new Date(); return new Date(d.getFullYear(),d.getMonth(),d.getDate()); }
+
+// Build 4 slice cards
+const DEFAULTS = [
+  { days:30,  spot:2200 },
+  { days:60,  spot:2400 },
+  { days:90,  spot:2800 },
+  { days:120, spot:3200 },
+];
+
+const slicesEl = document.getElementById('slices');
+
+DEFAULTS.forEach((def, i) => {
+  const n = i+1;
+  const defDate = (() => { const d=new Date(today()); d.setDate(d.getDate()+def.days); return toYMD(d); })();
+  slicesEl.insertAdjacentHTML('beforeend', `
+  <div class="card slice-card" style="animation-delay:${0.1+i*0.07}s">
+    <div class="slice-inner">
+      <div class="slice-number">${n}</div>
+      <div>
+        <div class="card-title">// СРЕЗКА ${n}</div>
+        <div class="slice-body">
+          <div>
+            <label>Кол-во контрактов</label>
+            <input type="number" id="qty${n}" value="" step="1" min="1" oninput="calcSlice(${n})">
+          </div>
+          <div>
+            <label>Цена актива на СРЕЗКУ</label>
+            <input type="number" id="sspot${n}" value="" step="1" oninput="calcSlice(${n})">
+          </div>
+          <div>
+            <label>Дата СРЕЗКИ / Дней от сегодня</label>
+            <div class="date-days">
+              <input type="date" id="sdate${n}" value="${defDate}" oninput="onSDateChange(${n})">
+              <input type="number" id="sdays${n}" value="${def.days}" step="30" min="0" oninput="onSDaysChange(${n})">
+            </div>
+          </div>
+        </div>
+        <div class="slice-results" id="sresults${n}" style="display:none"></div>
+      </div>
+    </div>
+  </div>`);
+});
+
+function onSDaysChange(n) {
+  const days=parseInt(document.getElementById(`sdays${n}`).value)||0;
+  const d=new Date(today()); d.setDate(d.getDate()+days);
+  document.getElementById(`sdate${n}`).value=toYMD(d);
+  calcSlice(n);
+}
+
+function onSDateChange(n) {
+  const sd=new Date(document.getElementById(`sdate${n}`).value);
+  document.getElementById(`sdays${n}`).value=Math.round((sd-today())/86400000);
+  calcSlice(n);
+}
+
+function calcSlice(n) {
+  const type   = document.getElementById('optType').value;
+  const K      = parseFloat(document.getElementById('strike').value);
+  const prem   = parseFloat(document.getElementById('premium').value);
+  const sigma  = parseFloat(document.getElementById('iv').value)/100;
+  const r      = parseFloat(document.getElementById('rf').value)/100;
+  const buyDate= new Date(document.getElementById('buyDate').value);
+  const expDate= new Date(document.getElementById('expiry').value);
+
+  const qtyGlobal = parseInt(document.getElementById('qtyGlobal').value)||1;
+  const qtyLocal  = document.getElementById(`qty${n}`).value;
+  const qty       = qtyLocal !== '' ? (parseInt(qtyLocal)||1) : qtyGlobal;
+  const scenSpot = parseFloat(document.getElementById(`sspot${n}`).value);
+  const scenDate = new Date(document.getElementById(`sdate${n}`).value);
+
+  const T_scen   = Math.max((expDate-scenDate)/1000/86400/365, 0);
+  const scenPrice= bs(scenSpot, K, T_scen, r, sigma, type);
+  const pnlPer   = scenPrice-prem;
+  const totalPnl = pnlPer*qty;
+  const be       = type==='call'?K+prem:K-prem;
+  const daysPassed=Math.round((scenDate-buyDate)/1000/86400);
+  const daysLeft  =Math.round((expDate-scenDate)/1000/86400);
+
+  const el=document.getElementById(`sresults${n}`);
+  el.style.display='flex';
+  el.innerHTML=`
+    <div class="metric">
+      <div class="metric-label">Цена опциона</div>
+      <div class="metric-value neutral">${scenPrice.toFixed(2)} $</div>
+    </div>
+    <div class="divider"></div>
+    <div class="metric">
+      <div class="metric-label">P&L / контракт</div>
+      <div class="metric-value ${pnlPer>=0?'profit':'loss'}">${pnlPer>=0?'+':''}${pnlPer.toFixed(2)} $</div>
+    </div>
+    <div class="divider"></div>
+    <div class="metric">
+      <div class="metric-label">Итого P&L ×${qty}</div>
+      <div class="metric-value ${totalPnl>=0?'profit':'loss'}">${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} $</div>
+    </div>
+    <div class="divider"></div>
+    <div class="metric">
+      <div class="metric-label">Дней прошло</div>
+      <div class="metric-value neutral">${daysPassed}д</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">До экспирации</div>
+      <div class="metric-value neutral">${daysLeft}д</div>
+    </div>
+    <div class="breakeven-inline">Безубыток при экспирации:<br><span>${be.toFixed(2)} USDT</span></div>
+  `;
+}
+
+function calcAll() { [1,2,3,4].forEach(calcSlice); }
+
+// Set buyDate to today
+document.getElementById('buyDate').value = toYMD(today());
+
+document.querySelectorAll('#optType,#spot,#strike,#buyDate,#expiry,#premium,#iv,#rf,#qtyGlobal')
+  .forEach(el => { el.addEventListener('change',calcAll); el.addEventListener('input',calcAll); });
+
+calcAll();
+</script>
+</body>
+</html>

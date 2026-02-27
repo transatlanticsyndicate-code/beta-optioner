@@ -93,7 +93,8 @@ import { useExtensionData } from '../hooks/useExtensionData';
 // ЗАЧЕМ: Определяет тип инструмента и соответствующую математику P&L
 const CALCULATOR_MODES = {
   STOCKS: 'stocks',
-  FUTURES: 'futures'
+  FUTURES: 'futures',
+  CRYPTO: 'crypto'
 };
 
 // Крипто-тикеры — для них не показываем группы акций и не запрашиваем классификацию
@@ -139,10 +140,22 @@ function UniversalOptionsCalculator() {
     };
   }, []);
 
-  // === НОВОЕ: Режим калькулятора (Акции/Фьючерсы) ===
+  // === НОВОЕ: Режим калькулятора (Акции/Фьючерсы/Крипто) ===
   // ЗАЧЕМ: Определяет тип инструмента и соответствующую математику P&L
-  // ВАЖНО: По умолчанию STOCKS, режим FUTURES устанавливается автоматически при детекции фьючерсного тикера
-  const [calculatorMode, setCalculatorMode] = useState(CALCULATOR_MODES.STOCKS);
+  // ВАЖНО: Инициализируется синхронно из URL-параметров, чтобы первый рендер уже знал правильный режим
+  // (иначе при сохранённой сделке для CRYPTO показывался бы ScenarioBlock до детекции тикера)
+  const [calculatorMode, setCalculatorMode] = useState(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const ticker = params.get('contract') || params.get('ticker') || '';
+      if (ticker) {
+        const detectedType = detectInstrumentTypeByPattern(ticker);
+        if (detectedType === 'futures') return CALCULATOR_MODES.FUTURES;
+        if (detectedType === 'crypto') return CALCULATOR_MODES.CRYPTO;
+      }
+    } catch {}
+    return CALCULATOR_MODES.STOCKS;
+  });
 
   // Информация о выбранном фьючерсе (для режима фьючерсов)
   // ЗАЧЕМ: Хранит pointValue и название фьючерса для расчётов
@@ -745,8 +758,24 @@ function UniversalOptionsCalculator() {
   }, [clearExtensionData]);
 
   // Функция создания сделки
-  // ЗАЧЕМ: Автоматически подбирает количество опционов под лимит и создаёт сделку
+  // ЗАЧЕМ: Создаёт сделку с текущим количеством опционов (без автоподбора по лимиту)
   const handleCreateDeal = useCallback(() => {
+    // Для крипто-режима (Binance) — пропускаем проверку таблицы опционов
+    // ЗАЧЕМ: BinanceDealTab использует собственные поля ввода, таблица опционов не нужна
+    if (calculatorMode === CALCULATOR_MODES.CRYPTO) {
+      const ticker = contractCode || selectedTicker;
+      const deal = {
+        ticker,
+        optionsCount: 0,
+        createdAt: new Date().toISOString()
+      };
+      setDealInfo(deal);
+      setDealSettings(null);
+      setActiveCalculatorTab('deal');
+      console.log('✅ [Deal][Binance] Сделка создана:', deal);
+      return;
+    }
+
     // Подсчитываем количество видимых опционов
     const visibleOptions = options.filter(opt => opt.visible !== false);
     
@@ -787,82 +816,24 @@ function UniversalOptionsCalculator() {
       return;
     }
     
-    // Получаем лимит из localStorage (FinancialControl)
-    const depositAmount = localStorage.getItem('depositAmount');
-    const instrumentCount = localStorage.getItem('instrumentCount');
-    
-    let instrumentLimit = null;
-    if (depositAmount && instrumentCount) {
-      const deposit = parseFloat(depositAmount);
-      const count = parseInt(instrumentCount);
-      if (deposit > 0 && count > 0) {
-        instrumentLimit = Math.round(deposit / count);
-        console.log(`💰 [Deal] Лимит на инструмент: $${instrumentLimit} (депозит: $${deposit}, инструментов: ${count})`);
-      }
-    }
-
-    // Если лимит не установлен — используем текущее количество опционов
-    if (!instrumentLimit) {
-      console.log('⚠️ [Deal] Лимит не установлен (depositAmount:', depositAmount, ', instrumentCount:', instrumentCount, ')');
-    }
-    let finalOptionsCount = visibleOptions.length;
-    let multiplier = 1;
-
-    // Если есть лимит — пытаемся подобрать оптимальное количество
-    // ЗАЧЕМ: Автоматически увеличиваем quantity опционов, чтобы приблизиться к лимиту
-    if (instrumentLimit && finalOptionsCount > 0) {
-      // Рассчитываем текущую стоимость позиции (премия * множитель * количество)
-      let totalCost = 0;
-      console.log(`📊 [Deal] Расчёт стоимости позиции (contractMultiplier: ${contractMultiplier}):`);
-      visibleOptions.forEach((opt, idx) => {
-        const premium = opt.isPremiumModified ? opt.customPremium : (opt.action === 'Buy' ? opt.ask : opt.bid) || opt.premium;
-        const qty = Math.abs(opt.quantity || 1);
-        console.log(`  [${idx}] ${opt.action} ${opt.type} ${opt.strike}: premium=${premium}, qty=${qty}`);
-        if (premium) {
-          // Для покупки — затраты, для продажи — кредит
-          const cost = Math.abs(premium) * contractMultiplier * qty;
-          if (opt.action === 'Buy') {
-            totalCost += cost;
-          } else {
-            totalCost -= cost; // Кредит уменьшает затраты
-          }
-        }
-      });
-      totalCost = Math.abs(totalCost);
-      console.log(`📊 [Deal] Итоговая стоимость позиции: $${totalCost}`);
-
-      // Рассчитываем, во сколько раз можно увеличить позицию
-      if (totalCost > 0) {
-        multiplier = Math.floor(instrumentLimit / totalCost);
-        if (multiplier > 1) {
-          // Увеличиваем quantity каждого опциона
-          // ВАЖНО: Используем (opt.quantity || 1) для fallback если quantity не задан
-          setOptions(prevOptions => prevOptions.map(opt => ({
-            ...opt,
-            quantity: (opt.quantity || (opt.action === 'Buy' ? 1 : -1)) * multiplier
-          })));
-          // Обновляем итоговое количество контрактов
-          finalOptionsCount = visibleOptions.reduce((sum, opt) => sum + Math.abs(opt.quantity || 1) * multiplier, 0);
-          console.log(`📈 [Deal] Увеличено количество опционов в ${multiplier} раз для приближения к лимиту $${instrumentLimit}. Текущая стоимость: $${totalCost}`);
-        } else {
-          // Если множитель = 1, считаем текущее количество контрактов
-          finalOptionsCount = visibleOptions.reduce((sum, opt) => sum + Math.abs(opt.quantity || 1), 0);
-        }
-      }
-    } else {
-      // Если лимит не установлен — считаем текущее количество контрактов
-      finalOptionsCount = visibleOptions.reduce((sum, opt) => sum + Math.abs(opt.quantity || 1), 0);
-    }
+    // Берём текущее количество контрактов без автоподбора по лимиту
+    // ЗАЧЕМ: Количество меняется только вручную пользователем
+    const finalOptionsCount = visibleOptions.reduce((sum, opt) => sum + Math.abs(opt.quantity || 1), 0);
 
     // Создаём информацию о сделке
     const ticker = contractCode || selectedTicker;
     const deal = {
       ticker,
-      optionsCount: finalOptionsCount, // Итоговое количество контрактов после автоподбора
+      optionsCount: finalOptionsCount,
       createdAt: new Date().toISOString()
     };
     
     setDealInfo(deal);
+    
+    // Сбрасываем настройки таба Сделка при создании новой сделки
+    // ЗАЧЕМ: Старый frozenExitPlan и slicesSent от предыдущей сделки не должны показываться
+    setDealSettings(null);
+    
     setActiveCalculatorTab('deal'); // Переключаемся на таб "Сделка"
     
     // Устанавливаем целевую цену актива в блок симуляции
@@ -871,7 +842,7 @@ function UniversalOptionsCalculator() {
     setTargetPrice(defaultTargetAssetPrice);
     
     console.log('✅ [Deal] Сделка создана:', deal);
-  }, [options, contractCode, selectedTicker, contractMultiplier, currentPrice, setTargetPrice]);
+  }, [options, contractCode, selectedTicker, currentPrice, calculatorMode, setTargetPrice, setDealSettings]);
 
   // Загружаем состояние при первой загрузке страницы
   // ПРИОРИТЕТ: config в URL > Данные от расширения > localStorage.calculatorState
@@ -2756,15 +2727,14 @@ function UniversalOptionsCalculator() {
             </div>
 
             {/* Кнопка "+ СДЕЛКА" или название созданной сделки */}
-            {/* ВРЕМЕННО скрыто для крипто-режима (Binance) */}
-            {calculatorMode !== CALCULATOR_MODES.CRYPTO && !dealInfo ? (
+            {!dealInfo ? (
               <Button
                 className="bg-green-500 hover:bg-green-600 active:bg-green-700 active:scale-95 text-white font-medium px-4 py-2 h-auto transition-all duration-100"
                 onClick={handleCreateDeal}
               >
                 + СДЕЛКА
               </Button>
-            ) : calculatorMode !== CALCULATOR_MODES.CRYPTO && (
+            ) : (
               (() => {
                 const isFutures = calculatorMode === CALCULATOR_MODES.FUTURES;
                 const bgColor = isFutures ? 'bg-purple-100 dark:bg-purple-900/30' : 'bg-green-100 dark:bg-green-900/30';

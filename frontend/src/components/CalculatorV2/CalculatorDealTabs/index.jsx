@@ -21,6 +21,8 @@ import { sendSlicesToTradingViewCommand, sendClearSlicesCommand } from '../../..
 // Импорт компонентов и утилит таба Сделка
 import ScenarioBlock from './ScenarioBlock';
 import { calculateExitPlan } from './calculateExitPlan';
+import BinanceDealTab from './BinanceDealTab';
+import { CALCULATOR_MODES } from '../../../utils/universalPricing';
 
 /**
  * CalculatorDealTabs — контейнер с двумя табами под таблицей опционов
@@ -116,65 +118,64 @@ function CalculatorDealTabs({
   const [slicesSentPut, setSlicesSentPut] = useState(false);
   const [frozenExitPlanPut, setFrozenExitPlanPut] = useState(null);
   const [tradingViewUrlPut, setTradingViewUrlPut] = useState(null);
-  
+
   // Ref для хранения последнего обработанного dealSettings
   // ЗАЧЕМ: Избежать повторной обработки того же объекта dealSettings
   const lastProcessedSettingsRef = React.useRef(null);
-  
-  // Ref для отслеживания процесса восстановления
-  // ЗАЧЕМ: Предотвратить сохранение dealSettings во время восстановления
-  const isRestoringState = React.useRef(false);
-  
-  // Восстанавливаем состояние отправки срезок из dealSettings при загрузке позиции
-  // ЗАЧЕМ: При открытии сохраненной позиции нужно показать правильные кнопки
+
+  // Ref для отслеживания предыдущего createdAt сделки
+  // ЗАЧЕМ: Сброс срезок при создании новой сделки по изменению createdAt
+  const prevDealCreatedAtRef = React.useRef(null);
+
+  // Ref для хранения createdAt сделки на момент последнего сброса
+  // ЗАЧЕМ: Saving useEffect сравнивает с этим значением чтобы не сохранять данные во время сброса
+  const resetCreatedAtRef = React.useRef(null);
+
+  // Сбрасываем срезки при создании НОВОЙ сделки (изменился dealInfo.createdAt)
+  // ЗАЧЕМ: Надёжный сброс независимо от race condition с dealSettings
   React.useEffect(() => {
-    // Восстанавливаем только если dealSettings изменился (новый объект)
-    if (dealSettings && dealSettings !== lastProcessedSettingsRef.current) {
-      isRestoringState.current = true;
-      
-      if (dealSettings.slicesSent !== undefined) {
-        setSlicesSent(dealSettings.slicesSent);
-      }
-      if (dealSettings.tradingViewUrl !== undefined) {
-        setTradingViewUrl(dealSettings.tradingViewUrl);
-      }
-      if (dealSettings.frozenExitPlan !== undefined) {
-        setFrozenExitPlan(dealSettings.frozenExitPlan);
-      }
-      
-      // Восстанавливаем состояние негативного сценария (PUT)
-      if (dealSettings.slicesSentPut !== undefined) {
-        setSlicesSentPut(dealSettings.slicesSentPut);
-      }
-      if (dealSettings.tradingViewUrlPut !== undefined) {
-        setTradingViewUrlPut(dealSettings.tradingViewUrlPut);
-      }
-      if (dealSettings.frozenExitPlanPut !== undefined) {
-        setFrozenExitPlanPut(dealSettings.frozenExitPlanPut);
-      }
-      
-      // Восстанавливаем настройки целевых цен PUT
-      if (dealSettings.targetAssetPricePercentPut !== undefined) {
-        setTargetAssetPricePercentPut(dealSettings.targetAssetPricePercentPut);
-      }
-      if (dealSettings.targetAssetPricePercentPutExit !== undefined) {
-        setTargetAssetPricePercentPutExit(dealSettings.targetAssetPricePercentPutExit);
-      }
-      
-      console.log('📊 Состояние срезок восстановлено из dealSettings:', {
-        slicesSent: dealSettings.slicesSent,
-        tradingViewUrl: dealSettings.tradingViewUrl,
-        slicesSentPut: dealSettings.slicesSentPut,
-        tradingViewUrlPut: dealSettings.tradingViewUrlPut,
-      });
-      
-      lastProcessedSettingsRef.current = dealSettings;
-      
-      // Сбрасываем флаг восстановления после завершения
-      setTimeout(() => {
-        isRestoringState.current = false;
-      }, 50);
+    const currentCreatedAt = dealInfo?.createdAt ?? null;
+    const prevCreatedAt = prevDealCreatedAtRef.current;
+
+    if (currentCreatedAt !== null && currentCreatedAt !== prevCreatedAt) {
+      prevDealCreatedAtRef.current = currentCreatedAt;
+      // Помечаем текущий createdAt как «в процессе сброса»
+      // ЗАЧЕМ: Saving useEffect проверяет этот ref и не сохраняет старые данные во время сброса
+      resetCreatedAtRef.current = currentCreatedAt;
+      setSlicesSent(false);
+      setTradingViewUrl(null);
+      setFrozenExitPlan(null);
+      setSlicesSentPut(false);
+      setTradingViewUrlPut(null);
+      setFrozenExitPlanPut(null);
+      lastProcessedSettingsRef.current = null;
     }
+  }, [dealInfo?.createdAt]);
+
+  // Восстанавливаем состояние срезок из dealSettings при загрузке сохранённой позиции
+  // ЗАЧЕМ: При открытии сохраненной позиции восстанавливаем срезки (null — игнорируем)
+  // ВАЖНО: lastProcessedSettingsRef предотвращает повторную обработку объекта из saving useEffect
+  // (saving useEffect передаёт тот же объект через setDealSettings — он не триггерит восстановление)
+  React.useEffect(() => {
+    if (dealSettings === null) return;
+    if (dealSettings === lastProcessedSettingsRef.current) return;
+
+    // Восстанавливаем state из внешнего dealSettings (открытие сохранённой позиции)
+    lastProcessedSettingsRef.current = dealSettings;
+
+    if (dealSettings.slicesSent !== undefined) setSlicesSent(dealSettings.slicesSent);
+    if (dealSettings.tradingViewUrl !== undefined) setTradingViewUrl(dealSettings.tradingViewUrl);
+    if (dealSettings.frozenExitPlan !== undefined) setFrozenExitPlan(dealSettings.frozenExitPlan);
+    if (dealSettings.slicesSentPut !== undefined) setSlicesSentPut(dealSettings.slicesSentPut);
+    if (dealSettings.tradingViewUrlPut !== undefined) setTradingViewUrlPut(dealSettings.tradingViewUrlPut);
+    if (dealSettings.frozenExitPlanPut !== undefined) setFrozenExitPlanPut(dealSettings.frozenExitPlanPut);
+    if (dealSettings.targetAssetPricePercentPut !== undefined) setTargetAssetPricePercentPut(dealSettings.targetAssetPricePercentPut);
+    if (dealSettings.targetAssetPricePercentPutExit !== undefined) setTargetAssetPricePercentPutExit(dealSettings.targetAssetPricePercentPutExit);
+
+    console.log('📊 Состояние срезок восстановлено из dealSettings:', {
+      slicesSent: dealSettings.slicesSent,
+      frozenExitPlan: dealSettings.frozenExitPlan,
+    });
   }, [dealSettings]);
   
   // Фильтрация опционов по типу для разных сценариев
@@ -263,11 +264,16 @@ function CalculatorDealTabs({
   // Сохраняем настройки таба Сделка при изменении
   // ЗАЧЕМ: Передать настройки в диалог сохранения позиции
   React.useEffect(() => {
-    // Не сохраняем во время восстановления состояния
-    if (isRestoringState.current) return;
-    
+    // Не сохраняем если идёт сброс при создании новой сделки
+    // ЗАЧЕМ: Предотвращаем перезапись dealSettings старыми slicesSent/frozenExitPlan до их сброса
+    if (resetCreatedAtRef.current && resetCreatedAtRef.current === dealInfo?.createdAt && slicesSent) return;
+    // Сбрасываем флаг сброса после первого успешного сохранения со slicesSent=false
+    if (resetCreatedAtRef.current === dealInfo?.createdAt && !slicesSent) {
+      resetCreatedAtRef.current = null;
+    }
+
     if (dealInfo && setDealSettings) {
-      setDealSettings({
+      const newSettings = {
         targetAssetPricePercent,
         exitStepsCount,
         exitPlan,
@@ -280,7 +286,12 @@ function CalculatorDealTabs({
         frozenExitPlanPut,
         targetAssetPricePercentPut,
         targetAssetPricePercentPutExit,
-      });
+      };
+      // Помечаем объект как уже обработанный ДО передачи в родитель
+      // ЗАЧЕМ: Когда useEffect([dealSettings]) получит этот объект — пропустит его (уже обработан)
+      // Это разрывает цикл: saving → setDealSettings → useEffect([dealSettings]) → setState → saving
+      lastProcessedSettingsRef.current = newSettings;
+      setDealSettings(newSettings);
     }
   }, [dealInfo, targetAssetPricePercent, exitStepsCount, exitPlan, slicesSent, tradingViewUrl, frozenExitPlan, slicesSentPut, tradingViewUrlPut, frozenExitPlanPut, targetAssetPricePercentPut, targetAssetPricePercentPutExit, setDealSettings]);
 
@@ -679,7 +690,14 @@ function CalculatorDealTabs({
 
         {/* Таб "Сделка" — данные о созданной сделке */}
         <TabsContent value="deal" className="mt-4 space-y-4">
-          {dealInfo ? (
+          {/* Для крипто-опционов Binance — всегда показываем BinanceDealTab, он самодостаточен */}
+          {calculatorMode === CALCULATOR_MODES.CRYPTO ? (
+            <BinanceDealTab
+              ticker={selectedTicker}
+              currentPrice={currentPrice}
+              options={options}
+            />
+          ) : dealInfo ? (
             <>
               {/* Позитивный сценарий (Buy CALL) — с кнопками срезок внутри */}
               <ScenarioBlock

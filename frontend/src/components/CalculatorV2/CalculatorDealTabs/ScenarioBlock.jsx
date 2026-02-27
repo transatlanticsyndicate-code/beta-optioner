@@ -161,10 +161,9 @@ function ScenarioBlock({
                       type="number"
                       value={exitStepsCount}
                       onChange={(e) => setExitStepsCount(Math.max(1, Number(e.target.value) || 1))}
-                      className={`w-full h-10 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:border-transparent ${focusRingColor} ${isDisabled ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                      className={`w-full h-10 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:border-transparent ${focusRingColor}`}
                       min="1"
                       max="20"
-                      disabled={isDisabled}
                     />
                   </div>
                 )}
@@ -182,11 +181,10 @@ function ScenarioBlock({
                           type="number"
                           value={targetAssetPricePercent}
                           onChange={(e) => handlePercentChange(e.target.value)}
-                          className={`w-full h-10 px-3 pr-8 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:border-transparent ${focusRingColor} ${isDisabled ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                          className={`w-full h-10 px-3 pr-8 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:border-transparent ${focusRingColor}`}
                           min="-100"
                           max="1000"
                           step="0.01"
-                          disabled={isDisabled}
                         />
                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
                       </div>
@@ -198,10 +196,9 @@ function ScenarioBlock({
                           onFocus={handleDollarsFocus}
                           onBlur={handleDollarsBlur}
                           onKeyDown={handleDollarsKeyDown}
-                          className={`w-full h-10 px-3 pr-8 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:border-transparent ${focusRingColor} ${isDisabled ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                          className={`w-full h-10 px-3 pr-8 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:border-transparent ${focusRingColor}`}
                           min="0"
                           step="0.01"
-                          disabled={isDisabled}
                         />
                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
                       </div>
@@ -220,11 +217,10 @@ function ScenarioBlock({
                           type="number"
                           value={targetAssetPricePercent}
                           onChange={(e) => handlePercentChange(e.target.value)}
-                          className={`w-full h-10 px-3 pr-8 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:border-transparent ${focusRingColor} ${isDisabled ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                          className={`w-full h-10 px-3 pr-8 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:border-transparent ${focusRingColor}`}
                           min="-100"
                           max="1000"
                           step="0.01"
-                          disabled={isDisabled}
                         />
                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
                       </div>
@@ -242,10 +238,9 @@ function ScenarioBlock({
                           onFocus={handleDollarsFocus}
                           onBlur={handleDollarsBlur}
                           onKeyDown={handleDollarsKeyDown}
-                          className={`w-full h-10 px-3 pr-8 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:border-transparent ${focusRingColor} ${isDisabled ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                          className={`w-full h-10 px-3 pr-8 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:border-transparent ${focusRingColor}`}
                           min="0"
                           step="0.01"
-                          disabled={isDisabled}
                         />
                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
                       </div>
@@ -265,11 +260,10 @@ function ScenarioBlock({
                           type="number"
                           value={secondGroupPercent}
                           onChange={(e) => secondGroupHandlePercentChange(e.target.value)}
-                          className={`w-full h-10 px-3 pr-8 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:border-transparent ${focusRingColor} ${isDisabled ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                          className={`w-full h-10 px-3 pr-8 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:border-transparent ${focusRingColor}`}
                           min="-100"
                           max="1000"
                           step="0.01"
-                          disabled={isDisabled}
                         />
                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
                       </div>
@@ -281,10 +275,9 @@ function ScenarioBlock({
                           onFocus={secondGroupHandleDollarsFocus}
                           onBlur={secondGroupHandleDollarsBlur}
                           onKeyDown={secondGroupHandleDollarsKeyDown}
-                          className={`w-full h-10 px-3 pr-8 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:border-transparent ${focusRingColor} ${isDisabled ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                          className={`w-full h-10 px-3 pr-8 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:border-transparent ${focusRingColor}`}
                           min="0"
                           step="0.01"
-                          disabled={isDisabled}
                         />
                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
                       </div>
