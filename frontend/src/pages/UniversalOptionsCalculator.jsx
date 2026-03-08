@@ -784,6 +784,12 @@ function UniversalOptionsCalculator() {
     // ЗАЧЕМ: Предотвращаем восстановление старой selectedExpirationDate из кэша
     localStorage.removeItem('calculatorState');
     console.log('🧹 [Universal] localStorage.calculatorState очищен');
+    
+    // ВАЖНО: Очищаем сохраненные ручные изменения опционов
+    // ЗАЧЕМ: После полного сброса калькулятора старые изменения не должны применяться
+    localStorage.removeItem('optioner_user_overrides');
+    userOptionOverridesRef.current = {};
+    console.log('🧹 [Universal] optioner_user_overrides очищен');
 
     // Очищаем URL параметры (contract, price, config, edit)
     // ЗАЧЕМ: Предотвращаем восстановление данных из URL при обновлении страницы
