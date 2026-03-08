@@ -313,6 +313,52 @@ function UniversalOptionsCalculator() {
   const [dividendYield, setDividendYield] = useState(0); // Дивидендная доходность в десятичном формате
   const [dividendLoading, setDividendLoading] = useState(false);
 
+  // Ref для хранения ручных изменений опционов
+  // ЗАЧЕМ: Расширение перезаписывает localStorage.calculatorState при добавлении новых опционов,
+  // теряя ручные изменения (quantity, customPremium, entryDate). Храним их отдельно.
+  // Ключ: optionKey (strike-type-date), значение: {quantity, customPremium, entryDate, ...}
+  const userOptionOverridesRef = useRef((() => {
+    try {
+      const saved = localStorage.getItem('optioner_user_overrides');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  })());
+  
+  // Функция для создания ключа опциона (для идентификации)
+  const getOptionKey = useCallback((option) => {
+    const strike = option.strike || 0;
+    const type = (option.type || '').toUpperCase();
+    const date = (option.date || '').split('T')[0];
+    return `${strike}-${type}-${date}`;
+  }, []);
+  
+  // Функция для сохранения ручных изменений опциона
+  const saveUserOverride = useCallback((option, field, value) => {
+    const key = getOptionKey(option);
+    const overrides = userOptionOverridesRef.current;
+    if (!overrides[key]) {
+      overrides[key] = {};
+    }
+    overrides[key][field] = value;
+    userOptionOverridesRef.current = overrides;
+    
+    // Сохраняем в localStorage
+    try {
+      localStorage.setItem('optioner_user_overrides', JSON.stringify(overrides));
+      console.log('💾 [UserOverrides] Сохранено:', { key, field, value });
+    } catch (error) {
+      console.error('❌ [UserOverrides] Ошибка сохранения:', error);
+    }
+  }, [getOptionKey]);
+  
+  // Функция для получения ручных изменений опциона
+  const getUserOverride = useCallback((option) => {
+    const key = getOptionKey(option);
+    return userOptionOverridesRef.current[key] || {};
+  }, [getOptionKey]);
+
 
   // State для синхронизированных настроек цены
   const [targetPrice, setTargetPrice] = useState(0);
@@ -1331,17 +1377,49 @@ function UniversalOptionsCalculator() {
     // Обновляем опционы при изменении от расширения с сохранением ручных изменений
     if (extensionOptions && extensionOptions.length > 0) {
       setOptions(prevOptions => {
+        console.log('🔍 [Sync] Начало синхронизации с расширением:');
+        console.log('  prevOptionsCount:', prevOptions.length);
+        console.log('  extensionOptionsCount:', extensionOptions.length);
+        console.log('  prevOptions:', prevOptions.map(o => ({
+          strike: o.strike,
+          type: o.type,
+          quantity: o.quantity,
+          entryDate: o.entryDate,
+          customPremium: o.customPremium,
+          isPremiumModified: o.isPremiumModified
+        })));
+        console.log('  extensionOptions:', extensionOptions.map(o => ({
+          strike: o.strike,
+          type: o.type,
+          quantity: o.quantity,
+          entryDate: o.entryDate
+        })));
+        
         // Проверяем, изменились ли опционы (по ключевым полям)
         // ЗАЧЕМ: Предотвращаем бесконечный цикл обновлений
         const prevHash = prevOptions.map(o => `${o.strike}-${o.type}-${o.date}`).sort().join(',');
         const extHash = extensionOptions.map(o => `${o.strike}-${o.type}-${o.date}`).sort().join(',');
-        if (prevHash === extHash && prevOptions.length === extensionOptions.length) {
-          // Опционы не изменились — возвращаем предыдущее состояние без изменений
+        
+        // Проверяем, есть ли сохраненные overrides для применения
+        const hasOverrides = Object.keys(userOptionOverridesRef.current).length > 0;
+        console.log('🔍 [Sync] Проверка overrides:', { 
+          hasOverrides, 
+          overridesKeys: Object.keys(userOptionOverridesRef.current),
+          overridesData: userOptionOverridesRef.current
+        });
+        
+        if (prevHash === extHash && prevOptions.length === extensionOptions.length && !hasOverrides) {
+          // Опционы не изменились и нет overrides — возвращаем предыдущее состояние без изменений
+          console.log('⏭️ [Sync] Опционы не изменились и нет overrides, пропускаем обновление');
           return prevOptions;
         }
 
-        // Сливаем данные: берем свежие данные от расширения, но сохраняем ручные изменения
+        // Сливаем данные: берем свежие данные от расширения, но применяем сохраненные ручные изменения
         const mergedOptions = extensionOptions.map(extOption => {
+          // Получаем сохраненные ручные изменения для этого опциона
+          const optionKey = getOptionKey(extOption);
+          const savedOverrides = userOptionOverridesRef.current[optionKey] || {};
+          
           // Ищем соответствующий опцион в текущих данных с более гибким сравнением
           const existingOption = prevOptions.find(existing => {
             const existingType = existing.type || existing.optionType || '';
@@ -1371,32 +1449,97 @@ function UniversalOptionsCalculator() {
             return typeMatch && strikeMatch && dateMatch;
           });
 
-          // Если найден опцион с ручными изменениями - сохраняем их
-          if (existingOption) {
-            return {
-              ...extOption,
-              // Сохраняем ручные изменения Bid
-              customBid: existingOption.customBid,
-              isBidModified: existingOption.isBidModified,
-              // Сохраняем ручные изменения Ask
-              customAsk: existingOption.customAsk,
-              isAskModified: existingOption.isAskModified,
-              // Сохраняем ручные изменения премии
-              isPremiumModified: existingOption.isPremiumModified,
-              // Сохраняем флаги происхождения опциона (Super/Golden)
-              isSuperOption: existingOption.isSuperOption,
-              isGoldenOption: existingOption.isGoldenOption,
-              // Сохраняем дополнительные параметры
-              entryDate: existingOption.entryDate,
-              simulationTargetPrice: existingOption.simulationTargetPrice,
-            };
+          // Применяем сохраненные ручные изменения (приоритет: savedOverrides > existingOption > extOption)
+          // ЗАЧЕМ: savedOverrides хранятся в отдельном localStorage, который расширение не перезаписывает
+          const quantity = savedOverrides.quantity ?? existingOption?.quantity ?? extOption.quantity;
+          const customBid = savedOverrides.customBid ?? existingOption?.customBid;
+          const customAsk = savedOverrides.customAsk ?? existingOption?.customAsk;
+          const customPremium = savedOverrides.customPremium ?? existingOption?.customPremium;
+          const entryDate = savedOverrides.entryDate ?? existingOption?.entryDate ?? extOption.entryDate;
+          
+          if (Object.keys(savedOverrides).length > 0) {
+            console.log('🔄 [Merge] Применяем сохраненные изменения:', {
+              optionKey,
+              savedOverrides,
+              resultQuantity: quantity,
+              resultEntryDate: entryDate
+            });
           }
 
-          return extOption;
+          // Если найден опцион с ручными изменениями - сохраняем их
+          if (existingOption || Object.keys(savedOverrides).length > 0) {
+            const merged = {
+              ...extOption,
+              // Применяем ручные изменения количества
+              quantity: quantity,
+              // Сохраняем ручные изменения Bid
+              customBid: customBid,
+              isBidModified: savedOverrides.isBidModified ?? existingOption?.isBidModified,
+              // Сохраняем ручные изменения Ask
+              customAsk: customAsk,
+              isAskModified: savedOverrides.isAskModified ?? existingOption?.isAskModified,
+              // Сохраняем ручные изменения премии
+              customPremium: customPremium,
+              isPremiumModified: savedOverrides.isPremiumModified ?? existingOption?.isPremiumModified,
+              // Сохраняем флаги происхождения опциона (Super/Golden)
+              isSuperOption: existingOption?.isSuperOption,
+              isGoldenOption: existingOption?.isGoldenOption,
+              // Сохраняем дополнительные параметры
+              entryDate: entryDate,
+              simulationTargetPrice: existingOption?.simulationTargetPrice,
+            };
+            console.log('🔄 [Merge] Опцион с ручными изменениями:', {
+              strike: extOption.strike,
+              type: extOption.type,
+              extQuantity: extOption.quantity,
+              savedOverridesQuantity: savedOverrides.quantity,
+              existingQuantity: existingOption?.quantity,
+              mergedQuantity: merged.quantity,
+              mergedEntryDate: merged.entryDate
+            });
+            return merged;
+          }
+
+          return {
+            ...extOption,
+            // Для новых опционов от расширения добавляем entryDate
+            entryDate: extOption.entryDate || new Date().toISOString().split('T')[0]
+          };
         });
 
-        console.log('📡 [Universal] Опционы обновлены от расширения:', mergedOptions.length, '(с сохранением ручных изменений)');
-        return mergedOptions;
+        // ВАЖНО: Добавляем опционы из prevOptions, которых нет в extensionOptions
+        // ЗАЧЕМ: Сохраняем вручную добавленные опционы и их изменения
+        const manualOptions = prevOptions.filter(prevOpt => {
+          return !extensionOptions.some(extOpt => {
+            const typeMatch = (prevOpt.type || '').toUpperCase() === (extOpt.type || '').toUpperCase();
+            const strikeMatch = Math.abs(parseFloat(prevOpt.strike) - parseFloat(extOpt.strike)) < 0.001;
+            
+            let dateMatch = false;
+            try {
+              const t1 = new Date(prevOpt.date).getTime();
+              const t2 = new Date(extOpt.date).getTime();
+              if (!isNaN(t1) && !isNaN(t2)) {
+                dateMatch = Math.abs(t1 - t2) / (1000 * 60 * 60) < 48;
+              } else {
+                const s1 = (prevOpt.date || '').toString().split('T')[0];
+                const s2 = (extOpt.date || '').toString().split('T')[0];
+                dateMatch = s1 === s2;
+              }
+            } catch (e) {
+              dateMatch = false;
+            }
+            
+            return typeMatch && strikeMatch && dateMatch;
+          });
+        });
+
+        const finalOptions = [...mergedOptions, ...manualOptions];
+        console.log('📡 [Universal] Опционы обновлены от расширения:', {
+          fromExtension: mergedOptions.length,
+          manual: manualOptions.length,
+          total: finalOptions.length
+        });
+        return finalOptions;
       });
     }
 
@@ -1598,6 +1741,17 @@ function UniversalOptionsCalculator() {
   const updateOption = useCallback((id, field, value) => {
     console.log('🔄 [Universal] updateOption вызван:', { id, field, value });
     setOptions(prevOptions => {
+      // Находим опцион для сохранения override
+      const targetOption = prevOptions.find(opt => opt.id === id);
+      
+      // ВАЖНО: Сохраняем ручные изменения в отдельное хранилище
+      // ЗАЧЕМ: Расширение перезаписывает localStorage.calculatorState, теряя изменения
+      // Поля, которые нужно сохранять: quantity, customPremium, customBid, customAsk, entryDate
+      const fieldsToOverride = ['quantity', 'customPremium', 'customBid', 'customAsk', 'entryDate', 'isPremiumModified', 'isBidModified', 'isAskModified'];
+      if (targetOption && fieldsToOverride.includes(field)) {
+        saveUserOverride(targetOption, field, value);
+      }
+      
       const updated = prevOptions.map((opt) => {
         if (opt.id === id) {
           const updatedOpt = { ...opt, [field]: value };
@@ -1615,9 +1769,22 @@ function UniversalOptionsCalculator() {
         return opt;
       });
       console.log('✅ [Universal] Опционы обновлены, всего:', updated.length);
+      
+      // ВАЖНО: Сохраняем обновленные опционы в localStorage
+      // ЗАЧЕМ: При добавлении нового опциона через расширение, оно обновит localStorage,
+      // но если мы предварительно сохранили ручные изменения, они будут учтены при слиянии
+      try {
+        const storageState = JSON.parse(localStorage.getItem('calculatorState') || '{}');
+        storageState.options = updated;
+        localStorage.setItem('calculatorState', JSON.stringify(storageState));
+        console.log('💾 [Universal] Опционы сохранены в localStorage');
+      } catch (error) {
+        console.error('❌ [Universal] Ошибка сохранения в localStorage:', error);
+      }
+      
       return updated;
     });
-  }, []);
+  }, [saveUserOverride]);
 
   const updatePosition = useCallback((id, field, value) => {
     setPositions(prevPositions => prevPositions.map((pos) =>

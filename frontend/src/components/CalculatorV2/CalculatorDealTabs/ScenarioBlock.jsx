@@ -98,7 +98,7 @@ function ScenarioBlock({
               className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-200 hover:bg-gray-300 rounded-md transition-colors"
               onClick={onSendSlices}
             >
-              Отправить срезки на график TradingView →
+              Срезки → график Опциона
             </button>
           ) : (
             <>
@@ -114,15 +114,15 @@ function ScenarioBlock({
                   }
                 }}
               >
-                Перейти на график TradingView →
+                График Опциона →
               </a>
               {onResetSlices && (
                 <button
-                  className="px-3 py-1.5 text-xs font-medium text-red-600 bg-red-100 hover:bg-red-200 rounded-md transition-colors"
+                  className="px-2 py-1.5 text-xs font-medium text-red-600 bg-red-100 hover:bg-red-200 rounded-md transition-colors"
                   onClick={onResetSlices}
                   title="Удалить срезки с графика"
                 >
-                  Удалить срезки с графика
+                  X
                 </button>
               )}
             </>
