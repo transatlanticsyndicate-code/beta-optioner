@@ -535,7 +535,7 @@ function SettingsCalibration() {
   const [months, setMonths] = useState(6);
   const [holdDays, setHoldDays] = useState(14);
   const [calibrationMode, setCalibrationMode] = useState('standard');
-  const [recentDays, setRecentDays] = useState(14);
+  const [recentDays, setRecentDays] = useState(30);
   const [onlineEnabled, setOnlineEnabled] = useState(false);
   const [watchlistInput, setWatchlistInput] = useState('');
   const [thetaJarPath, setThetaJarPath] = useState('');
@@ -551,7 +551,7 @@ function SettingsCalibration() {
   });
   const [scheduleConfig, setScheduleConfig] = useState({
     standard: { enabled: true, months: 6, hold_days: 14, cron: ['0 16 1 1-3,11-12 *', '0 15 1 4-10 *'] },
-    recent: { enabled: true, recent_days: 14, hold_days: 7, cron: ['0 16 * 1-3,11-12 *', '0 15 * 4-10 *'] },
+    recent: { enabled: true, recent_days: 30, hold_days: 7, cron: ['0 16 * 1-3,11-12 *', '0 15 * 4-10 *'] },
     weighted: { enabled: true, months: 6, hold_days: 14, cron: ['0 16 * 1-3,11-12 0', '0 15 * 4-10 0'] },
   });
 
@@ -916,12 +916,15 @@ function SettingsCalibration() {
                     <div>recent_days</div>
                     <Input
                       className="cursor-pointer"
-                      value={scheduleConfig[mode]?.recent_days ?? 14}
+                      value={scheduleConfig[mode]?.recent_days ?? 30}
                       onChange={e => setScheduleConfig(prev => ({
                         ...prev,
                         [mode]: { ...prev[mode], recent_days: Number(e.target.value) || 0 },
                       }))}
                     />
+                    <div className="text-[11px] text-yellow-700 dark:text-yellow-200">
+                      14 дней может быть недостаточно для некоторых тикеров. Практичный default для recent — 30 дней.
+                    </div>
                   </label>
                 )}
                 <label className="text-sm text-muted-foreground space-y-1">
@@ -1074,20 +1077,25 @@ function SettingsCalibration() {
             ))}
             {/* Выбор количества дней для режима recent */}
             {calibrationMode === 'recent' && (
-              <label className="flex items-center gap-2 text-muted-foreground ml-2">
-                Период:
-                <select
-                  value={recentDays}
-                  onChange={e => setRecentDays(Number(e.target.value))}
-                  disabled={isRunning}
-                  className="bg-muted border border-border rounded px-2 py-1 text-foreground text-sm cursor-pointer"
-                >
-                  <option value={14}>14 дней</option>
-                  <option value={30}>30 дней</option>
-                  <option value={60}>60 дней</option>
-                  <option value={90}>90 дней</option>
-                </select>
-              </label>
+              <div className="flex flex-col gap-1 ml-2">
+                <label className="flex items-center gap-2 text-muted-foreground">
+                  Период:
+                  <select
+                    value={recentDays}
+                    onChange={e => setRecentDays(Number(e.target.value))}
+                    disabled={isRunning}
+                    className="bg-muted border border-border rounded px-2 py-1 text-foreground text-sm cursor-pointer"
+                  >
+                    <option value={14}>14 дней</option>
+                    <option value={30}>30 дней</option>
+                    <option value={60}>60 дней</option>
+                    <option value={90}>90 дней</option>
+                  </select>
+                </label>
+                <div className="text-[11px] text-yellow-700 dark:text-yellow-200">
+                  14 дней может быть недостаточно для некоторых тикеров. Рекомендуемый default — 30 дней.
+                </div>
+              </div>
             )}
           </div>
         </CardContent>

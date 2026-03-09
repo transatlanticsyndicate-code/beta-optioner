@@ -67,7 +67,7 @@ class RunCalibrationRequest(BaseModel):
     months: int = 6             # Период загрузки данных в месяцах
     hold_days: int = 14         # Горизонт удержания для бэктестинга
     calibration_mode: str = "standard"  # Режим: standard | recent | weighted
-    recent_days: int = 14       # Дней для режима recent
+    recent_days: int = 30       # Дней для режима recent
 
 
 class SaveWatchlistRequest(BaseModel):
@@ -729,11 +729,11 @@ def run_scheduled_calibration(mode: str, mode_settings: Dict[str, Any], source: 
     if mode == "recent":
         months = int(mode_settings.get("months", 1))
         hold_days = int(mode_settings.get("hold_days", 7))
-        recent_days = int(mode_settings.get("recent_days", 14))
+        recent_days = int(mode_settings.get("recent_days", 30))
     else:
         months = int(mode_settings.get("months", 6))
         hold_days = int(mode_settings.get("hold_days", 14))
-        recent_days = int(mode_settings.get("recent_days", 14))
+        recent_days = int(mode_settings.get("recent_days", 30))
     return _launch_calibration_job(tickers, months, hold_days, mode, recent_days, source)
 
 

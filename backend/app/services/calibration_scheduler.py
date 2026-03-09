@@ -49,7 +49,7 @@ class CalibrationScheduler:
                 },
                 "recent": {
                     "enabled": True,
-                    "recent_days": 14,
+                    "recent_days": 30,
                     "hold_days": 7,
                     "cron": ["0 16 * 1-3,11-12 *", "0 15 * 4-10 *"]
                 },
