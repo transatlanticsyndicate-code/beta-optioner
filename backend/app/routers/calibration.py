@@ -16,15 +16,17 @@ API роутер для управления калибровкой коэффи
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
+from app.services.calibration_scheduler import calibration_scheduler
 
 # ============================================================================
 # КОНФИГУРАЦИЯ ПУТЕЙ
@@ -65,7 +67,15 @@ class RunCalibrationRequest(BaseModel):
     months: int = 6             # Период загрузки данных в месяцах
     hold_days: int = 14         # Горизонт удержания для бэктестинга
     calibration_mode: str = "standard"  # Режим: standard | recent | weighted
-    recent_days: int = 7        # Дней для режима recent
+    recent_days: int = 14       # Дней для режима recent
+
+
+class SaveWatchlistRequest(BaseModel):
+    enabled: bool = False
+    tickers: List[str] = []
+    theta: Dict[str, str] = {}
+    cleanup: Dict[str, Any] = {}
+    modes: Dict[str, Dict[str, Any]] = {}
 
 
 # ============================================================================
@@ -88,6 +98,22 @@ def _load_ticker_overrides() -> Dict[str, Any]:
     except Exception as e:
         print(f"[calibration] Ошибка загрузки overrides: {e}")
     return {}
+
+
+def _find_theta_jar() -> Optional[str]:
+    config = calibration_scheduler.load_config()
+    theta_config = config.get("theta", {}) if isinstance(config, dict) else {}
+    candidates = [
+        theta_config.get("jar_path", ""),
+        os.getenv("THETA_JAR_PATH", ""),
+        os.path.join(PROJECT_ROOT, "ThetaTerminalv3.jar"),
+        os.path.expanduser("~/ThetaTerminalv3.jar"),
+        os.path.expanduser("~/Downloads/ThetaTerminalv3.jar"),
+    ]
+    for path in candidates:
+        if path and os.path.exists(path):
+            return path
+    return None
 
 
 def _get_override_section(override_raw: dict, mode: str = "standard") -> dict:
@@ -140,6 +166,153 @@ def _count_options_files(ticker: str) -> int:
     return len([f for f in os.listdir(ticker_dir) if f.endswith(".csv")])
 
 
+def _safe_parse_iso_datetime(value: str) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(tzinfo=None)
+    except Exception:
+        return None
+
+
+def _get_cleanup_policy() -> Dict[str, Any]:
+    config = calibration_scheduler.load_config()
+    return config.get("cleanup", {}) if isinstance(config, dict) else {}
+
+
+def _load_online_tickers() -> List[str]:
+    return calibration_scheduler.load_tickers()
+
+
+def _scan_cleanup_candidates() -> Dict[str, Any]:
+    policy = _get_cleanup_policy()
+    now = datetime.now()
+    active_tickers = set(_load_online_tickers())
+    options_max_age_days = int(policy.get("options_max_age_days", 45))
+    results_max_age_days = int(policy.get("results_max_age_days", 90))
+    delete_orphan_options = bool(policy.get("delete_orphan_options", True))
+    delete_orphan_results = bool(policy.get("delete_orphan_results", False))
+    options_cutoff = now - timedelta(days=max(1, options_max_age_days))
+    results_cutoff = now - timedelta(days=max(1, results_max_age_days))
+
+    options_candidates = []
+    if os.path.exists(OPTIONS_DATA_DIR):
+        for ticker in sorted(os.listdir(OPTIONS_DATA_DIR)):
+            ticker_dir = os.path.join(OPTIONS_DATA_DIR, ticker)
+            if not os.path.isdir(ticker_dir):
+                continue
+            csv_files = []
+            newest_mtime = None
+            for filename in os.listdir(ticker_dir):
+                if not filename.endswith(".csv"):
+                    continue
+                file_path = os.path.join(ticker_dir, filename)
+                try:
+                    mtime = datetime.fromtimestamp(os.path.getmtime(file_path))
+                    csv_files.append(file_path)
+                    if newest_mtime is None or mtime > newest_mtime:
+                        newest_mtime = mtime
+                except OSError:
+                    continue
+            if not csv_files:
+                continue
+            is_orphan = ticker.upper() not in active_tickers
+            is_stale = newest_mtime is not None and newest_mtime < options_cutoff
+            if is_stale or (is_orphan and delete_orphan_options):
+                options_candidates.append({
+                    "ticker": ticker.upper(),
+                    "path": ticker_dir,
+                    "files_count": len(csv_files),
+                    "newest_mtime": newest_mtime.isoformat() if newest_mtime else None,
+                    "reason": "stale" if is_stale else "orphan",
+                })
+
+    result_candidates = []
+    if os.path.exists(CALIBRATION_RESULTS_DIR):
+        for filename in sorted(os.listdir(CALIBRATION_RESULTS_DIR)):
+            if not filename.endswith("_calibration.json"):
+                continue
+            ticker = filename.replace("_calibration.json", "").upper()
+            file_path = os.path.join(CALIBRATION_RESULTS_DIR, filename)
+            result = _load_calibration_result(ticker) or {}
+            calibrated_at = _safe_parse_iso_datetime(result.get("calibrated_at", ""))
+            if not calibrated_at:
+                try:
+                    calibrated_at = datetime.fromtimestamp(os.path.getmtime(file_path))
+                except OSError:
+                    calibrated_at = None
+            is_orphan = ticker not in active_tickers
+            is_stale = calibrated_at is not None and calibrated_at < results_cutoff
+            if is_stale or (is_orphan and delete_orphan_results):
+                result_candidates.append({
+                    "ticker": ticker,
+                    "path": file_path,
+                    "calibrated_at": calibrated_at.isoformat() if calibrated_at else None,
+                    "reason": "stale" if is_stale else "orphan",
+                })
+
+    return {
+        "policy": policy,
+        "options": options_candidates,
+        "results": result_candidates,
+        "summary": {
+            "options_dirs": len(options_candidates),
+            "result_files": len(result_candidates),
+        },
+    }
+
+
+def _run_cleanup(trigger: str = "manual") -> Dict[str, Any]:
+    candidates = _scan_cleanup_candidates()
+    deleted_options = []
+    deleted_results = []
+
+    for item in candidates.get("options", []):
+        try:
+            shutil.rmtree(item["path"], ignore_errors=False)
+            deleted_options.append(item)
+        except Exception as e:
+            item["error"] = str(e)
+
+    for item in candidates.get("results", []):
+        try:
+            os.remove(item["path"])
+            deleted_results.append(item)
+        except Exception as e:
+            item["error"] = str(e)
+
+    cleanup_job_id = f"cleanup_{int(time.time() * 1000)}"
+    calibration_scheduler.update_history_item(cleanup_job_id, {
+        "job_id": cleanup_job_id,
+        "status": "done",
+        "source": trigger,
+        "kind": "cleanup",
+        "started_at": datetime.now().isoformat(),
+        "finished_at": datetime.now().isoformat(),
+        "results": [
+            {
+                "status": "success",
+                "deleted_options_dirs": len(deleted_options),
+                "deleted_result_files": len(deleted_results),
+            }
+        ],
+        "cleanup": {
+            "deleted_options": deleted_options,
+            "deleted_results": deleted_results,
+        },
+    })
+
+    return {
+        "status": "ok",
+        "deleted_options": deleted_options,
+        "deleted_results": deleted_results,
+        "summary": {
+            "deleted_options_dirs": len(deleted_options),
+            "deleted_result_files": len(deleted_results),
+        },
+    }
+
+
 def _is_theta_terminal_running() -> bool:
     """
     Проверяет, запущен ли Theta Terminal на порту 25503
@@ -159,7 +332,11 @@ def _find_creds_file() -> Optional[str]:
     Ищет файл creds.txt в нескольких стандартных местах
     ЗАЧЕМ: Credentials нужны Theta Terminal для авторизации
     """
+    config = calibration_scheduler.load_config()
+    theta_config = config.get("theta", {}) if isinstance(config, dict) else {}
     candidates = [
+        theta_config.get("creds_file", ""),                # из server watchlist config
+        os.getenv("THETA_CREDS_FILE", ""),                  # из env
         os.path.join(PROJECT_ROOT, "creds.txt"),           # корень проекта
         os.path.expanduser("~/Downloads/creds.txt"),        # Downloads
         os.path.expanduser("~/creds.txt"),                  # домашняя папка
@@ -181,7 +358,8 @@ def _start_theta_terminal() -> bool:
     if _is_theta_terminal_running():
         return True
 
-    if not os.path.exists(THETA_TERMINAL_JAR):
+    theta_jar = _find_theta_jar()
+    if not theta_jar:
         print(f"[calibration] Theta Terminal jar не найден: {THETA_TERMINAL_JAR}")
         return False
 
@@ -216,7 +394,7 @@ def _start_theta_terminal() -> bool:
                 real_jar = os.path.join(lib_dir, jars[0])
                 print(f"[calibration] Используем реальный jar: {real_jar}")
 
-        jar_to_run = real_jar if real_jar else THETA_TERMINAL_JAR
+        jar_to_run = real_jar if real_jar else theta_jar
         cmd = ["java", "-jar", jar_to_run, "--creds-file", creds_file]
         print(f"[calibration] Запуск: {' '.join(cmd)}")
         subprocess.Popen(
@@ -237,6 +415,88 @@ def _start_theta_terminal() -> bool:
     except Exception as e:
         print(f"[calibration] Ошибка запуска Theta Terminal: {e}")
         return False
+
+
+def _build_job(job_id: str, tickers: List[str], months: int, hold_days: int,
+               calibration_mode: str, recent_days: int, source: str) -> Dict[str, Any]:
+    return {
+        "job_id": job_id,
+        "status": "pending",
+        "tickers": tickers,
+        "months": months,
+        "hold_days": hold_days,
+        "calibration_mode": calibration_mode,
+        "recent_days": recent_days,
+        "source": source,
+        "current_ticker": None,
+        "current_step": "Ожидание запуска",
+        "progress": 0,
+        "log": [],
+        "results": [],
+        "started_at": datetime.now().isoformat(),
+        "finished_at": None,
+        "error": None
+    }
+
+
+def _extract_result_from_override(ticker: str, mode: str) -> Optional[Dict[str, Any]]:
+    overrides = _load_ticker_overrides()
+    override_raw = overrides.get(ticker.upper())
+    override = _get_override_section(override_raw, mode)
+    if not override or not override.get("down_mult") or not override.get("up_mult"):
+        return None
+    note = override.get("note", "")
+    total_trades = None
+    calibrated_at = None
+    trades_match = re.search(r"(\d+) trades", note)
+    if trades_match:
+        total_trades = int(trades_match.group(1))
+    date_match = re.search(r"Calibrated (\d{4}-\d{2}-\d{2})", note)
+    if date_match:
+        calibrated_at = date_match.group(1)
+    return {
+        "ticker": ticker.upper(),
+        "down_mult": override.get("down_mult"),
+        "up_mult": override.get("up_mult"),
+        "iv_mean": override.get("iv_mean"),
+        "iv_kappa": override.get("iv_kappa"),
+        "iv_std": override.get("iv_std"),
+        "half_life_days": override.get("half_life_days"),
+        "total_trades": total_trades,
+        "calibrated_at": calibrated_at,
+        "note": note,
+        "mode": mode,
+    }
+
+
+def _append_job_history(job: Dict[str, Any]) -> None:
+    success_count = sum(1 for r in job.get("results", []) if r.get("status") == "success")
+    skipped_count = sum(1 for r in job.get("results", []) if r.get("status", "").startswith("skipped"))
+    error_count = sum(1 for r in job.get("results", []) if r.get("status") == "error")
+    calibration_scheduler.update_history_item(job["job_id"], {
+        "job_id": job["job_id"],
+        "status": job.get("status"),
+        "source": job.get("source", "manual"),
+        "tickers": job.get("tickers", []),
+        "months": job.get("months"),
+        "hold_days": job.get("hold_days"),
+        "calibration_mode": job.get("calibration_mode"),
+        "recent_days": job.get("recent_days"),
+        "started_at": job.get("started_at"),
+        "finished_at": job.get("finished_at"),
+        "error": job.get("error"),
+        "results": job.get("results", []),
+        "success_count": success_count,
+        "skipped_count": skipped_count,
+        "error_count": error_count,
+    })
+
+
+def _maybe_run_auto_cleanup(trigger: str) -> Optional[Dict[str, Any]]:
+    policy = _get_cleanup_policy()
+    if not policy.get("enabled") or not policy.get("auto_cleanup_after_run"):
+        return None
+    return _run_cleanup(trigger=trigger)
 
 
 def _run_calibration_job(job_id: str, tickers: List[str], months: int, hold_days: int, calibration_mode: str = "standard", recent_days: int = 7):
@@ -266,6 +526,8 @@ def _run_calibration_job(job_id: str, tickers: List[str], months: int, hold_days
             with _jobs_lock:
                 _jobs[job_id]["status"] = "error"
                 _jobs[job_id]["error"] = "Theta Terminal недоступен"
+                _jobs[job_id]["finished_at"] = datetime.now().isoformat()
+            _append_job_history(_jobs[job_id])
             return
         log("✅ Theta Terminal запущен")
     else:
@@ -353,11 +615,14 @@ def _run_calibration_job(job_id: str, tickers: List[str], months: int, hold_days
                 if line.strip():
                     log(f"  {line}")
 
-            # Читаем результат
-            result = _load_calibration_result(ticker)
-            if result:
-                log(f"✅ {ticker}: down_mult={result['down_mult']}, up_mult={result['up_mult']}, сделок={result['total_trades']}")
-                results.append({"ticker": ticker, "status": "success", **result})
+            joined_output = "\n".join(output_lines)
+            override_result = _extract_result_from_override(ticker, calibration_mode)
+            if "Недостаточно сделок для калибровки" in joined_output:
+                log(f"⚠️ {ticker}: недостаточно сделок для режима {calibration_mode}")
+                results.append({"ticker": ticker, "status": "skipped_insufficient_trades", "error": "Недостаточно сделок"})
+            elif override_result:
+                log(f"✅ {ticker}: down_mult={override_result['down_mult']}, up_mult={override_result['up_mult']}, сделок={override_result['total_trades']}")
+                results.append({"ticker": ticker, "status": "success", **override_result})
             else:
                 log(f"⚠️ Файл результата {ticker} не найден")
                 results.append({"ticker": ticker, "status": "error", "error": "Result file missing"})
@@ -377,6 +642,52 @@ def _run_calibration_job(job_id: str, tickers: List[str], months: int, hold_days
         _jobs[job_id]["current_step"] = "Завершено"
         _jobs[job_id]["results"] = results
         _jobs[job_id]["finished_at"] = datetime.now().isoformat()
+    _append_job_history(_jobs[job_id])
+    cleanup_result = _maybe_run_auto_cleanup(trigger=f"cleanup_after_{_jobs[job_id].get('source', 'manual')}")
+    if cleanup_result:
+        log(
+            f"🧹 Cleanup: удалено папок options={cleanup_result['summary']['deleted_options_dirs']}, "
+            f"файлов results={cleanup_result['summary']['deleted_result_files']}"
+        )
+
+
+def _launch_calibration_job(tickers: List[str], months: int, hold_days: int,
+                            calibration_mode: str, recent_days: int, source: str = "manual") -> Dict[str, Any]:
+    clean_tickers = []
+    for t in tickers:
+        t = t.strip().upper()
+        if t and t.isalpha() and len(t) <= 6:
+            clean_tickers.append(t)
+
+    if not clean_tickers:
+        raise HTTPException(status_code=400, detail="Не указаны корректные тикеры")
+
+    job_id = f"job_{int(time.time() * 1000)}"
+    job = _build_job(job_id, clean_tickers, months, hold_days, calibration_mode, recent_days, source)
+    with _jobs_lock:
+        _jobs[job_id] = job
+    _append_job_history(job)
+
+    thread = threading.Thread(
+        target=_run_calibration_job,
+        args=(job_id, clean_tickers, months, hold_days, calibration_mode, recent_days),
+        daemon=True
+    )
+    thread.start()
+    return job
+
+
+def run_scheduled_calibration(mode: str, mode_settings: Dict[str, Any], source: str = "scheduler") -> Dict[str, Any]:
+    tickers = _load_online_tickers()
+    if mode == "recent":
+        months = int(mode_settings.get("months", 1))
+        hold_days = int(mode_settings.get("hold_days", 7))
+        recent_days = int(mode_settings.get("recent_days", 14))
+    else:
+        months = int(mode_settings.get("months", 6))
+        hold_days = int(mode_settings.get("hold_days", 14))
+        recent_days = int(mode_settings.get("recent_days", 14))
+    return _launch_calibration_job(tickers, months, hold_days, mode, recent_days, source)
 
 
 # ============================================================================
@@ -505,12 +816,91 @@ async def get_calibration_status():
 
     # Проверяем статус Theta Terminal
     terminal_running = _is_theta_terminal_running()
+    watchlist_config = calibration_scheduler.load_config()
 
     return {
         "tickers": tickers_data,
         "terminal_running": terminal_running,
-        "total_calibrated": len(tickers_data)
+        "jar_exists": bool(_find_theta_jar()),
+        "total_calibrated": len(tickers_data),
+        "watchlist": {
+            **watchlist_config,
+            "tickers": _load_online_tickers(),
+        },
+        "scheduler": calibration_scheduler.get_scheduler_status(),
+        "cleanup_preview": _scan_cleanup_candidates(),
     }
+
+
+@router.get("/history")
+async def get_calibration_history(limit: int = 20):
+    return {
+        "items": calibration_scheduler.load_history(limit=max(1, min(limit, 100)))
+    }
+
+
+@router.get("/watchlist")
+async def get_calibration_watchlist():
+    config = calibration_scheduler.load_config()
+    return {
+        **config,
+        "tickers": _load_online_tickers(),
+    }
+
+
+@router.put("/watchlist")
+async def save_calibration_watchlist(request: SaveWatchlistRequest):
+    clean_tickers = []
+    for ticker in request.tickers:
+        ticker = ticker.strip().upper()
+        if ticker and ticker.isalpha() and len(ticker) <= 6:
+            clean_tickers.append(ticker)
+    config = calibration_scheduler.load_config()
+    config["enabled"] = request.enabled
+    config["theta"] = request.theta or {}
+    config["cleanup"] = request.cleanup or config.get("cleanup", {})
+    config["modes"] = request.modes or config.get("modes", {})
+    saved = calibration_scheduler.save_config(config)
+    saved_tickers = calibration_scheduler.save_tickers(clean_tickers)
+    return {
+        "status": "ok",
+        "config": {
+            **saved,
+            "tickers": saved_tickers.get("tickers", []),
+        },
+        "scheduler": calibration_scheduler.get_scheduler_status(),
+    }
+
+
+@router.get("/cleanup/preview")
+async def get_cleanup_preview():
+    return _scan_cleanup_candidates()
+
+
+@router.post("/cleanup/run")
+async def run_cleanup_now():
+    return _run_cleanup(trigger="manual_cleanup")
+
+
+@router.post("/run-scheduled/{mode}")
+async def run_scheduled_mode_now(mode: str):
+    mode = mode.strip().lower()
+    config = calibration_scheduler.load_config()
+    mode_settings = config.get("modes", {}).get(mode)
+    if mode not in ["standard", "recent", "weighted"] or not mode_settings:
+        raise HTTPException(status_code=400, detail="Некорректный режим")
+    job = run_scheduled_calibration(mode, mode_settings, "manual_scheduler")
+    return {
+        "status": "started",
+        "job_id": job["job_id"],
+        "mode": mode,
+        "tickers": job["tickers"],
+    }
+
+
+@router.get("/scheduler")
+async def get_scheduler_status():
+    return calibration_scheduler.get_scheduler_status()
 
 
 @router.post("/run")
@@ -519,45 +909,18 @@ async def run_calibration(request: RunCalibrationRequest, background_tasks: Back
     Запускает калибровку для списка тикеров в фоне
     ЗАЧЕМ: Нажатие кнопки в UI запускает полный цикл: Terminal → fetch → backtest → сохранение
     """
-    # Валидация тикеров
-    clean_tickers = []
-    for t in request.tickers:
-        t = t.strip().upper()
-        if t and t.isalpha() and len(t) <= 6:
-            clean_tickers.append(t)
-
-    if not clean_tickers:
-        raise HTTPException(status_code=400, detail="Не указаны корректные тикеры")
-
-    # Создаём задание
-    job_id = f"job_{int(time.time() * 1000)}"
-    with _jobs_lock:
-        _jobs[job_id] = {
-            "job_id": job_id,
-            "status": "pending",
-            "tickers": clean_tickers,
-            "current_ticker": None,
-            "current_step": "Ожидание запуска",
-            "progress": 0,
-            "log": [],
-            "results": [],
-            "started_at": datetime.now().isoformat(),
-            "finished_at": None,
-            "error": None
-        }
-
-    # Запускаем в фоновом потоке
-    thread = threading.Thread(
-        target=_run_calibration_job,
-        args=(job_id, clean_tickers, request.months, request.hold_days,
-              request.calibration_mode, request.recent_days),
-        daemon=True
+    job = _launch_calibration_job(
+        tickers=request.tickers,
+        months=request.months,
+        hold_days=request.hold_days,
+        calibration_mode=request.calibration_mode,
+        recent_days=request.recent_days,
+        source="manual"
     )
-    thread.start()
 
     return {
-        "job_id": job_id,
-        "tickers": clean_tickers,
+        "job_id": job["job_id"],
+        "tickers": job["tickers"],
         "status": "started"
     }
 
@@ -625,5 +988,5 @@ async def check_terminal_status():
     return {
         "running": running,
         "port": THETA_TERMINAL_PORT,
-        "jar_exists": os.path.exists(THETA_TERMINAL_JAR)
+        "jar_exists": bool(_find_theta_jar())
     }

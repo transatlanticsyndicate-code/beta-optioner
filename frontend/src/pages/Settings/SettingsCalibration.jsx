@@ -52,6 +52,211 @@ function TerminalStatus({ running, jarExists }) {
   );
 }
 
+function CleanupCard({ cleanupConfig, cleanupPreview, onChange, onSave, onRun, isRunning }) {
+  const summary = cleanupPreview?.summary || {};
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Trash2 className="h-4 w-4" />
+          Очистка старых данных
+        </CardTitle>
+        <CardDescription>
+          Единая policy для локальной и серверной очистки устаревших данных калибровки и опционов
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4 pb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={Boolean(cleanupConfig.enabled)}
+              onChange={e => onChange('enabled', e.target.checked)}
+              className="cursor-pointer"
+            />
+            Cleanup включён
+          </label>
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={Boolean(cleanupConfig.auto_cleanup_after_run)}
+              onChange={e => onChange('auto_cleanup_after_run', e.target.checked)}
+              className="cursor-pointer"
+            />
+            Автоочистка после калибровки
+          </label>
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={Boolean(cleanupConfig.delete_orphan_options)}
+              onChange={e => onChange('delete_orphan_options', e.target.checked)}
+              className="cursor-pointer"
+            />
+            Удалять orphan options_data
+          </label>
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={Boolean(cleanupConfig.delete_orphan_results)}
+              onChange={e => onChange('delete_orphan_results', e.target.checked)}
+              className="cursor-pointer"
+            />
+            Удалять orphan calibration_results
+          </label>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <label className="text-sm text-muted-foreground space-y-1">
+            <div>options_max_age_days</div>
+            <Input className="cursor-pointer" value={cleanupConfig.options_max_age_days ?? 45} onChange={e => onChange('options_max_age_days', Number(e.target.value) || 0)} />
+          </label>
+          <label className="text-sm text-muted-foreground space-y-1">
+            <div>results_max_age_days</div>
+            <Input className="cursor-pointer" value={cleanupConfig.results_max_age_days ?? 90} onChange={e => onChange('results_max_age_days', Number(e.target.value) || 0)} />
+          </label>
+          <label className="text-sm text-muted-foreground space-y-1">
+            <div>history_max_entries</div>
+            <Input className="cursor-pointer" value={cleanupConfig.history_max_entries ?? 200} onChange={e => onChange('history_max_entries', Number(e.target.value) || 0)} />
+          </label>
+        </div>
+
+        <div className="rounded-lg border border-border p-3 bg-muted/20 space-y-2">
+          <div className="text-sm font-medium">Кандидаты на удаление</div>
+          <div className="text-xs text-muted-foreground">
+            Папки options: {summary.options_dirs || 0} · Файлы результатов: {summary.result_files || 0}
+          </div>
+          {!!cleanupPreview?.options?.length && (
+            <div className="text-xs text-muted-foreground space-y-1">
+              {cleanupPreview.options.slice(0, 5).map(item => (
+                <div key={item.path}>{item.ticker}: {item.reason} · {item.files_count} CSV</div>
+              ))}
+            </div>
+          )}
+          {!!cleanupPreview?.results?.length && (
+            <div className="text-xs text-muted-foreground space-y-1">
+              {cleanupPreview.results.slice(0, 5).map(item => (
+                <div key={item.path}>{item.ticker}: {item.reason}</div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="text-xs text-muted-foreground">
+            Cleanup работает одинаково для локального запуска и для серверного online scheduler.
+          </div>
+          <div className="flex items-center gap-2">
+            <Button className="cursor-pointer" variant="outline" onClick={onSave} disabled={isRunning}>Сохранить policy</Button>
+            <Button className="cursor-pointer text-white" variant="destructive" onClick={onRun} disabled={isRunning}>Запустить cleanup</Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function HistoryStatusBadge({ status, successCount, skippedCount, errorCount }) {
+  if (status === 'done') {
+    return (
+      <Badge variant="outline" className="text-xs bg-emerald-500/10 border-emerald-500/30 text-emerald-600">
+        {successCount} ok / {skippedCount} skip / {errorCount} err
+      </Badge>
+    );
+  }
+  if (status === 'error') {
+    return (
+      <Badge variant="outline" className="text-xs bg-red-500/10 border-red-500/30 text-red-600">
+        ошибка
+      </Badge>
+    );
+  }
+  return <Badge variant="outline" className="text-xs">{status}</Badge>;
+}
+
+function CalibrationHistoryCard({ historyItems, onRefresh }) {
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              История операций калибровки
+            </CardTitle>
+            <CardDescription className="mt-1">
+              Постоянный журнал ручных и автоматических запусков на сервере
+            </CardDescription>
+          </div>
+          <Button className="cursor-pointer" size="sm" variant="ghost" onClick={onRefresh}>
+            <RefreshCw className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {!historyItems?.length ? (
+          <div className="text-sm text-muted-foreground">История пока пуста</div>
+        ) : historyItems.map(item => (
+          <div key={item.job_id} className="rounded-lg border border-border p-3 space-y-2 bg-muted/20">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-medium text-sm">
+                    {item.source === 'scheduler' || item.source === 'manual_scheduler' ? 'Онлайн-калибровка' : 'Ручная калибровка'}
+                  </span>
+                  <Badge variant="outline" className="text-xs">{item.calibration_mode}</Badge>
+                  <HistoryStatusBadge
+                    status={item.status}
+                    successCount={item.success_count || 0}
+                    skippedCount={item.skipped_count || 0}
+                    errorCount={item.error_count || 0}
+                  />
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {item.started_at ? new Date(item.started_at).toLocaleString('ru-RU') : '—'}
+                  {item.finished_at ? ` → ${new Date(item.finished_at).toLocaleString('ru-RU')}` : ''}
+                </div>
+              </div>
+              <div className="text-xs text-muted-foreground text-right">
+                <div>{item.tickers?.length || 0} тикеров</div>
+                <div>hold: {item.hold_days ?? '—'}д</div>
+                {item.calibration_mode === 'recent' && <div>recent: {item.recent_days ?? '—'}д</div>}
+              </div>
+            </div>
+
+            <div className="text-xs text-muted-foreground break-words">
+              {(item.tickers || []).join(', ')}
+            </div>
+
+            {!!item.results?.length && (
+              <div className="space-y-1">
+                {item.results.slice(0, 6).map(result => (
+                  <div key={`${item.job_id}_${result.ticker}`} className="text-xs flex items-center gap-2 flex-wrap">
+                    <span className="font-mono font-semibold">{result.ticker}</span>
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                      {result.status}
+                    </Badge>
+                    {result.status === 'success' ? (
+                      <span className="text-muted-foreground">
+                        down×{result.down_mult?.toFixed?.(3)} / up×{result.up_mult?.toFixed?.(3)}
+                      </span>
+                    ) : (
+                      <span className="text-red-500">{result.error}</span>
+                    )}
+                  </div>
+                ))}
+                {item.results.length > 6 && (
+                  <div className="text-xs text-muted-foreground">+ ещё {item.results.length - 6} результатов</div>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 /** Бейдж свежести калибровки */
 function FreshnessBadge({ daysAgo, isStale }) {
   if (daysAgo === null || daysAgo === undefined) {
@@ -170,7 +375,7 @@ function TickerRow({ item, onRecalibrate, onDelete, isRunning }) {
             variant="outline"
             onClick={() => onRecalibrate(item.ticker)}
             disabled={isRunning}
-            className="h-7 text-xs"
+            className="h-7 text-xs cursor-pointer"
           >
             <RefreshCw className="h-3 w-3 mr-1" />
             Обновить
@@ -180,7 +385,7 @@ function TickerRow({ item, onRecalibrate, onDelete, isRunning }) {
             variant="ghost"
             onClick={() => onDelete(item.ticker)}
             disabled={isRunning}
-            className="h-7 text-xs text-red-500 hover:text-red-600 hover:bg-red-500/10"
+            className="h-7 text-xs text-red-500 hover:text-red-600 hover:bg-red-500/10 cursor-pointer"
           >
             <Trash2 className="h-3 w-3" />
           </Button>
@@ -232,12 +437,12 @@ function JobProgress({ job, onClose }) {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setExpanded(e => !e)}
-              className="text-muted-foreground hover:text-foreground"
+              className="text-muted-foreground hover:text-foreground cursor-pointer"
             >
               {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             </button>
             {(isDone || isError) && (
-              <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-xs">
+              <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-xs cursor-pointer">
                 ✕
               </button>
             )}
@@ -323,13 +528,32 @@ function SettingsCalibration() {
   // Данные о тикерах и статус терминала
   const [statusData, setStatusData] = useState(null);
   const [loadingStatus, setLoadingStatus] = useState(true);
+  const [historyItems, setHistoryItems] = useState([]);
 
   // Поле ввода новых тикеров
   const [tickerInput, setTickerInput] = useState('');
   const [months, setMonths] = useState(6);
   const [holdDays, setHoldDays] = useState(14);
   const [calibrationMode, setCalibrationMode] = useState('standard');
-  const [recentDays, setRecentDays] = useState(30);
+  const [recentDays, setRecentDays] = useState(14);
+  const [onlineEnabled, setOnlineEnabled] = useState(false);
+  const [watchlistInput, setWatchlistInput] = useState('');
+  const [thetaJarPath, setThetaJarPath] = useState('');
+  const [thetaCredsFile, setThetaCredsFile] = useState('');
+  const [cleanupConfig, setCleanupConfig] = useState({
+    enabled: true,
+    auto_cleanup_after_run: true,
+    options_max_age_days: 45,
+    results_max_age_days: 90,
+    history_max_entries: 200,
+    delete_orphan_options: true,
+    delete_orphan_results: false,
+  });
+  const [scheduleConfig, setScheduleConfig] = useState({
+    standard: { enabled: true, months: 6, hold_days: 14, cron: ['0 16 1 1-3,11-12 *', '0 15 1 4-10 *'] },
+    recent: { enabled: true, recent_days: 14, hold_days: 7, cron: ['0 16 * 1-3,11-12 *', '0 15 * 4-10 *'] },
+    weighted: { enabled: true, months: 6, hold_days: 14, cron: ['0 16 * 1-3,11-12 0', '0 15 * 4-10 0'] },
+  });
 
   // Активное задание
   const [activeJob, setActiveJob] = useState(null);
@@ -349,6 +573,17 @@ function SettingsCalibration() {
       if (res.ok) {
         const data = await res.json();
         setStatusData(data);
+        const watchlist = data.watchlist || {};
+        setOnlineEnabled(Boolean(watchlist.enabled));
+        setWatchlistInput((watchlist.tickers || []).join(', '));
+        setThetaJarPath(watchlist.theta?.jar_path || '');
+        setThetaCredsFile(watchlist.theta?.creds_file || '');
+        if (watchlist.cleanup) {
+          setCleanupConfig(prev => ({ ...prev, ...watchlist.cleanup }));
+        }
+        if (watchlist.modes) {
+          setScheduleConfig(prev => ({ ...prev, ...watchlist.modes }));
+        }
       }
     } catch (e) {
       console.error('[SettingsCalibration] Ошибка загрузки статуса:', e);
@@ -357,9 +592,22 @@ function SettingsCalibration() {
     }
   }, []);
 
+  const loadHistory = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/history?limit=20`);
+      if (res.ok) {
+        const data = await res.json();
+        setHistoryItems(data.items || []);
+      }
+    } catch (e) {
+      console.error('[SettingsCalibration] Ошибка загрузки истории:', e);
+    }
+  }, []);
+
   useEffect(() => {
     loadStatus();
-  }, [loadStatus]);
+    loadHistory();
+  }, [loadStatus, loadHistory]);
 
   // ============================================================================
   // POLLING ПРОГРЕССА ЗАДАНИЯ
@@ -382,12 +630,13 @@ function SettingsCalibration() {
           pollRef.current = null;
           // Обновляем таблицу тикеров
           loadStatus();
+          loadHistory();
         }
       } catch (e) {
         console.error('[SettingsCalibration] Ошибка polling:', e);
       }
     }, POLL_INTERVAL);
-  }, [loadStatus]);
+  }, [loadStatus, loadHistory]);
 
   // Очищаем polling при размонтировании
   useEffect(() => {
@@ -395,6 +644,70 @@ function SettingsCalibration() {
       if (pollRef.current) clearInterval(pollRef.current);
     };
   }, []);
+
+  const saveOnlineSettings = useCallback(async () => {
+    const tickers = watchlistInput
+      .split(/[\s,]+/)
+      .map(t => t.trim().toUpperCase())
+      .filter(Boolean);
+
+    try {
+      const res = await fetch(`${API_BASE}/watchlist`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enabled: onlineEnabled,
+          tickers,
+          theta: {
+            jar_path: thetaJarPath,
+            creds_file: thetaCredsFile,
+          },
+          cleanup: cleanupConfig,
+          modes: scheduleConfig,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(`Ошибка сохранения online-настроек: ${err.detail || 'unknown error'}`);
+        return;
+      }
+      loadStatus();
+    } catch (e) {
+      alert(`Ошибка сохранения: ${e.message}`);
+    }
+  }, [watchlistInput, onlineEnabled, thetaJarPath, thetaCredsFile, cleanupConfig, scheduleConfig, loadStatus]);
+
+  const runCleanupNow = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/cleanup/run`, { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(`Ошибка cleanup: ${err.detail || 'unknown error'}`);
+        return;
+      }
+      loadStatus();
+      loadHistory();
+    } catch (e) {
+      alert(`Ошибка cleanup: ${e.message}`);
+    }
+  }, [loadStatus, loadHistory]);
+
+  const runScheduledModeNow = useCallback(async (mode) => {
+    try {
+      const res = await fetch(`${API_BASE}/run-scheduled/${mode}`, { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(`Ошибка запуска режима ${mode}: ${err.detail || 'unknown error'}`);
+        return;
+      }
+      const data = await res.json();
+      setActiveJobId(data.job_id);
+      setActiveJob({ job_id: data.job_id, status: 'pending', log: [], progress: 0, tickers: data.tickers, current_step: `Запуск ${mode}...` });
+      startPolling(data.job_id);
+    } catch (e) {
+      alert(`Ошибка запуска: ${e.message}`);
+    }
+  }, [startPolling]);
 
   // ============================================================================
   // ЗАПУСК КАЛИБРОВКИ
@@ -494,7 +807,7 @@ function SettingsCalibration() {
             {statusData ? (
               <TerminalStatus
                 running={statusData.terminal_running}
-                jarExists={true}
+                jarExists={statusData.jar_exists !== false}
               />
             ) : (
               <span className="text-xs text-muted-foreground">Проверка...</span>
@@ -510,6 +823,157 @@ function SettingsCalibration() {
           onClose={() => { setActiveJob(null); setActiveJobId(null); }}
         />
       )}
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Terminal className="h-4 w-4" />
+            Онлайн-калибровка по расписанию
+          </CardTitle>
+          <CardDescription>
+            Технические server-настройки online-калибровки: пути к Theta Terminal, cleanup и cron-расписание
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4 pb-6">
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={onlineEnabled}
+              onChange={e => setOnlineEnabled(e.target.checked)}
+              className="rounded border-border cursor-pointer"
+            />
+            Включить онлайн-автокалибровку на сервере
+          </label>
+
+          <div className="space-y-2">
+            <div className="text-sm text-muted-foreground">Список тикеров для online-калибровки</div>
+            <Input
+              className="font-mono cursor-pointer"
+              value={watchlistInput}
+              onChange={e => setWatchlistInput(e.target.value.toUpperCase())}
+              placeholder="AAPL, NVDA, ZS, TEAM..."
+            />
+            <div className="text-xs text-muted-foreground">
+              Эти тикеры сохраняются отдельно в server-файл `calibration_tickers.json`. Технические настройки scheduler хранятся отдельно.
+            </div>
+            <div className="text-xs text-yellow-700 rounded-lg border border-yellow-500/20 p-3 bg-yellow-500/10 dark:text-yellow-200">
+              Онлайн-калибровка берёт тикеры из server-файла `backend/app/config/calibration_tickers.json`.
+              Если вы укажете тикеры в поле выше и нажмёте `Сохранить server-настройки и тикеры`, страница сохранит этот список в тот же файл.
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <div className="text-sm text-muted-foreground">Путь к ThetaTerminal jar на сервере</div>
+              <Input className="cursor-pointer" value={thetaJarPath} onChange={e => setThetaJarPath(e.target.value)} placeholder="/opt/theta/ThetaTerminalv3.jar" />
+            </div>
+            <div className="space-y-2">
+              <div className="text-sm text-muted-foreground">Путь к creds.txt на сервере</div>
+              <Input className="cursor-pointer" value={thetaCredsFile} onChange={e => setThetaCredsFile(e.target.value)} placeholder="/etc/optioner/creds.txt" />
+            </div>
+          </div>
+
+          {['standard', 'recent', 'weighted'].map(mode => (
+            <div key={mode} className="rounded-lg border border-border p-3 space-y-3">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline">{mode}</Badge>
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(scheduleConfig[mode]?.enabled)}
+                      onChange={e => setScheduleConfig(prev => ({
+                        ...prev,
+                        [mode]: { ...prev[mode], enabled: e.target.checked },
+                      }))}
+                      className="cursor-pointer"
+                    />
+                    включён
+                  </label>
+                </div>
+                <Button className="cursor-pointer" size="sm" variant="outline" onClick={() => runScheduledModeNow(mode)} disabled={isRunning}>
+                  <Play className="h-3.5 w-3.5 mr-1.5" />
+                  Запустить сейчас
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                {mode !== 'recent' && (
+                  <label className="text-sm text-muted-foreground space-y-1">
+                    <div>Месяцы</div>
+                    <Input
+                      className="cursor-pointer"
+                      value={scheduleConfig[mode]?.months ?? 6}
+                      onChange={e => setScheduleConfig(prev => ({
+                        ...prev,
+                        [mode]: { ...prev[mode], months: Number(e.target.value) || 0 },
+                      }))}
+                    />
+                  </label>
+                )}
+                {mode === 'recent' && (
+                  <label className="text-sm text-muted-foreground space-y-1">
+                    <div>recent_days</div>
+                    <Input
+                      className="cursor-pointer"
+                      value={scheduleConfig[mode]?.recent_days ?? 14}
+                      onChange={e => setScheduleConfig(prev => ({
+                        ...prev,
+                        [mode]: { ...prev[mode], recent_days: Number(e.target.value) || 0 },
+                      }))}
+                    />
+                  </label>
+                )}
+                <label className="text-sm text-muted-foreground space-y-1">
+                  <div>hold_days</div>
+                  <Input
+                    className="cursor-pointer"
+                    value={scheduleConfig[mode]?.hold_days ?? 14}
+                    onChange={e => setScheduleConfig(prev => ({
+                      ...prev,
+                      [mode]: { ...prev[mode], hold_days: Number(e.target.value) || 0 },
+                    }))}
+                  />
+                </label>
+                <label className={`text-sm text-muted-foreground space-y-1 ${mode !== 'recent' ? 'md:col-span-3' : 'md:col-span-3'}`}>
+                  <div>Cron</div>
+                  <Input
+                    value={Array.isArray(scheduleConfig[mode]?.cron) ? scheduleConfig[mode].cron.join(' | ') : (scheduleConfig[mode]?.cron ?? '')}
+                    onChange={e => setScheduleConfig(prev => ({
+                      ...prev,
+                      [mode]: {
+                        ...prev[mode],
+                        cron: e.target.value
+                          .split('|')
+                          .map(item => item.trim())
+                          .filter(Boolean),
+                      },
+                    }))}
+                    placeholder="0 16 * 1-3,11-12 * | 0 15 * 4-10 *"
+                    className="font-mono cursor-pointer"
+                  />
+                </label>
+              </div>
+            </div>
+          ))}
+
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="text-xs text-muted-foreground">
+              Следующие запуски: {(statusData?.scheduler?.jobs || []).map(j => `${j.id.replace('calibration_', '')}: ${j.next_run_at ? new Date(j.next_run_at).toLocaleString('ru-RU') : '—'}`).join(' · ') || 'не настроены'}
+            </div>
+            <Button className="cursor-pointer" onClick={saveOnlineSettings} disabled={isRunning}>Сохранить server-настройки и тикеры</Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <CleanupCard
+        cleanupConfig={cleanupConfig}
+        cleanupPreview={statusData?.cleanup_preview}
+        onChange={(key, value) => setCleanupConfig(prev => ({ ...prev, [key]: value }))}
+        onSave={saveOnlineSettings}
+        onRun={runCleanupNow}
+        isRunning={isRunning}
+      />
 
       {/* Добавление тикеров */}
       <Card>
@@ -531,12 +995,12 @@ function SettingsCalibration() {
               onChange={e => setTickerInput(e.target.value.toUpperCase())}
               onKeyDown={e => e.key === 'Enter' && handleRunNew()}
               disabled={isRunning}
-              className="font-mono"
+              className="font-mono cursor-pointer"
             />
             <Button
               onClick={handleRunNew}
               disabled={isRunning || !tickerInput.trim()}
-              className="shrink-0"
+              className="shrink-0 cursor-pointer"
             >
               {isRunning ? (
                 <RefreshCw className="h-4 w-4 animate-spin mr-2" />
@@ -555,7 +1019,7 @@ function SettingsCalibration() {
                 value={months}
                 onChange={e => setMonths(Number(e.target.value))}
                 disabled={isRunning}
-                className="bg-muted border border-border rounded px-2 py-1 text-foreground text-sm"
+                className="bg-muted border border-border rounded px-2 py-1 text-foreground text-sm cursor-pointer"
               >
                 <option value={3}>3 месяца</option>
                 <option value={6}>6 месяцев</option>
@@ -568,7 +1032,7 @@ function SettingsCalibration() {
                 value={holdDays}
                 onChange={e => setHoldDays(Number(e.target.value))}
                 disabled={isRunning}
-                className="bg-muted border border-border rounded px-2 py-1 text-foreground text-sm"
+                className="bg-muted border border-border rounded px-2 py-1 text-foreground text-sm cursor-pointer"
               >
                 <option value={7}>7 дней</option>
                 <option value={14}>14 дней</option>
@@ -593,7 +1057,7 @@ function SettingsCalibration() {
                       onClick={() => setCalibrationMode(id)}
                       disabled={isRunning}
                       className={[
-                        'px-3 py-1 rounded-full border text-xs font-medium transition-all',
+                        'px-3 py-1 rounded-full border text-xs font-medium transition-all cursor-pointer',
                         calibrationMode === id
                           ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-600'
                           : 'bg-muted border-border text-muted-foreground hover:text-foreground',
@@ -616,7 +1080,7 @@ function SettingsCalibration() {
                   value={recentDays}
                   onChange={e => setRecentDays(Number(e.target.value))}
                   disabled={isRunning}
-                  className="bg-muted border border-border rounded px-2 py-1 text-foreground text-sm"
+                  className="bg-muted border border-border rounded px-2 py-1 text-foreground text-sm cursor-pointer"
                 >
                   <option value={14}>14 дней</option>
                   <option value={30}>30 дней</option>
@@ -628,6 +1092,8 @@ function SettingsCalibration() {
           </div>
         </CardContent>
       </Card>
+
+      <CalibrationHistoryCard historyItems={historyItems} onRefresh={loadHistory} />
 
       {/* Таблица откалиброванных тикеров */}
       <Card>
@@ -654,7 +1120,7 @@ function SettingsCalibration() {
                   variant="outline"
                   onClick={handleUpdateStale}
                   disabled={isRunning}
-                  className="text-yellow-600 border-yellow-500/30 hover:bg-yellow-500/10"
+                  className="text-yellow-600 border-yellow-500/30 hover:bg-yellow-500/10 cursor-pointer"
                 >
                   <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
                   Обновить устаревшие ({staleTickers.length})
@@ -665,6 +1131,7 @@ function SettingsCalibration() {
                 variant="ghost"
                 onClick={loadStatus}
                 disabled={loadingStatus}
+                className="cursor-pointer"
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${loadingStatus ? 'animate-spin' : ''}`} />
               </Button>
@@ -749,10 +1216,11 @@ function SettingsCalibration() {
               </CardDescription>
             </CardHeader>
             <CardContent className="flex gap-2 justify-end">
-              <Button variant="outline" size="sm" onClick={() => setDeleteConfirm(null)}>
+              <Button className="cursor-pointer" variant="outline" size="sm" onClick={() => setDeleteConfirm(null)}>
                 Отмена
               </Button>
               <Button
+                className="cursor-pointer"
                 variant="destructive"
                 size="sm"
                 onClick={() => handleDelete(deleteConfirm)}

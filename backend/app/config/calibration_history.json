@@ -1,0 +1,504 @@
+[
+  {
+    "job_id": "cleanup_1773087847609",
+    "status": "done",
+    "source": "manual_cleanup",
+    "kind": "cleanup",
+    "started_at": "2026-03-09T20:24:07.609962",
+    "finished_at": "2026-03-09T20:24:07.609969",
+    "results": [
+      {
+        "status": "success",
+        "deleted_options_dirs": 59,
+        "deleted_result_files": 0
+      }
+    ],
+    "cleanup": {
+      "deleted_options": [
+        {
+          "ticker": "AAPL",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/AAPL",
+          "files_count": 109,
+          "newest_mtime": "2026-03-09T19:49:44.006066",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "ADBE",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/ADBE",
+          "files_count": 109,
+          "newest_mtime": "2026-02-26T14:18:16.909518",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "AFRM",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/AFRM",
+          "files_count": 97,
+          "newest_mtime": "2026-02-26T14:20:14.800986",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "AJG",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/AJG",
+          "files_count": 109,
+          "newest_mtime": "2026-02-26T14:22:18.362459",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "ALAB",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/ALAB",
+          "files_count": 109,
+          "newest_mtime": "2026-02-26T14:24:23.222838",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "APP",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/APP",
+          "files_count": 109,
+          "newest_mtime": "2026-02-26T14:26:27.711527",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "BFAM",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/BFAM",
+          "files_count": 109,
+          "newest_mtime": "2026-02-26T14:28:40.854744",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "BRO",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/BRO",
+          "files_count": 109,
+          "newest_mtime": "2026-02-26T14:30:52.190970",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "BROS",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/BROS",
+          "files_count": 97,
+          "newest_mtime": "2026-02-26T14:32:58.932896",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "CAVA",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/CAVA",
+          "files_count": 93,
+          "newest_mtime": "2026-02-26T14:34:59.096035",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "CHTR",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/CHTR",
+          "files_count": 109,
+          "newest_mtime": "2026-02-26T14:36:59.414016",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "COIN",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/COIN",
+          "files_count": 109,
+          "newest_mtime": "2026-02-26T14:39:17.331662",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "CRCL",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/CRCL",
+          "files_count": 109,
+          "newest_mtime": "2026-02-26T14:41:17.317830",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "CRM",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/CRM",
+          "files_count": 109,
+          "newest_mtime": "2026-02-26T14:43:21.661117",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "CRWV",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/CRWV",
+          "files_count": 95,
+          "newest_mtime": "2026-02-26T14:45:16.529422",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "CSGP",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/CSGP",
+          "files_count": 109,
+          "newest_mtime": "2026-02-26T14:47:21.611219",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "DASH",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/DASH",
+          "files_count": 109,
+          "newest_mtime": "2026-02-26T14:49:23.825539",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "DOCU",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/DOCU",
+          "files_count": 99,
+          "newest_mtime": "2026-02-26T14:51:38.325020",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "DUOL",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/DUOL",
+          "files_count": 101,
+          "newest_mtime": "2026-02-26T15:12:19.867198",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "ELF",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/ELF",
+          "files_count": 109,
+          "newest_mtime": "2026-02-26T15:14:23.627871",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "FIS",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/FIS",
+          "files_count": 89,
+          "newest_mtime": "2026-02-26T15:16:28.525377",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "FISV",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/FISV",
+          "files_count": 65,
+          "newest_mtime": "2026-02-26T15:17:52.246297",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "FLUT",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/FLUT",
+          "files_count": 101,
+          "newest_mtime": "2026-02-26T15:19:45.252141",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "FOUR",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/FOUR",
+          "files_count": 109,
+          "newest_mtime": "2026-02-26T15:21:51.882550",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "GDDY",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/GDDY",
+          "files_count": 107,
+          "newest_mtime": "2026-02-26T15:23:57.320164",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "HOOD",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/HOOD",
+          "files_count": 109,
+          "newest_mtime": "2026-02-26T15:25:54.416087",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "HUBS",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/HUBS",
+          "files_count": 107,
+          "newest_mtime": "2026-02-26T15:28:05.448437",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "HUM",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/HUM",
+          "files_count": 109,
+          "newest_mtime": "2026-02-26T15:30:28.929518",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "INTU",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/INTU",
+          "files_count": 101,
+          "newest_mtime": "2026-02-26T15:32:39.850032",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "KMX",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/KMX",
+          "files_count": 107,
+          "newest_mtime": "2026-02-26T15:34:44.769447",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "LEU",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/LEU",
+          "files_count": 109,
+          "newest_mtime": "2026-02-26T15:36:48.104796",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "MOH",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/MOH",
+          "files_count": 109,
+          "newest_mtime": "2026-02-26T15:38:55.619897",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "MP",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/MP",
+          "files_count": 109,
+          "newest_mtime": "2026-02-26T15:40:59.073381",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "MSTR",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/MSTR",
+          "files_count": 105,
+          "newest_mtime": "2026-02-26T15:43:06.500732",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "NFLX",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/NFLX",
+          "files_count": 91,
+          "newest_mtime": "2026-02-26T15:45:12.995852",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "NOW",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/NOW",
+          "files_count": 85,
+          "newest_mtime": "2026-02-26T15:47:08.471328",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "NVDA",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/NVDA",
+          "files_count": 101,
+          "newest_mtime": "2026-02-26T15:49:12.106791",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "OKLO",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/OKLO",
+          "files_count": 109,
+          "newest_mtime": "2026-02-26T15:51:09.159076",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "ORCL",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/ORCL",
+          "files_count": 109,
+          "newest_mtime": "2026-02-26T15:53:16.807686",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "PAYC",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/PAYC",
+          "files_count": 109,
+          "newest_mtime": "2026-02-26T15:55:21.417863",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "PAYX",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/PAYX",
+          "files_count": 109,
+          "newest_mtime": "2026-02-26T15:57:30.544542",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "PCOR",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/PCOR",
+          "files_count": 109,
+          "newest_mtime": "2026-02-26T15:59:31.325578",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "PCTY",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/PCTY",
+          "files_count": 109,
+          "newest_mtime": "2026-02-26T16:01:42.708849",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "QTWO",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/QTWO",
+          "files_count": 99,
+          "newest_mtime": "2026-02-26T16:03:43.148836",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "RBLX",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/RBLX",
+          "files_count": 107,
+          "newest_mtime": "2026-02-26T16:05:51.120973",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "RDDT",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/RDDT",
+          "files_count": 109,
+          "newest_mtime": "2026-02-26T16:08:01.101721",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "SFM",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/SFM",
+          "files_count": 97,
+          "newest_mtime": "2026-02-26T16:09:48.301880",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "SPSC",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/SPSC",
+          "files_count": 103,
+          "newest_mtime": "2026-02-26T16:11:39.335382",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "TEAM",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/TEAM",
+          "files_count": 105,
+          "newest_mtime": "2026-02-26T16:13:41.920589",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "TEM",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/TEM",
+          "files_count": 109,
+          "newest_mtime": "2026-02-26T16:15:39.445958",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "TYL",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/TYL",
+          "files_count": 91,
+          "newest_mtime": "2026-02-26T16:17:24.755294",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "UNH",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/UNH",
+          "files_count": 109,
+          "newest_mtime": "2026-02-26T16:19:22.282027",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "VEEV",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/VEEV",
+          "files_count": 109,
+          "newest_mtime": "2026-02-26T16:21:16.879686",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "VRSK",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/VRSK",
+          "files_count": 109,
+          "newest_mtime": "2026-02-26T16:23:14.741647",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "WDAY",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/WDAY",
+          "files_count": 103,
+          "newest_mtime": "2026-02-26T16:25:08.371010",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "XYZ",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/XYZ",
+          "files_count": 105,
+          "newest_mtime": "2026-02-26T16:27:09.172196",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "Z",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/Z",
+          "files_count": 103,
+          "newest_mtime": "2026-02-26T16:29:25.773848",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "ZG",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/ZG",
+          "files_count": 109,
+          "newest_mtime": "2026-02-26T16:31:47.011998",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "ZS",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/ZS",
+          "files_count": 109,
+          "newest_mtime": "2026-02-26T16:34:05.933601",
+          "reason": "orphan"
+        }
+      ],
+      "deleted_results": []
+    }
+  },
+  {
+    "job_id": "cleanup_1773087879185",
+    "status": "done",
+    "source": "manual_cleanup",
+    "kind": "cleanup",
+    "started_at": "2026-03-09T20:24:39.185491",
+    "finished_at": "2026-03-09T20:24:39.185494",
+    "results": [
+      {
+        "status": "success",
+        "deleted_options_dirs": 0,
+        "deleted_result_files": 0
+      }
+    ],
+    "cleanup": {
+      "deleted_options": [],
+      "deleted_results": []
+    }
+  },
+  {
+    "job_id": "job_1773090398608",
+    "status": "done",
+    "source": "manual_scheduler",
+    "tickers": [
+      "MSTR",
+      "DOCS"
+    ],
+    "months": 1,
+    "hold_days": 7,
+    "calibration_mode": "recent",
+    "recent_days": 14,
+    "started_at": "2026-03-09T21:06:38.608621",
+    "finished_at": "2026-03-09T21:07:12.330839",
+    "error": null,
+    "results": [
+      {
+        "ticker": "MSTR",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "DOCS",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      }
+    ],
+    "success_count": 0,
+    "skipped_count": 2,
+    "error_count": 0
+  },
+  {
+    "job_id": "cleanup_1773090432342",
+    "status": "done",
+    "source": "cleanup_after_manual_scheduler",
+    "kind": "cleanup",
+    "started_at": "2026-03-09T21:07:12.342064",
+    "finished_at": "2026-03-09T21:07:12.342066",
+    "results": [
+      {
+        "status": "success",
+        "deleted_options_dirs": 0,
+        "deleted_result_files": 0
+      }
+    ],
+    "cleanup": {
+      "deleted_options": [],
+      "deleted_results": []
+    }
+  }
+]

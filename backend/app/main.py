@@ -16,6 +16,8 @@ from dotenv import load_dotenv
 from typing import Dict, Optional
 from datetime import datetime, timedelta
 import re
+from app.services.calibration_scheduler import calibration_scheduler
+from app.routers.calibration import run_scheduled_calibration
 
 from app.database import get_db, init_db
 from app.models.analysis_history import AnalysisHistory
@@ -118,12 +120,14 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     """Startup event для инициализации приложения"""
+    calibration_scheduler.configure(run_scheduled_calibration)
     print("🚀 Application startup complete")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Shutdown event для корректного завершения приложения"""
+    calibration_scheduler.shutdown()
     print("👋 Application shutdown")
 
 

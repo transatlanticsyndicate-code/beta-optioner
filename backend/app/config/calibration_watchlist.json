@@ -1,0 +1,46 @@
+{
+  "enabled": false,
+  "theta": {
+    "jar_path": "",
+    "creds_file": ""
+  },
+  "cleanup": {
+    "enabled": true,
+    "auto_cleanup_after_run": true,
+    "options_max_age_days": 45,
+    "results_max_age_days": 90,
+    "history_max_entries": 200,
+    "delete_orphan_options": true,
+    "delete_orphan_results": false
+  },
+  "modes": {
+    "standard": {
+      "enabled": true,
+      "months": 6,
+      "hold_days": 14,
+      "cron": [
+        "0 16 1 1-3,11-12 *",
+        "0 15 1 4-10 *"
+      ]
+    },
+    "recent": {
+      "enabled": true,
+      "recent_days": 14,
+      "hold_days": 7,
+      "cron": [
+        "0 16 * 1-3,11-12 *",
+        "0 15 * 4-10 *"
+      ]
+    },
+    "weighted": {
+      "enabled": true,
+      "months": 6,
+      "hold_days": 14,
+      "cron": [
+        "0 16 * 1-3,11-12 0",
+        "0 15 * 4-10 0"
+      ]
+    }
+  },
+  "updated_at": "2026-03-09T21:12:37.124519"
+}

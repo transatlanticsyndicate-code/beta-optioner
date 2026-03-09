@@ -497,6 +497,7 @@ def main():
     hold_days = args.hold_days
     mode = args.mode
     recent_days = args.recent_days
+    effective_min_trades = min(args.min_trades, 5) if mode == "recent" else args.min_trades
 
     print(f"\n{'='*60}")
     print(f"  Backtest Calibration")
@@ -548,7 +549,7 @@ def main():
         if recent_cutoff:
             trades = [
                 t for t in trades
-                if t.get("entry_date") and datetime.fromisoformat(str(t["entry_date"])) >= recent_cutoff
+                if t.get("exit_date") and datetime.fromisoformat(str(t["exit_date"])) >= recent_cutoff
             ]
 
         all_trades.extend(trades)
@@ -557,8 +558,8 @@ def main():
     print(f"\n📊 Обработано контрактов: {contracts_processed}")
     print(f"📊 Всего симулированных сделок: {len(all_trades)}")
 
-    if len(all_trades) < args.min_trades:
-        print(f"\n⚠️  Недостаточно сделок для калибровки (нужно минимум {args.min_trades})")
+    if len(all_trades) < effective_min_trades:
+        print(f"\n⚠️  Недостаточно сделок для калибровки (нужно минимум {effective_min_trades})")
         print(f"   Попробуйте загрузить больше данных или уменьшить --min-trades")
         return
 

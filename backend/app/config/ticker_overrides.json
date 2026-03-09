@@ -2,13 +2,13 @@
   "_comment": "Per-ticker коэффициенты калибровки. Приоритет над групповой классификацией. Формат: {down_mult, up_mult, note}",
   "AAPL": {
     "standard": {
-      "down_mult": 1.001,
-      "up_mult": 1.076,
-      "iv_mean": 0.2522,
-      "iv_kappa": 87.53,
-      "iv_std": 0.032,
-      "half_life_days": 3,
-      "note": "Calibrated 2026-02-22, 3258 trades, 14d hold, ThetaData EOD"
+      "down_mult": 0.995,
+      "up_mult": 1.041,
+      "iv_mean": 0.2518,
+      "iv_kappa": 63.29,
+      "iv_std": 0.0258,
+      "half_life_days": 4,
+      "note": "Calibrated 2026-03-09, 2783 trades, 14d hold, ThetaData EOD"
     },
     "recent": {
       "down_mult": 1.043,
