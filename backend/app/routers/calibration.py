@@ -116,6 +116,38 @@ def _find_theta_jar() -> Optional[str]:
     return None
 
 
+def _get_theta_terminal_diagnostics() -> Dict[str, Any]:
+    config = calibration_scheduler.load_config()
+    theta_config = config.get("theta", {}) if isinstance(config, dict) else {}
+    configured_jar = theta_config.get("jar_path", "")
+    configured_creds = theta_config.get("creds_file", "")
+    resolved_jar = _find_theta_jar()
+    resolved_creds = _find_creds_file()
+    java_path = shutil.which("java")
+    log_file = os.path.join(PROJECT_ROOT, "theta_terminal.log")
+    diagnostics = {
+        "running": _is_theta_terminal_running(),
+        "configured_jar_path": configured_jar,
+        "configured_creds_file": configured_creds,
+        "resolved_jar_path": resolved_jar,
+        "resolved_creds_file": resolved_creds,
+        "jar_exists": bool(resolved_jar and os.path.exists(resolved_jar)),
+        "creds_exists": bool(resolved_creds and os.path.exists(resolved_creds)),
+        "java_path": java_path,
+        "java_exists": bool(java_path),
+        "log_file": log_file,
+    }
+    if os.path.exists(log_file):
+        try:
+            with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
+                diagnostics["log_tail"] = f.read()[-2000:]
+        except Exception:
+            diagnostics["log_tail"] = ""
+    else:
+        diagnostics["log_tail"] = ""
+    return diagnostics
+
+
 def _get_override_section(override_raw: dict, mode: str = "standard") -> dict:
     """
     Извлекает данные нужной секции из override записи тикера
@@ -397,19 +429,23 @@ def _start_theta_terminal() -> bool:
         jar_to_run = real_jar if real_jar else theta_jar
         cmd = ["java", "-jar", jar_to_run, "--creds-file", creds_file]
         print(f"[calibration] Запуск: {' '.join(cmd)}")
+        log_file = os.path.join(PROJECT_ROOT, "theta_terminal.log")
+        log_handle = open(log_file, "ab")
         subprocess.Popen(
             cmd,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=log_handle,
+            stderr=log_handle,
             start_new_session=True
         )
         # Ждём до 60 секунд пока терминал поднимется и авторизуется
         for i in range(60):
             time.sleep(1)
             if _is_theta_terminal_running():
+                log_handle.close()
                 time.sleep(5)  # Дополнительная пауза для полной инициализации
                 print(f"[calibration] Theta Terminal успешно запущен (за {i+1} сек)")
                 return True
+        log_handle.close()
         print("[calibration] Theta Terminal не ответил за 60 секунд")
         return False
     except Exception as e:
@@ -522,7 +558,18 @@ def _run_calibration_job(job_id: str, tickers: List[str], months: int, hold_days
         with _jobs_lock:
             _jobs[job_id]["current_step"] = "Запуск Theta Terminal"
         if not _start_theta_terminal():
-            log(f"❌ Не удалось запустить Theta Terminal. Проверьте: jar={THETA_TERMINAL_JAR}, creds.txt в корне проекта или ~/Downloads/")
+            diagnostics = _get_theta_terminal_diagnostics()
+            log("❌ Не удалось запустить Theta Terminal")
+            log(
+                "   Диагностика: "
+                f"java={'ok' if diagnostics['java_exists'] else 'missing'}, "
+                f"jar={'ok' if diagnostics['jar_exists'] else 'missing'} [{diagnostics.get('resolved_jar_path') or diagnostics.get('configured_jar_path') or '-'}], "
+                f"creds={'ok' if diagnostics['creds_exists'] else 'missing'} [{diagnostics.get('resolved_creds_file') or diagnostics.get('configured_creds_file') or '-'}]"
+            )
+            if diagnostics.get("log_tail"):
+                for line in diagnostics["log_tail"].splitlines()[-5:]:
+                    if line.strip():
+                        log(f"   theta.log: {line[-300:]}")
             with _jobs_lock:
                 _jobs[job_id]["status"] = "error"
                 _jobs[job_id]["error"] = "Theta Terminal недоступен"
@@ -822,6 +869,7 @@ async def get_calibration_status():
         "tickers": tickers_data,
         "terminal_running": terminal_running,
         "jar_exists": bool(_find_theta_jar()),
+        "terminal": _get_theta_terminal_diagnostics(),
         "total_calibrated": len(tickers_data),
         "watchlist": {
             **watchlist_config,
@@ -984,9 +1032,8 @@ async def check_terminal_status():
     Проверяет статус Theta Terminal
     ЗАЧЕМ: UI показывает индикатор подключения перед запуском калибровки
     """
-    running = _is_theta_terminal_running()
+    diagnostics = _get_theta_terminal_diagnostics()
     return {
-        "running": running,
+        **diagnostics,
         "port": THETA_TERMINAL_PORT,
-        "jar_exists": bool(_find_theta_jar())
     }
