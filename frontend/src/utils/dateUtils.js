@@ -7,6 +7,61 @@
  * чтобы пользователи в разных часовых поясах видели одинаковые результаты
  */
 
+const isValidDate = (date) => date instanceof Date && !Number.isNaN(date.getTime());
+
+export function normalizeDateString(dateValue) {
+  if (!dateValue) return null;
+
+  if (typeof dateValue !== 'string') {
+    if (dateValue instanceof Date && isValidDate(dateValue)) {
+      return dateValue.toISOString().split('T')[0];
+    }
+    return null;
+  }
+
+  const trimmedValue = dateValue.trim();
+  if (!trimmedValue) return null;
+
+  const isoMatch = trimmedValue.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) {
+    return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+  }
+
+  const compactIsoMatch = trimmedValue.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (compactIsoMatch) {
+    return `${compactIsoMatch[1]}-${compactIsoMatch[2]}-${compactIsoMatch[3]}`;
+  }
+
+  const dotMatch = trimmedValue.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (dotMatch) {
+    return `${dotMatch[3]}-${dotMatch[2]}-${dotMatch[1]}`;
+  }
+
+  const slashMatch = trimmedValue.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slashMatch) {
+    const month = slashMatch[1].padStart(2, '0');
+    const day = slashMatch[2].padStart(2, '0');
+    return `${slashMatch[3]}-${month}-${day}`;
+  }
+
+  const parsedDate = new Date(trimmedValue);
+  if (!isValidDate(parsedDate)) {
+    return null;
+  }
+
+  return parsedDate.toISOString().split('T')[0];
+}
+
+export function parseDateAtStartOfDay(dateValue) {
+  const normalizedDate = normalizeDateString(dateValue);
+  if (!normalizedDate) {
+    return null;
+  }
+
+  const parsedDate = new Date(`${normalizedDate}T00:00:00`);
+  return isValidDate(parsedDate) ? parsedDate : null;
+}
+
 /**
  * Вычисляет количество дней между сегодняшней датой (UTC) и датой экспирации
  * ЗАЧЕМ: Единообразный расчёт для всех часовых поясов
@@ -16,13 +71,15 @@
  */
 export function getDaysUntilExpirationUTC(dateStr) {
   if (!dateStr) return 0;
+  const normalizedDate = normalizeDateString(dateStr);
+  if (!normalizedDate) return 0;
   
   // Получаем текущую дату в UTC (без времени)
   const now = new Date();
   const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
   
   // Парсим дату экспирации как UTC (YYYY-MM-DD)
-  const [year, month, day] = dateStr.split('-').map(Number);
+  const [year, month, day] = normalizedDate.split('-').map(Number);
   const expDateUTC = Date.UTC(year, month - 1, day); // month - 1, т.к. месяцы 0-indexed
   
   const diffTime = expDateUTC - todayUTC;
@@ -56,6 +113,11 @@ export function calculateDaysRemainingUTC(option, daysPassed = 0, defaultDays = 
   if (!option?.date) {
     return Math.max(0, defaultDays - daysPassed);
   }
+
+  const normalizedExpirationDate = normalizeDateString(option.date);
+  if (!normalizedExpirationDate) {
+    return Math.max(0, defaultDays - daysPassed);
+  }
   
   // Для зафиксированных позиций используем сохранённое initialDaysToExpiration
   // ЗАЧЕМ: daysPassed считается от даты сохранения, а не от сегодня
@@ -65,12 +127,12 @@ export function calculateDaysRemainingUTC(option, daysPassed = 0, defaultDays = 
   } else {
     // Для обычных позиций вычисляем от даты входа опциона по UTC
     // ЗАЧЕМ: Каждый опцион имеет свою дату входа (entryDate)
-    const entryDateStr = option.entryDate || new Date().toISOString().split('T')[0];
+    const entryDateStr = normalizeDateString(option.entryDate) || new Date().toISOString().split('T')[0];
     const [entryYear, entryMonth, entryDay] = entryDateStr.split('-').map(Number);
     const entryDateUTC = Date.UTC(entryYear, entryMonth - 1, entryDay);
     
     // Парсим дату экспирации
-    const [expYear, expMonth, expDay] = option.date.split('-').map(Number);
+    const [expYear, expMonth, expDay] = normalizedExpirationDate.split('-').map(Number);
     const expDateUTC = Date.UTC(expYear, expMonth - 1, expDay);
     
     // Дни от даты входа до экспирации
@@ -83,7 +145,10 @@ export function calculateDaysRemainingUTC(option, daysPassed = 0, defaultDays = 
   
   if (oldestEntryDate && option.entryDate && !option.isLockedPosition) {
     // Вычисляем разницу между датой входа опциона и самой старой датой входа
-    const entryDateStr = option.entryDate;
+    const entryDateStr = normalizeDateString(option.entryDate);
+    if (!entryDateStr) {
+      return Math.max(0, initialDaysToExpiration - actualDaysPassed);
+    }
     const [entryYear, entryMonth, entryDay] = entryDateStr.split('-').map(Number);
     const optionEntryDateUTC = Date.UTC(entryYear, entryMonth - 1, entryDay);
     
@@ -138,7 +203,7 @@ export function isOptionActiveAtDay(option, daysPassed, oldestEntryDate) {
   
   // Вычисляем разницу между датой входа опциона и самой старой датой входа
   // ВАЖНО: Если entryDate отсутствует, используем текущую дату как fallback
-  const entryDateStr = option.entryDate || new Date().toISOString().split('T')[0];
+  const entryDateStr = normalizeDateString(option.entryDate) || new Date().toISOString().split('T')[0];
   const [entryYear, entryMonth, entryDay] = entryDateStr.split('-').map(Number);
   const optionEntryDateUTC = Date.UTC(entryYear, entryMonth - 1, entryDay);
   
@@ -166,6 +231,8 @@ export function isOptionActiveAtDay(option, daysPassed, oldestEntryDate) {
  */
 export function isOptionExpiredAtDay(option, daysPassed, oldestEntryDate) {
   if (!oldestEntryDate || !option.date) return false; // Нет данных — считаем не истёкшим
+  const normalizedExpirationDate = normalizeDateString(option.date);
+  if (!normalizedExpirationDate) return false;
   
   // Вычисляем целевую дату в UTC полночь (timestamp)
   // ЗАЧЕМ: Сравниваем только даты без учета времени для консистентности между часовыми поясами
@@ -176,7 +243,7 @@ export function isOptionExpiredAtDay(option, daysPassed, oldestEntryDate) {
   );
   
   // Парсим дату экспирации опциона в UTC полночь (timestamp)
-  const [expYear, expMonth, expDay] = option.date.split('-').map(Number);
+  const [expYear, expMonth, expDay] = normalizedExpirationDate.split('-').map(Number);
   const expirationDateUTC = Date.UTC(expYear, expMonth - 1, expDay);
   
   // Опцион истёк, если целевая дата > даты экспирации
@@ -196,8 +263,10 @@ export function getOldestEntryDate(options) {
   
   let oldest = null;
   options.forEach(option => {
-    const entryDateStr = option.entryDate || new Date().toISOString().split('T')[0];
-    const entryDate = new Date(entryDateStr + 'T00:00:00');
+    const entryDate = parseDateAtStartOfDay(option.entryDate || new Date().toISOString().split('T')[0]);
+    if (!entryDate) {
+      return;
+    }
     
     if (!oldest || entryDate < oldest) {
       oldest = entryDate;

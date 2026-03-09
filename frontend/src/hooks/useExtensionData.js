@@ -15,6 +15,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { normalizeDateString } from '../utils/dateUtils';
 
 // Ключ в localStorage, куда расширение записывает данные
 // ВАЖНО: Расширение использует именно этот ключ — НЕ МЕНЯТЬ!
@@ -67,12 +68,15 @@ function adaptOption(option) {
   const effectiveIV = option.impliedVolatility || option.iv ||
     (isBuy ? option.askIV : option.bidIV) || 0;
 
+  const normalizedOptionDate = normalizeDateString(option.date || option.expirationDate) || '';
+  const normalizedEntryDate = normalizeDateString(option.entryDate) || new Date().toISOString().split('T')[0];
+
   return {
     id: option.id || Date.now().toString(),
     action: option.action || 'Buy',
     type: option.type || 'CALL',
     strike: option.strike || 0,
-    date: option.date || option.expirationDate || '',
+    date: normalizedOptionDate,
     quantity: option.quantity || 1,
     premium: effectivePremium,
     bid: option.bid || 0,
@@ -90,7 +94,7 @@ function adaptOption(option) {
     vega: option.vega || 0,
     impliedVolatility: effectiveIV,
     // Дата входа в позицию
-    entryDate: option.entryDate || new Date().toISOString().split('T')[0]
+    entryDate: normalizedEntryDate
   };
 }
 

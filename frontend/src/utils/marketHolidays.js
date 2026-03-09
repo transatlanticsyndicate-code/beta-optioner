@@ -78,12 +78,18 @@ const HOLIDAY_NAMES = {
   '12-25': 'Christmas',
 };
 
+const isValidDate = (date) => date instanceof Date && !Number.isNaN(date.getTime());
+
 /**
  * Проверяет, является ли дата выходным днём (суббота или воскресенье)
  * @param {Date} date - Дата для проверки
  * @returns {boolean} true если выходной
  */
 export const isWeekend = (date) => {
+  if (!isValidDate(date)) {
+    return false;
+  }
+  
   const day = date.getDay();
   return day === 0 || day === 6; // 0 = воскресенье, 6 = суббота
 };
@@ -94,6 +100,10 @@ export const isWeekend = (date) => {
  * @returns {boolean} true если праздник
  */
 export const isMarketHoliday = (date) => {
+  if (!isValidDate(date)) {
+    return false;
+  }
+  
   const year = date.getFullYear();
   const holidays = US_MARKET_HOLIDAYS[year] || [];
   
@@ -109,6 +119,10 @@ export const isMarketHoliday = (date) => {
  * @returns {string|null} Название праздника или null
  */
 export const getHolidayName = (date) => {
+  if (!isValidDate(date)) {
+    return null;
+  }
+  
   const year = date.getFullYear();
   const holidays = US_MARKET_HOLIDAYS[year] || [];
   const dateStr = date.toISOString().split('T')[0];
@@ -128,6 +142,10 @@ export const getHolidayName = (date) => {
  * @returns {{ isNonTrading: boolean, reason: string|null }}
  */
 export const isNonTradingDay = (date) => {
+  if (!isValidDate(date)) {
+    return { isNonTrading: false, reason: null };
+  }
+  
   if (isWeekend(date)) {
     const dayName = date.getDay() === 0 ? 'Воскресенье' : 'Суббота';
     return { isNonTrading: true, reason: dayName };

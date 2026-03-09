@@ -19,7 +19,7 @@ import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import { isNonTradingDay } from '../../utils/marketHolidays';
-
+import { parseDateAtStartOfDay } from '../../utils/dateUtils';
 
 function PriceAndTimeSettings({ 
   currentPrice = 0,
@@ -61,7 +61,10 @@ function PriceAndTimeSettings({
     options.forEach(option => {
       // Используем entryDate если есть, иначе текущую дату
       const entryDateStr = option.entryDate || new Date().toISOString().split('T')[0];
-      const entryDate = new Date(entryDateStr + 'T00:00:00');
+      const entryDate = parseDateAtStartOfDay(entryDateStr);
+      if (!entryDate) {
+        return;
+      }
       
       if (!oldest || entryDate < oldest) {
         oldest = entryDate;
@@ -78,9 +81,9 @@ function PriceAndTimeSettings({
     if (!options || options.length === 0) return 30;
     
     // Базовая дата: самая старая дата входа или дата сохранения (для зафиксированных)
-    let baseDate = oldestEntryDate || new Date();
-    if (savedConfigDate) {
-      baseDate = new Date(savedConfigDate);
+    let baseDate = savedConfigDate ? parseDateAtStartOfDay(savedConfigDate) : oldestEntryDate;
+    if (!baseDate) {
+      baseDate = new Date();
     }
     baseDate.setHours(0, 0, 0, 0);
     
@@ -88,7 +91,10 @@ function PriceAndTimeSettings({
     options.forEach(option => {
       if (option.date) {
         // Вычисляем дни от базовой даты до экспирации
-        const expirationDate = new Date(option.date + 'T00:00:00');
+        const expirationDate = parseDateAtStartOfDay(option.date);
+        if (!expirationDate) {
+          return;
+        }
         const diffTime = expirationDate.getTime() - baseDate.getTime();
         const daysUntil = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         if (daysUntil > maxDays) {
@@ -192,7 +198,7 @@ function PriceAndTimeSettings({
           {/* ВАЖНО: Считаем от самой старой даты входа (entryDate) */}
           {options.length > 0 && (() => {
             // Базовая дата: дата сохранения (для зафиксированных) или самая старая дата входа
-            const baseDate = savedConfigDate ? new Date(savedConfigDate) : (oldestEntryDate || new Date());
+            const baseDate = savedConfigDate ? (parseDateAtStartOfDay(savedConfigDate) || new Date()) : (oldestEntryDate || new Date());
             baseDate.setHours(0, 0, 0, 0);
             const targetDate = new Date(baseDate);
             targetDate.setDate(targetDate.getDate() + daysPassed);
@@ -239,7 +245,7 @@ function PriceAndTimeSettings({
         <div className="flex justify-between text-xs text-muted-foreground">
           <span>
             {savedConfigDate ? (() => {
-              const date = new Date(savedConfigDate);
+              const date = parseDateAtStartOfDay(savedConfigDate) || new Date();
               return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
             })() : (oldestEntryDate ? (() => {
               return oldestEntryDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
