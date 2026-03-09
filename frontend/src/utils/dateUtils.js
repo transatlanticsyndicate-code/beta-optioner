@@ -39,8 +39,23 @@ export function normalizeDateString(dateValue) {
 
   const slashMatch = trimmedValue.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (slashMatch) {
-    const month = slashMatch[1].padStart(2, '0');
-    const day = slashMatch[2].padStart(2, '0');
+    const firstPart = Number(slashMatch[1]);
+    const secondPart = Number(slashMatch[2]);
+
+    if (firstPart > 12 && secondPart <= 12) {
+      const day = String(firstPart).padStart(2, '0');
+      const month = String(secondPart).padStart(2, '0');
+      return `${slashMatch[3]}-${month}-${day}`;
+    }
+
+    if (secondPart > 12 && firstPart <= 12) {
+      const month = String(firstPart).padStart(2, '0');
+      const day = String(secondPart).padStart(2, '0');
+      return `${slashMatch[3]}-${month}-${day}`;
+    }
+
+    const day = String(firstPart).padStart(2, '0');
+    const month = String(secondPart).padStart(2, '0');
     return `${slashMatch[3]}-${month}-${day}`;
   }
 
