@@ -27,6 +27,7 @@ class CalibrationScheduler:
     def get_default_config(self) -> Dict[str, Any]:
         return {
             "enabled": False,
+            "tickers_source_url": "https://raw.githubusercontent.com/levonmusoyan-cell/for_tikers/main/calibration_tickers.json",
             "theta": {
                 "jar_path": "",
                 "creds_file": ""
@@ -90,6 +91,7 @@ class CalibrationScheduler:
             config = self.get_default_config()
         default_config = self.get_default_config()
         config.setdefault("enabled", default_config["enabled"])
+        config.setdefault("tickers_source_url", default_config["tickers_source_url"])
         config.setdefault("theta", default_config["theta"])
         config.setdefault("cleanup", default_config["cleanup"])
         config.setdefault("modes", default_config["modes"])

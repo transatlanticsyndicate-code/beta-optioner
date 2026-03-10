@@ -1,5 +1,6 @@
 {
   "enabled": false,
+  "tickers_source_url": "https://raw.githubusercontent.com/levonmusoyan-cell/for_tikers/main/calibration_tickers.json",
   "theta": {
     "jar_path": "",
     "creds_file": ""

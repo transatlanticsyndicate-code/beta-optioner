@@ -21,6 +21,8 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.error
+import urllib.request
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 
@@ -73,6 +75,7 @@ class RunCalibrationRequest(BaseModel):
 class SaveWatchlistRequest(BaseModel):
     enabled: bool = False
     tickers: List[str] = []
+    tickers_source_url: str = ""
     theta: Dict[str, str] = {}
     cleanup: Dict[str, Any] = {}
     modes: Dict[str, Dict[str, Any]] = {}
@@ -212,14 +215,74 @@ def _get_cleanup_policy() -> Dict[str, Any]:
     return config.get("cleanup", {}) if isinstance(config, dict) else {}
 
 
-def _load_online_tickers() -> List[str]:
-    return calibration_scheduler.load_tickers()
+def _normalize_ticker_source_url(url: str) -> str:
+    value = (url or "").strip()
+    if not value:
+        return ""
+    github_blob_match = re.match(r"^https://github\.com/([^/]+)/([^/]+)/blob/([^/]+)/(.+)$", value)
+    if github_blob_match:
+        owner, repo, branch, path = github_blob_match.groups()
+        return f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{path}"
+    return value
+
+
+def _sanitize_tickers(tickers: Any) -> List[str]:
+    clean_tickers = []
+    for ticker in tickers if isinstance(tickers, list) else []:
+        if not isinstance(ticker, str):
+            continue
+        normalized = ticker.strip().upper()
+        if normalized and normalized.isalpha() and len(normalized) <= 6:
+            clean_tickers.append(normalized)
+    return clean_tickers
+
+
+def _load_online_tickers() -> Dict[str, Any]:
+    local_tickers = calibration_scheduler.load_tickers()
+    config = calibration_scheduler.load_config()
+    source_url = _normalize_ticker_source_url(config.get("tickers_source_url", "") if isinstance(config, dict) else "")
+    if not source_url:
+        return {
+            "tickers": local_tickers,
+            "source": "local_file",
+            "source_url": "",
+            "fallback_used": False,
+            "error": None,
+        }
+
+    try:
+        with urllib.request.urlopen(source_url, timeout=10) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        remote_tickers = _sanitize_tickers(payload.get("tickers", [])) if isinstance(payload, dict) else []
+        if remote_tickers:
+            return {
+                "tickers": remote_tickers,
+                "source": "remote_url",
+                "source_url": source_url,
+                "fallback_used": False,
+                "error": None,
+            }
+        return {
+            "tickers": local_tickers,
+            "source": "local_file",
+            "source_url": source_url,
+            "fallback_used": True,
+            "error": "Во внешнем JSON нет корректного списка tickers",
+        }
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError, ValueError) as exc:
+        return {
+            "tickers": local_tickers,
+            "source": "local_file",
+            "source_url": source_url,
+            "fallback_used": True,
+            "error": str(exc),
+        }
 
 
 def _scan_cleanup_candidates() -> Dict[str, Any]:
     policy = _get_cleanup_policy()
     now = datetime.now()
-    active_tickers = set(_load_online_tickers())
+    active_tickers = set(_load_online_tickers().get("tickers", []))
     options_max_age_days = int(policy.get("options_max_age_days", 45))
     results_max_age_days = int(policy.get("results_max_age_days", 90))
     delete_orphan_options = bool(policy.get("delete_orphan_options", True))
@@ -725,7 +788,7 @@ def _launch_calibration_job(tickers: List[str], months: int, hold_days: int,
 
 
 def run_scheduled_calibration(mode: str, mode_settings: Dict[str, Any], source: str = "scheduler") -> Dict[str, Any]:
-    tickers = _load_online_tickers()
+    tickers = _load_online_tickers().get("tickers", [])
     if mode == "recent":
         months = int(mode_settings.get("months", 1))
         hold_days = int(mode_settings.get("hold_days", 7))
@@ -864,6 +927,7 @@ async def get_calibration_status():
     # Проверяем статус Theta Terminal
     terminal_running = _is_theta_terminal_running()
     watchlist_config = calibration_scheduler.load_config()
+    online_tickers = _load_online_tickers()
 
     return {
         "tickers": tickers_data,
@@ -873,7 +937,13 @@ async def get_calibration_status():
         "total_calibrated": len(tickers_data),
         "watchlist": {
             **watchlist_config,
-            "tickers": _load_online_tickers(),
+            "tickers": online_tickers.get("tickers", []),
+            "tickers_source": {
+                "type": online_tickers.get("source"),
+                "url": online_tickers.get("source_url"),
+                "fallback_used": online_tickers.get("fallback_used"),
+                "error": online_tickers.get("error"),
+            },
         },
         "scheduler": calibration_scheduler.get_scheduler_status(),
         "cleanup_preview": _scan_cleanup_candidates(),
@@ -890,9 +960,16 @@ async def get_calibration_history(limit: int = 20):
 @router.get("/watchlist")
 async def get_calibration_watchlist():
     config = calibration_scheduler.load_config()
+    online_tickers = _load_online_tickers()
     return {
         **config,
-        "tickers": _load_online_tickers(),
+        "tickers": online_tickers.get("tickers", []),
+        "tickers_source": {
+            "type": online_tickers.get("source"),
+            "url": online_tickers.get("source_url"),
+            "fallback_used": online_tickers.get("fallback_used"),
+            "error": online_tickers.get("error"),
+        },
     }
 
 
@@ -905,16 +982,24 @@ async def save_calibration_watchlist(request: SaveWatchlistRequest):
             clean_tickers.append(ticker)
     config = calibration_scheduler.load_config()
     config["enabled"] = request.enabled
+    config["tickers_source_url"] = _normalize_ticker_source_url(request.tickers_source_url)
     config["theta"] = request.theta or {}
     config["cleanup"] = request.cleanup or config.get("cleanup", {})
     config["modes"] = request.modes or config.get("modes", {})
     saved = calibration_scheduler.save_config(config)
     saved_tickers = calibration_scheduler.save_tickers(clean_tickers)
+    online_tickers = _load_online_tickers()
     return {
         "status": "ok",
         "config": {
             **saved,
-            "tickers": saved_tickers.get("tickers", []),
+            "tickers": online_tickers.get("tickers", saved_tickers.get("tickers", [])),
+            "tickers_source": {
+                "type": online_tickers.get("source"),
+                "url": online_tickers.get("source_url"),
+                "fallback_used": online_tickers.get("fallback_used"),
+                "error": online_tickers.get("error"),
+            },
         },
         "scheduler": calibration_scheduler.get_scheduler_status(),
     }

@@ -538,6 +538,7 @@ function SettingsCalibration() {
   const [recentDays, setRecentDays] = useState(30);
   const [onlineEnabled, setOnlineEnabled] = useState(false);
   const [watchlistInput, setWatchlistInput] = useState('');
+  const [tickersSourceUrl, setTickersSourceUrl] = useState('');
   const [thetaJarPath, setThetaJarPath] = useState('');
   const [thetaCredsFile, setThetaCredsFile] = useState('');
   const [cleanupConfig, setCleanupConfig] = useState({
@@ -576,6 +577,7 @@ function SettingsCalibration() {
         const watchlist = data.watchlist || {};
         setOnlineEnabled(Boolean(watchlist.enabled));
         setWatchlistInput((watchlist.tickers || []).join(', '));
+        setTickersSourceUrl(watchlist.tickers_source_url || '');
         setThetaJarPath(watchlist.theta?.jar_path || '');
         setThetaCredsFile(watchlist.theta?.creds_file || '');
         if (watchlist.cleanup) {
@@ -658,6 +660,7 @@ function SettingsCalibration() {
         body: JSON.stringify({
           enabled: onlineEnabled,
           tickers,
+          tickers_source_url: tickersSourceUrl,
           theta: {
             jar_path: thetaJarPath,
             creds_file: thetaCredsFile,
@@ -675,7 +678,7 @@ function SettingsCalibration() {
     } catch (e) {
       alert(`Ошибка сохранения: ${e.message}`);
     }
-  }, [watchlistInput, onlineEnabled, thetaJarPath, thetaCredsFile, cleanupConfig, scheduleConfig, loadStatus]);
+  }, [watchlistInput, onlineEnabled, tickersSourceUrl, thetaJarPath, thetaCredsFile, cleanupConfig, scheduleConfig, loadStatus]);
 
   const runCleanupNow = useCallback(async () => {
     try {
@@ -857,8 +860,41 @@ function SettingsCalibration() {
               Эти тикеры сохраняются отдельно в server-файл `calibration_tickers.json`. Технические настройки scheduler хранятся отдельно.
             </div>
             <div className="text-xs text-yellow-700 rounded-lg border border-yellow-500/20 p-3 bg-yellow-500/10 dark:text-yellow-200">
-              Онлайн-калибровка берёт тикеры из server-файла `backend/app/config/calibration_tickers.json`.
-              Если вы укажете тикеры в поле выше и нажмёте `Сохранить server-настройки и тикеры`, страница сохранит этот список в тот же файл.
+              Онлайн-калибровка может брать тикеры из внешнего JSON URL. Если внешний источник недоступен,
+              backend автоматически использует локальный fallback `backend/app/config/calibration_tickers.json`.
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="text-sm text-muted-foreground">Внешний источник тикеров (raw JSON URL)</div>
+            <Input
+              className="font-mono cursor-pointer"
+              value={tickersSourceUrl}
+              onChange={e => setTickersSourceUrl(e.target.value)}
+              placeholder="https://raw.githubusercontent.com/.../calibration_tickers.json"
+            />
+            <div className="text-xs text-muted-foreground">
+              Можно вставить и обычную GitHub blob-ссылку — backend автоматически преобразует её в raw URL.
+            </div>
+            <div className="text-xs rounded-lg border border-border p-3 bg-muted/20 space-y-1">
+              <div>
+                Текущий источник: {statusData?.watchlist?.tickers_source?.type === 'remote_url' ? 'внешний URL' : 'локальный файл'}
+              </div>
+              {!!statusData?.watchlist?.tickers_source?.url && (
+                <div className="break-all text-muted-foreground">
+                  URL: {statusData.watchlist.tickers_source.url}
+                </div>
+              )}
+              {statusData?.watchlist?.tickers_source?.fallback_used && (
+                <div className="text-yellow-700 dark:text-yellow-200">
+                  Внешний источник недоступен, используется локальный fallback.
+                </div>
+              )}
+              {!!statusData?.watchlist?.tickers_source?.error && (
+                <div className="text-red-500 break-all">
+                  Ошибка источника: {statusData.watchlist.tickers_source.error}
+                </div>
+              )}
             </div>
           </div>
 
