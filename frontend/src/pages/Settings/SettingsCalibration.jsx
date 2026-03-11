@@ -30,6 +30,52 @@ const API_BASE = '/api/calibration';
 // Интервал polling прогресса (мс)
 const POLL_INTERVAL = 2000;
 
+function formatUtcDateTime(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString('ru-RU', {
+    timeZone: 'UTC',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }) + ' UTC';
+}
+
+function parseCronExpression(expression) {
+  const parts = String(expression || '').trim().split(/\s+/);
+  if (parts.length !== 5) return null;
+  const [minute, hour, day, month, dayOfWeek] = parts;
+  return { minute, hour, day, month, dayOfWeek };
+}
+
+function formatCronUtcTime(expression) {
+  const parsed = parseCronExpression(expression);
+  if (!parsed) return '';
+  const hour = String(parsed.hour).padStart(2, '0');
+  const minute = String(parsed.minute).padStart(2, '0');
+  if (!/^\d{2}$/.test(hour) || !/^\d{2}$/.test(minute)) return '';
+  return `${hour}:${minute}`;
+}
+
+function updateCronUtcTime(cronList, timeValue) {
+  const normalizedTime = String(timeValue || '').trim();
+  if (!/^\d{2}:\d{2}$/.test(normalizedTime)) return cronList;
+  const [hour, minute] = normalizedTime.split(':');
+  return (Array.isArray(cronList) ? cronList : [])
+    .map(item => String(item || '').trim())
+    .filter(Boolean)
+    .map(item => {
+      const parsed = parseCronExpression(item);
+      if (!parsed) return item;
+      return `${Number(minute)} ${Number(hour)} ${parsed.day} ${parsed.month} ${parsed.dayOfWeek}`;
+    });
+}
+
 // ============================================================================
 // ВСПОМОГАТЕЛЬНЫЕ КОМПОНЕНТЫ
 // ============================================================================
@@ -787,6 +833,14 @@ function SettingsCalibration() {
 
   const isRunning = activeJob && (activeJob.status === 'running' || activeJob.status === 'pending');
   const staleTickers = statusData?.tickers?.filter(t => t.is_stale) || [];
+  const schedulerJobsByMode = (statusData?.scheduler?.jobs || []).reduce((acc, job) => {
+    const match = job.id?.match(/^calibration_([^_]+)/);
+    const mode = match?.[1];
+    if (!mode) return acc;
+    if (!acc[mode]) acc[mode] = [];
+    acc[mode].push(job);
+    return acc;
+  }, {});
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -911,6 +965,12 @@ function SettingsCalibration() {
 
           {['standard', 'recent', 'weighted'].map(mode => (
             <div key={mode} className="rounded-lg border border-border p-3 space-y-3">
+              {(() => {
+                const modeCronList = Array.isArray(scheduleConfig[mode]?.cron) ? scheduleConfig[mode].cron : [];
+                const modeUtcTime = formatCronUtcTime(modeCronList[0] || '');
+                const nextModeRuns = schedulerJobsByMode[mode] || [];
+                return (
+                  <>
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex items-center gap-2">
                   <Badge variant="outline">{mode}</Badge>
@@ -931,6 +991,37 @@ function SettingsCalibration() {
                   <Play className="h-3.5 w-3.5 mr-1.5" />
                   Запустить сейчас
                 </Button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <label className="text-sm text-muted-foreground space-y-1">
+                  <div>Время старта онлайн-калибровки по расписанию (UTC)</div>
+                  <Input
+                    type="time"
+                    className="cursor-pointer"
+                    value={modeUtcTime}
+                    onChange={e => setScheduleConfig(prev => ({
+                      ...prev,
+                      [mode]: {
+                        ...prev[mode],
+                        cron: updateCronUtcTime(prev[mode]?.cron, e.target.value),
+                      },
+                    }))}
+                  />
+                  <div className="text-[11px] text-muted-foreground">
+                    Это поле меняет часы и минуты UTC во всех cron-правилах режима, сохраняя сезонность и дни запуска.
+                  </div>
+                </label>
+                <div className="rounded-lg border border-border p-3 bg-muted/20 space-y-1">
+                  <div className="text-sm text-muted-foreground">
+                    Ближайшие запуски режима (UTC)
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {nextModeRuns.length > 0
+                      ? nextModeRuns.map(job => formatUtcDateTime(job.next_run_at)).join(' · ')
+                      : 'не настроено'}
+                  </div>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
@@ -993,12 +1084,15 @@ function SettingsCalibration() {
                   />
                 </label>
               </div>
+                  </>
+                );
+              })()}
             </div>
           ))}
 
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="text-xs text-muted-foreground">
-              Следующие запуски: {(statusData?.scheduler?.jobs || []).map(j => `${j.id.replace('calibration_', '')}: ${j.next_run_at ? new Date(j.next_run_at).toLocaleString('ru-RU') : '—'}`).join(' · ') || 'не настроены'}
+              Следующие запуски (UTC): {(statusData?.scheduler?.jobs || []).map(j => `${j.id.replace('calibration_', '')}: ${formatUtcDateTime(j.next_run_at)}`).join(' · ') || 'не настроены'}
             </div>
             <Button className="cursor-pointer" onClick={saveOnlineSettings} disabled={isRunning}>Сохранить server-настройки и тикеры</Button>
           </div>
