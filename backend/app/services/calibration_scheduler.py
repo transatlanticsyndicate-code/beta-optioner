@@ -3,6 +3,7 @@ import logging
 import os
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Union
+from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -14,13 +15,14 @@ CONFIG_DIR = os.path.join(os.path.dirname(__file__), "..", "config")
 WATCHLIST_FILE = os.path.join(CONFIG_DIR, "calibration_watchlist.json")
 TICKERS_FILE = os.path.join(CONFIG_DIR, "calibration_tickers.json")
 HISTORY_FILE = os.path.join(CONFIG_DIR, "calibration_history.json")
+UTC = ZoneInfo("UTC")
 
 RunCallback = Callable[[str, Dict[str, Any], str], Dict[str, Any]]
 
 
 class CalibrationScheduler:
     def __init__(self) -> None:
-        self.scheduler = BackgroundScheduler()
+        self.scheduler = BackgroundScheduler(timezone=UTC)
         self.run_callback: Optional[RunCallback] = None
         self.started = False
 
@@ -188,7 +190,14 @@ class CalibrationScheduler:
 
     def _parse_cron(self, expression: str) -> CronTrigger:
         minute, hour, day, month, day_of_week = expression.split()
-        return CronTrigger(minute=minute, hour=hour, day=day, month=month, day_of_week=day_of_week)
+        return CronTrigger(
+            minute=minute,
+            hour=hour,
+            day=day,
+            month=month,
+            day_of_week=day_of_week,
+            timezone=UTC,
+        )
 
     def _get_cron_expressions(self, cron_value: Union[str, List[str]]) -> List[str]:
         if isinstance(cron_value, list):
