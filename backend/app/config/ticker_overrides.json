@@ -1701,5 +1701,16 @@
       "half_life_days": 6,
       "note": "Calibrated 2026-02-26, 2804 trades, 7d hold, ThetaData EOD"
     }
+  },
+  "IT": {
+    "recent": {
+      "down_mult": 0.993,
+      "up_mult": 1.062,
+      "iv_mean": 0.5792,
+      "iv_kappa": 80.98,
+      "iv_std": 0.1669,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-03-12, 88 trades, 7d hold, ThetaData EOD"
+    }
   }
 }

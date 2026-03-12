@@ -7,7 +7,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  FlaskConical, Play, Trash2, RefreshCw, Plus, CheckCircle2,
+  FlaskConical, Play, Trash2, RefreshCw, CheckCircle2,
   AlertCircle, Clock, Wifi, WifiOff, ChevronDown, ChevronUp,
   TrendingDown, TrendingUp, Database, Terminal, Activity
 } from 'lucide-react';
@@ -74,6 +74,13 @@ function updateCronUtcTime(cronList, timeValue) {
       if (!parsed) return item;
       return `${Number(minute)} ${Number(hour)} ${parsed.day} ${parsed.month} ${parsed.dayOfWeek}`;
     });
+}
+
+function parseTickerList(value) {
+  return String(value || '')
+    .split(/[,\s]+/)
+    .map(ticker => ticker.trim().toUpperCase())
+    .filter(ticker => ticker && /^[A-Z]{1,6}$/.test(ticker));
 }
 
 // ============================================================================
@@ -442,7 +449,7 @@ function TickerRow({ item, onRecalibrate, onDelete, isRunning }) {
 }
 
 /** Блок прогресса активного задания */
-function JobProgress({ job, onClose }) {
+function JobProgress({ job, onClose, onStop }) {
   const [expanded, setExpanded] = useState(true);
   const logRef = useRef(null);
 
@@ -457,6 +464,7 @@ function JobProgress({ job, onClose }) {
 
   const isDone = job.status === 'done';
   const isError = job.status === 'error';
+  const isRunning = job.status === 'running' || job.status === 'pending';
   const successCount = job.results?.filter(r => r.status === 'success').length || 0;
   const totalCount = job.tickers?.length || 0;
 
@@ -481,6 +489,11 @@ function JobProgress({ job, onClose }) {
             </span>
           </div>
           <div className="flex items-center gap-2">
+            {isRunning && (
+              <Button size="sm" variant="destructive" onClick={() => onStop?.(job.job_id)} className="h-7 text-xs text-white hover:text-white cursor-pointer">
+                Остановить текущую калибровку
+              </Button>
+            )}
             <button
               onClick={() => setExpanded(e => !e)}
               className="text-muted-foreground hover:text-foreground cursor-pointer"
@@ -577,7 +590,6 @@ function SettingsCalibration() {
   const [historyItems, setHistoryItems] = useState([]);
 
   // Поле ввода новых тикеров
-  const [tickerInput, setTickerInput] = useState('');
   const [months, setMonths] = useState(6);
   const [holdDays, setHoldDays] = useState(14);
   const [calibrationMode, setCalibrationMode] = useState('standard');
@@ -742,8 +754,13 @@ function SettingsCalibration() {
   }, [loadStatus, loadHistory]);
 
   const runScheduledModeNow = useCallback(async (mode) => {
+    const tickers = parseTickerList(watchlistInput);
     try {
-      const res = await fetch(`${API_BASE}/run-scheduled/${mode}`, { method: 'POST' });
+      const res = await fetch(`${API_BASE}/run-scheduled/${mode}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tickers }),
+      });
       if (!res.ok) {
         const err = await res.json();
         alert(`Ошибка запуска режима ${mode}: ${err.detail || 'unknown error'}`);
@@ -756,7 +773,34 @@ function SettingsCalibration() {
     } catch (e) {
       alert(`Ошибка запуска: ${e.message}`);
     }
-  }, [startPolling]);
+  }, [startPolling, watchlistInput]);
+
+  const stopCalibration = useCallback(async (jobId) => {
+    if (!jobId) return;
+    try {
+      const res = await fetch(`${API_BASE}/stop/${jobId}`, { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(`Ошибка остановки: ${err.detail || 'unknown error'}`);
+        return;
+      }
+      const data = await res.json();
+      setActiveJob(prev => prev ? {
+        ...prev,
+        status: 'error',
+        cancelled: true,
+        error: 'Остановка запрошена пользователем',
+        current_step: 'Остановка...',
+        log: [...(prev.log || []), '[manual] 🛑 Запрошена остановка калибровки'],
+      } : prev);
+      if (data.status === 'ignored' && pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    } catch (e) {
+      alert(`Ошибка остановки: ${e.message}`);
+    }
+  }, []);
 
   // ============================================================================
   // ЗАПУСК КАЛИБРОВКИ
@@ -782,25 +826,10 @@ function SettingsCalibration() {
       setActiveJobId(data.job_id);
       setActiveJob({ job_id: data.job_id, status: 'pending', log: [], progress: 0, tickers, current_step: 'Запуск...' });
       startPolling(data.job_id);
-      setTickerInput('');
     } catch (e) {
       alert(`Ошибка: ${e.message}`);
     }
   }, [months, holdDays, calibrationMode, recentDays, startPolling]);
-
-  /** Запуск из поля ввода */
-  const handleRunNew = () => {
-    const tickers = tickerInput
-      .split(/[,\s]+/)
-      .map(t => t.trim().toUpperCase())
-      .filter(t => t && /^[A-Z]{1,6}$/.test(t));
-
-    if (tickers.length === 0) {
-      alert('Введите корректные тикеры (например: NVDA, MSFT, SPOT)');
-      return;
-    }
-    runCalibration(tickers);
-  };
 
   /** Обновить все устаревшие */
   const handleUpdateStale = () => {
@@ -877,6 +906,7 @@ function SettingsCalibration() {
       {activeJob && (
         <JobProgress
           job={activeJob}
+          onStop={stopCalibration}
           onClose={() => { setActiveJob(null); setActiveJobId(null); }}
         />
       )}
@@ -1107,129 +1137,6 @@ function SettingsCalibration() {
         onRun={runCleanupNow}
         isRunning={isRunning}
       />
-
-      {/* Добавление тикеров */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Plus className="h-4 w-4" />
-            Запустить калибровку
-          </CardTitle>
-          <CardDescription>
-            Введите тикеры через запятую или пробел. Процесс: загрузка данных → бэктест → сохранение коэффициентов
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Поле ввода тикеров */}
-          <div className="flex gap-2">
-            <Input
-              placeholder="NVDA, MSFT, SPOT, TSLA..."
-              value={tickerInput}
-              onChange={e => setTickerInput(e.target.value.toUpperCase())}
-              onKeyDown={e => e.key === 'Enter' && handleRunNew()}
-              disabled={isRunning}
-              className="font-mono cursor-pointer"
-            />
-            <Button
-              onClick={handleRunNew}
-              disabled={isRunning || !tickerInput.trim()}
-              className="shrink-0 cursor-pointer"
-            >
-              {isRunning ? (
-                <RefreshCw className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <Play className="h-4 w-4 mr-2" />
-              )}
-              Запустить
-            </Button>
-          </div>
-
-          {/* Параметры */}
-          <div className="flex flex-wrap items-center gap-6 text-sm pb-2">
-            <label className="flex items-center gap-2 text-muted-foreground">
-              Период данных:
-              <select
-                value={months}
-                onChange={e => setMonths(Number(e.target.value))}
-                disabled={isRunning}
-                className="bg-muted border border-border rounded px-2 py-1 text-foreground text-sm cursor-pointer"
-              >
-                <option value={3}>3 месяца</option>
-                <option value={6}>6 месяцев</option>
-                <option value={12}>12 месяцев</option>
-              </select>
-            </label>
-            <label className="flex items-center gap-2 text-muted-foreground">
-              Горизонт удержания:
-              <select
-                value={holdDays}
-                onChange={e => setHoldDays(Number(e.target.value))}
-                disabled={isRunning}
-                className="bg-muted border border-border rounded px-2 py-1 text-foreground text-sm cursor-pointer"
-              >
-                <option value={7}>7 дней</option>
-                <option value={14}>14 дней</option>
-                <option value={21}>21 день</option>
-                <option value={30}>30 дней</option>
-              </select>
-            </label>
-          </div>
-
-          {/* Режим калибровки */}
-          <div className="flex flex-wrap items-center gap-3 text-sm pb-2">
-            <span className="text-muted-foreground">Режим:</span>
-            {[
-              { id: 'standard', label: 'Стабильный', desc: 'Все данные за период — стабильные коэффициенты' },
-              { id: 'weighted', label: 'Взвешенный', desc: 'Свежие сделки важнее — эксп. веса по возрасту (half-life 30 дней)' },
-              { id: 'recent',   label: 'Свежий', desc: `Только последние ${recentDays} дней — максимально актуально` },
-            ].map(({ id, label, desc }) => (
-              <TooltipProvider key={id}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      onClick={() => setCalibrationMode(id)}
-                      disabled={isRunning}
-                      className={[
-                        'px-3 py-1 rounded-full border text-xs font-medium transition-all cursor-pointer',
-                        calibrationMode === id
-                          ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-600'
-                          : 'bg-muted border-border text-muted-foreground hover:text-foreground',
-                      ].join(' ')}
-                    >
-                      {label}
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-[220px] text-xs">
-                    {desc}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            ))}
-            {/* Выбор количества дней для режима recent */}
-            {calibrationMode === 'recent' && (
-              <div className="flex flex-col gap-1 ml-2">
-                <label className="flex items-center gap-2 text-muted-foreground">
-                  Период:
-                  <select
-                    value={recentDays}
-                    onChange={e => setRecentDays(Number(e.target.value))}
-                    disabled={isRunning}
-                    className="bg-muted border border-border rounded px-2 py-1 text-foreground text-sm cursor-pointer"
-                  >
-                    <option value={14}>14 дней</option>
-                    <option value={30}>30 дней</option>
-                    <option value={60}>60 дней</option>
-                    <option value={90}>90 дней</option>
-                  </select>
-                </label>
-                <div className="text-[11px] text-yellow-700 dark:text-yellow-200">
-                  14 дней может быть недостаточно для некоторых тикеров. Рекомендуемый default — 30 дней.
-                </div>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
 
       <CalibrationHistoryCard historyItems={historyItems} onRefresh={loadHistory} />
 

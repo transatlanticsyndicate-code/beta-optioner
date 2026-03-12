@@ -17,6 +17,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import threading
@@ -79,6 +80,10 @@ class SaveWatchlistRequest(BaseModel):
     theta: Dict[str, str] = {}
     cleanup: Dict[str, Any] = {}
     modes: Dict[str, Dict[str, Any]] = {}
+
+
+class RunScheduledModeRequest(BaseModel):
+    tickers: List[str] = []
 
 
 # ============================================================================
@@ -534,7 +539,10 @@ def _build_job(job_id: str, tickers: List[str], months: int, hold_days: int,
         "results": [],
         "started_at": datetime.now().isoformat(),
         "finished_at": None,
-        "error": None
+        "error": None,
+        "cancel_requested": False,
+        "cancelled": False,
+        "active_process_pid": None,
     }
 
 
@@ -598,6 +606,69 @@ def _maybe_run_auto_cleanup(trigger: str) -> Optional[Dict[str, Any]]:
     return _run_cleanup(trigger=trigger)
 
 
+def _is_job_cancel_requested(job_id: str) -> bool:
+    with _jobs_lock:
+        return bool(_jobs.get(job_id, {}).get("cancel_requested"))
+
+
+def _finalize_cancelled_job(job_id: str, results: List[Dict[str, Any]], reason: str) -> None:
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if not job:
+            return
+        job["status"] = "error"
+        job["cancelled"] = True
+        job["error"] = reason
+        job["current_step"] = "Остановлено пользователем"
+        job["results"] = results
+        job["finished_at"] = datetime.now().isoformat()
+        job["active_process_pid"] = None
+        snapshot = dict(job)
+    _append_job_history(snapshot)
+
+
+def _run_process_with_cancel(job_id: str, cmd: List[str], timeout: int) -> subprocess.CompletedProcess:
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        cwd=PROJECT_ROOT,
+        start_new_session=True,
+    )
+    with _jobs_lock:
+        if job_id in _jobs:
+            _jobs[job_id]["active_process_pid"] = process.pid
+    try:
+        start_time = time.time()
+        while True:
+            if _is_job_cancel_requested(job_id):
+                try:
+                    os.killpg(process.pid, signal.SIGTERM)
+                except Exception:
+                    process.terminate()
+                stdout, stderr = process.communicate(timeout=5)
+                raise RuntimeError("JOB_CANCELLED")
+            if process.poll() is not None:
+                stdout, stderr = process.communicate()
+                return subprocess.CompletedProcess(cmd, process.returncode, stdout, stderr)
+            if time.time() - start_time > timeout:
+                try:
+                    os.killpg(process.pid, signal.SIGTERM)
+                except Exception:
+                    process.terminate()
+                try:
+                    stdout, stderr = process.communicate(timeout=5)
+                except Exception:
+                    stdout, stderr = "", ""
+                raise subprocess.TimeoutExpired(cmd, timeout, stdout, stderr)
+            time.sleep(0.5)
+    finally:
+        with _jobs_lock:
+            if job_id in _jobs:
+                _jobs[job_id]["active_process_pid"] = None
+
+
 def _run_calibration_job(job_id: str, tickers: List[str], months: int, hold_days: int, calibration_mode: str = "standard", recent_days: int = 7):
     """
     Фоновая задача: запускает fetch + backtest для каждого тикера последовательно
@@ -609,6 +680,13 @@ def _run_calibration_job(job_id: str, tickers: List[str], months: int, hold_days
         with _jobs_lock:
             _jobs[job_id]["log"].append(f"[{timestamp}] {msg}")
         print(f"[calibration job {job_id}] {msg}")
+
+    def stop_if_cancelled(results: List[Dict[str, Any]]) -> bool:
+        if not _is_job_cancel_requested(job_id):
+            return False
+        log("🛑 Калибровка остановлена пользователем")
+        _finalize_cancelled_job(job_id, results, "Остановлено пользователем")
+        return True
 
     with _jobs_lock:
         _jobs[job_id]["status"] = "running"
@@ -646,7 +724,12 @@ def _run_calibration_job(job_id: str, tickers: List[str], months: int, hold_days
     total = len(tickers)
     results = []
 
+    if stop_if_cancelled(results):
+        return
+
     for idx, ticker in enumerate(tickers):
+        if stop_if_cancelled(results):
+            return
         ticker = ticker.upper()
         log(f"--- [{idx+1}/{total}] Начинаем калибровку {ticker} ---")
 
@@ -667,12 +750,10 @@ def _run_calibration_job(job_id: str, tickers: List[str], months: int, hold_days
         log(f"📥 Загрузка данных опционов {ticker} за {fetch_months} мес. (режим: {calibration_mode})...")
         fetch_script = os.path.join(SCRIPTS_DIR, "fetch_options_thetadata.py")
         try:
-            proc = subprocess.run(
+            proc = _run_process_with_cancel(
+                job_id,
                 [sys.executable, fetch_script, "--ticker", ticker, "--months", str(fetch_months)],
-                capture_output=True,
-                text=True,
-                timeout=300,  # 5 минут максимум на загрузку
-                cwd=PROJECT_ROOT
+                300,
             )
             if proc.returncode != 0:
                 log(f"⚠️ Fetch завершился с ошибкой: {proc.stderr[-500:] if proc.stderr else 'нет вывода'}")
@@ -684,6 +765,13 @@ def _run_calibration_job(job_id: str, tickers: List[str], months: int, hold_days
                         log(f"  {line}")
                 contracts = _count_options_files(ticker)
                 log(f"✅ Загружено {contracts} контрактов для {ticker}")
+            if stop_if_cancelled(results):
+                return
+        except RuntimeError as e:
+            if str(e) == "JOB_CANCELLED":
+                _finalize_cancelled_job(job_id, results, "Остановлено пользователем")
+                return
+            raise
         except subprocess.TimeoutExpired:
             log(f"❌ Timeout при загрузке данных {ticker}")
             results.append({"ticker": ticker, "status": "error", "error": "Timeout"})
@@ -707,13 +795,7 @@ def _run_calibration_job(job_id: str, tickers: List[str], months: int, hold_days
             ]
             if calibration_mode == "recent":
                 backtest_cmd += ["--recent-days", str(recent_days)]
-            proc = subprocess.run(
-                backtest_cmd,
-                capture_output=True,
-                text=True,
-                timeout=120,
-                cwd=PROJECT_ROOT
-            )
+            proc = _run_process_with_cancel(job_id, backtest_cmd, 120)
             if proc.returncode != 0:
                 log(f"⚠️ Backtest ошибка: {proc.stderr[-500:] if proc.stderr else 'нет вывода'}")
                 results.append({"ticker": ticker, "status": "error", "error": "Backtest failed"})
@@ -736,7 +818,14 @@ def _run_calibration_job(job_id: str, tickers: List[str], months: int, hold_days
             else:
                 log(f"⚠️ Файл результата {ticker} не найден")
                 results.append({"ticker": ticker, "status": "error", "error": "Result file missing"})
+            if stop_if_cancelled(results):
+                return
 
+        except RuntimeError as e:
+            if str(e) == "JOB_CANCELLED":
+                _finalize_cancelled_job(job_id, results, "Остановлено пользователем")
+                return
+            raise
         except subprocess.TimeoutExpired:
             log(f"❌ Timeout при бэктестинге {ticker}")
             results.append({"ticker": ticker, "status": "error", "error": "Backtest timeout"})
@@ -787,8 +876,13 @@ def _launch_calibration_job(tickers: List[str], months: int, hold_days: int,
     return job
 
 
-def run_scheduled_calibration(mode: str, mode_settings: Dict[str, Any], source: str = "scheduler") -> Dict[str, Any]:
-    tickers = _load_online_tickers().get("tickers", [])
+def run_scheduled_calibration(
+    mode: str,
+    mode_settings: Dict[str, Any],
+    source: str = "scheduler",
+    tickers_override: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    tickers = tickers_override or _load_online_tickers().get("tickers", [])
     if mode == "recent":
         months = int(mode_settings.get("months", 1))
         hold_days = int(mode_settings.get("hold_days", 7))
@@ -1016,13 +1110,19 @@ async def run_cleanup_now():
 
 
 @router.post("/run-scheduled/{mode}")
-async def run_scheduled_mode_now(mode: str):
+async def run_scheduled_mode_now(mode: str, request: Optional[RunScheduledModeRequest] = None):
     mode = mode.strip().lower()
     config = calibration_scheduler.load_config()
     mode_settings = config.get("modes", {}).get(mode)
     if mode not in ["standard", "recent", "weighted"] or not mode_settings:
         raise HTTPException(status_code=400, detail="Некорректный режим")
-    job = run_scheduled_calibration(mode, mode_settings, "manual_scheduler")
+    tickers_override = []
+    if request and isinstance(request.tickers, list):
+        for ticker in request.tickers:
+            normalized = ticker.strip().upper()
+            if normalized and normalized.isalpha() and len(normalized) <= 6:
+                tickers_override.append(normalized)
+    job = run_scheduled_calibration(mode, mode_settings, "manual_scheduler", tickers_override or None)
     return {
         "status": "started",
         "job_id": job["job_id"],
@@ -1071,6 +1171,37 @@ async def get_job_progress(job_id: str):
         raise HTTPException(status_code=404, detail=f"Задание {job_id} не найдено")
 
     return job
+
+
+@router.post("/stop/{job_id}")
+async def stop_calibration_job(job_id: str):
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail=f"Задание {job_id} не найдено")
+        if job.get("status") not in {"pending", "running"}:
+            return {
+                "status": "ignored",
+                "job_id": job_id,
+                "detail": "Задание уже завершено",
+            }
+        job["cancel_requested"] = True
+        job["current_step"] = "Остановка..."
+        pid = job.get("active_process_pid")
+
+    if pid:
+        try:
+            os.killpg(pid, signal.SIGTERM)
+        except Exception:
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except Exception:
+                pass
+
+    return {
+        "status": "stopping",
+        "job_id": job_id,
+    }
 
 
 @router.delete("/{ticker}")

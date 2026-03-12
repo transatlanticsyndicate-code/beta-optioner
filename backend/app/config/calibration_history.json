@@ -500,5 +500,86 @@
       "deleted_options": [],
       "deleted_results": []
     }
+  },
+  {
+    "job_id": "job_1773327773647",
+    "status": "done",
+    "source": "manual_scheduler",
+    "tickers": [
+      "IT"
+    ],
+    "months": 1,
+    "hold_days": 7,
+    "calibration_mode": "recent",
+    "recent_days": 30,
+    "started_at": "2026-03-12T15:02:53.647731",
+    "finished_at": "2026-03-12T15:03:45.236845",
+    "error": null,
+    "results": [
+      {
+        "ticker": "IT",
+        "status": "success",
+        "down_mult": 0.993,
+        "up_mult": 1.062,
+        "iv_mean": 0.5792,
+        "iv_kappa": 80.98,
+        "iv_std": 0.1669,
+        "half_life_days": 3,
+        "total_trades": 88,
+        "calibrated_at": "2026-03-12",
+        "note": "Calibrated 2026-03-12, 88 trades, 7d hold, ThetaData EOD",
+        "mode": "recent"
+      }
+    ],
+    "success_count": 1,
+    "skipped_count": 0,
+    "error_count": 0
+  },
+  {
+    "job_id": "cleanup_1773327825483",
+    "status": "done",
+    "source": "cleanup_after_manual_scheduler",
+    "kind": "cleanup",
+    "started_at": "2026-03-12T15:03:45.483463",
+    "finished_at": "2026-03-12T15:03:45.483473",
+    "results": [
+      {
+        "status": "success",
+        "deleted_options_dirs": 1,
+        "deleted_result_files": 0
+      }
+    ],
+    "cleanup": {
+      "deleted_options": [
+        {
+          "ticker": "DOCS",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/DOCS",
+          "files_count": 19,
+          "newest_mtime": "2026-03-09T21:07:11.772882",
+          "reason": "orphan"
+        }
+      ],
+      "deleted_results": []
+    }
+  },
+  {
+    "job_id": "job_1773329901903",
+    "status": "error",
+    "source": "manual_scheduler",
+    "tickers": [
+      "GSHD",
+      "HUBS"
+    ],
+    "months": 1,
+    "hold_days": 7,
+    "calibration_mode": "recent",
+    "recent_days": 30,
+    "started_at": "2026-03-12T15:38:21.903556",
+    "finished_at": "2026-03-12T15:38:28.962897",
+    "error": "Остановлено пользователем",
+    "results": [],
+    "success_count": 0,
+    "skipped_count": 0,
+    "error_count": 0
   }
 ]
