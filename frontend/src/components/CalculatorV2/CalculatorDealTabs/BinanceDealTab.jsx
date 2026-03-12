@@ -615,25 +615,49 @@ function BinanceDealTab({ ticker = 'ETHUSDT', currentPrice = 0, options = [] }) 
       </Card>
 
       {/* ── Блоки 2–5: Срезки ─────────────────────────────────────────────────── */}
-      {slices.map((sliceParams, i) => {
-        // Вычисляем остаток контрактов: totalQty минус суммы предыдущих срезок
+      {(() => {
+        // Определяем максимальное количество срезок
+        // ЗАЧЕМ: Если контрактов 2 — максимум 2 срезки, если дата срезки > expiry — не показываем
         const totalQtyNum = parseInt(qtyGlobal) || 0;
-        const usedBefore = slices
-          .slice(0, i)
-          .reduce((sum, s) => sum + (parseInt(s.qty) || 0), 0);
-        const remainingQty = Math.max(0, totalQtyNum - usedBefore);
-        return (
-          <SliceCard
-            key={i}
-            index={i}
-            params={sliceParams}
-            onParamsChange={handleSliceChange}
-            result={calcSliceResult(sliceParams, i)}
-            animDelay={0.1 + i * 0.07}
-            remainingQty={remainingQty}
-          />
-        );
-      })}
+        const expiryDate = expiry ? new Date(expiry) : null;
+        
+        // Фильтруем срезки: не больше qtyGlobal и дата срезки <= expiry
+        const validSlices = slices.filter((s, idx) => {
+          // Ограничение по количеству: индекс < qtyGlobal (если qty=2, показываем срезки 0 и 1)
+          if (totalQtyNum > 0 && idx >= totalQtyNum) return false;
+          
+          // Ограничение по дате: срезка должна быть до экспирации
+          if (expiryDate && s.date) {
+            const sliceDate = new Date(s.date);
+            if (sliceDate > expiryDate) return false;
+          }
+          
+          return true;
+        });
+
+        return validSlices.map((sliceParams, displayIdx) => {
+          // Находим оригинальный индекс в массиве slices
+          const originalIdx = slices.indexOf(sliceParams);
+          
+          // Вычисляем остаток контрактов: totalQty минус суммы предыдущих срезок
+          const usedBefore = slices
+            .slice(0, originalIdx)
+            .reduce((sum, s) => sum + (parseInt(s.qty) || 0), 0);
+          const remainingQty = Math.max(0, totalQtyNum - usedBefore);
+          
+          return (
+            <SliceCard
+              key={originalIdx}
+              index={originalIdx}
+              params={sliceParams}
+              onParamsChange={handleSliceChange}
+              result={calcSliceResult(sliceParams, originalIdx)}
+              animDelay={0.1 + displayIdx * 0.07}
+              remainingQty={remainingQty}
+            />
+          );
+        });
+      })()}
 
       {/* ── Итоговый блок ────────────────────────────────────────────────── */}
       {(() => {

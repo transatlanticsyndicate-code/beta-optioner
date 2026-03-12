@@ -28,9 +28,9 @@ export const getPLColor = (value) => {
 };
 
 // Расчет диапазона цен для слайдера
-// ЗАЧЕМ: Определение min/max цены для симуляции (±50% от текущей)
+// ЗАЧЕМ: Определение min/max цены для симуляции (±100% от текущей)
 export const getPriceRange = (currentPrice) => {
-  const minPrice = Math.round(currentPrice * 0.5);
-  const maxPrice = Math.round(currentPrice * 1.5);
+  const minPrice = Math.round(currentPrice * 0);
+  const maxPrice = Math.round(currentPrice * 2);
   return { minPrice, maxPrice };
 };

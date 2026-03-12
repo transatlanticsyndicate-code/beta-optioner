@@ -107,8 +107,8 @@ function PriceAndTimeSettings({
   }, [options, savedConfigDate, oldestEntryDate]);
 
   // Вычисляем диапазон цен
-  const calculatedMinPrice = minPrice || (currentPrice > 0 ? currentPrice * 0.5 : 0);
-  const calculatedMaxPrice = maxPrice || (currentPrice > 0 ? currentPrice * 1.5 : 1000);
+  const calculatedMinPrice = minPrice || (currentPrice > 0 ? currentPrice * 0 : 0);
+  const calculatedMaxPrice = maxPrice || (currentPrice > 0 ? currentPrice * 2 : 1000);
 
   const handlePriceInputChange = (e) => {
     const value = e.target.value;

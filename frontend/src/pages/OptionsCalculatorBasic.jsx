@@ -2041,8 +2041,8 @@ function OptionsCalculatorV3() {
                           setUserAdjustedDays(true);
                         }}
                         options={displayOptions}
-                        minPrice={currentPrice * 0.5}
-                        maxPrice={currentPrice * 1.5}
+                        minPrice={currentPrice * 0}
+                        maxPrice={currentPrice * 2}
                         compact={true}
                         savedConfigDate={savedConfigDate}
                         livePrice={livePrice}
