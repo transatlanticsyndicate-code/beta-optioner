@@ -30,6 +30,8 @@ SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "..", "config", "stock_g
 # Путь к файлу per-ticker overrides (калиброванные коэффициенты для конкретных акций)
 # ЗАЧЕМ: Позволяет задать точные коэффициенты для конкретного тикера, минуя групповую классификацию
 TICKER_OVERRIDES_FILE = os.path.join(os.path.dirname(__file__), "..", "config", "ticker_overrides.json")
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+CALIBRATION_RESULTS_DIR = os.path.join(PROJECT_ROOT, "scripts", "calibration_results")
 
 # Кэш настроек (перезагружается при каждом вызове для актуальности)
 _settings_cache: Optional[Dict] = None
@@ -73,6 +75,62 @@ def _get_available_modes(override_raw: Dict[str, Any]) -> List[str]:
     if override_raw.get("down_mult"):
         return ["standard"]
     return []
+
+
+def _resolve_override(override_raw: Dict[str, Any], mode: str = "standard") -> tuple[Optional[Dict[str, Any]], Optional[str]]:
+    if not override_raw or not isinstance(override_raw, dict):
+        return None, None
+
+    available_modes = _get_available_modes(override_raw)
+    if not available_modes:
+        return None, None
+
+    resolved_mode = mode if mode in available_modes else available_modes[0]
+    override = _get_override_section(override_raw, resolved_mode) or None
+    return override, resolved_mode
+
+
+def _load_calibration_result(ticker: str) -> Optional[Dict[str, Any]]:
+    result_file = os.path.join(CALIBRATION_RESULTS_DIR, f"{ticker.upper()}_calibration.json")
+    try:
+        if os.path.exists(result_file):
+            with open(result_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"[stock_classifier] Ошибка загрузки calibration result {ticker}: {e}")
+    return None
+
+
+def _build_override_from_calibration_result(ticker: str) -> Optional[Dict[str, Any]]:
+    result = _load_calibration_result(ticker)
+    if not result:
+        return None
+
+    down_mult = result.get("down_mult")
+    up_mult = result.get("up_mult")
+    if down_mult is None or up_mult is None:
+        return None
+
+    calibrated_at = result.get("calibrated_at", "")
+    note = f"Calibrated {calibrated_at}" if calibrated_at else "Calibrated from calibration_results"
+    total_trades = result.get("total_trades")
+    hold_days = result.get("hold_days")
+    if total_trades:
+        note += f", {total_trades} trades"
+    if hold_days:
+        note += f", {hold_days}d hold"
+
+    return {
+        "standard": {
+            "down_mult": down_mult,
+            "up_mult": up_mult,
+            "iv_mean": result.get("iv_mean"),
+            "iv_kappa": result.get("iv_kappa"),
+            "iv_std": result.get("iv_std"),
+            "half_life_days": result.get("half_life_days"),
+            "note": note,
+        }
+    }
 
 
 def _load_settings_from_file() -> Dict[str, Any]:
@@ -584,18 +642,21 @@ async def classify_stock(symbol: str, **kwargs) -> Dict[str, Any]:
     # ЗАЧЕМ: Калиброванные коэффициенты точнее групповых — используем если есть
     ticker_overrides = _load_ticker_overrides()
     override_raw = ticker_overrides.get(symbol.upper())
+    if not override_raw:
+        override_raw = _build_override_from_calibration_result(symbol)
 
     # Поддержка нового формата с секциями {standard: {...}, recent: {...}, weighted: {...}}
     # и старого формата {down_mult: ..., up_mult: ...} для обратной совместимости
     # ЗАЧЕМ: Новый формат позволяет хранить все три набора коэффициентов для одного тикера
-    calibration_mode = kwargs.get("calibration_mode", "standard") if kwargs else "standard"
-    override = _get_override_section(override_raw, calibration_mode) or None
+    requested_calibration_mode = kwargs.get("calibration_mode", "standard") if kwargs else "standard"
+    available_modes = _get_available_modes(override_raw)
+    override, resolved_calibration_mode = _resolve_override(override_raw, requested_calibration_mode)
 
     if override:
         down_mult = override.get("down_mult", classification["down_mult"])
         up_mult = override.get("up_mult", classification["up_mult"])
         override_note = override.get("note", "")
-        print(f"[stock_classifier] {symbol} → per-ticker override [{calibration_mode}]: down:{down_mult} up:{up_mult} ({override_note})")
+        print(f"[stock_classifier] {symbol} → per-ticker override [{resolved_calibration_mode}]: down:{down_mult} up:{up_mult} ({override_note})")
     else:
         down_mult = classification["down_mult"]
         up_mult = classification["up_mult"]
@@ -618,12 +679,12 @@ async def classify_stock(symbol: str, **kwargs) -> Dict[str, Any]:
         "reason": classification["reason"],  # Причина классификации для отладки
         "features": features,
         "cached": False,
-        "ticker_override": bool(override),        # Флаг для UI — применён ли override
+        "ticker_override": bool(available_modes),        # Флаг для UI — для тикера есть хотя бы один calibrated mode
         "iv_mean": iv_mean,                          # Долгосрочное среднее IV (None если нет калибровки)
         "iv_kappa": iv_kappa,                        # Скорость возврата IV к среднему (Ornstein-Uhlenbeck)
         "iv_std": iv_std,                            # Стандартное отклонение IV
-        "calibration_mode": calibration_mode,        # Активный режим калибровки
-        "available_modes": _get_available_modes(override_raw),
+        "calibration_mode": resolved_calibration_mode or requested_calibration_mode,        # Активный режим калибровки
+        "available_modes": available_modes,
     }
     
     # Кэширование отключено

@@ -581,5 +581,58 @@
     "success_count": 0,
     "skipped_count": 0,
     "error_count": 0
+  },
+  {
+    "job_id": "job_1773741192819",
+    "status": "done",
+    "source": "manual_scheduler",
+    "tickers": [
+      "MNDY"
+    ],
+    "months": 1,
+    "hold_days": 7,
+    "calibration_mode": "recent",
+    "recent_days": 30,
+    "started_at": "2026-03-17T09:53:12.819354",
+    "finished_at": "2026-03-17T09:54:18.748630",
+    "error": null,
+    "results": [
+      {
+        "ticker": "MNDY",
+        "status": "success",
+        "down_mult": 1.014,
+        "up_mult": 1.098,
+        "iv_mean": 2.5329,
+        "iv_kappa": 100.0,
+        "iv_std": 0.3551,
+        "half_life_days": 3,
+        "total_trades": 45,
+        "calibrated_at": "2026-03-17",
+        "note": "Calibrated 2026-03-17, 45 trades, 7d hold, ThetaData EOD",
+        "mode": "recent"
+      }
+    ],
+    "success_count": 1,
+    "skipped_count": 0,
+    "error_count": 0
+  },
+  {
+    "job_id": "cleanup_1773741258949",
+    "status": "done",
+    "source": "cleanup_after_manual_scheduler",
+    "kind": "cleanup",
+    "started_at": "2026-03-17T09:54:18.949793",
+    "finished_at": "2026-03-17T09:54:18.949800",
+    "results": [
+      {
+        "status": "success",
+        "deleted_options_dirs": 0,
+        "deleted_result_files": 0
+      }
+    ],
+    "cleanup": {
+      "deleted_options": [],
+      "deleted_results": []
+    }
   }
 ]
