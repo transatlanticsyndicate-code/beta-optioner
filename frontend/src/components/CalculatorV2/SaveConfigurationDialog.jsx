@@ -78,10 +78,7 @@ const getExpirationDateFromOptions = (options) => {
 const generateConfigName = (currentState, isLocked = false) => {
   const parts = [];
   
-  // Добавляем маркер фиксации только для зафиксированных позиций
-  if (isLocked) {
-    parts.push('🔴');
-  }
+  // Маркер фиксации удален - название начинается с текста
   
   // Базовый актив: TICKER QTY+TYPE @PRICE
   // Например: AAPL 100L @280
@@ -145,7 +142,7 @@ function SaveConfigurationDialog({ isOpen, onClose, onSave, currentState, isLock
         // Рассчитываем количество опционов как сумму всех quantity в видимых опционах
         const visibleOptions = (currentState.options || []).filter(opt => opt.visible !== false);
         const totalOptionsCount = visibleOptions.reduce((sum, opt) => sum + Math.abs(opt.quantity || 1), 0);
-        autoName = `💼 Сделка - ${dealInfo.ticker}`;
+        autoName = `Сделка - ${dealInfo.ticker}`;
       } else {
         autoName = generateConfigName(currentState, isLocked);
       }

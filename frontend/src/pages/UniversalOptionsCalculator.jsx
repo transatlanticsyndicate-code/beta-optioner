@@ -2692,13 +2692,7 @@ function UniversalOptionsCalculator() {
 
       // Генерируем новое название на основе текущих данных
       // ЗАЧЕМ: Название должно отражать новые данные после редактирования
-      const generatedName = generateConfigurationName();
-
-      // Добавляем эмодзи ✍️ в начало названия если его еще нет
-      let updatedName = generatedName;
-      if (!updatedName.startsWith('✍️')) {
-        updatedName = `✍️ ${updatedName}`;
-      }
+      const updatedName = generateConfigurationName();
 
       // Восстанавливаем флаги блокировки для опционов если конфигурация была зафиксирована
       // ЗАЧЕМ: После редактирования зафиксированная позиция должна остаться зафиксированной
