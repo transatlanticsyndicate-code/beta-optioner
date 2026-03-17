@@ -49,9 +49,9 @@ function UniversalSavedConfigurations() {
   const [filterInstrumentType, setFilterInstrumentType] = useState('all');
 
   // Состояние сортировки: поле и направление
-  // ЗАЧЕМ: Позволяет пользователю упорядочить список по дате или тикеру
-  const [sortField, setSortField] = useState('createdAt');
-  const [sortDirection, setSortDirection] = useState('desc');
+  // ЗАЧЕМ: Позволяет пользователю упорядочить список по названию, дате или тикеру
+  const [sortField, setSortField] = useState('name');
+  const [sortDirection, setSortDirection] = useState('asc');
 
   // Состояние импорта
   const [showImportModal, setShowImportModal] = useState(false);
@@ -204,6 +204,9 @@ function UniversalSavedConfigurations() {
       } else if (sortField === 'ticker') {
         valA = (a.ticker || '').toLowerCase();
         valB = (b.ticker || '').toLowerCase();
+      } else if (sortField === 'name') {
+        valA = (a.name || '').toLowerCase();
+        valB = (b.name || '').toLowerCase();
       } else {
         return 0;
       }
@@ -489,7 +492,15 @@ function UniversalSavedConfigurations() {
                       </span>
                     </TableHead>
                     <TableHead>Тип инструмента</TableHead>
-                    <TableHead>Название</TableHead>
+                    <TableHead
+                      className="cursor-pointer select-none hover:text-foreground"
+                      onClick={() => handleSort('name')}
+                    >
+                      <span className="inline-flex items-center">
+                        Название
+                        <SortIcon field="name" />
+                      </span>
+                    </TableHead>
                     <TableHead>Автор</TableHead>
                     <TableHead className="text-right">Действия</TableHead>
                   </TableRow>

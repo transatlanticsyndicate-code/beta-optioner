@@ -10,7 +10,7 @@
 """
 
 import httpx
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List
 from datetime import datetime, timedelta
 import asyncio
 import os
@@ -55,6 +55,24 @@ def _load_ticker_overrides() -> Dict[str, Any]:
     except Exception as e:
         print(f"[stock_classifier] Ошибка загрузки ticker overrides: {e}")
     return {}
+
+
+def _get_override_section(override_raw: Dict[str, Any], mode: str = "standard") -> Dict[str, Any]:
+    if not override_raw or not isinstance(override_raw, dict):
+        return {}
+    if "standard" in override_raw or "recent" in override_raw or "weighted" in override_raw:
+        return override_raw.get(mode) or override_raw.get("standard") or {}
+    return override_raw
+
+
+def _get_available_modes(override_raw: Dict[str, Any]) -> List[str]:
+    if not override_raw or not isinstance(override_raw, dict):
+        return []
+    if "standard" in override_raw or "recent" in override_raw or "weighted" in override_raw:
+        return [mode for mode in ["standard", "recent", "weighted"] if mode in override_raw]
+    if override_raw.get("down_mult"):
+        return ["standard"]
+    return []
 
 
 def _load_settings_from_file() -> Dict[str, Any]:
@@ -571,15 +589,7 @@ async def classify_stock(symbol: str, **kwargs) -> Dict[str, Any]:
     # и старого формата {down_mult: ..., up_mult: ...} для обратной совместимости
     # ЗАЧЕМ: Новый формат позволяет хранить все три набора коэффициентов для одного тикера
     calibration_mode = kwargs.get("calibration_mode", "standard") if kwargs else "standard"
-    if override_raw and isinstance(override_raw, dict):
-        if "standard" in override_raw or "recent" in override_raw or "weighted" in override_raw:
-            # Новый формат: берём секцию нужного режима, fallback на standard
-            override = override_raw.get(calibration_mode) or override_raw.get("standard") or None
-        else:
-            # Старый формат: используем как есть (backward compatibility)
-            override = override_raw
-    else:
-        override = None
+    override = _get_override_section(override_raw, calibration_mode) or None
 
     if override:
         down_mult = override.get("down_mult", classification["down_mult"])
@@ -613,10 +623,7 @@ async def classify_stock(symbol: str, **kwargs) -> Dict[str, Any]:
         "iv_kappa": iv_kappa,                        # Скорость возврата IV к среднему (Ornstein-Uhlenbeck)
         "iv_std": iv_std,                            # Стандартное отклонение IV
         "calibration_mode": calibration_mode,        # Активный режим калибровки
-        "available_modes": [                         # Доступные режимы для этого тикера
-            m for m in ["standard", "recent", "weighted"]
-            if override_raw and isinstance(override_raw, dict) and m in override_raw
-        ] if override_raw else [],
+        "available_modes": _get_available_modes(override_raw),
     }
     
     # Кэширование отключено
