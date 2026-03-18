@@ -843,28 +843,10 @@ function UniversalOptionsCalculator() {
       return;
     }
     
-    if (buyCallOptions.length === 0) {
-      alert('Для создания сделки необходим хотя бы один опцион типа Buy CALL (позитивный сценарий)');
-      console.warn('⚠️ [Deal] В таблице нет опционов Buy CALL');
-      return;
-    }
-    
-    if (buyCallOptions.length > 1) {
-      alert('Функционал Сделки поддерживает только один опцион Buy CALL');
-      console.warn('⚠️ [Deal] В таблице больше одного опциона Buy CALL:', buyCallOptions.length);
-      return;
-    }
-    
-    if (buyPutOptions.length > 1) {
-      alert('Функционал Сделки поддерживает только один опцион Buy PUT');
-      console.warn('⚠️ [Deal] В таблице больше одного опциона Buy PUT:', buyPutOptions.length);
-      return;
-    }
-    
-    // Проверяем, что нет Sell опционов или других типов
-    if (otherOptions.length > 0) {
-      alert('Функционал Сделки поддерживает только опционы Buy CALL и Buy PUT. Удалите другие опционы из таблицы.');
-      console.warn('⚠️ [Deal] В таблице есть недопустимые опционы:', otherOptions.length);
+    // Ограничение: не более 4 опционов для Мультисделки
+    if (visibleOptions.length > 4) {
+      alert('Функционал Сделки поддерживает не более 4 различных опционов');
+      console.warn('⚠️ [Deal] Превышено ограничение в 4 опциона:', visibleOptions.length);
       return;
     }
     
@@ -874,9 +856,13 @@ function UniversalOptionsCalculator() {
 
     // Создаём информацию о сделке
     const ticker = contractCode || selectedTicker;
+    const isMultiDeal = visibleOptions.length > 1;
+    
     const deal = {
       ticker,
       optionsCount: finalOptionsCount,
+      options: visibleOptions, // Передаем массив опционов
+      isMultiDeal,
       createdAt: new Date().toISOString()
     };
     
@@ -2911,7 +2897,7 @@ function UniversalOptionsCalculator() {
                 return (
                   <div className={`inline-flex items-center gap-4 p-3 ${bgColor} border-2 ${borderColor} rounded-lg`} style={{ minHeight: '57px' }}>
                     <span className={`text-lg font-bold ${textColor}`}>
-                      Сделка - {dealInfo.ticker}
+                      {dealInfo.isMultiDeal ? 'Мультисделка' : 'Сделка'} - {dealInfo.ticker}
                     </span>
                   </div>
                 );

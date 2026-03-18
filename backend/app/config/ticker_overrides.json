@@ -1023,7 +1023,7 @@
       "iv_kappa": 100.0,
       "iv_std": 0.1603,
       "half_life_days": 3,
-      "note": "Calibrated 2026-03-17, 45 trades, 7d hold, ThetaData EOD"
+      "note": "Calibrated 2026-03-18, 45 trades, 7d hold, ThetaData EOD"
     },
     "weighted": {
       "down_mult": 1.006,
@@ -1710,7 +1710,7 @@
       "iv_kappa": 76.65,
       "iv_std": 0.1846,
       "half_life_days": 3,
-      "note": "Calibrated 2026-03-17, 51 trades, 7d hold, ThetaData EOD"
+      "note": "Calibrated 2026-03-18, 51 trades, 7d hold, ThetaData EOD"
     }
   },
   "MNDY": {
@@ -1721,7 +1721,7 @@
       "iv_kappa": 100.0,
       "iv_std": 0.3551,
       "half_life_days": 3,
-      "note": "Calibrated 2026-03-17, 45 trades, 7d hold, ThetaData EOD"
+      "note": "Calibrated 2026-03-18, 45 trades, 7d hold, ThetaData EOD"
     }
   }
 }

@@ -20,6 +20,7 @@ import { sendSlicesToTradingViewCommand, sendClearSlicesCommand } from '../../..
 
 // Импорт компонентов и утилит таба Сделка
 import ScenarioBlock from './ScenarioBlock';
+import ExitPlanTable from './ExitPlanTable';
 import { calculateExitPlan } from './calculateExitPlan';
 import BinanceDealTab from './BinanceDealTab';
 import { CALCULATOR_MODES } from '../../../utils/universalPricing';
@@ -698,84 +699,16 @@ function CalculatorDealTabs({
               options={options}
             />
           ) : dealInfo ? (
-            <>
-              {/* Позитивный сценарий (Buy CALL) — с кнопками срезок внутри */}
-              <ScenarioBlock
-                title="Позитивный сценарий"
-                borderColor="#22c55e"
-                bgColor="bg-green-100 dark:bg-green-900/30"
-                textColor="text-green-700 dark:text-green-300"
-                iconColor="text-green-600"
-                focusRingColor="focus:ring-green-500"
-                profitColor="text-green-600"
-                exitStepsCount={exitStepsCount}
-                setExitStepsCount={setExitStepsCount}
-                targetAssetPricePercent={targetAssetPricePercent}
-                inlineInputs
-                inputsGroupLabel="Целевая цена актива:"
-                handlePercentChange={handlePercentChange}
-                targetAssetPriceDollars={targetAssetPriceDollars}
-                dollarsInputValue={dollarsInputValue}
-                isDollarsInputFocused={isDollarsInputFocused}
-                handleDollarsInputChange={handleDollarsInputChange}
-                handleDollarsFocus={handleDollarsFocus}
-                handleDollarsBlur={handleDollarsBlur}
-                handleDollarsKeyDown={handleDollarsKeyDown}
-                exitPlan={exitPlan}
-                frozenExitPlan={frozenExitPlan}
-                slicesSent={slicesSent}
-                onSendSlices={handleSendSlicesToTradingView}
-                onResetSlices={handleResetExitPlan}
-                tradingViewUrl={tradingViewUrl}
-              />
-              
-              {/* Негативный сценарий (Buy PUT) — с кнопками срезок внутри */}
-              {hasNegativeScenario && (
-                <ScenarioBlock
-                  title="Негативный сценарий"
-                  borderColor="#ef4444"
-                  bgColor="bg-red-100 dark:bg-red-900/30"
-                  textColor="text-red-700 dark:text-red-300"
-                  iconColor="text-red-600"
-                  focusRingColor="focus:ring-red-500"
-                  profitColor="text-green-600"
-                  exitStepsCount={effectivePutStepsCount}
-                  setExitStepsCount={() => {}}
-                  targetAssetPricePercent={targetAssetPricePercentPut}
-                  handlePercentChange={handlePercentChangePut}
-                  targetAssetPriceDollars={targetAssetPriceDollarsPut}
-                  dollarsInputValue={dollarsInputValuePut}
-                  isDollarsInputFocused={isDollarsInputFocusedPut}
-                  handleDollarsInputChange={handleDollarsInputChangePut}
-                  handleDollarsFocus={handleDollarsFocusPut}
-                  handleDollarsBlur={handleDollarsBlurPut}
-                  handleDollarsKeyDown={handleDollarsKeyDownPut}
-                  exitPlan={exitPlanPut}
-                  frozenExitPlan={frozenExitPlanPut}
-                  slicesSent={slicesSentPut}
-                  onSendSlices={handleSendSlicesToTradingViewPut}
-                  onResetSlices={handleResetExitPlanPut}
-                  tradingViewUrl={tradingViewUrlPut}
-                  planTitle="ПЛАН ВХОДА И ВЫХОДА для Опциона PUT"
-                  hideStepsInput
-                  stepLabels={['Вход', 'Выход']}
-                  hideTotal
-                  warningText="ВНИМАНИЕ! При выходе из Опциона PUT необходимо также выйти из всех Опционов CALL"
-                  inlineInputs
-                  inputsGroupLabel="Целевая цена актива для входа в PUT:"
-                  secondGroupLabel="Целевая цена актива для выхода из PUT:"
-                  secondGroupPercent={targetAssetPricePercentPutExit}
-                  secondGroupHandlePercentChange={handlePercentChangePutExit}
-                  secondGroupDollars={targetAssetPriceDollarsPutExit}
-                  secondGroupDollarsInputValue={dollarsInputValuePutExit}
-                  secondGroupIsDollarsInputFocused={isDollarsInputFocusedPutExit}
-                  secondGroupHandleDollarsInputChange={handleDollarsInputChangePutExit}
-                  secondGroupHandleDollarsFocus={handleDollarsFocusPutExit}
-                  secondGroupHandleDollarsBlur={handleDollarsBlurPutExit}
-                  secondGroupHandleDollarsKeyDown={handleDollarsKeyDownPutExit}
-                />
-              )}
-            </>
+            <ExitPlanTable 
+              currentPrice={currentPrice} 
+              dealInfo={dealInfo}
+              options={options}
+              calculatorMode={calculatorMode}
+              contractMultiplier={contractMultiplier}
+              dividendYield={dividendYield}
+              stockClassification={stockClassification}
+              ivSurface={ivSurface}
+            />
           ) : (
             <Card className="w-full" style={{ borderColor: '#b8b8b8' }}>
               <CardContent className="pt-6 pb-6 px-6">
