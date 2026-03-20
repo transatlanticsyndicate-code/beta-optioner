@@ -15,17 +15,21 @@ function MarketIvOverrideControl({
   setMarketIvOverride,
   compact = false,
 }) {
+  // Генерируем уникальный ID для этого экземпляра компонента
+  const instanceId = React.useRef(`market-iv-${Math.random().toString(36).substr(2, 9)}`).current;
+  
   const [inputValue, setInputValue] = React.useState(
     marketIvOverride !== null && marketIvOverride !== undefined ? String(marketIvOverride) : ''
   );
 
   React.useEffect(() => {
-    if (document.activeElement && document.activeElement.getAttribute('data-market-iv-input') === 'true') {
+    // Не обновляем input если именно это поле сейчас в фокусе
+    if (document.activeElement && document.activeElement.id === instanceId) {
       return;
     }
 
     setInputValue(marketIvOverride !== null && marketIvOverride !== undefined ? String(marketIvOverride) : '');
-  }, [marketIvOverride]);
+  }, [marketIvOverride, instanceId]);
 
   const handleChange = (event) => {
     const value = event.target.value;
@@ -77,11 +81,11 @@ function MarketIvOverrideControl({
       <div className="flex items-center gap-2">
         <span className="text-xs text-muted-foreground min-w-[20px]">%</span>
         <Input
+          id={instanceId}
           type="number"
           value={inputValue}
           onChange={handleChange}
           onBlur={handleBlur}
-          data-market-iv-input="true"
           className={`${compact ? 'h-8 text-sm' : 'h-9'} flex-1`}
           step="0.1"
           min="0"
