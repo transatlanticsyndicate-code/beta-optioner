@@ -3276,6 +3276,8 @@ function UniversalOptionsCalculator() {
                 calculatorMode={calculatorMode}
                 contractMultiplier={contractMultiplier}
                 stockClassification={calculatorMode === 'stocks' ? stockClassification : null}
+                manualIvOverride={marketIvOverride}
+                setMarketIvOverride={setMarketIvOverride}
                 shouldShowBlock={shouldShowBlock}
                 isFuturesMissingSettings={isFuturesMissingSettings}
                 isAIEnabled={isAIEnabled}

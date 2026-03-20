@@ -44,6 +44,8 @@ function CalculatorDealTabs({
   calculatorMode,
   contractMultiplier,
   stockClassification,
+  manualIvOverride = null,
+  setMarketIvOverride = null,
   
   // Пропсы для OptionsMetrics
   shouldShowBlock,
@@ -686,6 +688,8 @@ function CalculatorDealTabs({
             calculatorMode={calculatorMode}
             contractMultiplier={contractMultiplier}
             stockClassification={stockClassification}
+            manualIvOverride={manualIvOverride}
+            setMarketIvOverride={setMarketIvOverride}
           />
         </TabsContent>
 

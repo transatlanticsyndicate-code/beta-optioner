@@ -34,7 +34,9 @@ export function ExitCalculator({
   selectedTicker = '',
   calculatorMode = 'stocks', // Режим калькулятора: 'stocks' | 'futures'
   contractMultiplier = 100, // Множитель контракта: 100 для акций, pointValue для фьючерсов
-  stockClassification = null // Классификация акции для применения коэффициентов группы
+  stockClassification = null, // Классификация акции для применения коэффициентов группы
+  manualIvOverride = null, // Ручная фактическая IV на сегодня
+  setMarketIvOverride = null // Функция для изменения фактической IV
 }) {
   // State для UI
   // ЗАЧЕМ: Сохранение состояния сворачивания в localStorage
@@ -136,6 +138,8 @@ export function ExitCalculator({
                     maxPrice={maxPrice}
                     compact={true}
                     savedConfigDate={savedConfigDate}
+                    marketIvOverride={manualIvOverride}
+                    setMarketIvOverride={setMarketIvOverride}
                   />
                 </div>
 
