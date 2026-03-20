@@ -17,7 +17,7 @@ import { calculateOptionPLValue as calculateStockOptionPLValue, adjustPLByStockG
 import { calculateFuturesOptionPLValue } from '../../utils/futuresPricing';
 import { getOptionVolatility } from '../../utils/volatilitySurface';
 import { assessLiquidity, getLiquidityColor, formatLiquidityTooltip, LIQUIDITY_LEVELS } from '../../utils/liquidityCheck';
-import { calculateDaysRemainingUTC, getOldestEntryDate, isOptionActiveAtDay, isOptionExpiredAtDay } from '../../utils/dateUtils';
+import { calculateDaysRemainingUTC, getOldestEntryDate, isOptionActiveAtDay, isOptionExpiredAtDay, calculateDaysToExpirationFromToday } from '../../utils/dateUtils';
 import LockIcon from './LockIcon';
 
 // Режимы калькулятора
@@ -438,7 +438,7 @@ function OptionsTableV3({
             <div></div>
           </div>
 
-          {options.map((option) => {
+          {options.map((option, optionIndex) => {
             // Устанавливаем дату входа по умолчанию (текущая дата в ISO формате)
             // ЗАЧЕМ: Каждая позиция должна иметь дату входа для отслеживания времени нахождения в позиции
             const entryDate = option.entryDate || new Date().toISOString().split('T')[0];
@@ -723,7 +723,10 @@ function OptionsTableV3({
                     const oldestEntry = getOldestEntryDate(options);
                     const currentDays = calculateDaysRemainingUTC(option, 0, 30, oldestEntry);
                     const simulatedDays = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntry);
-                    const resultIV = getOptionVolatility(option, currentDays, simulatedDays, ivSurface, 'simple', null, manualIvOverride);
+                    const todaySimDays = calculateDaysToExpirationFromToday(option);
+                    // manualIvOverride только для первого опциона в таблице
+                    const ivOverrideForOption = optionIndex === 0 ? manualIvOverride : null;
+                    const resultIV = getOptionVolatility(option, currentDays, simulatedDays, ivSurface, 'simple', null, ivOverrideForOption, todaySimDays);
                     return `${resultIV.toFixed(2)}%`;
                   })()}
                 </span>
@@ -788,6 +791,9 @@ function OptionsTableV3({
 
                     // Определяем волатильность для этого опциона
                     // ЗАЧЕМ: Используем единую функцию getOptionVolatility с IV Surface для точной интерполяции
+                    const todaySimDays = calculateDaysToExpirationFromToday(option);
+                    // manualIvOverride только для первого опциона в таблице
+                    const ivOverrideForOption = optionIndex === 0 ? manualIvOverride : null;
                     let optionVolatility = getOptionVolatility(
                       option,
                       currentDaysToExpiration,
@@ -795,7 +801,8 @@ function OptionsTableV3({
                       ivSurface,
                       'simple',
                       null,
-                      manualIvOverride
+                      ivOverrideForOption,
+                      todaySimDays
                     );
 
                     // Проверяем наличие AI волатильности в кэше
@@ -942,6 +949,9 @@ function OptionsTableV3({
 
                     // Определяем волатильность для этого опциона
                     // ЗАЧЕМ: Используем единую функцию getOptionVolatility с IV Surface для точной интерполяции
+                    const todaySimDaysForOpt = calculateDaysToExpirationFromToday(opt);
+                    // manualIvOverride только для первого опциона (по ID)
+                    const ivOverrideForOpt = opt.id === options[0]?.id ? manualIvOverride : null;
                     let optVolatility = getOptionVolatility(
                       opt,
                       currentDaysToExp,
@@ -949,7 +959,8 @@ function OptionsTableV3({
                       ivSurface,
                       'simple',
                       null,
-                      manualIvOverride
+                      ivOverrideForOpt,
+                      todaySimDaysForOpt
                     );
 
                     // Проверяем наличие AI волатильности в кэше

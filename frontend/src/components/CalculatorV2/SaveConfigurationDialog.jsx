@@ -195,14 +195,23 @@ function SaveConfigurationDialog({ isOpen, onClose, onSave, currentState, isLock
         // ЗАЧЕМ: Позволяет добавлять новые позиции к зафиксированным, сохраняя старые заблокированными
         options: isLocked 
           ? (currentState.options || []).map(opt => {
-              // Вычисляем дни до экспирации на момент сохранения
+              // Вычисляем дни до экспирации от ДАТЫ ВХОДА (entryDate), не от сегодня
+              // ЗАЧЕМ: initialDaysToExpiration = дни на момент входа в позицию.
+              // Если брать new Date() — при входе 06.03 и локе 20.03 получим 90 вместо 104
               let initialDaysToExpiration = 30; // default
               if (opt.date) {
-                const now = new Date();
-                const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+                // Используем entryDate опциона, иначе fallback на сегодня
+                let entryUTC;
+                if (opt.entryDate) {
+                  const [ey, em, ed] = opt.entryDate.split('-').map(Number);
+                  entryUTC = Date.UTC(ey, em - 1, ed);
+                } else {
+                  const now = new Date();
+                  entryUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+                }
                 const [year, month, day] = opt.date.split('-').map(Number);
                 const expDateUTC = Date.UTC(year, month - 1, day);
-                initialDaysToExpiration = Math.ceil((expDateUTC - todayUTC) / (1000 * 60 * 60 * 24));
+                initialDaysToExpiration = Math.ceil((expDateUTC - entryUTC) / (1000 * 60 * 60 * 24));
               }
               return { ...opt, isLockedPosition: true, initialDaysToExpiration };
             })

@@ -1005,7 +1005,6 @@ function UniversalOptionsCalculator() {
               setDaysPassed(calculatedDaysPassed);
               
               optionsToSet = optionsToSet.map(opt => {
-                if (opt.initialDaysToExpiration !== undefined) return opt;
                 if (opt.date) {
                   const [year, month, day] = opt.date.split('-').map(Number);
                   const expDateUTC = Date.UTC(year, month - 1, day);
@@ -2406,15 +2405,8 @@ function UniversalOptionsCalculator() {
             const savedDate = new Date(configEntryDate);
             savedDate.setHours(0, 0, 0, 0);
             optionsToSet = optionsToSet.map(opt => {
-              // Если initialDaysToExpiration уже есть — не перезаписываем
-              if (opt.initialDaysToExpiration !== undefined) {
-                // Сохраняем entryDate если его нет
-                return {
-                  ...opt,
-                  entryDate: opt.entryDate || fallbackEntryDate
-                };
-              }
-              // Вычисляем дни от даты сохранения до экспирации
+              // Вычисляем дни от даты сохранения до экспирации (всегда пересчитываем)
+              // ЗАЧЕМ: Старые конфигурации могли хранить неправильное значение (от new Date вместо от entryDate)
               if (opt.date) {
                 const [year, month, day] = opt.date.split('-').map(Number);
                 const expDateUTC = Date.UTC(year, month - 1, day);

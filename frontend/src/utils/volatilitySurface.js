@@ -374,14 +374,28 @@ export const buildIVSurfaceFromCache = (strikesByDate, optionDetailsCache) => {
  * @param {Object} ouParams - параметры Ornstein-Uhlenbeck: { iv_mean, iv_kappa } (опционально)
  * @returns {number} - волатильность в процентах (например, 25 для 25%)
  */
-export const getOptionVolatility = (option, currentDaysToExpiration = null, simulatedDaysToExpiration = null, ivSurface = null, mode = null, ouParams = null, manualIvOverride = null) => {
+export const getOptionVolatility = (option, currentDaysToExpiration = null, simulatedDaysToExpiration = null, ivSurface = null, mode = null, ouParams = null, manualIvOverride = null, todayDaysToExpiration = null) => {
   // Fallback IV если у опциона нет данных из API
   const DEFAULT_IV = 25;
 
   // ЗАЧЕМ: manualIvOverride имеет приоритет над IV из API
-  // Пользователь ввёл фактическую IV — используем её для всех расчётов напрямую
+  // todayDaysToExpiration = дни от реального сегодня до экспирации (calculateDaysToExpirationFromToday)
+  // simDays >= todayDays → это сегодня или прошлое → возвращаем manualIvOverride напрямую
+  // simDays < todayDays → это будущее → проецируем вперёд от сегодняшней IV
   if (manualIvOverride && manualIvOverride > 0) {
     const manualIVPercent = manualIvOverride < 1 ? manualIvOverride * 100 : manualIvOverride;
+    const todayDays = todayDaysToExpiration ?? currentDaysToExpiration;
+
+    // Сегодня или прошлое — возвращаем напрямую
+    if (todayDays === null || simulatedDaysToExpiration === null || simulatedDaysToExpiration >= todayDays) {
+      return manualIVPercent;
+    }
+
+    // Будущее — проецируем от сегодняшней точки (todayDays, 40%) вперёд
+    if (simulatedDaysToExpiration > 0) {
+      return getProjectedIV(option, todayDays, simulatedDaysToExpiration, ivSurface, ouParams, manualIvOverride);
+    }
+
     return manualIVPercent;
   }
 
