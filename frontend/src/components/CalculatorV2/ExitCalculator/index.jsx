@@ -68,7 +68,8 @@ export function ExitCalculator({
     selectedTicker,
     calculatorMode,
     contractMultiplier,
-    stockClassification
+    stockClassification,
+    manualIvOverride
   });
 
   // Проверяем, есть ли данные для расчета
