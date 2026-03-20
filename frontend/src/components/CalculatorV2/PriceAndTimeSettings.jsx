@@ -20,6 +20,7 @@ import { Button } from '../ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import { isNonTradingDay } from '../../utils/marketHolidays';
 import { parseDateAtStartOfDay } from '../../utils/dateUtils';
+import MarketIvOverrideControl from './MarketIvOverrideControl';
 
 function PriceAndTimeSettings({ 
   currentPrice = 0,
@@ -32,7 +33,9 @@ function PriceAndTimeSettings({
   maxPrice = 0,
   compact = false, // Компактный режим для левой колонки
   savedConfigDate = null,  // Дата сохранения конфигурации (для зафиксированных позиций)
-  livePrice = null  // Текущая рыночная цена (для кнопки сброса в зафиксированных позициях)
+  livePrice = null,  // Текущая рыночная цена (для кнопки сброса в зафиксированных позициях)
+  marketIvOverride = null,  // Ручная фактическая IV на сегодня
+  setMarketIvOverride = null  // Функция для изменения фактической IV
 }) {
   const [priceInput, setPriceInput] = React.useState(targetPrice.toFixed(2));
   const priceInputFocusedRef = React.useRef(false);
@@ -254,6 +257,15 @@ function PriceAndTimeSettings({
           <span>{options.length === 0 ? '—' : `${maxDaysToExpiration} д.`}</span>
         </div>
       </div>
+
+      {/* Ручное переопределение фактической IV на сегодня */}
+      {setMarketIvOverride && (
+        <MarketIvOverrideControl
+          marketIvOverride={marketIvOverride}
+          setMarketIvOverride={setMarketIvOverride}
+          compact={compact}
+        />
+      )}
 
     </div>
   );
