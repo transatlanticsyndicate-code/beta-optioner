@@ -244,6 +244,32 @@ function UniversalOptionsCalculator() {
   // ЗАЧЕМ: Кнопка сброса цены должна сбрасывать на текущую цену, а не на цену при сохранении
   const [livePrice, setLivePrice] = useState(null);
 
+  // State для ручного переопределения фактической IV на сегодня
+  // ЗАЧЕМ: Позволяет подставить реальную волатильность как базу для всех прогнозных расчётов
+  const [marketIvOverride, setMarketIvOverride] = useState(() => {
+    try {
+      const saved = localStorage.getItem('universalCalc_marketIvOverride');
+      if (!saved) return null;
+      const parsed = parseFloat(saved);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+    } catch {
+      return null;
+    }
+  });
+
+  // Сохранение marketIvOverride в localStorage
+  React.useEffect(() => {
+    try {
+      if (Number.isFinite(marketIvOverride) && marketIvOverride > 0) {
+        localStorage.setItem('universalCalc_marketIvOverride', String(marketIvOverride));
+      } else {
+        localStorage.removeItem('universalCalc_marketIvOverride');
+      }
+    } catch (error) {
+      console.error('❌ [Universal] Ошибка сохранения фактической IV:', error);
+    }
+  }, [marketIvOverride]);
+
   // State для отслеживания загруженной конфигурации
   // ЗАЧЕМ: Позволяет автоматически сохранять изменения (новые опционы) в localStorage
   // ВАЖНО: Инициализируем из localStorage — при перезагрузке расширением TradingView
