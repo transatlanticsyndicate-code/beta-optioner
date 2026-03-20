@@ -3083,6 +3083,8 @@ function UniversalOptionsCalculator() {
                         compact={true}
                         savedConfigDate={savedConfigDate}
                         livePrice={livePrice}
+                        marketIvOverride={marketIvOverride}
+                        setMarketIvOverride={setMarketIvOverride}
                       />
                     </CardContent>
                   )}
