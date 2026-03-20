@@ -126,8 +126,11 @@ export const usePositionExitCalculator = ({
   selectedTicker = '',
   calculatorMode = 'stocks', // Режим калькулятора: 'stocks' | 'futures'
   contractMultiplier = 100, // Множитель контракта: 100 для акций, pointValue для фьючерсов
-  stockClassification = null // Классификация акции для применения коэффициентов группы
+  stockClassification = null, // Классификация акции для применения коэффициентов группы
+  manualIvOverride: manualIvOverrideProp = null // Ручная фактическая IV на сегодня
 }) => {
+  const manualIvOverride = manualIvOverrideProp;
+
   return useMemo(() => {
     // Извлекаем параметры Ornstein-Uhlenbeck из классификации тикера
     // ЗАЧЕМ: Если тикер откалиброван — используем iv_mean/iv_kappa для прогноза IV
@@ -179,7 +182,8 @@ export const usePositionExitCalculator = ({
       selectedTicker,
       calculatorMode,
       contractMultiplier,
-      ouParams
+      ouParams,
+      manualIvOverride
     });
 
     // Сценарий 3: Закрыть всё (Close everything)
@@ -196,7 +200,8 @@ export const usePositionExitCalculator = ({
       selectedTicker,
       calculatorMode,
       contractMultiplier,
-      ouParams
+      ouParams,
+      manualIvOverride
     });
 
     // Проверяем ликвидность всех опционов
@@ -366,7 +371,7 @@ const calculateExerciseScenario = ({ options, positions, underlyingPrice, curren
  * - Закрываем опционы по текущей цене (intrinsic + time value)
  * - P&L от изменения цены акций
  */
-const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, daysPassed, currentPrice, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100, ouParams = null }) => {
+const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, daysPassed, currentPrice, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100, ouParams = null, manualIvOverride = null }) => {
   const details = [];
   let totalPL = 0;
 
@@ -422,11 +427,12 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
       simulatedDaysToExpiration,
       ivSurface,
       'simple',
-      ouParams
+      ouParams,
+      manualIvOverride
     );
 
     // Используем AI волатильность если доступна
-    if (isAIEnabled && aiVolatilityMap && selectedTicker) {
+    if (isAIEnabled && aiVolatilityMap && selectedTicker && manualIvOverride == null) {
       const cacheKey = `${selectedTicker}_${option.strike}_${option.date}_${underlyingPrice.toFixed(2)}_${simulatedDaysToExpiration}`;
       const aiVolatility = aiVolatilityMap[cacheKey];
       if (aiVolatility) {
@@ -522,7 +528,7 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
  * - Закрываем опционы по текущей цене (intrinsic + time value)
  * - Продаем акции по текущей цене
  */
-const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPassed, currentPrice, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100, ouParams = null }) => {
+const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPassed, currentPrice, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100, ouParams = null, manualIvOverride = null }) => {
   const details = [];
   let totalPL = 0;
 
@@ -575,11 +581,12 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
       simulatedDaysToExpiration,
       ivSurface,
       'simple',
-      ouParams
+      ouParams,
+      manualIvOverride
     );
 
     // Используем AI волатильность если доступна
-    if (isAIEnabled && aiVolatilityMap && selectedTicker) {
+    if (isAIEnabled && aiVolatilityMap && selectedTicker && manualIvOverride == null) {
       const cacheKey = `${selectedTicker}_${option.strike}_${option.date}_${underlyingPrice.toFixed(2)}_${simulatedDaysToExpiration}`;
       const aiVolatility = aiVolatilityMap[cacheKey];
       if (aiVolatility) {
