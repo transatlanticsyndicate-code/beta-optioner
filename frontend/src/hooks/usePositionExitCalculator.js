@@ -413,14 +413,17 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
     const entryPrice = getEntryPrice(option);
 
     // Вычисляем индивидуальные параметры для этого опциона
-    // currentDays - дни до экспирации на сегодня (без симуляции)
+    // currentDays - дни до экспирации на момент входа (без симуляции)
     // simulatedDays - дни до экспирации с учётом симуляции (daysPassed)
+    // todayDays - дни от РЕАЛЬНОГО СЕГОДНЯ до экспирации (для manualIvOverride)
     // ВАЖНО: Передаём oldestEntryDate для корректного расчёта actualDaysPassed
     const currentDaysToExpiration = calculateDaysToExpirationForOption(option, 0, oldestEntryDate);
     const simulatedDaysToExpiration = calculateDaysToExpirationForOption(option, daysPassed, oldestEntryDate);
+    const todayDaysToExpiration = calculateDaysToExpirationFromToday(option);
 
     // Получаем прогнозируемую IV с учётом временной структуры (Volatility Surface)
     // ВАЖНО: ouParams передаёт параметры OU-модели для mean reversion прогноза IV
+    // todayDaysToExpiration используется для привязки manualIvOverride к реальному сегодня
     let optionVolatility = getOptionVolatility(
       option,
       currentDaysToExpiration,
@@ -428,7 +431,8 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
       ivSurface,
       'simple',
       ouParams,
-      manualIvOverride
+      manualIvOverride,
+      todayDaysToExpiration
     );
 
     // Используем AI волатильность если доступна
@@ -567,14 +571,17 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
     const entryPrice = getEntryPrice(option);
 
     // Вычисляем индивидуальные параметры для этого опциона
-    // currentDays - дни до экспирации на сегодня (без симуляции)
+    // currentDays - дни до экспирации на момент входа (без симуляции)
     // simulatedDays - дни до экспирации с учётом симуляции (daysPassed)
+    // todayDays - дни от РЕАЛЬНОГО СЕГОДНЯ до экспирации (для manualIvOverride)
     // ВАЖНО: Передаём oldestEntryDate для корректного расчёта actualDaysPassed
     const currentDaysToExpiration = calculateDaysToExpirationForOption(option, 0, oldestEntryDate);
     const simulatedDaysToExpiration = calculateDaysToExpirationForOption(option, daysPassed, oldestEntryDate);
+    const todayDaysToExpiration = calculateDaysToExpirationFromToday(option);
 
     // Получаем прогнозируемую IV с учётом временной структуры (Volatility Surface)
     // ВАЖНО: ouParams передаёт параметры OU-модели для mean reversion прогноза IV
+    // todayDaysToExpiration используется для привязки manualIvOverride к реальному сегодня
     let optionVolatility = getOptionVolatility(
       option,
       currentDaysToExpiration,
@@ -582,7 +589,8 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
       ivSurface,
       'simple',
       ouParams,
-      manualIvOverride
+      manualIvOverride,
+      todayDaysToExpiration
     );
 
     // Используем AI волатильность если доступна
