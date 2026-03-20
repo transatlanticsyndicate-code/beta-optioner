@@ -16,7 +16,7 @@ import {
 import { calculateIntrinsicValueBlack76 } from '../utils/black76';
 import { getOptionVolatility } from '../utils/volatilitySurface';
 import { assessLiquidity, LIQUIDITY_LEVELS } from '../utils/liquidityCheck';
-import { calculateDaysRemainingUTC, getOldestEntryDate } from '../utils/dateUtils';
+import { calculateDaysRemainingUTC, getOldestEntryDate, calculateDaysToExpirationFromToday } from '../utils/dateUtils';
 
 // Режимы калькулятора
 const CALCULATOR_MODES = {

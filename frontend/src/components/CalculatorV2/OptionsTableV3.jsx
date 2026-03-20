@@ -87,7 +87,8 @@ function OptionsTableV3({
   calculatorMode = 'stocks', // Режим калькулятора: 'stocks' | 'futures'
   contractMultiplier = 100, // Множитель контракта: 100 для акций, pointValue для фьючерсов
   isFuturesMissingSettings = false, // Флаг: отсутствуют настройки фьючерса (блокирует расчёты)
-  stockClassification = null // Классификация акции для корректировки P&L (только для режима stocks)
+  stockClassification = null, // Классификация акции для корректировки P&L (только для режима stocks)
+  manualIvOverride = null // Ручная фактическая IV (в процентах, например 40)
 }) {
   // DEBUG: Закомментировано для production
   // console.log('🤖 [OptionsTable] Получены пропсы:', {
@@ -722,7 +723,7 @@ function OptionsTableV3({
                     const oldestEntry = getOldestEntryDate(options);
                     const currentDays = calculateDaysRemainingUTC(option, 0, 30, oldestEntry);
                     const simulatedDays = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntry);
-                    const resultIV = getOptionVolatility(option, currentDays, simulatedDays, ivSurface, 'simple');
+                    const resultIV = getOptionVolatility(option, currentDays, simulatedDays, ivSurface, 'simple', null, manualIvOverride);
                     return `${resultIV.toFixed(2)}%`;
                   })()}
                 </span>
@@ -792,12 +793,15 @@ function OptionsTableV3({
                       currentDaysToExpiration,
                       optionDaysRemaining,
                       ivSurface,
-                      'simple'
+                      'simple',
+                      null,
+                      manualIvOverride
                     );
 
                     // Проверяем наличие AI волатильности в кэше
                     // ЗАЧЕМ: Если AI включен и есть прогноз, используем его вместо стандартной IV
-                    if (isAIEnabled && aiVolatilityMap && selectedTicker && targetPrice) {
+                    // ВАЖНО: manualIvOverride имеет приоритет — AI не перезаписывает ручную IV
+                    if (isAIEnabled && aiVolatilityMap && selectedTicker && targetPrice && !manualIvOverride) {
                       const cacheKey = `${selectedTicker}_${option.strike}_${option.date}_${targetPrice.toFixed(2)}_${optionDaysRemaining}`;
                       const aiVolatility = aiVolatilityMap[cacheKey];
                       if (aiVolatility) {
@@ -943,11 +947,14 @@ function OptionsTableV3({
                       currentDaysToExp,
                       optDaysRemaining,
                       ivSurface,
-                      'simple'
+                      'simple',
+                      null,
+                      manualIvOverride
                     );
 
                     // Проверяем наличие AI волатильности в кэше
-                    if (isAIEnabled && aiVolatilityMap && selectedTicker && targetPrice) {
+                    // ВАЖНО: manualIvOverride имеет приоритет — AI не перезаписывает ручную IV
+                    if (isAIEnabled && aiVolatilityMap && selectedTicker && targetPrice && !manualIvOverride) {
                       const cacheKey = `${selectedTicker}_${opt.strike}_${opt.date}_${targetPrice.toFixed(2)}_${optDaysRemaining}`;
                       const aiVolatility = aiVolatilityMap[cacheKey];
                       if (aiVolatility) {

@@ -3189,6 +3189,7 @@ function UniversalOptionsCalculator() {
                       calculatorMode={calculatorMode}
                       contractMultiplier={contractMultiplier}
                       isFuturesMissingSettings={isFuturesMissingSettings}
+                      manualIvOverride={marketIvOverride}
                       onAddMagicOption={(option) => {
                         // Добавляем опцион из волшебного подбора
                         console.log('👑 OptionsCalculatorBasic: Получен опцион в onAddMagicOption:', option.isGoldenOption, option);

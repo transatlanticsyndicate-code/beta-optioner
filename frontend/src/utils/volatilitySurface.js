@@ -177,34 +177,19 @@ export const interpolateIV = (surface, strike, targetDays, fallbackIV = 0.25) =>
  * @param {Object} ouParams - параметры OU модели: { iv_mean, iv_kappa } (опционально)
  * @returns {number} - прогнозируемая IV в процентах (например, 25 для 25%)
  */
-export const getProjectedIV = (option, currentDaysToExpiration, simulatedDaysToExpiration, ivSurface = null, ouParams = null, manualIvOverride = null, todayDaysToExpiration = null) => {
-  // ВАЖНО: manualIvOverride представляет IV на РЕАЛЬНЫЙ СЕГОДНЯШНИЙ ДЕНЬ
-  // todayDaysToExpiration = дни от реального сегодня до экспирации
-  // currentDaysToExpiration = дни от даты входа до экспирации (для обычных расчетов)
-  // simulatedDaysToExpiration = дни с учетом daysPassed
-  
-  // Если есть manualIvOverride, используем его как IV на сегодня
+export const getProjectedIV = (option, currentDaysToExpiration, simulatedDaysToExpiration, ivSurface = null, ouParams = null, manualIvOverride = null) => {
+  // Базовая IV: manualIvOverride или IV из API
+  // ЗАЧЕМ: Caller (getOptionVolatility) уже решил с какой точки проецировать (entry или today)
   const baseIV = manualIvOverride ?? option.impliedVolatility ?? option.implied_volatility ?? 0.25;
   const baseIVDecimal = baseIV > 1 ? baseIV / 100 : baseIV;
 
-  // Если нет manualIvOverride, используем стандартную логику
-  if (!manualIvOverride) {
-    if (simulatedDaysToExpiration >= currentDaysToExpiration || simulatedDaysToExpiration <= 0) {
-      return baseIVDecimal * 100;
-    }
-    const daysPassed = currentDaysToExpiration - simulatedDaysToExpiration;
-    // Продолжаем со стандартной проекцией ниже
-  } else {
-    // manualIvOverride привязан к СЕГОДНЯ (todayDaysToExpiration)
-    // Если симулируем сегодняшний день, возвращаем manualIvOverride напрямую
-    if (todayDaysToExpiration !== null && Math.abs(simulatedDaysToExpiration - todayDaysToExpiration) < 0.5) {
-      return baseIVDecimal * 100;
-    }
+  // Если нет смысла проецировать — возвращаем базовую IV
+  if (simulatedDaysToExpiration >= currentDaysToExpiration || simulatedDaysToExpiration <= 0) {
+    return baseIVDecimal * 100;
   }
 
-  // Определяем от какой точки проецировать
-  const fromDays = manualIvOverride && todayDaysToExpiration !== null ? todayDaysToExpiration : currentDaysToExpiration;
-  const daysPassed = fromDays - simulatedDaysToExpiration;
+  // Количество прошедших дней от текущей точки до симулируемой даты
+  const daysPassed = currentDaysToExpiration - simulatedDaysToExpiration;
 
   // МОДЕЛЬ ORNSTEIN-UHLENBECK (mean reversion)
   // ЗАЧЕМ: Если IV сейчас выше среднего — она будет падать, если ниже — расти.
@@ -223,7 +208,7 @@ export const getProjectedIV = (option, currentDaysToExpiration, simulatedDaysToE
 
     // OU формула: IV(t+dt) = iv_mean + (IV(t) - iv_mean) * exp(-kappa * dt)
     const decayFactor = Math.exp(-kappa * dt);
-    const projectedIVDecimal = ivMean + (currentIVDecimal - ivMean) * decayFactor;
+    const projectedIVDecimal = ivMean + (baseIVDecimal - ivMean) * decayFactor;
 
     // Ограничиваем результат разумными пределами (5% ... 300%)
     const clampedIV = Math.max(0.05, Math.min(3.0, projectedIVDecimal));
@@ -236,7 +221,7 @@ export const getProjectedIV = (option, currentDaysToExpiration, simulatedDaysToE
   // Формула: 1 + 0.5 * (1 - 1/sqrt(timeRatio)), даёт рост от 1.0 до макс 1.5
   const timeRatio = currentDaysToExpiration / Math.max(simulatedDaysToExpiration, 1);
   const growthFactor = 1 + 0.5 * (1 - 1 / Math.sqrt(timeRatio));
-  return Math.min(currentIVDecimal * growthFactor, 3.0) * 100;
+  return Math.min(baseIVDecimal * growthFactor, 3.0) * 100;
 };
 
 /**
@@ -389,40 +374,33 @@ export const buildIVSurfaceFromCache = (strikesByDate, optionDetailsCache) => {
  * @param {Object} ouParams - параметры Ornstein-Uhlenbeck: { iv_mean, iv_kappa } (опционально)
  * @returns {number} - волатильность в процентах (например, 25 для 25%)
  */
-export const getOptionVolatility = (option, currentDaysToExpiration = null, simulatedDaysToExpiration = null, ivSurface = null, mode = null, ouParams = null, manualIvOverride = null, todayDaysToExpiration = null) => {
+export const getOptionVolatility = (option, currentDaysToExpiration = null, simulatedDaysToExpiration = null, ivSurface = null, mode = null, ouParams = null, manualIvOverride = null) => {
   // Fallback IV если у опциона нет данных из API
   const DEFAULT_IV = 25;
-  
+
   // ЗАЧЕМ: manualIvOverride имеет приоритет над IV из API
-  const optIV = manualIvOverride ?? option.impliedVolatility ?? option.implied_volatility;
+  // Пользователь ввёл фактическую IV — используем её для всех расчётов напрямую
+  if (manualIvOverride && manualIvOverride > 0) {
+    const manualIVPercent = manualIvOverride < 1 ? manualIvOverride * 100 : manualIvOverride;
+    return manualIVPercent;
+  }
+
+  // Стандартная логика без manualIvOverride
+  const optIV = option.impliedVolatility ?? option.implied_volatility;
   if (!optIV || optIV <= 0) {
     return DEFAULT_IV;
   }
-  
+
   // Конвертируем в проценты если в десятичном формате
   const currentIVPercent = optIV < 1 ? optIV * 100 : optIV;
-  
-  // Если есть manualIvOverride и todayDaysToExpiration, проверяем симулируем ли мы сегодня
-  if (manualIvOverride && todayDaysToExpiration !== null && Math.abs(simulatedDaysToExpiration - todayDaysToExpiration) < 0.5) {
-    return currentIVPercent;
-  }
-  
+
   // Если есть данные о времени — используем прогнозируемую IV
   // ЗАЧЕМ: Передаём ouParams для Ornstein-Uhlenbeck модели если доступны
-  if (currentDaysToExpiration !== null && simulatedDaysToExpiration !== null && 
+  if (currentDaysToExpiration !== null && simulatedDaysToExpiration !== null &&
       simulatedDaysToExpiration < currentDaysToExpiration && simulatedDaysToExpiration > 0) {
-    const projectedIV = getProjectedIV(
-      option, 
-      currentDaysToExpiration, 
-      simulatedDaysToExpiration,
-      ivSurface,
-      ouParams,  // Передаём OU параметры для mean reversion модели
-      manualIvOverride,  // Передаём manual IV override
-      todayDaysToExpiration  // Передаём дни от сегодня до экспирации
-    );
-    return projectedIV;
+    return getProjectedIV(option, currentDaysToExpiration, simulatedDaysToExpiration, ivSurface, ouParams, null);
   }
-  
+
   return currentIVPercent;
 };
 

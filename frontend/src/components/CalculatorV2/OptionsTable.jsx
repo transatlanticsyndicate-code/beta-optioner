@@ -75,7 +75,8 @@ function OptionsTable({
   aiVolatilityMap = {}, // Кэш AI предсказаний волатильности
   fetchAIVolatility = null, // Функция для запроса AI волатильности
   hideColumns = [], // Массив колонок для скрытия: ['premium', 'oi']
-  stockClassification = null // Классификация акции для корректировки P&L
+  stockClassification = null, // Классификация акции для корректировки P&L
+  manualIvOverride = null // Ручная фактическая IV (в процентах, например 40)
 }) {
   // Логирование полученных AI пропсов
   console.log('🤖 [OptionsTable] Получены пропсы:', {
@@ -963,7 +964,7 @@ function OptionsTable({
                     const oldestEntry = getOldestEntryDate(options);
                     const currentDays = calculateDaysRemainingUTC(option, 0, 30, oldestEntry);
                     const simulatedDays = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntry);
-                    const resultIV = getOptionVolatility(option, currentDays, simulatedDays, ivSurface);
+                    const resultIV = getOptionVolatility(option, currentDays, simulatedDays, ivSurface, null, null, manualIvOverride);
                     return `${resultIV.toFixed(0)}%`;
                   })()}
                 </span>
@@ -1031,7 +1032,10 @@ function OptionsTable({
                       option,
                       currentDaysToExpiration,
                       optionDaysRemaining,
-                      ivSurface
+                      ivSurface,
+                      null,
+                      null,
+                      manualIvOverride
                     );
 
                     // Проверяем наличие AI волатильности в кэше

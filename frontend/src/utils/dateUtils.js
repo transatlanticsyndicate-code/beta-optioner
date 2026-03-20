@@ -187,6 +187,37 @@ export function calculateDaysRemainingUTC(option, daysPassed = 0, defaultDays = 
 }
 
 /**
+ * Вычисляет дни до экспирации от реального сегодняшнего дня (не от даты входа)
+ * ЗАЧЕМ: Для привязки manualIvOverride к текущей дате, а не к дате входа в позицию
+ * 
+ * @param {Object} option - Опцион с полем date
+ * @returns {number} Дни до экспирации от сегодня
+ */
+export function calculateDaysToExpirationFromToday(option) {
+  if (!option?.date) {
+    return 30; // Fallback
+  }
+
+  const normalizedExpirationDate = normalizeDateString(option.date);
+  if (!normalizedExpirationDate) {
+    return 30;
+  }
+
+  // Парсим дату экспирации
+  const [expYear, expMonth, expDay] = normalizedExpirationDate.split('-').map(Number);
+  const expDateUTC = Date.UTC(expYear, expMonth - 1, expDay);
+
+  // Сегодняшняя дата в UTC
+  const today = new Date();
+  const todayUTC = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+
+  // Дни от сегодня до экспирации
+  const daysToExpiration = Math.ceil((expDateUTC - todayUTC) / (1000 * 60 * 60 * 24));
+
+  return Math.max(0, daysToExpiration);
+}
+
+/**
  * Проверяет, есть ли у опциона оставшиеся дни до экспирации
  * ЗАЧЕМ: Используется для определения, показывать ли линию экспирации на графике
  * 
