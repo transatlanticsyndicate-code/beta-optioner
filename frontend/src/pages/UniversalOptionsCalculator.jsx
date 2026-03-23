@@ -246,29 +246,8 @@ function UniversalOptionsCalculator() {
 
   // State для ручного переопределения фактической IV на сегодня
   // ЗАЧЕМ: Позволяет подставить реальную волатильность как базу для всех прогнозных расчётов
-  const [marketIvOverride, setMarketIvOverride] = useState(() => {
-    try {
-      const saved = localStorage.getItem('universalCalc_marketIvOverride');
-      if (!saved) return null;
-      const parsed = parseFloat(saved);
-      return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-    } catch {
-      return null;
-    }
-  });
-
-  // Сохранение marketIvOverride в localStorage
-  React.useEffect(() => {
-    try {
-      if (Number.isFinite(marketIvOverride) && marketIvOverride > 0) {
-        localStorage.setItem('universalCalc_marketIvOverride', String(marketIvOverride));
-      } else {
-        localStorage.removeItem('universalCalc_marketIvOverride');
-      }
-    } catch (error) {
-      console.error('❌ [Universal] Ошибка сохранения фактической IV:', error);
-    }
-  }, [marketIvOverride]);
+  // ВАЖНО: Инициализируем null, загрузка из localStorage происходит в useEffect по первому опциону
+  const [marketIvOverride, setMarketIvOverride] = useState(null);
 
   // State для отслеживания загруженной конфигурации
   // ЗАЧЕМ: Позволяет автоматически сохранять изменения (новые опционы) в localStorage
@@ -717,6 +696,77 @@ function UniversalOptionsCalculator() {
 
   const [options, setOptions] = useState([]);
 
+  // Вычисляем ключ первого опциона для загрузки/сохранения marketIvOverride
+  // ЗАЧЕМ: Каждый опцион имеет уникальный ключ в localStorage
+  // ВАЖНО: Мемоизируем чтобы избежать пересчёта при каждом рендере
+  const firstOptionKey = useMemo(() => {
+    return options && options.length > 0 ? `${options[0].strike}_${options[0].date}` : null;
+  }, [options]);
+
+  // Сохранение marketIvOverride в localStorage с ключом, зависящим от первого опциона
+  // ЗАЧЕМ: Разные опционы (даже в одном тикере) имеют разную волатильность
+  React.useEffect(() => {
+    try {
+      const firstOption = options && options.length > 0 ? options[0] : null;
+      if (!firstOption || !selectedTicker) {
+        // Если нет опционов или тикера — не сохраняем
+        return;
+      }
+
+      // Ключ включает тикер, страйк и дату для уникальности
+      const storageKey = `universalCalc_marketIvOverride_${selectedTicker}_${firstOption.strike}_${firstOption.date}`;
+
+      if (Number.isFinite(marketIvOverride) && marketIvOverride > 0) {
+        localStorage.setItem(storageKey, String(marketIvOverride));
+      } else {
+        localStorage.removeItem(storageKey);
+      }
+    } catch (error) {
+      console.error('❌ [Universal] Ошибка сохранения фактической IV:', error);
+    }
+  }, [marketIvOverride, selectedTicker, options]);
+
+  // Загрузка marketIvOverride из localStorage при изменении опционов
+  // ЗАЧЕМ: Когда пользователь переключается на другой опцион, загружаем сохранённую IV для этого опциона
+  // ВАЖНО: Не перезаписываем значение из конфигурации (loadedConfigId)
+  React.useEffect(() => {
+    try {
+      const firstOption = options && options.length > 0 ? options[0] : null;
+      if (!firstOption || !selectedTicker) {
+        // Если нет опционов или тикера — очищаем IV только если конфигурация не загружена
+        if (!loadedConfigId) {
+          setMarketIvOverride(null);
+        }
+        return;
+      }
+
+      // Если конфигурация загружена — не перезаписываем marketIvOverride из localStorage
+      // ЗАЧЕМ: Значение уже установлено из конфигурации и должно сохраниться
+      if (loadedConfigId) {
+        return;
+      }
+
+      // Ключ включает тикер, страйк и дату для уникальности
+      const storageKey = `universalCalc_marketIvOverride_${selectedTicker}_${firstOption.strike}_${firstOption.date}`;
+      const saved = localStorage.getItem(storageKey);
+
+      if (saved) {
+        const parsed = parseFloat(saved);
+        if (Number.isFinite(parsed) && parsed > 0) {
+          setMarketIvOverride(parsed);
+        } else {
+          setMarketIvOverride(null);
+        }
+      } else {
+        // Если нет сохранённого значения для этого опциона — очищаем
+        setMarketIvOverride(null);
+      }
+    } catch (error) {
+      console.error('❌ [Universal] Ошибка загрузки фактической IV:', error);
+      setMarketIvOverride(null);
+    }
+  }, [selectedTicker, firstOptionKey, loadedConfigId]);
+
   // Динамический расчёт количества опционов для отображения в хедере
   // ЗАЧЕМ: При изменении quantity в таблице опционов — название сделки автоматически обновляется
   const currentOptionsCount = useMemo(() => {
@@ -1030,6 +1080,11 @@ function UniversalOptionsCalculator() {
             setPositions(config.state.positions || []);
             if (config.state.selectedExpirationDate) setSelectedExpirationDate(config.state.selectedExpirationDate);
             if (config.state.chartDisplayMode) setChartDisplayMode(config.state.chartDisplayMode);
+            
+            // Восстанавливаем фактическую IV если она была сохранена
+            if (config.state.marketIvOverride) {
+              setMarketIvOverride(config.state.marketIvOverride);
+            }
             
             // Восстанавливаем режим калькулятора
             if (config.state.calculatorMode) {
@@ -2457,6 +2512,11 @@ function UniversalOptionsCalculator() {
           setShowProbabilityZones(config.state.showProbabilityZones !== undefined ? config.state.showProbabilityZones : true);
           setChartDisplayMode(config.state.chartDisplayMode || 'profit-loss-dollar');
 
+          // Восстанавливаем фактическую IV если она была сохранена
+          if (config.state.marketIvOverride) {
+            setMarketIvOverride(config.state.marketIvOverride);
+          }
+
           // Восстанавливаем режим калькулятора (акции/фьючерсы)
           // ЗАЧЕМ: Предотвращает неправильное определение типа актива при загрузке конфигурации
           // ВАЖНО: Если calculatorMode не сохранён — определяем по тикеру
@@ -2755,6 +2815,7 @@ function UniversalOptionsCalculator() {
       showProbabilityZones,
       chartDisplayMode,
       calculatorMode,
+      marketIvOverride, // Фактическая IV на сегодня
     };
   };
 
