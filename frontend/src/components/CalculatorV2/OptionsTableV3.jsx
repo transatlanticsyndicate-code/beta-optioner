@@ -431,8 +431,8 @@ function OptionsTableV3({
           {/* Заголовки колонок — динамическая сетка в зависимости от hideColumns */}
           <div className="grid items-center text-xs font-medium text-muted-foreground px-2" style={{
             display: 'grid',
-            gridTemplateColumns: `30px 1fr 1fr 1fr 0.5fr ${hideColumns.includes('premium') ? '' : '1fr '}1fr 1fr ${hideColumns.includes('oi') ? '' : '0.8fr '}0.5fr 0.5fr 0.8fr 1.2fr 40px`.replace(/\s+/g, ' ').trim(),
-            gap: '8px'
+            gridTemplateColumns: `30px 0.6fr 0.7fr 0.7fr 0.4fr ${hideColumns.includes('premium') ? '' : '0.8fr '}0.6fr 0.6fr ${hideColumns.includes('oi') ? '' : '0.6fr '}0.4fr 0.4fr 0.55fr 0.65fr 1fr 40px`.replace(/\s+/g, ' ').trim(),
+            gap: '6px'
           }}>
             <div></div>
             <div className="text-left">Тип</div>
@@ -472,8 +472,8 @@ function OptionsTableV3({
                   }`}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: `30px 1fr 1fr 1fr 0.5fr ${hideColumns.includes('premium') ? '' : '1fr '}1fr 1fr ${hideColumns.includes('oi') ? '' : '0.8fr '}0.5fr 0.5fr 0.8fr 1.2fr 40px`.replace(/\s+/g, ' ').trim(),
-                  gap: '8px'
+                  gridTemplateColumns: `30px 0.6fr 0.7fr 0.7fr 0.4fr ${hideColumns.includes('premium') ? '' : '0.8fr '}0.6fr 0.6fr ${hideColumns.includes('oi') ? '' : '0.6fr '}0.4fr 0.4fr 0.55fr 0.65fr 1fr 40px`.replace(/\s+/g, ' ').trim(),
+                  gap: '6px'
                 }}
               >
                 {/* Иконка видимости: Lock для зафиксированных позиций, Eye/EyeOff для обычных */}
@@ -941,7 +941,7 @@ function OptionsTableV3({
           })}
 
           {/* Итоговая строка */}
-          <div className="items-center text-sm border-t-2 border-cyan-500 bg-cyan-50/50 rounded-md p-2 font-bold" style={{ display: 'grid', gridTemplateColumns: `30px 1fr 1fr 1fr 0.5fr ${hideColumns.includes('premium') ? '' : '1fr '}1fr 1fr ${hideColumns.includes('oi') ? '' : '0.8fr '}0.5fr 0.5fr 0.8fr 1.2fr 40px`.replace(/\s+/g, ' ').trim(), gap: '8px' }}>
+          <div className="items-center text-sm border-t-2 border-cyan-500 bg-cyan-50/50 rounded-md p-2 font-bold" style={{ display: 'grid', gridTemplateColumns: `30px 0.6fr 0.7fr 0.7fr 0.4fr ${hideColumns.includes('premium') ? '' : '0.8fr '}0.6fr 0.6fr ${hideColumns.includes('oi') ? '' : '0.6fr '}0.4fr 0.4fr 0.55fr 0.65fr 1fr 40px`.replace(/\s+/g, ' ').trim(), gap: '6px' }}>
             <div></div>
             <div className="text-left">ИТОГО:</div>
             <div></div>
@@ -951,6 +951,7 @@ function OptionsTableV3({
             <div></div>
             <div></div>
             {!hideColumns.includes('oi') && <div></div>}
+            <div></div>
             <div></div>
             <div></div>
             <div></div>
