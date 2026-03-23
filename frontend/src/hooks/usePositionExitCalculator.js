@@ -126,10 +126,8 @@ export const usePositionExitCalculator = ({
   selectedTicker = '',
   calculatorMode = 'stocks', // Режим калькулятора: 'stocks' | 'futures'
   contractMultiplier = 100, // Множитель контракта: 100 для акций, pointValue для фьючерсов
-  stockClassification = null, // Классификация акции для применения коэффициентов группы
-  manualIvOverride: manualIvOverrideProp = null // Ручная фактическая IV на сегодня
+  stockClassification = null // Классификация акции для применения коэффициентов группы
 }) => {
-  const manualIvOverride = manualIvOverrideProp;
 
   return useMemo(() => {
     // Извлекаем параметры Ornstein-Uhlenbeck из классификации тикера
@@ -182,8 +180,7 @@ export const usePositionExitCalculator = ({
       selectedTicker,
       calculatorMode,
       contractMultiplier,
-      ouParams,
-      manualIvOverride
+      ouParams
     });
 
     // Сценарий 3: Закрыть всё (Close everything)
@@ -200,8 +197,7 @@ export const usePositionExitCalculator = ({
       selectedTicker,
       calculatorMode,
       contractMultiplier,
-      ouParams,
-      manualIvOverride
+      ouParams
     });
 
     // Проверяем ликвидность всех опционов
@@ -371,7 +367,7 @@ const calculateExerciseScenario = ({ options, positions, underlyingPrice, curren
  * - Закрываем опционы по текущей цене (intrinsic + time value)
  * - P&L от изменения цены акций
  */
-const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, daysPassed, currentPrice, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100, ouParams = null, manualIvOverride = null }) => {
+const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, daysPassed, currentPrice, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100, ouParams = null }) => {
   const details = [];
   let totalPL = 0;
 
@@ -400,7 +396,7 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
   // Вычисляем самую старую дату входа для индивидуального расчёта daysPassed
   const oldestEntryDate = getOldestEntryDate(options);
 
-  options.forEach((option, optionIndex) => {
+  options.forEach((option) => {
     // ВАЖНО: При ручной премии обнуляем ask/bid, чтобы getEntryPrice() использовал premium
     // Если нет - передаем ручные Bid/Ask, если они изменены
     const tempOption = {
@@ -421,13 +417,10 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
     const simulatedDaysToExpiration = calculateDaysToExpirationForOption(option, daysPassed, oldestEntryDate);
     const todayDaysToExpiration = calculateDaysToExpirationFromToday(option);
 
-    // manualIvOverride применяется только к первому опциону (index === 0)
-    // ЗАЧЕМ: Пользователь вводит фактическую IV для первого опциона стратегии
-    const ivOverrideForOption = optionIndex === 0 ? manualIvOverride : null;
-
     // Получаем прогнозируемую IV с учётом временной структуры (Volatility Surface)
     // ВАЖНО: ouParams передаёт параметры OU-модели для mean reversion прогноза IV
     // todayDaysToExpiration используется для привязки manualIvOverride к реальному сегодня
+    // Используем manualIvOverride из самого опциона
     let optionVolatility = getOptionVolatility(
       option,
       currentDaysToExpiration,
@@ -435,12 +428,12 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
       ivSurface,
       'simple',
       ouParams,
-      ivOverrideForOption,
+      option.manualIvOverride,
       todayDaysToExpiration
     );
 
     // Используем AI волатильность если доступна
-    if (isAIEnabled && aiVolatilityMap && selectedTicker && ivOverrideForOption == null) {
+    if (isAIEnabled && aiVolatilityMap && selectedTicker && !option.manualIvOverride) {
       const cacheKey = `${selectedTicker}_${option.strike}_${option.date}_${underlyingPrice.toFixed(2)}_${simulatedDaysToExpiration}`;
       const aiVolatility = aiVolatilityMap[cacheKey];
       if (aiVolatility) {
@@ -536,7 +529,7 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
  * - Закрываем опционы по текущей цене (intrinsic + time value)
  * - Продаем акции по текущей цене
  */
-const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPassed, currentPrice, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100, ouParams = null, manualIvOverride = null }) => {
+const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPassed, currentPrice, ivSurface = null, dividendYield = 0, isAIEnabled = false, aiVolatilityMap = {}, selectedTicker = '', calculatorMode = 'stocks', contractMultiplier = 100, ouParams = null }) => {
   const details = [];
   let totalPL = 0;
 
@@ -562,7 +555,7 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
   // Вычисляем самую старую дату входа для индивидуального расчёта daysPassed
   const oldestEntryDate = getOldestEntryDate(options);
 
-  options.forEach((option, optionIndex) => {
+  options.forEach((option) => {
     // ВАЖНО: При ручной премии обнуляем ask/bid, чтобы getEntryPrice() использовал premium
     // Если нет - передаем ручные Bid/Ask, если они изменены
     const tempOption = {
@@ -583,13 +576,10 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
     const simulatedDaysToExpiration = calculateDaysToExpirationForOption(option, daysPassed, oldestEntryDate);
     const todayDaysToExpiration = calculateDaysToExpirationFromToday(option);
 
-    // manualIvOverride применяется только к первому опциону (index === 0)
-    // ЗАЧЕМ: Пользователь вводит фактическую IV для первого опциона стратегии
-    const ivOverrideForOption = optionIndex === 0 ? manualIvOverride : null;
-
     // Получаем прогнозируемую IV с учётом временной структуры (Volatility Surface)
     // ВАЖНО: ouParams передаёт параметры OU-модели для mean reversion прогноза IV
     // todayDaysToExpiration используется для привязки manualIvOverride к реальному сегодня
+    // Используем manualIvOverride из самого опциона
     let optionVolatility = getOptionVolatility(
       option,
       currentDaysToExpiration,
@@ -597,12 +587,12 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
       ivSurface,
       'simple',
       ouParams,
-      ivOverrideForOption,
+      option.manualIvOverride,
       todayDaysToExpiration
     );
 
     // Используем AI волатильность если доступна
-    if (isAIEnabled && aiVolatilityMap && selectedTicker && ivOverrideForOption == null) {
+    if (isAIEnabled && aiVolatilityMap && selectedTicker && !option.manualIvOverride) {
       const cacheKey = `${selectedTicker}_${option.strike}_${option.date}_${underlyingPrice.toFixed(2)}_${simulatedDaysToExpiration}`;
       const aiVolatility = aiVolatilityMap[cacheKey];
       if (aiVolatility) {

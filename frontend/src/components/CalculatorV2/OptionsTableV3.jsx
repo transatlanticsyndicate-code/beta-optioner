@@ -87,8 +87,7 @@ function OptionsTableV3({
   calculatorMode = 'stocks', // Режим калькулятора: 'stocks' | 'futures'
   contractMultiplier = 100, // Множитель контракта: 100 для акций, pointValue для фьючерсов
   isFuturesMissingSettings = false, // Флаг: отсутствуют настройки фьючерса (блокирует расчёты)
-  stockClassification = null, // Классификация акции для корректировки P&L (только для режима stocks)
-  manualIvOverride = null // Ручная фактическая IV (в процентах, например 40)
+  stockClassification = null // Классификация акции для корректировки P&L (только для режима stocks)
 }) {
   // DEBUG: Закомментировано для production
   // console.log('🤖 [OptionsTable] Получены пропсы:', {
@@ -192,6 +191,19 @@ function OptionsTableV3({
       console.warn('⚠️ [OptionsTable] onUpdateOption не определен!');
     }
   };
+
+  // Обработчик изменения фактической IV для опциона
+  // ЗАЧЕМ: Позволяет пользователю корректировать волатильность для каждого опциона отдельно
+  const handleIvOverrideChange = React.useCallback((optionId, value) => {
+    const numValue = value ? parseFloat(value) : null;
+    
+    // Валидация: 1-200%
+    if (numValue !== null && (numValue < 1 || numValue > 200)) {
+      return;
+    }
+    
+    handleFieldChange(optionId, 'manualIvOverride', numValue);
+  }, []);
 
   // Обработчик обновления всех незалоченных опционов
   // ЗАЧЕМ: Позволяет пользователю быстро обновить рыночные данные для всех позиций
@@ -433,6 +445,7 @@ function OptionsTableV3({
             {!hideColumns.includes('oi') && <div className="text-right">OI</div>}
             <div className="text-right" style={{ fontSize: '0.7rem' }}>VOL</div>
             <div className="text-right" style={{ fontSize: '0.7rem' }}>IV</div>
+            <div className="text-right" style={{ fontSize: '0.7rem' }}>Факт. IV %</div>
             <div className="text-right">Вход</div>
             <div className="text-right">P&L</div>
             <div></div>
@@ -724,12 +737,33 @@ function OptionsTableV3({
                     const currentDays = calculateDaysRemainingUTC(option, 0, 30, oldestEntry);
                     const simulatedDays = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntry);
                     const todaySimDays = calculateDaysToExpirationFromToday(option);
-                    // manualIvOverride только для первого опциона в таблице
-                    const ivOverrideForOption = optionIndex === 0 ? manualIvOverride : null;
-                    const resultIV = getOptionVolatility(option, currentDays, simulatedDays, ivSurface, 'simple', null, ivOverrideForOption, todaySimDays);
+                    // Используем manualIvOverride из самого опциона
+                    const resultIV = getOptionVolatility(option, currentDays, simulatedDays, ivSurface, 'simple', null, option.manualIvOverride, todaySimDays);
                     return `${resultIV.toFixed(2)}%`;
                   })()}
                 </span>
+
+                {/* Фактическая IV % - ручная коррекция волатильности */}
+                {/* ЗАЧЕМ: Позволяет пользователю корректировать IV для каждого опциона отдельно */}
+                <Input
+                  type="number"
+                  min="1"
+                  max="200"
+                  step="0.1"
+                  value={option.manualIvOverride || ''}
+                  onChange={(e) => handleIvOverrideChange(option.id, e.target.value)}
+                  placeholder={(() => {
+                    const optIV = option.impliedVolatility || option.implied_volatility;
+                    if (!optIV || optIV <= 0) return '—';
+                    return optIV < 1 ? (optIV * 100).toFixed(1) : optIV.toFixed(1);
+                  })()}
+                  disabled={option.isLockedPosition}
+                  className="w-14 px-1 text-right text-xs border rounded"
+                  style={{ 
+                    fontSize: '0.7rem',
+                    backgroundColor: option.manualIvOverride ? '#fef3c7' : 'transparent'
+                  }}
+                />
 
                 {/* Дата входа в позицию */}
                 <span
@@ -792,8 +826,7 @@ function OptionsTableV3({
                     // Определяем волатильность для этого опциона
                     // ЗАЧЕМ: Используем единую функцию getOptionVolatility с IV Surface для точной интерполяции
                     const todaySimDays = calculateDaysToExpirationFromToday(option);
-                    // manualIvOverride только для первого опциона в таблице
-                    const ivOverrideForOption = optionIndex === 0 ? manualIvOverride : null;
+                    // Используем manualIvOverride из самого опциона
                     let optionVolatility = getOptionVolatility(
                       option,
                       currentDaysToExpiration,
@@ -801,14 +834,14 @@ function OptionsTableV3({
                       ivSurface,
                       'simple',
                       null,
-                      ivOverrideForOption,
+                      option.manualIvOverride,
                       todaySimDays
                     );
 
                     // Проверяем наличие AI волатильности в кэше
                     // ЗАЧЕМ: Если AI включен и есть прогноз, используем его вместо стандартной IV
                     // ВАЖНО: manualIvOverride имеет приоритет — AI не перезаписывает ручную IV
-                    if (isAIEnabled && aiVolatilityMap && selectedTicker && targetPrice && !manualIvOverride) {
+                    if (isAIEnabled && aiVolatilityMap && selectedTicker && targetPrice && !option.manualIvOverride) {
                       const cacheKey = `${selectedTicker}_${option.strike}_${option.date}_${targetPrice.toFixed(2)}_${optionDaysRemaining}`;
                       const aiVolatility = aiVolatilityMap[cacheKey];
                       if (aiVolatility) {
@@ -950,8 +983,7 @@ function OptionsTableV3({
                     // Определяем волатильность для этого опциона
                     // ЗАЧЕМ: Используем единую функцию getOptionVolatility с IV Surface для точной интерполяции
                     const todaySimDaysForOpt = calculateDaysToExpirationFromToday(opt);
-                    // manualIvOverride только для первого опциона (по ID)
-                    const ivOverrideForOpt = opt.id === options[0]?.id ? manualIvOverride : null;
+                    // Используем manualIvOverride из самого опциона
                     let optVolatility = getOptionVolatility(
                       opt,
                       currentDaysToExp,
@@ -959,13 +991,13 @@ function OptionsTableV3({
                       ivSurface,
                       'simple',
                       null,
-                      ivOverrideForOpt,
+                      opt.manualIvOverride,
                       todaySimDaysForOpt
                     );
 
                     // Проверяем наличие AI волатильности в кэше
                     // ВАЖНО: manualIvOverride имеет приоритет — AI не перезаписывает ручную IV
-                    if (isAIEnabled && aiVolatilityMap && selectedTicker && targetPrice && !manualIvOverride) {
+                    if (isAIEnabled && aiVolatilityMap && selectedTicker && targetPrice && !opt.manualIvOverride) {
                       const cacheKey = `${selectedTicker}_${opt.strike}_${opt.date}_${targetPrice.toFixed(2)}_${optDaysRemaining}`;
                       const aiVolatility = aiVolatilityMap[cacheKey];
                       if (aiVolatility) {

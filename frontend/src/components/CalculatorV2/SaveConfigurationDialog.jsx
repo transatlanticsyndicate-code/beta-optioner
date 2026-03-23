@@ -225,7 +225,6 @@ function SaveConfigurationDialog({ isOpen, onClose, onSave, currentState, isLock
         showProbabilityZones: currentState.showProbabilityZones,
         chartDisplayMode: currentState.chartDisplayMode,
         calculatorMode: currentState.calculatorMode, // Режим калькулятора: 'stocks' | 'futures'
-        marketIvOverride: currentState.marketIvOverride, // Фактическая IV на сегодня
       },
       // Сохраняем настройки таба Сделка если они есть
       // ЗАЧЕМ: При загрузке зафиксированной позиции восстанавливаем все настройки сделки
