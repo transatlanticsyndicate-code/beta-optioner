@@ -1868,5 +1868,698 @@
       "deleted_options": [],
       "deleted_results": []
     }
+  },
+  {
+    "job_id": "job_1774285200301",
+    "status": "done",
+    "source": "scheduler",
+    "tickers": [
+      "MNDY",
+      "TEAM",
+      "INSP",
+      "GLOB",
+      "IT",
+      "GSHD",
+      "HUBS",
+      "MOH",
+      "FDS",
+      "WIX",
+      "CRVL",
+      "GDDY",
+      "SPSC",
+      "LULU",
+      "FOUR",
+      "ARE",
+      "MSTR",
+      "NSIT",
+      "ESTC",
+      "WD",
+      "WDAY",
+      "SFM",
+      "KMX",
+      "BRO",
+      "ICLR",
+      "CSGP",
+      "TRI",
+      "DOCU",
+      "JJSF",
+      "PCTY",
+      "ACN",
+      "Z",
+      "TYL",
+      "ZG",
+      "ADBE",
+      "ROP",
+      "PAYC",
+      "SLVM",
+      "ROCK",
+      "MORN",
+      "BFAM",
+      "CHTR",
+      "AJG",
+      "PAYX",
+      "SE",
+      "PYPL",
+      "QTWO",
+      "FICO",
+      "ENPH",
+      "CHE",
+      "COLM",
+      "LRN",
+      "LBRDK",
+      "NOW",
+      "LBRDA",
+      "CHKP",
+      "IPAR",
+      "MMSI",
+      "EMN",
+      "AMWD",
+      "HLNE",
+      "RH",
+      "OLED",
+      "KKR",
+      "ARES",
+      "FBIN",
+      "GPI",
+      "FND",
+      "MMYT",
+      "BX",
+      "ROOT",
+      "GIS",
+      "HUM",
+      "POOL",
+      "BLDR",
+      "IOSP",
+      "UHAL",
+      "PFSI",
+      "CDW",
+      "WHR",
+      "ASGN",
+      "TGLS",
+      "ERIE",
+      "ZS",
+      "BLKB",
+      "FLUT",
+      "ELV",
+      "CVLT",
+      "DUOL",
+      "MKC"
+    ],
+    "months": 6,
+    "hold_days": 14,
+    "calibration_mode": "weighted",
+    "recent_days": 30,
+    "started_at": "2026-03-23T17:00:00.301357",
+    "finished_at": "2026-03-23T23:05:04.260918",
+    "error": null,
+    "results": [
+      {
+        "ticker": "MNDY",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "TEAM",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "INSP",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "GLOB",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "IT",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "GSHD",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "HUBS",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "MOH",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "FDS",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "WIX",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "CRVL",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "GDDY",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "SPSC",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "LULU",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "FOUR",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "ARE",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "MSTR",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "NSIT",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "ESTC",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "WD",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "WDAY",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "SFM",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "KMX",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "BRO",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "ICLR",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "CSGP",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "TRI",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "DOCU",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "JJSF",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "PCTY",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "ACN",
+        "status": "success",
+        "down_mult": 1.208,
+        "up_mult": 0.822,
+        "iv_mean": 0.3331,
+        "iv_kappa": 48.94,
+        "iv_std": 0.069,
+        "half_life_days": 5,
+        "total_trades": 59,
+        "calibrated_at": "2026-03-23",
+        "note": "Calibrated 2026-03-23, 59 trades, 14d hold, ThetaData EOD",
+        "mode": "weighted"
+      },
+      {
+        "ticker": "Z",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "TYL",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "ZG",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "ADBE",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "ROP",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "PAYC",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "SLVM",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "ROCK",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "MORN",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "BFAM",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "CHTR",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "AJG",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "PAYX",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "SE",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "PYPL",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "QTWO",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "FICO",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "ENPH",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "CHE",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "COLM",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "LRN",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "LBRDK",
+        "status": "success",
+        "down_mult": 0.986,
+        "up_mult": 1.028,
+        "iv_mean": 0.7499,
+        "iv_kappa": 48.83,
+        "iv_std": 0.3036,
+        "half_life_days": 5,
+        "total_trades": 2859,
+        "calibrated_at": "2026-03-23",
+        "note": "Calibrated 2026-03-23, 2859 trades, 14d hold, ThetaData EOD",
+        "mode": "weighted"
+      },
+      {
+        "ticker": "NOW",
+        "status": "success",
+        "down_mult": 1.025,
+        "up_mult": 1.058,
+        "iv_mean": 1.2688,
+        "iv_kappa": 20.21,
+        "iv_std": 0.3845,
+        "half_life_days": 13,
+        "total_trades": 1120,
+        "calibrated_at": "2026-03-23",
+        "note": "Calibrated 2026-03-23, 1120 trades, 14d hold, ThetaData EOD",
+        "mode": "weighted"
+      },
+      {
+        "ticker": "LBRDA",
+        "status": "success",
+        "down_mult": 1.024,
+        "up_mult": 1.021,
+        "iv_mean": 0.5627,
+        "iv_kappa": 100.0,
+        "iv_std": 0.2102,
+        "half_life_days": 3,
+        "total_trades": 2399,
+        "calibrated_at": "2026-03-23",
+        "note": "Calibrated 2026-03-23, 2399 trades, 14d hold, ThetaData EOD",
+        "mode": "weighted"
+      },
+      {
+        "ticker": "CHKP",
+        "status": "success",
+        "down_mult": 1.077,
+        "up_mult": 1.031,
+        "iv_mean": 0.3392,
+        "iv_kappa": 56.88,
+        "iv_std": 0.0608,
+        "half_life_days": 4,
+        "total_trades": 3876,
+        "calibrated_at": "2026-03-23",
+        "note": "Calibrated 2026-03-23, 3876 trades, 14d hold, ThetaData EOD",
+        "mode": "weighted"
+      },
+      {
+        "ticker": "IPAR",
+        "status": "success",
+        "down_mult": 0.988,
+        "up_mult": 1.093,
+        "iv_mean": 0.4861,
+        "iv_kappa": 100.0,
+        "iv_std": 0.1101,
+        "half_life_days": 3,
+        "total_trades": 235,
+        "calibrated_at": "2026-03-23",
+        "note": "Calibrated 2026-03-23, 235 trades, 14d hold, ThetaData EOD",
+        "mode": "weighted"
+      },
+      {
+        "ticker": "MMSI",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "EMN",
+        "status": "success",
+        "down_mult": 1.003,
+        "up_mult": 1.066,
+        "iv_mean": 0.4937,
+        "iv_kappa": 100.0,
+        "iv_std": 0.1633,
+        "half_life_days": 3,
+        "total_trades": 3502,
+        "calibrated_at": "2026-03-23",
+        "note": "Calibrated 2026-03-23, 3502 trades, 14d hold, ThetaData EOD",
+        "mode": "weighted"
+      },
+      {
+        "ticker": "AMWD",
+        "status": "success",
+        "down_mult": 1.061,
+        "up_mult": 1.007,
+        "iv_mean": 0.5682,
+        "iv_kappa": 100.0,
+        "iv_std": 0.1546,
+        "half_life_days": 3,
+        "total_trades": 2417,
+        "calibrated_at": "2026-03-23",
+        "note": "Calibrated 2026-03-23, 2417 trades, 14d hold, ThetaData EOD",
+        "mode": "weighted"
+      },
+      {
+        "ticker": "HLNE",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "RH",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "OLED",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "KKR",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "ARES",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "FBIN",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "GPI",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "FND",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "MMYT",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "BX",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "ROOT",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "GIS",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "HUM",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "POOL",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "BLDR",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "IOSP",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "UHAL",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "PFSI",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "CDW",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "WHR",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "ASGN",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "TGLS",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "ERIE",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "ZS",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "BLKB",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "FLUT",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "ELV",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "CVLT",
+        "status": "error",
+        "error": "Timeout"
+      },
+      {
+        "ticker": "DUOL",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "MKC",
+        "status": "error",
+        "error": "Timeout"
+      }
+    ],
+    "success_count": 8,
+    "skipped_count": 26,
+    "error_count": 56
+  },
+  {
+    "job_id": "cleanup_1774307106138",
+    "status": "done",
+    "source": "cleanup_after_scheduler",
+    "kind": "cleanup",
+    "started_at": "2026-03-23T23:05:06.138311",
+    "finished_at": "2026-03-23T23:05:06.138317",
+    "results": [
+      {
+        "status": "success",
+        "deleted_options_dirs": 6,
+        "deleted_result_files": 0
+      }
+    ],
+    "cleanup": {
+      "deleted_options": [
+        {
+          "ticker": "COLM",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/COLM",
+          "files_count": 82,
+          "newest_mtime": "2026-03-23T20:27:37.600781",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "EMN",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/EMN",
+          "files_count": 105,
+          "newest_mtime": "2026-03-23T20:55:34.002301",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "ENPH",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/ENPH",
+          "files_count": 67,
+          "newest_mtime": "2026-03-23T20:17:37.075021",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "IPAR",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/IPAR",
+          "files_count": 28,
+          "newest_mtime": "2026-03-23T20:51:32.174374",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "LRN",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/LRN",
+          "files_count": 77,
+          "newest_mtime": "2026-03-23T20:32:34.646070",
+          "reason": "orphan"
+        },
+        {
+          "ticker": "SLVM",
+          "path": "/Users/andres/Desktop/WINDSURF/beta.optioner.online/scripts/options_data/SLVM",
+          "files_count": 41,
+          "newest_mtime": "2026-03-23T19:22:31.774329",
+          "reason": "orphan"
+        }
+      ],
+      "deleted_results": []
+    }
   }
 ]
