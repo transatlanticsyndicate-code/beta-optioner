@@ -700,6 +700,7 @@ function CalculatorDealTabs({
             />
           ) : dealInfo ? (
             <ExitPlanTable 
+              ticker={selectedTicker}
               currentPrice={currentPrice} 
               dealInfo={dealInfo}
               options={options}

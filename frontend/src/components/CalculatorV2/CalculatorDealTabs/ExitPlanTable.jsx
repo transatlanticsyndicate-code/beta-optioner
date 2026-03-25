@@ -9,7 +9,7 @@ import { getOptionVolatility } from '../../../utils/volatilitySurface';
  * Таблица Плана выхода для сделки
  * ЗАЧЕМ: Позволяет гибко настраивать цели по цене и количеству для каждого шага выхода
  */
-function ExitPlanTable({ currentPrice, dealInfo, options, calculatorMode = CALCULATOR_MODES.STOCKS, contractMultiplier = 100, dividendYield = 0, stockClassification = null, ivSurface = null }) {
+function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode = CALCULATOR_MODES.STOCKS, contractMultiplier = 100, dividendYield = 0, stockClassification = null, ivSurface = null }) {
   // Дефолтные проценты для 4 шагов
   const defaultPercents = [15, 30, 45, 60];
   
@@ -246,6 +246,35 @@ function ExitPlanTable({ currentPrice, dealInfo, options, calculatorMode = CALCU
     return `${action} ${type} ${strike}${formattedDate ? ` (${formattedDate})` : ''}`;
   };
 
+  // Обработчик отправки срезок на график TradingView
+  // ЗАЧЕМ: Отправляет данные из таблицы "План выхода" в расширение TradingView через localStorage
+  const handleSendSrezki = () => {
+    if (!ticker || steps.length === 0) {
+      console.warn('[План выхода] Невозможно отправить срезки: нет тикера или шагов');
+      return;
+    }
+
+    // Формируем массив срезок из таблицы "План выхода"
+    const srezki = steps.map(step => ({
+      option: formatOptionName(step.optionRef),
+      targetPrice: step.dollars
+    }));
+
+    // Формируем команду для расширения
+    const command = {
+      type: 'send_srezki',
+      ticker: ticker,
+      srezki: srezki,
+      timestamp: Date.now(),
+      processed: false
+    };
+
+    // Записываем команду в localStorage
+    localStorage.setItem('tvc_refresh_command', JSON.stringify(command));
+
+    console.log('[План выхода] ✅ Срезки отправлены на график:', command);
+  };
+
   // Расчёт P&L для конкретного шага на дату выхода
   // ЗАЧЕМ: Использует ТЕ ЖЕ функции calculateOptionPLValue / calculateFuturesOptionPLValue,
   // что и таблица опционов, для идентичного результата при одинаковых параметрах
@@ -328,9 +357,19 @@ function ExitPlanTable({ currentPrice, dealInfo, options, calculatorMode = CALCU
   return (
     <Card className="w-full relative" style={{ borderColor: '#22c55e' }}>
       <CardContent className="pt-6 pb-6 px-6">
-        <h3 className="text-lg font-bold text-green-700 dark:text-green-300 mb-4">
-          План выхода
-        </h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-bold text-green-700 dark:text-green-300">
+            План выхода
+          </h3>
+          {steps.length > 0 && ticker && (
+            <button
+              onClick={handleSendSrezki}
+              className="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-md transition-colors"
+            >
+              Отправить срезки на график
+            </button>
+          )}
+        </div>
         
         <div className="border rounded-lg overflow-hidden">
           <table className="w-full text-sm">
