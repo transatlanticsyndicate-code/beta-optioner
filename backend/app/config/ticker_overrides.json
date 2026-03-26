@@ -446,13 +446,13 @@
       "note": "Calibrated 2026-02-22, 970 trades, 7d hold, ThetaData EOD"
     },
     "recent": {
-      "down_mult": 0.995,
-      "up_mult": 1.015,
-      "iv_mean": 1.5755,
-      "iv_kappa": 7.66,
-      "iv_std": 0.2787,
-      "half_life_days": 33,
-      "note": "Calibrated 2026-02-25, 81 trades, 14d hold, ThetaData EOD"
+      "down_mult": 1.016,
+      "up_mult": 1.03,
+      "iv_mean": 1.9581,
+      "iv_kappa": 4.04,
+      "iv_std": 0.3043,
+      "half_life_days": 63,
+      "note": "Calibrated 2026-03-25, 167 trades, 7d hold, ThetaData EOD"
     },
     "weighted": {
       "down_mult": 1.025,
@@ -1744,6 +1744,15 @@
       "iv_std": 0.3036,
       "half_life_days": 5,
       "note": "Calibrated 2026-03-23, 2859 trades, 14d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.004,
+      "up_mult": 0.978,
+      "iv_mean": 1.0924,
+      "iv_kappa": 56.78,
+      "iv_std": 0.3802,
+      "half_life_days": 4,
+      "note": "Calibrated 2026-03-25, 165 trades, 7d hold, ThetaData EOD"
     }
   },
   "LBRDA": {
@@ -1755,6 +1764,15 @@
       "iv_std": 0.2102,
       "half_life_days": 3,
       "note": "Calibrated 2026-03-23, 2399 trades, 14d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 1.049,
+      "up_mult": 1.028,
+      "iv_mean": 0.6727,
+      "iv_kappa": 100.0,
+      "iv_std": 0.3912,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-03-25, 192 trades, 7d hold, ThetaData EOD"
     }
   },
   "CHKP": {
@@ -1766,6 +1784,15 @@
       "iv_std": 0.0608,
       "half_life_days": 4,
       "note": "Calibrated 2026-03-23, 3876 trades, 14d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 0.987,
+      "up_mult": 1.036,
+      "iv_mean": 0.4815,
+      "iv_kappa": 100.0,
+      "iv_std": 0.1671,
+      "half_life_days": 3,
+      "note": "Calibrated 2026-03-25, 210 trades, 7d hold, ThetaData EOD"
     }
   },
   "IPAR": {
@@ -1799,6 +1826,15 @@
       "iv_std": 0.1546,
       "half_life_days": 3,
       "note": "Calibrated 2026-03-23, 2417 trades, 14d hold, ThetaData EOD"
+    },
+    "recent": {
+      "down_mult": 0.995,
+      "up_mult": 1.021,
+      "iv_mean": 0.9788,
+      "iv_kappa": 45.37,
+      "iv_std": 0.5574,
+      "half_life_days": 6,
+      "note": "Calibrated 2026-03-25, 175 trades, 7d hold, ThetaData EOD"
     }
   }
 }

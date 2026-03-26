@@ -2561,5 +2561,730 @@
       ],
       "deleted_results": []
     }
+  },
+  {
+    "job_id": "job_1774446300727",
+    "status": "done",
+    "source": "scheduler",
+    "tickers": [
+      "MNDY",
+      "DUOL",
+      "HUBS",
+      "SPSC",
+      "MSTR",
+      "GDDY",
+      "WIX",
+      "NTNX",
+      "DOCU",
+      "PAYC",
+      "PCTY",
+      "QTWO",
+      "ROP",
+      "NOW",
+      "Z",
+      "ACN",
+      "CRM",
+      "PAYX",
+      "RBRK",
+      "FIS",
+      "OKTA",
+      "DSGX",
+      "WK",
+      "VRSK",
+      "TTAN",
+      "ADP",
+      "FDS",
+      "FICO",
+      "EEFT",
+      "ARE",
+      "CRVL",
+      "WD",
+      "KNSL",
+      "LRN",
+      "SFM",
+      "SE",
+      "FRPT",
+      "WGS",
+      "LBRDK",
+      "ENPH",
+      "BSX",
+      "CWST",
+      "GIS",
+      "CHE",
+      "BFAM",
+      "INSP",
+      "JJSF",
+      "CHKP",
+      "GPI",
+      "MKC",
+      "HLNE",
+      "BRO",
+      "TRI",
+      "AJG",
+      "TAP",
+      "ERIE",
+      "CDW",
+      "MMSI",
+      "GSHD",
+      "NSIT",
+      "IOSP",
+      "KKR",
+      "MORN",
+      "PFSI",
+      "MOH",
+      "AMWD",
+      "OLED",
+      "LULU",
+      "UHAL",
+      "CSGP",
+      "HUM",
+      "ROOT",
+      "IT",
+      "ADBE",
+      "CHTR",
+      "FNF",
+      "POOL",
+      "FOUR",
+      "TYL",
+      "GLOB",
+      "ZS",
+      "ASGN",
+      "BLKB",
+      "KMX",
+      "BX",
+      "LGIH",
+      "ARES",
+      "WDAY",
+      "ELV",
+      "ZG",
+      "WHR",
+      "ESTC",
+      "FBIN",
+      "CVLT",
+      "FND",
+      "FLUT",
+      "BLDR",
+      "MMYT",
+      "TEAM",
+      "PYPL",
+      "RH",
+      "BCC",
+      "LBRDA",
+      "ROCK",
+      "TGLS",
+      "JEF",
+      "ICLR"
+    ],
+    "months": 1,
+    "hold_days": 7,
+    "calibration_mode": "recent",
+    "recent_days": 30,
+    "started_at": "2026-03-25T13:45:00.727814",
+    "finished_at": "2026-03-25T13:56:31.672924",
+    "error": null,
+    "results": [
+      {
+        "ticker": "MNDY",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "DUOL",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "HUBS",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "SPSC",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "MSTR",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "GDDY",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "WIX",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "NTNX",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "DOCU",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "PAYC",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "PCTY",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "QTWO",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "ROP",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "NOW",
+        "status": "success",
+        "down_mult": 1.016,
+        "up_mult": 1.03,
+        "iv_mean": 1.9581,
+        "iv_kappa": 4.04,
+        "iv_std": 0.3043,
+        "half_life_days": 63,
+        "total_trades": 167,
+        "calibrated_at": "2026-03-25",
+        "note": "Calibrated 2026-03-25, 167 trades, 7d hold, ThetaData EOD",
+        "mode": "recent"
+      },
+      {
+        "ticker": "Z",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "ACN",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "CRM",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "PAYX",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "RBRK",
+        "status": "error",
+        "error": "Result file missing"
+      },
+      {
+        "ticker": "FIS",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "OKTA",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "DSGX",
+        "status": "error",
+        "error": "Result file missing"
+      },
+      {
+        "ticker": "WK",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "VRSK",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "TTAN",
+        "status": "error",
+        "error": "Result file missing"
+      },
+      {
+        "ticker": "ADP",
+        "status": "error",
+        "error": "Result file missing"
+      },
+      {
+        "ticker": "FDS",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "FICO",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "EEFT",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "ARE",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "CRVL",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "WD",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "KNSL",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "LRN",
+        "status": "error",
+        "error": "Result file missing"
+      },
+      {
+        "ticker": "SFM",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "SE",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "FRPT",
+        "status": "error",
+        "error": "Result file missing"
+      },
+      {
+        "ticker": "WGS",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "LBRDK",
+        "status": "success",
+        "down_mult": 1.004,
+        "up_mult": 0.978,
+        "iv_mean": 1.0924,
+        "iv_kappa": 56.78,
+        "iv_std": 0.3802,
+        "half_life_days": 4,
+        "total_trades": 165,
+        "calibrated_at": "2026-03-25",
+        "note": "Calibrated 2026-03-25, 165 trades, 7d hold, ThetaData EOD",
+        "mode": "recent"
+      },
+      {
+        "ticker": "ENPH",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "BSX",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "CWST",
+        "status": "error",
+        "error": "Result file missing"
+      },
+      {
+        "ticker": "GIS",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "CHE",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "BFAM",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "INSP",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "JJSF",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "CHKP",
+        "status": "success",
+        "down_mult": 0.987,
+        "up_mult": 1.036,
+        "iv_mean": 0.4815,
+        "iv_kappa": 100.0,
+        "iv_std": 0.1671,
+        "half_life_days": 3,
+        "total_trades": 210,
+        "calibrated_at": "2026-03-25",
+        "note": "Calibrated 2026-03-25, 210 trades, 7d hold, ThetaData EOD",
+        "mode": "recent"
+      },
+      {
+        "ticker": "GPI",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "MKC",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "HLNE",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "BRO",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "TRI",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "AJG",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "TAP",
+        "status": "error",
+        "error": "Result file missing"
+      },
+      {
+        "ticker": "ERIE",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "CDW",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "MMSI",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "GSHD",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "NSIT",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "IOSP",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "KKR",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "MORN",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "PFSI",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "MOH",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "AMWD",
+        "status": "success",
+        "down_mult": 0.995,
+        "up_mult": 1.021,
+        "iv_mean": 0.9788,
+        "iv_kappa": 45.37,
+        "iv_std": 0.5574,
+        "half_life_days": 6,
+        "total_trades": 175,
+        "calibrated_at": "2026-03-25",
+        "note": "Calibrated 2026-03-25, 175 trades, 7d hold, ThetaData EOD",
+        "mode": "recent"
+      },
+      {
+        "ticker": "OLED",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "LULU",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "UHAL",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "CSGP",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "HUM",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "ROOT",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "IT",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "ADBE",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "CHTR",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "FNF",
+        "status": "error",
+        "error": "Result file missing"
+      },
+      {
+        "ticker": "POOL",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "FOUR",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "TYL",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "GLOB",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "ZS",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "ASGN",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "BLKB",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "KMX",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "BX",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "LGIH",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "ARES",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "WDAY",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "ELV",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "ZG",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "WHR",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "ESTC",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "FBIN",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "CVLT",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "FND",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "FLUT",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "BLDR",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "MMYT",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "TEAM",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "PYPL",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "RH",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "BCC",
+        "status": "error",
+        "error": "Result file missing"
+      },
+      {
+        "ticker": "LBRDA",
+        "status": "success",
+        "down_mult": 1.049,
+        "up_mult": 1.028,
+        "iv_mean": 0.6727,
+        "iv_kappa": 100.0,
+        "iv_std": 0.3912,
+        "half_life_days": 3,
+        "total_trades": 192,
+        "calibrated_at": "2026-03-25",
+        "note": "Calibrated 2026-03-25, 192 trades, 7d hold, ThetaData EOD",
+        "mode": "recent"
+      },
+      {
+        "ticker": "ROCK",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "TGLS",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      },
+      {
+        "ticker": "JEF",
+        "status": "error",
+        "error": "Result file missing"
+      },
+      {
+        "ticker": "ICLR",
+        "status": "skipped_insufficient_trades",
+        "error": "Недостаточно сделок"
+      }
+    ],
+    "success_count": 5,
+    "skipped_count": 91,
+    "error_count": 11
+  },
+  {
+    "job_id": "cleanup_1774446992252",
+    "status": "done",
+    "source": "cleanup_after_scheduler",
+    "kind": "cleanup",
+    "started_at": "2026-03-25T13:56:32.252577",
+    "finished_at": "2026-03-25T13:56:32.252596",
+    "results": [
+      {
+        "status": "success",
+        "deleted_options_dirs": 0,
+        "deleted_result_files": 0
+      }
+    ],
+    "cleanup": {
+      "deleted_options": [],
+      "deleted_results": []
+    }
   }
 ]

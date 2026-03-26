@@ -4,12 +4,13 @@ import { calculateOptionPLValue, adjustPLByStockGroup } from '../../../utils/opt
 import { calculateFuturesOptionPLValue } from '../../../utils/futuresPricing';
 import { CALCULATOR_MODES } from '../../../utils/universalPricing';
 import { getOptionVolatility } from '../../../utils/volatilitySurface';
+import { calculateDaysToExpirationFromToday } from '../../../utils/dateUtils';
 
 /**
  * Таблица Плана выхода для сделки
  * ЗАЧЕМ: Позволяет гибко настраивать цели по цене и количеству для каждого шага выхода
  */
-function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode = CALCULATOR_MODES.STOCKS, contractMultiplier = 100, dividendYield = 0, stockClassification = null, ivSurface = null }) {
+function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode = CALCULATOR_MODES.STOCKS, contractMultiplier = 100, dividendYield = 0, stockClassification = null, ivSurface = null, slicesSent = false, setSlicesSent }) {
   // Дефолтные проценты для 4 шагов
   const defaultPercents = [15, 30, 45, 60];
   
@@ -62,9 +63,11 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
     // Используем текущие опционы из таблицы как liveOptions
     const liveOptions = visibleOptions;
 
-    // Проверяем, новая ли это сделка
+    // Проверяем, новая ли это сделка или первая загрузка
     const dealId = dealInfo.createdAt;
-    if (lastSeenDealIdRef.current !== dealId) {
+    const isNewDeal = lastSeenDealIdRef.current !== dealId;
+    
+    if (isNewDeal || lastSeenDealIdRef.current === null) {
       lastSeenDealIdRef.current = dealId;
       lastSeenTotalQuantityRef.current = null; // Принудительный сброс количеств
     }
@@ -111,7 +114,7 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
             dollars: Math.round(dollars * 100) / 100,
             quantity,
             exitDate, // Дата выхода для этого шага
-            optionRef: option, // Сохраняем ссылку на опцион для отображения названия
+            optionRef: option, // ВАЖНО: Всегда берём актуальный опцион для получения свежих manualIvOverride и actualPL
             profit: existingStep ? existingStep.profit : 0 // Временно заглушка
           };
         });
@@ -160,9 +163,16 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
         hasChanges = true;
       } else {
         for (let i = 0; i < prevSteps.length; i++) {
+          const prevOpt = prevSteps[i].optionRef;
+          const newOpt = newSteps[i].optionRef;
+          
+          // Проверяем изменения в шагах и в optionRef (manualIvOverride, actualPL)
           if (prevSteps[i].quantity !== newSteps[i].quantity || 
               prevSteps[i].percent !== newSteps[i].percent || 
-              prevSteps[i].dollars !== newSteps[i].dollars) {
+              prevSteps[i].dollars !== newSteps[i].dollars ||
+              prevOpt?.manualIvOverride !== newOpt?.manualIvOverride ||
+              prevOpt?.actualPL !== newOpt?.actualPL ||
+              prevOpt?.actualPLDate !== newOpt?.actualPLDate) {
             hasChanges = true;
             break;
           }
@@ -272,7 +282,57 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
     // Записываем команду в localStorage
     localStorage.setItem('tvc_refresh_command', JSON.stringify(command));
 
+    // Обновляем состояние: срезки отправлены
+    if (setSlicesSent) setSlicesSent(true);
+
     console.log('[План выхода] ✅ Срезки отправлены на график:', command);
+  };
+
+  // Обработчик перехода на график TradingView
+  // ЗАЧЕМ: Отправляет команду расширению для открытия/переключения на вкладку TradingView
+  const handleGoToChart = () => {
+    if (!ticker) {
+      console.warn('[План выхода] Невозможно перейти на график: нет тикера');
+      return;
+    }
+
+    // Формируем команду для расширения
+    const command = {
+      type: 'go_to_chart',
+      ticker: ticker,
+      timestamp: Date.now(),
+      processed: false
+    };
+
+    // Записываем команду в localStorage
+    localStorage.setItem('tvc_refresh_command', JSON.stringify(command));
+
+    console.log('[План выхода] 📊 Переход на график:', command);
+  };
+
+  // Обработчик удаления срезок с графика
+  // ЗАЧЕМ: Отправляет команду расширению для удаления нарисованных линий и сбрасывает состояние
+  const handleClearSrezki = () => {
+    if (!ticker) {
+      console.warn('[План выхода] Невозможно удалить срезки: нет тикера');
+      return;
+    }
+
+    // Формируем команду для расширения
+    const command = {
+      type: 'clear_srezki',
+      ticker: ticker,
+      timestamp: Date.now(),
+      processed: false
+    };
+
+    // Записываем команду в localStorage
+    localStorage.setItem('tvc_refresh_command', JSON.stringify(command));
+
+    // Сбрасываем состояние: срезки удалены
+    if (setSlicesSent) setSlicesSent(false);
+
+    console.log('[План выхода] 🗑️ Срезки удалены с графика:', command);
   };
 
   // Расчёт P&L для конкретного шага на дату выхода
@@ -296,12 +356,21 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
     const entryDt = new Date(entryDateStr + 'T00:00:00');
     const currentDaysToExpiration = Math.max(0, Math.ceil((expDt - entryDt) / (1000 * 60 * 60 * 24)));
 
+    // todayDaysToExpiration = дни от РЕАЛЬНОГО СЕГОДНЯ до ЭКСПИРАЦИИ (для manualIvOverride)
+    // ЗАЧЕМ: manualIvOverride привязан к реальному сегодня, а не к дате входа
+    const todayDaysToExpiration = calculateDaysToExpirationFromToday(option);
+
     // Получаем IV через ту же функцию getOptionVolatility с IV Surface
+    // ВАЖНО: Передаём manualIvOverride из опциона для учёта ручной IV
     const optionVolatility = getOptionVolatility(
       option,
       currentDaysToExpiration,
       daysRemaining,
-      ivSurface
+      ivSurface,
+      'simple',
+      null,
+      option.manualIvOverride,
+      todayDaysToExpiration
     );
 
     // Подготовка объекта опциона — та же логика, что в таблице опционов
@@ -321,6 +390,9 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
       currentDaysToExpiration,
       daysRemaining,
       IV: (optionVolatility * 100).toFixed(1) + '%',
+      manualIvOverride: option.manualIvOverride,
+      actualPL: option.actualPL,
+      actualPLDate: option.actualPLDate,
       quantity: step.quantity,
       contractMultiplier
     });
@@ -351,6 +423,64 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
       pl = adjustPLByStockGroup(pl, stockClassification);
     }
 
+    // Логика якорной P&L: если пользователь ввел actualPL, используем её как якорь
+    // ЗАЧЕМ: Позволяет пользователю зафиксировать реальную P&L и проецировать от неё
+    if (option.actualPL !== null && option.actualPL !== undefined && option.actualPLDate) {
+      // Вычисляем дни от входа до даты ввода actualPL
+      const anchorDateObj = new Date(option.actualPLDate + 'T00:00:00');
+      const anchorDaysPassed = Math.max(0, Math.ceil((anchorDateObj - entryDt) / (1000 * 60 * 60 * 24)));
+      
+      // Вычисляем дни от даты выхода до даты входа (для сравнения с anchorDaysPassed)
+      const exitDaysPassed = Math.max(0, Math.ceil((exitDt - entryDt) / (1000 * 60 * 60 * 24)));
+      
+      // Если дата выхода >= даты ввода actualPL — используем якорную формулу
+      if (exitDaysPassed >= anchorDaysPassed) {
+        // Вычисляем теоретическую цену на момент якоря
+        const anchorDaysToExp = Math.max(0, Math.ceil((expDt - anchorDateObj) / (1000 * 60 * 60 * 24)));
+        
+        // IV на момент якоря: используем manualIvOverride если задан, иначе marketIV
+        const anchorIV = option.manualIvOverride !== null && option.manualIvOverride !== undefined
+          ? (option.manualIvOverride / 100)
+          : optionVolatility;
+        
+        let plAtAnchor = 0;
+        if (calculatorMode === CALCULATOR_MODES.FUTURES) {
+          plAtAnchor = calculateFuturesOptionPLValue(
+            tempOpt,
+            targetAssetPrice,
+            anchorDaysToExp,
+            contractMultiplier,
+            anchorIV
+          );
+        } else {
+          plAtAnchor = calculateOptionPLValue(
+            tempOpt,
+            targetAssetPrice,
+            currentPrice,
+            anchorDaysToExp,
+            anchorIV,
+            dividendYield
+          );
+        }
+        
+        if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
+          plAtAnchor = adjustPLByStockGroup(plAtAnchor, stockClassification);
+        }
+        
+        // Итоговая P&L = actualPL + (текущая теор. P&L - теор. P&L на якоре)
+        const plBeforeAnchor = pl;
+        pl = option.actualPL + (pl - plAtAnchor);
+        
+        console.log(`[План выхода] 🎯 Якорная формула применена:`, {
+          actualPL: option.actualPL,
+          plBeforeAnchor: Math.round(plBeforeAnchor),
+          plAtAnchor: Math.round(plAtAnchor),
+          delta: Math.round(plBeforeAnchor - plAtAnchor),
+          plAfterAnchor: Math.round(pl)
+        });
+      }
+    }
+
     return Math.round(pl);
   };
 
@@ -362,12 +492,31 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
             План выхода
           </h3>
           {steps.length > 0 && ticker && (
-            <button
-              onClick={handleSendSrezki}
-              className="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-md transition-colors"
-            >
-              Отправить срезки на график
-            </button>
+            <div className="flex gap-2">
+              {!slicesSent ? (
+                <button
+                  onClick={handleSendSrezki}
+                  className="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-md transition-colors"
+                >
+                  Отправить срезки на график
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={handleGoToChart}
+                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
+                  >
+                    Перейти на график
+                  </button>
+                  <button
+                    onClick={handleClearSrezki}
+                    className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors"
+                  >
+                    Удалить срезки
+                  </button>
+                </>
+              )}
+            </div>
           )}
         </div>
         

@@ -205,6 +205,24 @@ function OptionsTableV3({
     handleFieldChange(optionId, 'manualIvOverride', numValue);
   }, []);
 
+  // Обработчик изменения фактической P&L для опциона
+  // ЗАЧЕМ: Позволяет пользователю зафиксировать реальную P&L на конкретный день
+  // ВАЖНО: Сохраняет дату ввода (actualPLDate) для корректной проекции на будущие дни
+  const handleActualPLChange = React.useCallback((optionId, value) => {
+    const numValue = value ? parseFloat(value) : null;
+    
+    // Сохраняем actualPL и actualPLDate (сегодня)
+    if (numValue !== null) {
+      const today = new Date().toISOString().split('T')[0]; // ISO формат: YYYY-MM-DD
+      handleFieldChange(optionId, 'actualPL', numValue);
+      handleFieldChange(optionId, 'actualPLDate', today);
+    } else {
+      // Если поле очищено — удаляем оба значения
+      handleFieldChange(optionId, 'actualPL', null);
+      handleFieldChange(optionId, 'actualPLDate', null);
+    }
+  }, []);
+
   // Обработчик обновления всех незалоченных опционов
   // ЗАЧЕМ: Позволяет пользователю быстро обновить рыночные данные для всех позиций
   // ВАЖНО: В режиме расширения отправляет команду refresh_specific, иначе использует API
@@ -431,7 +449,7 @@ function OptionsTableV3({
           {/* Заголовки колонок — динамическая сетка в зависимости от hideColumns */}
           <div className="grid items-center text-xs font-medium text-muted-foreground px-2" style={{
             display: 'grid',
-            gridTemplateColumns: `30px 0.6fr 0.7fr 0.7fr 0.4fr ${hideColumns.includes('premium') ? '' : '0.8fr '}0.6fr 0.6fr ${hideColumns.includes('oi') ? '' : '0.6fr '}0.4fr 0.4fr 0.55fr 0.65fr 1fr 40px`.replace(/\s+/g, ' ').trim(),
+            gridTemplateColumns: `30px 0.6fr 0.7fr 0.7fr 0.4fr ${hideColumns.includes('premium') ? '' : '0.8fr '}0.6fr 0.6fr ${hideColumns.includes('oi') ? '' : '0.6fr '}0.4fr 0.4fr 0.55fr 0.65fr 0.8fr 0.8fr 40px`.replace(/\s+/g, ' ').trim(),
             gap: '6px'
           }}>
             <div></div>
@@ -448,6 +466,7 @@ function OptionsTableV3({
             <div className="text-right" style={{ fontSize: '0.7rem' }}>Факт. IV %</div>
             <div className="text-right">Вход</div>
             <div className="text-right">P&L</div>
+            <div className="text-right" style={{ fontSize: '0.75rem' }}>Факт. P&L</div>
             <div></div>
           </div>
 
@@ -472,7 +491,7 @@ function OptionsTableV3({
                   }`}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: `30px 0.6fr 0.7fr 0.7fr 0.4fr ${hideColumns.includes('premium') ? '' : '0.8fr '}0.6fr 0.6fr ${hideColumns.includes('oi') ? '' : '0.6fr '}0.4fr 0.4fr 0.55fr 0.65fr 1fr 40px`.replace(/\s+/g, ' ').trim(),
+                  gridTemplateColumns: `30px 0.6fr 0.7fr 0.7fr 0.4fr ${hideColumns.includes('premium') ? '' : '0.8fr '}0.6fr 0.6fr ${hideColumns.includes('oi') ? '' : '0.6fr '}0.4fr 0.4fr 0.55fr 0.65fr 0.8fr 0.8fr 40px`.replace(/\s+/g, ' ').trim(),
                   gap: '6px'
                 }}
               >
@@ -914,6 +933,39 @@ function OptionsTableV3({
                       pl = adjustPLByStockGroup(pl, stockClassification);
                     }
 
+                    // Логика якорной P&L: если пользователь ввел actualPL, используем её как якорь
+                    // ЗАЧЕМ: Позволяет пользователю зафиксировать реальную P&L и проецировать от неё
+                    if (option.actualPL !== null && option.actualPL !== undefined && option.actualPLDate) {
+                      // Вычисляем дни от входа до даты ввода actualPL
+                      const anchorDateObj = new Date(option.actualPLDate + 'T00:00:00Z');
+                      const oldestEntryDateObj = oldestEntry || new Date();
+                      const anchorDaysPassed = Math.round((anchorDateObj - oldestEntryDateObj) / (1000 * 60 * 60 * 24));
+                      
+                      // Если текущий день < дня ввода — показываем стандартный расчёт
+                      // Если текущий день >= дня ввода — используем якорную формулу
+                      if (daysPassed >= anchorDaysPassed) {
+                        // Вычисляем теоретическую цену на момент якоря
+                        const anchorDaysToExp = calculateDaysRemainingUTC(option, anchorDaysPassed, 30, oldestEntry);
+                        const rfrAnchor = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
+                        
+                        // IV на момент якоря: используем manualIvOverride если задан, иначе marketIV
+                        const anchorIV = option.manualIvOverride !== null && option.manualIvOverride !== undefined
+                          ? (option.manualIvOverride / 100)
+                          : optionVolatility;
+                        
+                        let plAtAnchor = calculatorMode === CALCULATOR_MODES.FUTURES
+                          ? calculateFuturesOptionPLValue(tempOpt, targetPrice || currentPrice, anchorDaysToExp, contractMultiplier, anchorIV)
+                          : calculateStockOptionPLValue(tempOpt, targetPrice || currentPrice, currentPrice, anchorDaysToExp, anchorIV, dividendYield, contractMultiplier, rfrAnchor);
+                        
+                        if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
+                          plAtAnchor = adjustPLByStockGroup(plAtAnchor, stockClassification);
+                        }
+                        
+                        // Итоговая P&L = actualPL + (текущая теор. P&L - теор. P&L на якоре)
+                        pl = option.actualPL + (pl - plAtAnchor);
+                      }
+                    }
+
                     const plColor = pl > 0 ? 'text-green-600' : pl < 0 ? 'text-red-600' : 'text-muted-foreground';
 
                     return (
@@ -923,6 +975,27 @@ function OptionsTableV3({
                     );
                   })()}
                 </span>
+
+                {/* Фактическая P&L — ручная коррекция P&L на конкретный день */}
+                {/* ЗАЧЕМ: Позволяет пользователю зафиксировать реальную P&L и использовать её как якорь для проекций */}
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={option.actualPL !== null && option.actualPL !== undefined ? option.actualPL : ''}
+                  onChange={(e) => handleActualPLChange(option.id, e.target.value)}
+                  placeholder={(() => {
+                    // Placeholder = текущий теоретический P&L
+                    const hasPremium = option.isPremiumModified ? (option.customPremium !== null && option.customPremium !== undefined) : (option.premium !== null && option.premium !== undefined);
+                    if (!hasPremium || !option.strike || !currentPrice) return '—';
+                    return '0';
+                  })()}
+                  disabled={option.isLockedPosition}
+                  className="w-full px-1 text-right text-xs border rounded"
+                  style={{ 
+                    fontSize: '0.7rem',
+                    backgroundColor: (option.actualPL !== null && option.actualPL !== undefined) ? '#fef3c7' : 'transparent'
+                  }}
+                />
 
                 {/* Кнопка удаления скрыта для зафиксированных позиций */}
                 {/* ЗАЧЕМ: Проверяем isLockedPosition на уровне каждой позиции */}
@@ -941,7 +1014,7 @@ function OptionsTableV3({
           })}
 
           {/* Итоговая строка */}
-          <div className="items-center text-sm border-t-2 border-cyan-500 bg-cyan-50/50 rounded-md p-2 font-bold" style={{ display: 'grid', gridTemplateColumns: `30px 0.6fr 0.7fr 0.7fr 0.4fr ${hideColumns.includes('premium') ? '' : '0.8fr '}0.6fr 0.6fr ${hideColumns.includes('oi') ? '' : '0.6fr '}0.4fr 0.4fr 0.55fr 0.65fr 1fr 40px`.replace(/\s+/g, ' ').trim(), gap: '6px' }}>
+          <div className="items-center text-sm border-t-2 border-cyan-500 bg-cyan-50/50 rounded-md p-2 font-bold" style={{ display: 'grid', gridTemplateColumns: `30px 0.6fr 0.7fr 0.7fr 0.4fr ${hideColumns.includes('premium') ? '' : '0.8fr '}0.6fr 0.6fr ${hideColumns.includes('oi') ? '' : '0.6fr '}0.4fr 0.4fr 0.55fr 0.65fr 0.8fr 0.8fr 40px`.replace(/\s+/g, ' ').trim(), gap: '6px' }}>
             <div></div>
             <div className="text-left">ИТОГО:</div>
             <div></div>
@@ -951,6 +1024,7 @@ function OptionsTableV3({
             <div></div>
             <div></div>
             {!hideColumns.includes('oi') && <div></div>}
+            <div></div>
             <div></div>
             <div></div>
             <div></div>
@@ -1029,6 +1103,38 @@ function OptionsTableV3({
                     // Применяем корректировку P&L по группе акции (только для режима stocks, не для крипто)
                     if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
                       pl = adjustPLByStockGroup(pl, stockClassification);
+                    }
+
+                    // Логика якорной P&L для итоговой строки
+                    // ЗАЧЕМ: Если пользователь ввел actualPL, используем её как якорь для этого опциона
+                    if (opt.actualPL !== null && opt.actualPL !== undefined && opt.actualPLDate) {
+                      // Вычисляем дни от входа до даты ввода actualPL
+                      const anchorDateObj = new Date(opt.actualPLDate + 'T00:00:00Z');
+                      const oldestEntryDateObj = oldestEntry || new Date();
+                      const anchorDaysPassed = Math.round((anchorDateObj - oldestEntryDateObj) / (1000 * 60 * 60 * 24));
+                      
+                      // Если текущий день >= дня ввода — используем якорную формулу
+                      if (daysPassed >= anchorDaysPassed) {
+                        // Вычисляем теоретическую цену на момент якоря
+                        const anchorDaysToExp = calculateDaysRemainingUTC(opt, anchorDaysPassed, 30, oldestEntry);
+                        const rfrAnchor = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
+                        
+                        // IV на момент якоря: используем manualIvOverride если задан, иначе marketIV
+                        const anchorIV = opt.manualIvOverride !== null && opt.manualIvOverride !== undefined
+                          ? (opt.manualIvOverride / 100)
+                          : optVolatility;
+                        
+                        let plAtAnchor = calculatorMode === CALCULATOR_MODES.FUTURES
+                          ? calculateFuturesOptionPLValue(tempOpt, targetPrice || currentPrice, anchorDaysToExp, contractMultiplier, anchorIV)
+                          : calculateStockOptionPLValue(tempOpt, targetPrice || currentPrice, currentPrice, anchorDaysToExp, anchorIV, dividendYield, contractMultiplier, rfrAnchor);
+                        
+                        if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
+                          plAtAnchor = adjustPLByStockGroup(plAtAnchor, stockClassification);
+                        }
+                        
+                        // Итоговая P&L = actualPL + (текущая теор. P&L - теор. P&L на якоре)
+                        pl = opt.actualPL + (pl - plAtAnchor);
+                      }
                     }
 
                     return sum + pl;

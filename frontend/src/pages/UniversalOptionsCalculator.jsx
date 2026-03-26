@@ -2598,6 +2598,29 @@ function UniversalOptionsCalculator() {
     }
   }, [isLocked, isEditMode, loadedConfigId, options, positions, selectedExpirationDate, daysPassed, showOptionLines, showProbabilityZones, chartDisplayMode, calculatorMode]);
 
+  // Точечное обновление dealSettings в сохранённой конфигурации
+  // ЗАЧЕМ: При нажатии "Отправить срезки" / "Удалить срезки" dealSettings обновляется в памяти,
+  // но автосохранение отключено для зафиксированных позиций. Этот useEffect обновляет ТОЛЬКО dealSettings
+  // в сохранённой конфигурации, не затрагивая зафиксированные данные позиции (options, positions и т.д.)
+  useEffect(() => {
+    if (!loadedConfigId || !dealSettings) return;
+
+    const saved = localStorage.getItem('universalCalculatorConfigurations');
+    if (!saved) return;
+
+    try {
+      const configurations = JSON.parse(saved);
+      const configIndex = configurations.findIndex(c => c.id === loadedConfigId);
+      if (configIndex === -1) return;
+
+      // Обновляем только dealSettings, не трогая остальные поля конфигурации
+      configurations[configIndex].dealSettings = dealSettings;
+      localStorage.setItem('universalCalculatorConfigurations', JSON.stringify(configurations));
+    } catch (error) {
+      console.error('❌ Ошибка обновления dealSettings в конфигурации:', error);
+    }
+  }, [loadedConfigId, dealSettings]);
+
   // Функция сохранения конфигурации
   const handleSaveConfiguration = (configuration) => {
     const saved = localStorage.getItem('universalCalculatorConfigurations');

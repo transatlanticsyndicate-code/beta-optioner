@@ -709,6 +709,8 @@ function CalculatorDealTabs({
               dividendYield={dividendYield}
               stockClassification={stockClassification}
               ivSurface={ivSurface}
+              slicesSent={slicesSent}
+              setSlicesSent={setSlicesSent}
             />
           ) : (
             <Card className="w-full" style={{ borderColor: '#b8b8b8' }}>
