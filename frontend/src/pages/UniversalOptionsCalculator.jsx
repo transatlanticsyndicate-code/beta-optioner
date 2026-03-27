@@ -1003,6 +1003,27 @@ function UniversalOptionsCalculator() {
               });
             }
             
+            // Применяем savedOverrides из userOptionOverridesRef к загруженным опционам
+            // ЗАЧЕМ: При перезагрузке расширением ручные изменения (actualPL, manualIvOverride, customAsk) терялись
+            const todayDateRestore = new Date().toISOString().split('T')[0];
+            optionsToSet = optionsToSet.map(opt => {
+              const optionKey = getOptionKey(opt);
+              const savedOverrides = userOptionOverridesRef.current[optionKey] || {};
+              const hasSavedOverrides = Object.keys(savedOverrides).length > 0;
+              
+              if (hasSavedOverrides) {
+                console.log('🔄 [Restore] Применяем savedOverrides:', { optionKey, savedOverrides });
+                return { ...opt, ...savedOverrides };
+              }
+              
+              // Новый опцион от расширения — ставим сегодняшнюю дату
+              if (opt.entryDate === fallbackEntryDate && !hasSavedOverrides) {
+                return { ...opt, entryDate: todayDateRestore };
+              }
+              
+              return opt;
+            });
+            
             setOptions(optionsToSet);
             setPositions(config.state.positions || []);
             if (config.state.selectedExpirationDate) setSelectedExpirationDate(config.state.selectedExpirationDate);
@@ -1246,11 +1267,17 @@ function UniversalOptionsCalculator() {
           setTargetPrice(state.currentPrice || state.underlyingPrice || 0);
           setPriceChange(state.priceChange || { value: 0, percent: 0 });
 
-          // Восстанавливаем опционы
-          const restoredOptions = (state.options || []).map(opt => ({
-            ...opt,
-            entryDate: opt.entryDate || new Date().toISOString().split('T')[0]
-          }));
+          // Восстанавливаем опционы с применением savedOverrides
+          // ЗАЧЕМ: При перезагрузке ручные изменения (actualPL, manualIvOverride и др.) могут отсутствовать в localStorage
+          const restoredOptions = (state.options || []).map(opt => {
+            const base = { ...opt, entryDate: opt.entryDate || new Date().toISOString().split('T')[0] };
+            const optionKey = getOptionKey(base);
+            const savedOverrides = userOptionOverridesRef.current[optionKey] || {};
+            if (Object.keys(savedOverrides).length > 0) {
+              return { ...base, ...savedOverrides };
+            }
+            return base;
+          });
           setOptions(restoredOptions);
           setPositions(state.positions || []);
           setSelectedExpirationDate(state.selectedExpirationDate || null);
@@ -1311,6 +1338,14 @@ function UniversalOptionsCalculator() {
   useEffect(() => {
     if (!isInitialized) return;
     
+    console.log('🔔 [SYNC TRIGGERED]', {
+      loadedConfigId,
+      isLocked,
+      extensionOptionsCount: extensionOptions?.length || 0,
+      extensionLastUpdated,
+      extensionOptions: extensionOptions?.map(o => ({ strike: o.strike, type: o.type, date: o.date }))
+    });
+    
     // Если загружена конфигурация — НЕ заменяем опционы данными расширения,
     // но ДОБАВЛЯЕМ новые опционы от расширения к существующим
     // ЗАЧЕМ: Позволяет добавлять опционы из TradingView к зафиксированной конфигурации
@@ -1318,10 +1353,29 @@ function UniversalOptionsCalculator() {
     if (loadedConfigId) {
       if (extensionOptions && extensionOptions.length > 0) {
         setOptions(prevOptions => {
+          // Применяем savedOverrides к существующим опционам
+          // ЗАЧЕМ: Сохраняем actualPL, manualIvOverride и другие ручные изменения
+          const updatedPrevOptions = prevOptions.map(prevOpt => {
+            const optionKey = getOptionKey(prevOpt);
+            const savedOverrides = userOptionOverridesRef.current[optionKey] || {};
+            
+            if (Object.keys(savedOverrides).length > 0) {
+              console.log('🔄 [Config] Применяем savedOverrides к существующему опциону:', {
+                optionKey,
+                savedOverrides
+              });
+              return {
+                ...prevOpt,
+                ...savedOverrides
+              };
+            }
+            return prevOpt;
+          });
+          
           // Находим опционы от расширения, которых ещё нет в калькуляторе
           // ЗАЧЕМ: Добавляем только НОВЫЕ опционы, не дублируя существующие
           const newOptions = extensionOptions.filter(extOpt => {
-            return !prevOptions.some(existing => {
+            return !updatedPrevOptions.some(existing => {
               const existingType = (existing.type || '').toUpperCase();
               const extType = (extOpt.type || '').toUpperCase();
               const typeMatch = existingType === extType;
@@ -1348,16 +1402,16 @@ function UniversalOptionsCalculator() {
           });
           
           if (newOptions.length > 0) {
-            // Добавляем entryDate к новым опционам
+            // Добавляем entryDate к новым опционам (сегодняшняя дата)
             const enrichedNewOptions = newOptions.map(opt => ({
               ...opt,
-              entryDate: opt.entryDate || new Date().toISOString().split('T')[0]
+              entryDate: new Date().toISOString().split('T')[0] // Всегда сегодняшняя дата для новых опционов
             }));
             console.log('➕ [Universal] Добавлено новых опционов к конфигурации:', enrichedNewOptions.length);
-            return [...prevOptions, ...enrichedNewOptions];
+            return [...updatedPrevOptions, ...enrichedNewOptions];
           }
           
-          return prevOptions; // Нет новых опционов — без изменений
+          return updatedPrevOptions; // Возвращаем обновлённые опционы с savedOverrides
         });
       }
       // Обновляем цену от расширения даже при загруженной конфигурации
@@ -1450,13 +1504,34 @@ function UniversalOptionsCalculator() {
           const customAsk = savedOverrides.customAsk ?? existingOption?.customAsk;
           const customPremium = savedOverrides.customPremium ?? existingOption?.customPremium;
           const entryDate = savedOverrides.entryDate ?? existingOption?.entryDate ?? extOption.entryDate;
+          const actualPL = savedOverrides.actualPL ?? existingOption?.actualPL;
+          const actualPLDate = savedOverrides.actualPLDate ?? existingOption?.actualPLDate;
+          const actualPLPrice = savedOverrides.actualPLPrice ?? existingOption?.actualPLPrice;
+          const manualIvOverride = savedOverrides.manualIvOverride ?? existingOption?.manualIvOverride;
+          
+          console.log('🔍 [Merge Debug]:', {
+            optionKey,
+            strike: extOption.strike,
+            type: extOption.type,
+            hasSavedOverrides: Object.keys(savedOverrides).length > 0,
+            savedOverrides,
+            hasExistingOption: !!existingOption,
+            existingActualPL: existingOption?.actualPL,
+            existingManualIvOverride: existingOption?.manualIvOverride,
+            resultActualPL: actualPL,
+            resultActualPLDate: actualPLDate,
+            resultActualPLPrice: actualPLPrice,
+            resultManualIvOverride: manualIvOverride
+          });
           
           if (Object.keys(savedOverrides).length > 0) {
             console.log('🔄 [Merge] Применяем сохраненные изменения:', {
               optionKey,
               savedOverrides,
               resultQuantity: quantity,
-              resultEntryDate: entryDate
+              resultEntryDate: entryDate,
+              resultActualPL: actualPL,
+              resultManualIvOverride: manualIvOverride
             });
           }
 
@@ -1475,6 +1550,12 @@ function UniversalOptionsCalculator() {
               // Сохраняем ручные изменения премии
               customPremium: customPremium,
               isPremiumModified: savedOverrides.isPremiumModified ?? existingOption?.isPremiumModified,
+              // Сохраняем якорные значения P&L
+              actualPL: actualPL,
+              actualPLDate: actualPLDate,
+              actualPLPrice: actualPLPrice,
+              // Сохраняем ручную коррекцию IV
+              manualIvOverride: manualIvOverride,
               // Сохраняем флаги происхождения опциона (Super/Golden)
               isSuperOption: existingOption?.isSuperOption,
               isGoldenOption: existingOption?.isGoldenOption,
@@ -2279,6 +2360,7 @@ function UniversalOptionsCalculator() {
   // ВАЖНО: Если config.isLocked=true — НЕ загружаем новые данные с API
   // ВАЖНО: Если editMode=true — сбрасываем флаги блокировки для редактирования
   const loadConfiguration = async (configId, editMode = false) => {
+    console.log('🔔 [LOAD CONFIG CALLED]', { configId, editMode, stack: new Error().stack?.split('\n')[2]?.trim() });
     const saved = localStorage.getItem('universalCalculatorConfigurations');
     if (saved) {
       try {
@@ -2420,6 +2502,31 @@ function UniversalOptionsCalculator() {
               entryDate: opt.entryDate || fallbackEntryDate
             }));
           }
+          // Применяем savedOverrides из userOptionOverridesRef к загруженным опционам
+          // ЗАЧЕМ: При повторном вызове loadConfiguration (перезагрузка расширением)
+          // ручные изменения (actualPL, manualIvOverride, customAsk и др.) терялись
+          const todayDate = new Date().toISOString().split('T')[0];
+          optionsToSet = optionsToSet.map(opt => {
+            const optionKey = getOptionKey(opt);
+            const savedOverrides = userOptionOverridesRef.current[optionKey] || {};
+            const hasSavedOverrides = Object.keys(savedOverrides).length > 0;
+            
+            if (hasSavedOverrides) {
+              console.log('🔄 [LoadConfig] Применяем savedOverrides:', { optionKey, savedOverrides });
+              return { ...opt, ...savedOverrides };
+            }
+            
+            // Если у опциона entryDate = fallbackEntryDate и нет savedOverrides —
+            // это новый опцион, добавленный расширением. Ставим сегодняшнюю дату.
+            // ЗАЧЕМ: Расширение добавляет опцион без entryDate, и он получает дату конфига вместо сегодняшней
+            if (opt.entryDate === fallbackEntryDate && !hasSavedOverrides) {
+              console.log('📅 [LoadConfig] Новый опцион от расширения, ставим сегодняшнюю дату:', { optionKey, old: opt.entryDate, new: todayDate });
+              return { ...opt, entryDate: todayDate };
+            }
+            
+            return opt;
+          });
+          
           setOptions(optionsToSet);
           setPositions(config.state.positions || []);
           setSelectedExpirationDate(config.state.selectedExpirationDate || '');
