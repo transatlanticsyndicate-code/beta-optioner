@@ -172,7 +172,8 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
               prevSteps[i].dollars !== newSteps[i].dollars ||
               prevOpt?.manualIvOverride !== newOpt?.manualIvOverride ||
               prevOpt?.actualPL !== newOpt?.actualPL ||
-              prevOpt?.actualPLDate !== newOpt?.actualPLDate) {
+              prevOpt?.actualPLDate !== newOpt?.actualPLDate ||
+              prevOpt?.actualPLPrice !== newOpt?.actualPLPrice) {
             hasChanges = true;
             break;
           }
@@ -443,11 +444,15 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
           ? (option.manualIvOverride / 100)
           : optionVolatility;
         
+        // ВАЖНО: plAtAnchor считается при ЦЕНЕ АКТИВА НА МОМЕНТ ВВОДА якоря (actualPLPrice)
+        // ЗАЧЕМ: Якорь фиксирует P&L при конкретной цене, дельта должна учитывать изменение цены
+        const anchorPrice = option.actualPLPrice || currentPrice;
+        
         let plAtAnchor = 0;
         if (calculatorMode === CALCULATOR_MODES.FUTURES) {
           plAtAnchor = calculateFuturesOptionPLValue(
             tempOpt,
-            targetAssetPrice,
+            anchorPrice,
             anchorDaysToExp,
             contractMultiplier,
             anchorIV
@@ -455,7 +460,7 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
         } else {
           plAtAnchor = calculateOptionPLValue(
             tempOpt,
-            targetAssetPrice,
+            anchorPrice,
             currentPrice,
             anchorDaysToExp,
             anchorIV,

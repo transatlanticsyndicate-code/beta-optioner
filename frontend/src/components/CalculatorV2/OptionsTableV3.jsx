@@ -211,17 +211,20 @@ function OptionsTableV3({
   const handleActualPLChange = React.useCallback((optionId, value) => {
     const numValue = value ? parseFloat(value) : null;
     
-    // Сохраняем actualPL и actualPLDate (сегодня)
+    // Сохраняем actualPL, actualPLDate (сегодня) и actualPLPrice (текущая цена актива)
+    // ЗАЧЕМ: actualPLPrice нужна для корректного расчёта якорной P&L при изменении цены актива
     if (numValue !== null) {
       const today = new Date().toISOString().split('T')[0]; // ISO формат: YYYY-MM-DD
       handleFieldChange(optionId, 'actualPL', numValue);
       handleFieldChange(optionId, 'actualPLDate', today);
+      handleFieldChange(optionId, 'actualPLPrice', currentPrice); // Цена актива на момент ввода
     } else {
-      // Если поле очищено — удаляем оба значения
+      // Если поле очищено — удаляем все якорные значения
       handleFieldChange(optionId, 'actualPL', null);
       handleFieldChange(optionId, 'actualPLDate', null);
+      handleFieldChange(optionId, 'actualPLPrice', null);
     }
-  }, []);
+  }, [currentPrice]);
 
   // Обработчик обновления всех незалоченных опционов
   // ЗАЧЕМ: Позволяет пользователю быстро обновить рыночные данные для всех позиций
@@ -953,9 +956,13 @@ function OptionsTableV3({
                           ? (option.manualIvOverride / 100)
                           : optionVolatility;
                         
+                        // ВАЖНО: plAtAnchor считается при ЦЕНЕ АКТИВА НА МОМЕНТ ВВОДА якоря (actualPLPrice)
+                        // ЗАЧЕМ: Якорь фиксирует P&L при конкретной цене, дельта должна учитывать изменение цены
+                        const anchorPrice = option.actualPLPrice || currentPrice;
+                        
                         let plAtAnchor = calculatorMode === CALCULATOR_MODES.FUTURES
-                          ? calculateFuturesOptionPLValue(tempOpt, targetPrice || currentPrice, anchorDaysToExp, contractMultiplier, anchorIV)
-                          : calculateStockOptionPLValue(tempOpt, targetPrice || currentPrice, currentPrice, anchorDaysToExp, anchorIV, dividendYield, contractMultiplier, rfrAnchor);
+                          ? calculateFuturesOptionPLValue(tempOpt, anchorPrice, anchorDaysToExp, contractMultiplier, anchorIV)
+                          : calculateStockOptionPLValue(tempOpt, anchorPrice, currentPrice, anchorDaysToExp, anchorIV, dividendYield, contractMultiplier, rfrAnchor);
                         
                         if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
                           plAtAnchor = adjustPLByStockGroup(plAtAnchor, stockClassification);
@@ -1124,9 +1131,13 @@ function OptionsTableV3({
                           ? (opt.manualIvOverride / 100)
                           : optVolatility;
                         
+                        // ВАЖНО: plAtAnchor считается при ЦЕНЕ АКТИВА НА МОМЕНТ ВВОДА якоря (actualPLPrice)
+                        // ЗАЧЕМ: Якорь фиксирует P&L при конкретной цене, дельта должна учитывать изменение цены
+                        const anchorPrice = opt.actualPLPrice || currentPrice;
+                        
                         let plAtAnchor = calculatorMode === CALCULATOR_MODES.FUTURES
-                          ? calculateFuturesOptionPLValue(tempOpt, targetPrice || currentPrice, anchorDaysToExp, contractMultiplier, anchorIV)
-                          : calculateStockOptionPLValue(tempOpt, targetPrice || currentPrice, currentPrice, anchorDaysToExp, anchorIV, dividendYield, contractMultiplier, rfrAnchor);
+                          ? calculateFuturesOptionPLValue(tempOpt, anchorPrice, anchorDaysToExp, contractMultiplier, anchorIV)
+                          : calculateStockOptionPLValue(tempOpt, anchorPrice, currentPrice, anchorDaysToExp, anchorIV, dividendYield, contractMultiplier, rfrAnchor);
                         
                         if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
                           plAtAnchor = adjustPLByStockGroup(plAtAnchor, stockClassification);
