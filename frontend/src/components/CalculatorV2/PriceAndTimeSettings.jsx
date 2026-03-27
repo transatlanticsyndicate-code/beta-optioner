@@ -128,6 +128,24 @@ function PriceAndTimeSettings({
     }
   };
 
+  // Вычисляем количество дней от базовой даты до сегодня
+  // ЗАЧЕМ: Кнопка "С" должна устанавливать ползунок на сегодняшнюю дату,
+  // а не на daysPassed=0, так как для сохраненных позиций нулевой день может быть в прошлом
+  const getDaysPassedToToday = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Базовая дата: дата сохранения (для зафиксированных) или самая старая дата входа
+    const baseDate = savedConfigDate ? (parseDateAtStartOfDay(savedConfigDate) || new Date()) : (oldestEntryDate || new Date());
+    baseDate.setHours(0, 0, 0, 0);
+    
+    const diffTime = today.getTime() - baseDate.getTime();
+    const daysToToday = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    
+    // Ограничиваем диапазоном [0, maxDaysToExpiration]
+    return Math.max(0, Math.min(daysToToday, maxDaysToExpiration));
+  };
+
   return (
     <div className={`space-y-${compact ? '4' : '6'}`}>
       {/* Цена базового актива */}
@@ -190,6 +208,15 @@ function PriceAndTimeSettings({
       <div className="space-y-2">
         {/* Заголовок с прошедшими днями слева, названием по центру и оставшимися днями справа */}
         <div className="flex items-center text-sm mb-1">
+          {/* Кнопка "С" для установки даты на сегодня */}
+          <Button
+            onClick={() => setDaysPassed(getDaysPassedToToday())}
+            disabled={options.length === 0}
+            className="h-6 w-6 p-0 mr-1 bg-gray-500 hover:bg-gray-600 text-white text-xs font-semibold"
+            title="Установить на сегодня"
+          >
+            С
+          </Button>
           {/* Прошедшие дни (слева) - ширина по содержимому */}
           <span className={`${compact ? 'text-base' : 'text-lg'} font-semibold ${compact ? 'text-cyan-600' : ''} text-left mr-2`}>
             {options.length === 0 ? '—' : `${daysPassed} д.`}

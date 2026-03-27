@@ -1738,8 +1738,8 @@ function UniversalOptionsCalculator() {
       
       // ВАЖНО: Сохраняем ручные изменения в отдельное хранилище
       // ЗАЧЕМ: Расширение перезаписывает localStorage.calculatorState, теряя изменения
-      // Поля, которые нужно сохранять: quantity, customPremium, customBid, customAsk, entryDate
-      const fieldsToOverride = ['quantity', 'customPremium', 'customBid', 'customAsk', 'entryDate', 'isPremiumModified', 'isBidModified', 'isAskModified'];
+      // Поля, которые нужно сохранять: quantity, customPremium, customBid, customAsk, entryDate, actualPL, actualPLDate, actualPLPrice, manualIvOverride
+      const fieldsToOverride = ['quantity', 'customPremium', 'customBid', 'customAsk', 'entryDate', 'isPremiumModified', 'isBidModified', 'isAskModified', 'actualPL', 'actualPLDate', 'actualPLPrice', 'manualIvOverride'];
       if (targetOption && fieldsToOverride.includes(field)) {
         saveUserOverride(targetOption, field, value);
       }
