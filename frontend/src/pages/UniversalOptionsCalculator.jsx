@@ -70,11 +70,13 @@ import {
 import OptionsTableV3 from '../components/CalculatorV2/OptionsTableV3';
 import FinancialControl from '../components/CalculatorV2/FinancialControl';
 import ExitCalculator from '../components/CalculatorV2/ExitCalculator';
+import { ScenarioCard, LiquidityWarning } from '../components/CalculatorV2/ExitCalculator/components';
 import OptionSelectionResult from '../components/CalculatorV2/OptionSelectionResult';
 import CalculatorDealTabs from '../components/CalculatorV2/CalculatorDealTabs';
 import { getDaysUntilExpirationUTC, calculateDaysRemainingUTC } from '../utils/dateUtils';
 import { WhatsNewModal, shouldShowModal } from '../components/WhatsNewModal';
 import { buildIVSurface } from '../utils/volatilitySurface';
+import { usePositionExitCalculator } from '../hooks/usePositionExitCalculator';
 // УБРАНО: AI модель не используется в универсальном калькуляторе
 // import aiPredictionService from '../services/aiPredictionService';
 
@@ -2756,6 +2758,24 @@ function UniversalOptionsCalculator() {
     };
   };
 
+  // Расчет P&L для сценария "Закрыть всё в выбранную дату"
+  // ЗАЧЕМ: Отображение блока в левой колонке с результатами выхода из позиции
+  const { plCloseAll, details, liquidityWarnings } = usePositionExitCalculator({
+    underlyingPrice: targetPrice,
+    daysPassed: daysPassed,
+    options: displayOptions,
+    positions: positions,
+    currentPrice: currentPrice,
+    ivSurface: ivSurface,
+    dividendYield: useDividends ? dividendYield : 0,
+    isAIEnabled: false,
+    aiVolatilityMap: {},
+    selectedTicker: selectedTicker,
+    calculatorMode: calculatorMode,
+    contractMultiplier: contractMultiplier,
+    stockClassification: calculatorMode === CALCULATOR_MODES.STOCKS ? stockClassification : null
+  });
+
   return (
     <div className="min-h-screen bg-background text-foreground" style={{ minWidth: '1570px', maxWidth: '1570px' }}>
       <div className="p-6">
@@ -2962,6 +2982,7 @@ function UniversalOptionsCalculator() {
           </div>
         )}
 
+
         <div className="space-y-6">
           <div className="flex gap-6">
             <div className="flex-[1] space-y-6" style={{ minWidth: '400px', maxWidth: '400px' }}>
@@ -3103,6 +3124,22 @@ function UniversalOptionsCalculator() {
                     </CardContent>
                   )}
                 </Card>
+              )}
+
+              {/* Предупреждение о низкой ликвидности */}
+              {selectedTicker && displayOptions.length > 0 && liquidityWarnings && (
+                <LiquidityWarning warnings={liquidityWarnings} />
+              )}
+
+              {/* Сценарий: Закрыть всё в выбранную дату */}
+              {selectedTicker && displayOptions.length > 0 && plCloseAll !== undefined && details && (
+                <ScenarioCard
+                  title="Закрыть всё в выбранную дату"
+                  pl={plCloseAll}
+                  details={details.closeAll}
+                  headerBgColor="#10b981"
+                  tooltip="Закрытие всех опционов по рыночной цене и всех позиций базового актива по целевой цене"
+                />
               )}
 
               {shouldShowBlock('calculator-settings') && (

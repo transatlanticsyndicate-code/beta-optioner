@@ -663,7 +663,8 @@ function CalculatorDealTabs({
           />
 
           {/* Калькулятор выхода из позиции */}
-          <ExitCalculator
+          {/* СКРЫТО: Блок перенесен в левую колонку */}
+          {/* <ExitCalculator
             options={options}
             positions={positions}
             currentPrice={currentPrice}
@@ -686,7 +687,7 @@ function CalculatorDealTabs({
             calculatorMode={calculatorMode}
             contractMultiplier={contractMultiplier}
             stockClassification={stockClassification}
-          />
+          /> */}
         </TabsContent>
 
         {/* Таб "Сделка" — данные о созданной сделке */}
