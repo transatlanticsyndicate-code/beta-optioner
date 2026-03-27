@@ -211,20 +211,21 @@ function OptionsTableV3({
   const handleActualPLChange = React.useCallback((optionId, value) => {
     const numValue = value ? parseFloat(value) : null;
     
-    // Сохраняем actualPL, actualPLDate (сегодня) и actualPLPrice (текущая цена актива)
+    // Сохраняем actualPL, actualPLDate (сегодня) и actualPLPrice (текущая цена актива из блока "Симуляция")
     // ЗАЧЕМ: actualPLPrice нужна для корректного расчёта якорной P&L при изменении цены актива
+    // ВАЖНО: Берём targetPrice (поле "Цена базового актива" в блоке "Симуляция"), fallback на currentPrice
     if (numValue !== null) {
       const today = new Date().toISOString().split('T')[0]; // ISO формат: YYYY-MM-DD
       handleFieldChange(optionId, 'actualPL', numValue);
       handleFieldChange(optionId, 'actualPLDate', today);
-      handleFieldChange(optionId, 'actualPLPrice', currentPrice); // Цена актива на момент ввода
+      handleFieldChange(optionId, 'actualPLPrice', targetPrice || currentPrice); // targetPrice = цена из блока "Симуляция"
     } else {
       // Если поле очищено — удаляем все якорные значения
       handleFieldChange(optionId, 'actualPL', null);
       handleFieldChange(optionId, 'actualPLDate', null);
       handleFieldChange(optionId, 'actualPLPrice', null);
     }
-  }, [currentPrice]);
+  }, [targetPrice, currentPrice]);
 
   // Обработчик обновления всех незалоченных опционов
   // ЗАЧЕМ: Позволяет пользователю быстро обновить рыночные данные для всех позиций
@@ -968,8 +969,21 @@ function OptionsTableV3({
                           plAtAnchor = adjustPLByStockGroup(plAtAnchor, stockClassification);
                         }
                         
+                        const plBeforeAnchor = pl;
                         // Итоговая P&L = actualPL + (текущая теор. P&L - теор. P&L на якоре)
                         pl = option.actualPL + (pl - plAtAnchor);
+                        
+                        console.log(`🎯 [Якорь] ${option.type} Strike ${option.strike}:`, {
+                          actualPL: option.actualPL,
+                          actualPLPrice: option.actualPLPrice,
+                          currentPrice,
+                          targetPrice,
+                          anchorPrice,
+                          plBeforeAnchor: Math.round(plBeforeAnchor),
+                          plAtAnchor: Math.round(plAtAnchor),
+                          delta: Math.round(plBeforeAnchor - plAtAnchor),
+                          plAfterAnchor: Math.round(pl)
+                        });
                       }
                     }
 

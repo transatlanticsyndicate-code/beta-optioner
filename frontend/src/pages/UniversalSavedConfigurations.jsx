@@ -99,6 +99,29 @@ function UniversalSavedConfigurations() {
     navigate(`/tools/universal-calculator?config=${configId}&edit=true`);
   };
 
+  // Получение минимальной даты входа из опционов конфигурации
+  // ЗАЧЕМ: Использовать дату входа опциона вместо даты сохранения позиции
+  // Если опционов несколько, берем самую раннюю дату
+  const getMinEntryDateFromConfig = (config) => {
+    if (!config.state?.options || config.state.options.length === 0) {
+      return null;
+    }
+
+    // Фильтруем опционы с установленной датой входа
+    const optionsWithEntryDate = config.state.options.filter(opt => opt.entryDate);
+    
+    if (optionsWithEntryDate.length === 0) {
+      return null;
+    }
+
+    // Находим минимальную дату входа
+    const minEntryDate = optionsWithEntryDate.reduce((min, opt) => {
+      return opt.entryDate < min ? opt.entryDate : min;
+    }, optionsWithEntryDate[0].entryDate);
+
+    return minEntryDate;
+  };
+
   // Форматирование даты в UTC
   // ЗАЧЕМ: Все даты и время отображаются в UTC для консистентности между часовыми поясами
   const formatDate = (dateString) => {
@@ -510,11 +533,14 @@ function UniversalSavedConfigurations() {
                     const instrumentType = getInstrumentType(config);
                     const isStocks = instrumentType === 'Акции';
                     const isCrypto = instrumentType === 'Крипто';
+                    // Получаем дату входа опциона, если есть, иначе используем дату создания
+                    const minEntryDate = getMinEntryDateFromConfig(config);
+                    const displayDate = minEntryDate || config.createdAt;
                     
                     return (
                       <TableRow key={config.id} className="hover:bg-gray-50">
                         <TableCell className="font-mono text-sm">
-                          {formatDate(config.createdAt)}
+                          {formatDate(displayDate)}
                         </TableCell>
                         <TableCell className="font-semibold">
                           {config.ticker || '—'}
