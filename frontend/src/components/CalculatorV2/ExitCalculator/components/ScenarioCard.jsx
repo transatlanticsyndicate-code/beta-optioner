@@ -79,7 +79,37 @@ export function ScenarioCard({ title, pl, details, headerBgColor = '#06b6d4', to
                 </div>
                 {detail.description && (
                   <div className="text-muted-foreground text-xs mt-0.5 whitespace-pre-line">
-                    {detail.description}
+                    {(() => {
+                      // Парсим описание и выделяем цену после "закрываем по" или "выкупаем по" красным жирным шрифтом
+                      const text = detail.description;
+                      const closeByPattern = /(закрываем по|выкупаем по)\s+([\d.]+)/g;
+                      const parts = [];
+                      let lastIndex = 0;
+                      let match;
+                      
+                      while ((match = closeByPattern.exec(text)) !== null) {
+                        // Добавляем текст до совпадения
+                        if (match.index > lastIndex) {
+                          parts.push(text.substring(lastIndex, match.index));
+                        }
+                        // Добавляем текст с выделением цены
+                        parts.push(match[1]);
+                        parts.push(' ');
+                        parts.push(
+                          <span key={`price-${match.index}`} className="font-bold text-red-600">
+                            {match[2]}
+                          </span>
+                        );
+                        lastIndex = match.index + match[0].length;
+                      }
+                      
+                      // Добавляем оставшийся текст
+                      if (lastIndex < text.length) {
+                        parts.push(text.substring(lastIndex));
+                      }
+                      
+                      return parts.length > 0 ? parts : text;
+                    })()}
                   </div>
                 )}
               </div>
