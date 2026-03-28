@@ -2453,6 +2453,10 @@ function UniversalOptionsCalculator() {
           // Для зафиксированных позиций добавляем initialDaysToExpiration если его нет
           // ЗАЧЕМ: Старые конфигурации могут не иметь этого поля, вычисляем от даты сохранения
           let optionsToSet = config.state.options || [];
+          
+          // Сохраняем исходный список опционов из конфигурации
+          // ЗАЧЕМ: Отличить "новый опцион от расширения" от "старого сохраненного опциона"
+          const originalOptionKeys = new Set(optionsToSet.map(opt => getOptionKey(opt)));
 
           // Дата для fallback entryDate (дата создания конфигурации в формате YYYY-MM-DD)
           // ЗАЧЕМ: Для старых конфигураций без entryDate используем дату создания
@@ -2516,10 +2520,12 @@ function UniversalOptionsCalculator() {
               return { ...opt, ...savedOverrides };
             }
             
-            // Если у опциона entryDate = fallbackEntryDate и нет savedOverrides —
-            // это новый опцион, добавленный расширением. Ставим сегодняшнюю дату.
-            // ЗАЧЕМ: Расширение добавляет опцион без entryDate, и он получает дату конфига вместо сегодняшней
-            if (opt.entryDate === fallbackEntryDate && !hasSavedOverrides) {
+            // Проверяем, был ли этот опцион в исходной конфигурации
+            // ЗАЧЕМ: Отличить "новый опцион от расширения" от "старого сохраненного опциона"
+            // Новый опцион = его нет в originalOptionKeys, старый = есть в originalOptionKeys
+            const isNewOptionFromExtension = !originalOptionKeys.has(optionKey);
+            
+            if (isNewOptionFromExtension && opt.entryDate === fallbackEntryDate) {
               console.log('📅 [LoadConfig] Новый опцион от расширения, ставим сегодняшнюю дату:', { optionKey, old: opt.entryDate, new: todayDate });
               return { ...opt, entryDate: todayDate };
             }
