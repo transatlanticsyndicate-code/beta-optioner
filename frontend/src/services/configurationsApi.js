@@ -91,12 +91,14 @@ export const createConfiguration = async (configData) => {
  */
 export const updateConfiguration = async (configId, configData, userId = null) => {
   try {
-    const url = new URL(`${API_BASE_URL}/api/configurations/${configId}`);
+    const params = new URLSearchParams();
     if (userId) {
-      url.searchParams.append('user_id', userId);
+      params.append('user_id', userId);
     }
+    const queryString = params.toString();
+    const urlPath = `${API_BASE_URL}/api/configurations/${configId}${queryString ? '?' + queryString : ''}`;
 
-    const response = await fetch(url.toString(), {
+    const response = await fetch(urlPath, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -129,12 +131,14 @@ export const updateConfiguration = async (configId, configData, userId = null) =
  */
 export const deleteConfiguration = async (configId, userId = null) => {
   try {
-    const url = new URL(`${API_BASE_URL}/api/configurations/${configId}`);
+    const params = new URLSearchParams();
     if (userId) {
-      url.searchParams.append('user_id', userId);
+      params.append('user_id', userId);
     }
+    const queryString = params.toString();
+    const urlPath = `${API_BASE_URL}/api/configurations/${configId}${queryString ? '?' + queryString : ''}`;
 
-    const response = await fetch(url.toString(), {
+    const response = await fetch(urlPath, {
       method: 'DELETE',
     });
     
