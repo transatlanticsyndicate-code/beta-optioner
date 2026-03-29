@@ -3,7 +3,10 @@
  * ЗАЧЕМ: Обёртка над fetch для CRUD операций с позициями
  */
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+// ЗАЧЕМ: На beta сервере используем относительный путь для избежания CORS ошибок
+// На localhost фронтенд на :3000 обращается к бэку на :8000 (разные порты)
+// На beta сервере оба на одном домене, поэтому используем относительный путь
+const API_BASE_URL = process.env.REACT_APP_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:8000' : '');
 
 /**
  * Получить список всех конфигураций с фильтрами
