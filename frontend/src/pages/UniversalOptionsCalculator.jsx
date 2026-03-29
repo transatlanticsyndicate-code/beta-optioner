@@ -965,10 +965,23 @@ function UniversalOptionsCalculator() {
               ? new Date(configEntryDate).toISOString().split('T')[0]
               : new Date().toISOString().split('T')[0];
             
-            let optionsToSet = (config.state.options || []).map(opt => ({
-              ...opt,
-              entryDate: opt.entryDate || fallbackEntryDate
-            }));
+            let optionsToSet = (config.state.options || []).map(opt => {
+              // Если у опциона нет entryDate — это либо новый опцион от расширения, либо старая конфигурация
+              // ЗАЧЕМ: Новые опционы должны получать сегодняшнюю дату, старые — дату конфигурации
+              if (!opt.entryDate) {
+                const todayDateInit = new Date().toISOString().split('T')[0];
+                console.log('📅 [Init] Опцион без entryDate, ставим сегодняшнюю дату:', { 
+                  optionKey: getOptionKey(opt), 
+                  date: todayDateInit 
+                });
+                return { ...opt, entryDate: todayDateInit };
+              }
+              return opt;
+            });
+            
+            // Сохраняем исходный список опционов из конфигурации
+            // ЗАЧЕМ: Для последующих проверок при применении savedOverrides
+            const originalOptionKeys = new Set(optionsToSet.map(opt => getOptionKey(opt)));
             
             // Для зафиксированных позиций вычисляем daysPassed и initialDaysToExpiration
             if (configIsLocked && configEntryDate) {
@@ -1009,15 +1022,24 @@ function UniversalOptionsCalculator() {
             optionsToSet = optionsToSet.map(opt => {
               const optionKey = getOptionKey(opt);
               const savedOverrides = userOptionOverridesRef.current[optionKey] || {};
-              const hasSavedOverrides = Object.keys(savedOverrides).length > 0;
+              
+              // Исключаем entryDate из savedOverrides
+              // ЗАЧЕМ: entryDate не должен перезаписываться из savedOverrides, только из конфигурации
+              const { entryDate: _, ...overridesWithoutEntryDate } = savedOverrides;
+              const hasSavedOverrides = Object.keys(overridesWithoutEntryDate).length > 0;
               
               if (hasSavedOverrides) {
-                console.log('🔄 [Restore] Применяем savedOverrides:', { optionKey, savedOverrides });
-                return { ...opt, ...savedOverrides };
+                console.log('🔄 [Restore] Применяем savedOverrides:', { optionKey, savedOverrides: overridesWithoutEntryDate });
+                return { ...opt, ...overridesWithoutEntryDate };
               }
               
-              // Новый опцион от расширения — ставим сегодняшнюю дату
-              if (opt.entryDate === fallbackEntryDate && !hasSavedOverrides) {
+              // Проверяем, был ли этот опцион в исходной конфигурации
+              // ЗАЧЕМ: Отличить "новый опцион от расширения" от "старого сохраненного опциона"
+              // Новый опцион = его нет в originalOptionKeys, старый = есть в originalOptionKeys
+              const isNewOptionFromExtension = !originalOptionKeys.has(optionKey);
+              
+              if (isNewOptionFromExtension && opt.entryDate === fallbackEntryDate) {
+                console.log('📅 [Restore] Новый опцион от расширения, ставим сегодняшнюю дату:', { optionKey, old: opt.entryDate, new: todayDateRestore });
                 return { ...opt, entryDate: todayDateRestore };
               }
               
@@ -2467,7 +2489,27 @@ function UniversalOptionsCalculator() {
           if (configIsLocked && configEntryDate) {
             const savedDate = new Date(configEntryDate);
             savedDate.setHours(0, 0, 0, 0);
+            const todayDateLocked = new Date().toISOString().split('T')[0];
+            
             optionsToSet = optionsToSet.map(opt => {
+              // Определяем entryDate для опциона
+              let optionEntryDate = opt.entryDate;
+              
+              // Если у опциона нет entryDate — проверяем, новый ли это опцион
+              if (!optionEntryDate) {
+                const optionKey = getOptionKey(opt);
+                const isNewOption = !originalOptionKeys.has(optionKey);
+                
+                if (isNewOption) {
+                  // Новый опцион — ставим сегодняшнюю дату
+                  optionEntryDate = todayDateLocked;
+                  console.log('📅 [LoadConfig-Locked] Новый опцион, ставим сегодняшнюю дату:', { optionKey, date: todayDateLocked });
+                } else {
+                  // Старый опцион без даты — используем fallback
+                  optionEntryDate = fallbackEntryDate;
+                }
+              }
+              
               // Вычисляем дни от даты сохранения до экспирации (всегда пересчитываем)
               // ЗАЧЕМ: Старые конфигурации могли хранить неправильное значение (от new Date вместо от entryDate)
               if (opt.date) {
@@ -2479,13 +2521,13 @@ function UniversalOptionsCalculator() {
                   ...opt,
                   initialDaysToExpiration,
                   isLockedPosition: true,
-                  entryDate: opt.entryDate || fallbackEntryDate
+                  entryDate: optionEntryDate
                 };
               }
               return {
                 ...opt,
                 isLockedPosition: true,
-                entryDate: opt.entryDate || fallbackEntryDate
+                entryDate: optionEntryDate
               };
             });
           } else if (editMode) {
@@ -2501,10 +2543,20 @@ function UniversalOptionsCalculator() {
           } else {
             // Для обычных (незафиксированных) конфигураций также сохраняем entryDate
             // ЗАЧЕМ: Дата входа должна сохраняться при любом типе загрузки
-            optionsToSet = optionsToSet.map(opt => ({
-              ...opt,
-              entryDate: opt.entryDate || fallbackEntryDate
-            }));
+            optionsToSet = optionsToSet.map(opt => {
+              const originalEntryDate = opt.entryDate;
+              const finalEntryDate = opt.entryDate || fallbackEntryDate;
+              if (!originalEntryDate) {
+                console.log('⚠️ [LoadConfig] Опцион без entryDate, используем fallback:', { 
+                  optionKey: getOptionKey(opt), 
+                  fallbackEntryDate 
+                });
+              }
+              return {
+                ...opt,
+                entryDate: finalEntryDate
+              };
+            });
           }
           // Применяем savedOverrides из userOptionOverridesRef к загруженным опционам
           // ЗАЧЕМ: При повторном вызове loadConfiguration (перезагрузка расширением)
@@ -2513,11 +2565,15 @@ function UniversalOptionsCalculator() {
           optionsToSet = optionsToSet.map(opt => {
             const optionKey = getOptionKey(opt);
             const savedOverrides = userOptionOverridesRef.current[optionKey] || {};
-            const hasSavedOverrides = Object.keys(savedOverrides).length > 0;
+            
+            // Исключаем entryDate из savedOverrides
+            // ЗАЧЕМ: entryDate не должен перезаписываться из savedOverrides, только из конфигурации
+            const { entryDate: _, ...overridesWithoutEntryDate } = savedOverrides;
+            const hasSavedOverrides = Object.keys(overridesWithoutEntryDate).length > 0;
             
             if (hasSavedOverrides) {
-              console.log('🔄 [LoadConfig] Применяем savedOverrides:', { optionKey, savedOverrides });
-              return { ...opt, ...savedOverrides };
+              console.log('🔄 [LoadConfig] Применяем savedOverrides:', { optionKey, savedOverrides: overridesWithoutEntryDate });
+              return { ...opt, ...overridesWithoutEntryDate };
             }
             
             // Проверяем, был ли этот опцион в исходной конфигурации
@@ -3244,8 +3300,8 @@ function UniversalOptionsCalculator() {
                 <LiquidityWarning warnings={liquidityWarnings} />
               )}
 
-              {/* Сценарий: Закрыть всё в выбранную дату */}
-              {selectedTicker && displayOptions.length > 0 && plCloseAll !== undefined && details && (
+              {/* СКРЫТО: Сценарий "Закрыть всё в выбранную дату" */}
+              {/* {selectedTicker && displayOptions.length > 0 && plCloseAll !== undefined && details && (
                 <ScenarioCard
                   title="Закрыть всё в выбранную дату"
                   pl={plCloseAll}
@@ -3253,7 +3309,7 @@ function UniversalOptionsCalculator() {
                   headerBgColor="#10b981"
                   tooltip="Закрытие всех опционов по рыночной цене и всех позиций базового актива по целевой цене"
                 />
-              )}
+              )} */}
 
               {shouldShowBlock('calculator-settings') && (
                 <Card

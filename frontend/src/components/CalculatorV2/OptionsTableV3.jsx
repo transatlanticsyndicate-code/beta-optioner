@@ -12,9 +12,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import { getAllStrategies } from '../../config/optionsStrategies';
 // Импорт из старого модуля для режима "Акции" (обратная совместимость)
-import { calculateOptionPLValue as calculateStockOptionPLValue, adjustPLByStockGroup } from '../../utils/optionPricing';
+import { calculateOptionPLValue as calculateStockOptionPLValue, adjustPLByStockGroup, calculateOptionTheoreticalPrice } from '../../utils/optionPricing';
 // Импорт из нового модуля для режима "Фьючерсы"
-import { calculateFuturesOptionPLValue } from '../../utils/futuresPricing';
+import { calculateFuturesOptionPLValue, calculateFuturesOptionTheoreticalPrice } from '../../utils/futuresPricing';
 import { getOptionVolatility } from '../../utils/volatilitySurface';
 import { assessLiquidity, getLiquidityColor, formatLiquidityTooltip, LIQUIDITY_LEVELS } from '../../utils/liquidityCheck';
 import { calculateDaysRemainingUTC, getOldestEntryDate, isOptionActiveAtDay, isOptionExpiredAtDay, calculateDaysToExpirationFromToday } from '../../utils/dateUtils';
@@ -109,6 +109,63 @@ function OptionsTableV3({
   const [editingAsk, setEditingAsk] = React.useState(null); // optionId для редактирования ask
   const [isRefreshingAll, setIsRefreshingAll] = React.useState(false); // Состояние обновления всех опционов
   const scrolledToAtm = React.useRef(new Set()); // Отслеживаем, для каких опционов уже был скролл
+
+  // Состояние для сортировки таблицы
+  // ЗАЧЕМ: Позволяет пользователю сортировать опционы по разным колонкам
+  const [sortColumn, setSortColumn] = React.useState('date'); // По умолчанию сортировка по дате экспирации
+  const [sortDirection, setSortDirection] = React.useState('asc'); // asc | desc
+
+  // Функция обработки клика по заголовку колонки
+  const handleSort = (column) => {
+    if (sortColumn === column) {
+      // Если кликнули по той же колонке — меняем направление
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // Новая колонка — устанавливаем её и направление по умолчанию (asc)
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  // Функция сортировки опционов
+  const getSortedOptions = () => {
+    if (!options || options.length === 0) return [];
+
+    const sorted = [...options].sort((a, b) => {
+      let valueA, valueB;
+
+      switch (sortColumn) {
+        case 'type':
+          // Сортируем по типу (CALL/PUT) + action (Buy/Sell)
+          valueA = `${a.type}_${a.action}`;
+          valueB = `${b.type}_${b.action}`;
+          break;
+        case 'date':
+          // Сортируем по дате экспирации
+          valueA = a.date || '';
+          valueB = b.date || '';
+          break;
+        case 'strike':
+          // Сортируем по страйку (числовое сравнение)
+          valueA = parseFloat(a.strike) || 0;
+          valueB = parseFloat(b.strike) || 0;
+          break;
+        case 'entry':
+          // Сортируем по дате входа
+          valueA = a.entryDate || '';
+          valueB = b.entryDate || '';
+          break;
+        default:
+          return 0;
+      }
+
+      if (valueA < valueB) return sortDirection === 'asc' ? -1 : 1;
+      if (valueA > valueB) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return sorted;
+  };
 
   // Функция фильтрации страйков (показываем только ±20% от цены)
   // ВАЖНО: Всегда включаем текущий страйк опциона, даже если он далеко от цены
@@ -451,15 +508,40 @@ function OptionsTableV3({
       {hasOptions && (
         <div className="space-y-2">
           {/* Заголовки колонок — динамическая сетка в зависимости от hideColumns */}
+          {/* ЗАЧЕМ: Клик по заголовку сортирует таблицу по этой колонке */}
           <div className="grid items-center text-xs font-medium text-muted-foreground px-2" style={{
             display: 'grid',
-            gridTemplateColumns: `30px 0.6fr 0.7fr 0.7fr 0.4fr ${hideColumns.includes('premium') ? '' : '0.8fr '}0.6fr 0.6fr ${hideColumns.includes('oi') ? '' : '0.6fr '}0.4fr 0.4fr 0.55fr 0.65fr 0.8fr 0.8fr 40px`.replace(/\s+/g, ' ').trim(),
+            gridTemplateColumns: `30px 0.6fr 0.7fr 0.7fr 0.4fr ${hideColumns.includes('premium') ? '' : '0.8fr '}0.9fr 0.5fr ${hideColumns.includes('oi') ? '' : '0.6fr '}0.4fr 0.3fr 0.55fr 0.65fr 0.8fr 0.8fr 0.7fr 40px`.replace(/\s+/g, ' ').trim(),
             gap: '6px'
           }}>
             <div></div>
-            <div className="text-left">Тип</div>
-            <div className="text-right">Дата эксп.</div>
-            <div className="text-right">Страйк</div>
+            <div 
+              className="text-left cursor-pointer hover:text-foreground select-none flex items-center gap-1"
+              onClick={() => handleSort('type')}
+            >
+              Тип
+              {sortColumn === 'type' && (
+                <span className="text-cyan-500">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+              )}
+            </div>
+            <div 
+              className="text-right cursor-pointer hover:text-foreground select-none flex items-center justify-end gap-1"
+              onClick={() => handleSort('date')}
+            >
+              Expir.
+              {sortColumn === 'date' && (
+                <span className="text-cyan-500">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+              )}
+            </div>
+            <div 
+              className="text-right cursor-pointer hover:text-foreground select-none flex items-center justify-end gap-1"
+              onClick={() => handleSort('strike')}
+            >
+              Страйк
+              {sortColumn === 'strike' && (
+                <span className="text-cyan-500">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+              )}
+            </div>
             <div className="text-right">Кол.</div>
             {!hideColumns.includes('premium') && <div className="text-right">Премия</div>}
             <div className="text-right">BID</div>
@@ -467,14 +549,24 @@ function OptionsTableV3({
             {!hideColumns.includes('oi') && <div className="text-right">OI</div>}
             <div className="text-right" style={{ fontSize: '0.7rem' }}>VOL</div>
             <div className="text-right" style={{ fontSize: '0.7rem' }}>IV</div>
-            <div className="text-right" style={{ fontSize: '0.7rem' }}>Факт. IV %</div>
-            <div className="text-right">Вход</div>
-            <div className="text-right">P&L</div>
-            <div className="text-right" style={{ fontSize: '0.75rem' }}>Факт. P&L</div>
+            <div className="text-right" style={{ fontSize: '0.7rem' }}>Fact IV</div>
+            <div 
+              className="text-right cursor-pointer hover:text-foreground select-none flex items-center justify-end gap-1"
+              onClick={() => handleSort('entry')}
+              style={{ fontSize: '0.75rem' }}
+            >
+              Вход
+              {sortColumn === 'entry' && (
+                <span className="text-cyan-500">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+              )}
+            </div>
+            <div className="text-right" style={{ fontSize: '0.75rem' }}>P&L</div>
+            <div className="text-right" style={{ fontSize: '0.75rem' }}>Fact P&L</div>
+            <div className="text-right" style={{ fontSize: '0.75rem' }}>Close</div>
             <div></div>
           </div>
 
-          {options.map((option, optionIndex) => {
+          {getSortedOptions().map((option, optionIndex) => {
             // Устанавливаем дату входа по умолчанию (текущая дата в ISO формате)
             // ЗАЧЕМ: Каждая позиция должна иметь дату входа для отслеживания времени нахождения в позиции
             const entryDate = option.entryDate || new Date().toISOString().split('T')[0];
@@ -495,7 +587,7 @@ function OptionsTableV3({
                   }`}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: `30px 0.6fr 0.7fr 0.7fr 0.4fr ${hideColumns.includes('premium') ? '' : '0.8fr '}0.6fr 0.6fr ${hideColumns.includes('oi') ? '' : '0.6fr '}0.4fr 0.4fr 0.55fr 0.65fr 0.8fr 0.8fr 40px`.replace(/\s+/g, ' ').trim(),
+                  gridTemplateColumns: `30px 0.6fr 0.7fr 0.7fr 0.4fr ${hideColumns.includes('premium') ? '' : '0.8fr '}0.6fr 0.6fr ${hideColumns.includes('oi') ? '' : '0.6fr '}0.4fr 0.55fr 0.55fr 0.65fr 0.8fr 0.8fr 0.7fr 40px`.replace(/\s+/g, ' ').trim(),
                   gap: '6px'
                 }}
               >
@@ -1018,6 +1110,141 @@ function OptionsTableV3({
                   }}
                 />
 
+                {/* Close Price - теоретическая цена опциона на выход */}
+                {/* ЗАЧЕМ: Показывает цену опциона, соответствующую отображаемому P&L (с учётом калибровки и якоря) */}
+                {/* ВАЖНО: Рассчитываем обратно из adjusted P&L, чтобы всегда соответствовать колонке P&L */}
+                <span className="text-muted-foreground text-right" style={{ fontSize: '0.7rem' }}>
+                  {(() => {
+                    const hasPremium = option.isPremiumModified ? (option.customPremium !== null && option.customPremium !== undefined) : (option.premium !== null && option.premium !== undefined);
+                    if (!hasPremium || !option.strike || !currentPrice) {
+                      return <span className="text-muted-foreground">—</span>;
+                    }
+
+                    const oldestEntry = getOldestEntryDate(options);
+                    const isActive = isOptionActiveAtDay(option, daysPassed, oldestEntry);
+                    if (!isActive) {
+                      return <span className="text-muted-foreground">—</span>;
+                    }
+
+                    // === Расчёт той же adjusted P&L что и в колонке P&L ===
+                    const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0, 30, oldestEntry);
+                    const optionDaysRemaining = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntry);
+                    const todaySimDays = calculateDaysToExpirationFromToday(option);
+
+                    // Определяем волатильность
+                    let optionVolatility = getOptionVolatility(
+                      option,
+                      currentDaysToExpiration,
+                      optionDaysRemaining,
+                      ivSurface,
+                      'simple',
+                      null,
+                      option.manualIvOverride,
+                      todaySimDays
+                    );
+
+                    // Используем customPremium если премия была изменена вручную
+                    const effectivePremium = option.isPremiumModified ? option.customPremium : option.premium;
+                    const tempOpt = {
+                      ...option,
+                      premium: effectivePremium,
+                      ask: option.isPremiumModified ? 0 : (option.isAskModified ? option.customAsk : option.ask),
+                      bid: option.isPremiumModified ? 0 : (option.isBidModified ? option.customBid : option.bid),
+                    };
+
+                    // Цена входа (ASK для Buy, BID для Sell)
+                    const isBuy = (option.action || 'Buy').toLowerCase() === 'buy';
+                    let entryPrice;
+                    if (isBuy) {
+                      entryPrice = option.isAskModified && option.customAsk !== undefined ? option.customAsk : (option.ask || effectivePremium || 0);
+                    } else {
+                      entryPrice = option.isBidModified && option.customBid !== undefined ? option.customBid : (option.bid || effectivePremium || 0);
+                    }
+
+                    const quantity = Math.abs(option.quantity || 0);
+
+                    // Базовая теоретическая цена (до корректировок)
+                    let theoreticalPrice;
+                    if (calculatorMode === CALCULATOR_MODES.FUTURES) {
+                      theoreticalPrice = calculateFuturesOptionTheoreticalPrice(
+                        option,
+                        targetPrice || currentPrice,
+                        optionDaysRemaining,
+                        optionVolatility
+                      );
+                    } else {
+                      const rfrOpt = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
+                      theoreticalPrice = calculateOptionTheoreticalPrice(
+                        option,
+                        targetPrice || currentPrice,
+                        optionDaysRemaining,
+                        optionVolatility,
+                        dividendYield,
+                        rfrOpt
+                      );
+                    }
+
+                    // Расчёт raw P&L
+                    const rfrOpt = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
+                    let pl = calculatorMode === CALCULATOR_MODES.FUTURES
+                      ? calculateFuturesOptionPLValue(tempOpt, targetPrice || currentPrice, optionDaysRemaining, contractMultiplier, optionVolatility)
+                      : calculateStockOptionPLValue(tempOpt, targetPrice || currentPrice, currentPrice, optionDaysRemaining, optionVolatility, dividendYield, contractMultiplier, rfrOpt);
+
+                    // Применяем корректировку P&L по группе акции
+                    if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
+                      pl = adjustPLByStockGroup(pl, stockClassification);
+                    }
+
+                    // Применяем логику якорной P&L
+                    if (option.actualPL !== null && option.actualPL !== undefined && option.actualPLDate) {
+                      const anchorDateObj = new Date(option.actualPLDate + 'T00:00:00Z');
+                      const oldestEntryDateObj = oldestEntry || new Date();
+                      const anchorDaysPassed = Math.round((anchorDateObj - oldestEntryDateObj) / (1000 * 60 * 60 * 24));
+                      
+                      if (daysPassed >= anchorDaysPassed) {
+                        const anchorDaysToExp = calculateDaysRemainingUTC(option, anchorDaysPassed, 30, oldestEntry);
+                        const rfrAnchor = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
+                        const anchorIV = option.manualIvOverride !== null && option.manualIvOverride !== undefined
+                          ? (option.manualIvOverride / 100)
+                          : optionVolatility;
+                        const anchorPrice = option.actualPLPrice || currentPrice;
+                        
+                        let plAtAnchor = calculatorMode === CALCULATOR_MODES.FUTURES
+                          ? calculateFuturesOptionPLValue(tempOpt, anchorPrice, anchorDaysToExp, contractMultiplier, anchorIV)
+                          : calculateStockOptionPLValue(tempOpt, anchorPrice, currentPrice, anchorDaysToExp, anchorIV, dividendYield, contractMultiplier, rfrAnchor);
+                        
+                        if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
+                          plAtAnchor = adjustPLByStockGroup(plAtAnchor, stockClassification);
+                        }
+                        
+                        pl = option.actualPL + (pl - plAtAnchor);
+                      }
+                    }
+
+                    // === Обратный расчёт цены закрытия из adjusted P&L ===
+                    // P&L = (ClosePrice - EntryPrice) * Qty * Multiplier (для Buy)
+                    // P&L = (EntryPrice - ClosePrice) * Qty * Multiplier (для Sell)
+                    // Отсюда: ClosePrice = EntryPrice + P&L/(Qty*Multiplier) для Buy
+                    // ClosePrice = EntryPrice - P&L/(Qty*Multiplier) для Sell
+                    let closePrice;
+                    const multiplier = contractMultiplier || 100;
+                    if (quantity === 0 || multiplier === 0) {
+                      closePrice = theoreticalPrice;
+                    } else {
+                      if (isBuy) {
+                        closePrice = entryPrice + (pl / (quantity * multiplier));
+                      } else {
+                        closePrice = entryPrice - (pl / (quantity * multiplier));
+                      }
+                    }
+
+                    // Ограничиваем цену неотрицательными значениями
+                    closePrice = Math.max(0, closePrice);
+
+                    return `$${closePrice.toFixed(2)}`;
+                  })()}
+                </span>
+
                 {/* Кнопка удаления скрыта для зафиксированных позиций */}
                 {/* ЗАЧЕМ: Проверяем isLockedPosition на уровне каждой позиции */}
                 {!option.isLockedPosition ? (
@@ -1035,7 +1262,7 @@ function OptionsTableV3({
           })}
 
           {/* Итоговая строка */}
-          <div className="items-center text-sm border-t-2 border-cyan-500 bg-cyan-50/50 rounded-md p-2 font-bold" style={{ display: 'grid', gridTemplateColumns: `30px 0.6fr 0.7fr 0.7fr 0.4fr ${hideColumns.includes('premium') ? '' : '0.8fr '}0.6fr 0.6fr ${hideColumns.includes('oi') ? '' : '0.6fr '}0.4fr 0.4fr 0.55fr 0.65fr 0.8fr 0.8fr 40px`.replace(/\s+/g, ' ').trim(), gap: '6px' }}>
+          <div className="items-center text-sm border-t-2 border-cyan-500 bg-cyan-50/50 rounded-md p-2 font-bold" style={{ display: 'grid', gridTemplateColumns: `30px 0.6fr 0.7fr 0.7fr 0.4fr ${hideColumns.includes('premium') ? '' : '0.8fr '}0.6fr 0.6fr ${hideColumns.includes('oi') ? '' : '0.6fr '}0.4fr 0.4fr 0.55fr 0.65fr 0.8fr 0.8fr 0.7fr 40px`.replace(/\s+/g, ' ').trim(), gap: '6px' }}>
             <div></div>
             <div className="text-left">ИТОГО:</div>
             <div></div>
@@ -1045,6 +1272,7 @@ function OptionsTableV3({
             <div></div>
             <div></div>
             {!hideColumns.includes('oi') && <div></div>}
+            <div></div>
             <div></div>
             <div></div>
             <div></div>
@@ -1174,6 +1402,7 @@ function OptionsTableV3({
                 );
               })()}
             </div>
+            <div></div>
             <div></div>
           </div>
         </div>
