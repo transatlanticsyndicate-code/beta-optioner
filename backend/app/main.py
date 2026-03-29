@@ -16,13 +16,10 @@ from dotenv import load_dotenv
 from typing import Dict, Optional
 from datetime import datetime, timedelta
 import re
-from app.services.calibration_scheduler import calibration_scheduler
-from app.routers.calibration import run_scheduled_calibration
-
 from app.database import get_db, init_db
 from app.models.analysis_history import AnalysisHistory
 from app.models.user import Base as UserBase
-from app.routers import options, ai_chat, polygon, data_source_info, ib_monitoring, yahoo_proxy, crypto_rating, ml_api, ai_prediction, finnhub_proxy, options_universal, stock_classifier, stock_groups_settings, calibration
+from app.routers import options, ai_chat, polygon, data_source_info, ib_monitoring, yahoo_proxy, crypto_rating, ml_api, ai_prediction, finnhub_proxy, options_universal, saved_configurations
 
 # Load environment variables from .env file
 env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
@@ -74,9 +71,7 @@ app.include_router(finnhub_proxy.router)
 app.include_router(crypto_rating.router)
 app.include_router(ml_api.router)
 app.include_router(options_universal.router)
-app.include_router(stock_classifier.router)
-app.include_router(stock_groups_settings.router)
-app.include_router(calibration.router)
+app.include_router(saved_configurations.router)
 
 # Простой in-memory кэш (fallback если Redis недоступен)
 _data_cache: Dict = {}
@@ -120,14 +115,12 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     """Startup event для инициализации приложения"""
-    calibration_scheduler.configure(run_scheduled_calibration)
     print("🚀 Application startup complete")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Shutdown event для корректного завершения приложения"""
-    calibration_scheduler.shutdown()
     print("👋 Application shutdown")
 
 

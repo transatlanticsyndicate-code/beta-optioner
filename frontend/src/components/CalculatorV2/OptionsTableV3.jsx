@@ -66,6 +66,7 @@ function OptionsTableV3({
   isLoadingDates = false,
   selectedStrategyName = '',
   onSaveConfiguration,
+  onSaveToDB,
   onLockConfiguration,
   onResetCalculator,
   daysPassed = 0,
@@ -430,6 +431,9 @@ function OptionsTableV3({
             <DropdownMenuContent align="start">
               <DropdownMenuItem onClick={() => onSaveConfiguration && onSaveConfiguration()}>
                 <span>Сохранить текущую конфигурацию</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onSaveToDB && onSaveToDB()}>
+                <span>💾 Сохранить в БД</span>
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => onLockConfiguration && onLockConfiguration()}

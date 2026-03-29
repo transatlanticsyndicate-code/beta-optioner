@@ -23,6 +23,7 @@ import {
   ExternalLink,
   Layers,
   Podcast,
+  Database,
 } from 'lucide-react';
 
 function Sidebar() {
@@ -136,8 +137,11 @@ function Sidebar() {
                 <NavItem to="/tools/universal-calculator" icon={Layers} title="Универсальный калькулятор (Акции + Фьючерсы)" customColor="text-cyan-500 hover:text-cyan-600 hover:bg-accent/50">
                   Калькулятор
                 </NavItem>
-                <NavItem to="/tools/universal-saved-configurations" icon={Save} title="Сохраненные конфигурации универсального калькулятора" customColor="text-cyan-500 hover:text-cyan-600 hover:bg-accent/50">
-                  Сохранения
+                <NavItem to="/tools/universal-saved-configurations" icon={Save} title="Сохраненные конфигурации универсального калькулятора (localStorage)" customColor="text-cyan-500 hover:text-cyan-600 hover:bg-accent/50">
+                  Сохранения (Local)
+                </NavItem>
+                <NavItem to="/tools/db-saved-configurations" icon={Database} title="Сохраненные конфигурации в БД (доступны всем)" customColor="text-cyan-500 hover:text-cyan-600 hover:bg-accent/50">
+                  Сохранения (БД)
                 </NavItem>
                 <ExternalNavItem href="https://crypto.optioner.online" icon={Coins} title="Крипто Менеджер - управление криптовалютными активами">
                   Крипто Менеджер

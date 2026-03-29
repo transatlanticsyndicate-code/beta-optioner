@@ -25,7 +25,9 @@ function TopNav() {
       case '/tools/saved-configurations':
         return 'Сохраненные конфигурации';
       case '/tools/universal-saved-configurations':
-        return 'Сохранения из Универсального калькулятора';
+        return 'Сохранения из Универсального калькулятора (Local)';
+      case '/tools/db-saved-configurations':
+        return 'Сохранения из БД (доступны всем)';
       case '/tools/gradual-strategy-calculator':
         return 'Градуальный калькулятор';
       case '/tools/options-analyzer':
@@ -54,7 +56,7 @@ function TopNav() {
           <span className="text-sm text-cyan-500 font-medium">v33</span>
         )}
         {location.pathname === '/tools/universal-calculator' && (
-          <span className="text-sm text-cyan-500 font-medium">v31</span>
+          <span className="text-sm text-cyan-500 font-medium">v32 + БД Сохранений</span>
         )}
       </div>
 

@@ -19,13 +19,14 @@ import { flushSync } from 'react-dom';
 import { Calculator, ChevronUp, ChevronDown, Save, RotateCcw, TrendingUp, Activity, BarChart3, Target, Bitcoin, LineChart, Layers } from 'lucide-react';
 // УБРАНО: NewTikerFinder не используется — данные приходят от расширения
 // import NewTikerFinder from '../components/NewTikerFinder';
-import StockGroupSelector from '../components/StockGroupSelector';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate, useBeforeUnload } from 'react-router-dom';
 import { useLocalStorageValue } from '../hooks/useLocalStorage';
 import { getActiveBlocks, isBlockEnabled } from '../config/calculatorV3Blocks';
 import { applyStrategy, getAllStrategies } from '../config/optionsStrategies';
 import { saveCustomStrategy, getCustomStrategies, deleteCustomStrategy, applyCustomStrategy } from '../utils/customStrategies';
 import { detectInstrumentType } from '../utils/instrumentTypeDetector';
+import { createConfiguration, getConfiguration, updateConfiguration } from '../services/configurationsApi';
+import { supabase } from '../services/supabase';
 import { Card, CardContent } from '../components/ui/card';
 import {
   Dialog,
@@ -225,14 +226,6 @@ function UniversalOptionsCalculator() {
   const [currentPrice, setCurrentPrice] = useState(0); // Начальное значение 0, обновляется при выборе тикера
   const [priceChange, setPriceChange] = useState({ value: 0, percent: 0 }); // Начальное значение
 
-  // State для классификации акции
-  // ЗАЧЕМ: Определяет группу акции (stable/growth/illiquid) для корректировки P&L прогнозов
-  // ВАЖНО: Применяется только в режиме stocks
-  const [stockClassification, setStockClassification] = useState(null);
-
-  // Режим калибровки: standard (6 мес) | recent (1 нед) | weighted (взвешенный)
-  // ЗАЧЕМ: Позволяет мгновенно переключать набор коэффициентов и видеть разницу в P&L
-  const [calibrationMode, setCalibrationMode] = useState('standard');
 
   // State для зафиксированных позиций
   // ЗАЧЕМ: Если isLocked=true, данные НЕ обновляются с API при загрузке конфигурации
@@ -496,71 +489,6 @@ function UniversalOptionsCalculator() {
     fetchDividendYield();
   }, [selectedTicker]);
 
-  // Загрузка классификации акции при выборе тикера (только для режима stocks)
-  // ЗАЧЕМ: Определяем группу акции для корректировки P&L прогнозов
-  const fetchClassification = useCallback(async (ticker, mode) => {
-    if (!ticker || calculatorMode !== CALCULATOR_MODES.STOCKS) {
-      setStockClassification(null);
-      return;
-    }
-
-    // Крипто-тикеры не классифицируются по группам акций
-    if (CRYPTO_TICKERS.includes(ticker.toUpperCase())) {
-      setStockClassification(null);
-      return;
-    }
-
-    const activeMode = mode || calibrationMode || 'standard';
-    try {
-      const response = await fetch(`/api/stock/classify?symbol=${ticker}&calibration_mode=${activeMode}`);
-      if (response.ok) {
-        const data = await response.json();
-        // Добавляем originalGroup для отслеживания исходной группы из API
-        const classificationWithOriginal = {
-          ...data,
-          originalGroup: data.group
-        };
-        setStockClassification(classificationWithOriginal);
-        console.log(`📊 Классификация ${ticker} [${activeMode}]:`, classificationWithOriginal);
-      } else {
-        setStockClassification(null);
-      }
-    } catch (error) {
-      console.error('Ошибка загрузки классификации:', error);
-      setStockClassification(null);
-    }
-  }, [calculatorMode, calibrationMode]);
-
-  useEffect(() => {
-    fetchClassification(selectedTicker);
-  }, [selectedTicker, fetchClassification]);
-
-  // Перезагружаем классификацию при смене режима калибровки
-  // ЗАЧЕМ: Разные режимы дают разные коэффициенты — P&L пересчитывается мгновенно
-  useEffect(() => {
-    if (selectedTicker) {
-      fetchClassification(selectedTicker, calibrationMode);
-    }
-  }, [calibrationMode]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Принудительное обновление классификации (очистка кэша + повторный запрос)
-  // ЗАЧЕМ: Позволяет пользователю обновить авто-определение группы
-  const refreshClassification = useCallback(async () => {
-    if (!selectedTicker || calculatorMode !== CALCULATOR_MODES.STOCKS) return;
-
-    try {
-      // Очищаем кэш для этого тикера
-      await fetch(`/api/stock/clear-cache?symbol=${selectedTicker}`, { method: 'POST' });
-
-      // Запрашиваем классификацию заново
-      await fetchClassification(selectedTicker);
-
-      console.log(`🔄 Классификация ${selectedTicker} обновлена`);
-    } catch (error) {
-      console.error('Ошибка обновления классификации:', error);
-    }
-  }, [selectedTicker, calculatorMode, fetchClassification]);
-
   // State для позиций
   const [positions, setPositions] = useState([]); // Убрано демо-данные AAPL
 
@@ -645,9 +573,6 @@ function UniversalOptionsCalculator() {
           setPriceChange({ value: 0, percent: 0 });
         }
 
-        // Сохраняем классификацию акции для корректировки P&L (только для stocks)
-        // ЗАЧЕМ: Применяем коэффициенты группы к прогнозу P&L
-        setStockClassification(classification);
 
         // Используем переданный тип инструмента или определяем автоматически
         const type = instrumentType || detectInstrumentType(ticker);
@@ -666,7 +591,6 @@ function UniversalOptionsCalculator() {
       }
     } else {
       setSelectedTicker("");
-      setStockClassification(null);
       setIsDataCleared(false);
       setShowDemoData(false);
       setExpirationDates({});
@@ -2315,6 +2239,8 @@ function UniversalOptionsCalculator() {
   const [saveConfigDialogOpen, setSaveConfigDialogOpen] = useState(false);
   // State для диалога фиксации позиций (isLocked=true)
   const [lockConfigDialogOpen, setLockConfigDialogOpen] = useState(false);
+  // State для диалога сохранения в БД
+  const [saveToDBDialogOpen, setSaveToDBDialogOpen] = useState(false);
 
   // State для сворачивания блока StrikeScale
   const [isStrikeScaleCollapsed, setIsStrikeScaleCollapsed] = useState(() => {
@@ -2348,14 +2274,21 @@ function UniversalOptionsCalculator() {
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const configId = searchParams.get('config');
+    const dbConfigId = searchParams.get('dbConfig');
     const editMode = searchParams.get('edit') === 'true';
     const hasContract = searchParams.has('contract');
 
-    if (configId) {
+    if (dbConfigId) {
+      // Загрузка конфигурации из БД
+      loadConfigurationFromDB(dbConfigId, editMode);
+      setLoadedConfigId(dbConfigId);
+      setIsEditMode(editMode);
+      setHasChanges(false);
+    } else if (configId) {
+      // Загрузка конфигурации из localStorage
       loadConfiguration(configId, editMode);
       setLoadedConfigId(configId);
       setIsEditMode(editMode);
-      // Сбрасываем флаг изменений при загрузке конфигурации
       setHasChanges(false);
     } else {
       // Проверяем localStorage — при полной перезагрузке расширением
@@ -2792,6 +2725,197 @@ function UniversalOptionsCalculator() {
     }
   }, [loadedConfigId, dealSettings]);
 
+  // Предупреждение при несохранённых изменениях (закрытие вкладки)
+  // ЗАЧЕМ: Защита от потери данных при закрытии вкладки
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (hasChanges && loadedConfigId) {
+        e.preventDefault();
+        e.returnValue = 'Позиция была изменена! Сохранить изменения?';
+        return e.returnValue;
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [hasChanges, loadedConfigId]);
+
+  // Блокировка навигации при несохранённых изменениях (переход на другую страницу)
+  // ЗАЧЕМ: Предотвращение потери данных при клике по ссылкам в Sidebar/TopNav
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (hasChanges && loadedConfigId) {
+        // Проверяем, является ли цель клика ссылкой или находится внутри ссылки
+        const link = e.target.closest('a[href]');
+        if (link && link.href) {
+          // Проверяем, является ли это внутренней навигацией (не внешняя ссылка)
+          const url = new URL(link.href);
+          const currentUrl = new URL(window.location.href);
+          
+          if (url.origin === currentUrl.origin && url.pathname !== currentUrl.pathname) {
+            // Это внутренняя навигация на другую страницу
+            const confirmLeave = window.confirm('Позиция была изменена! Вы уверены, что хотите покинуть страницу без сохранения?');
+            if (!confirmLeave) {
+              e.preventDefault();
+              e.stopPropagation();
+            }
+          }
+        }
+      }
+    };
+
+    // Добавляем обработчик на фазе capture для перехвата кликов раньше
+    document.addEventListener('click', handleClick, true);
+
+    return () => {
+      document.removeEventListener('click', handleClick, true);
+    };
+  }, [hasChanges, loadedConfigId]);
+
+  // Функция загрузки конфигурации из БД
+  // ЗАЧЕМ: Загружает конфигурацию из базы данных вместо localStorage
+  const loadConfigurationFromDB = async (configId, editMode = false) => {
+    try {
+      console.log('🔔 [LOAD DB CONFIG]', { configId, editMode });
+      
+      // Загружаем конфигурацию с API
+      const result = await getConfiguration(configId);
+      
+      if (result.status !== 'success' || !result.data) {
+        alert('Ошибка загрузки конфигурации из БД');
+        return;
+      }
+
+      const config = result.data;
+      
+      if (!config.state) {
+        alert('Конфигурация повреждена');
+        return;
+      }
+
+      // Проверяем, зафиксирована ли конфигурация
+      let configIsLocked = config.isLocked === true;
+      if (editMode) {
+        configIsLocked = false; // Разблокируем для редактирования
+      }
+      setIsLocked(configIsLocked);
+
+      // Вычисляем daysPassed
+      let calculatedDaysPassed = config.state.daysPassed || 0;
+      const configEntryDate = config.entryDate || config.createdAt;
+
+      if (configIsLocked && configEntryDate) {
+        setSavedConfigDate(configEntryDate);
+        const savedDate = new Date(configEntryDate);
+        const today = new Date();
+        savedDate.setHours(0, 0, 0, 0);
+        today.setHours(0, 0, 0, 0);
+        const diffTime = today.getTime() - savedDate.getTime();
+        calculatedDaysPassed = Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
+      } else {
+        setSavedConfigDate(null);
+      }
+
+      // Восстанавливаем состояние калькулятора
+      const ticker = config.state.selectedTicker || '';
+
+      if (ticker) {
+        setSelectedTicker(ticker);
+        setCurrentPrice(config.state.currentPrice || 0);
+        setPriceChange(config.state.priceChange || { value: 0, percent: 0 });
+
+        // Для зафиксированных позиций загружаем текущую рыночную цену
+        if (configIsLocked) {
+          try {
+            const priceResponse = await fetch(`/api/polygon/ticker/${ticker}`);
+            if (priceResponse.ok) {
+              const priceData = await priceResponse.json();
+              if (priceData.price) {
+                setLivePrice(priceData.price);
+              }
+            }
+          } catch (error) {
+            console.warn('⚠️ Не удалось загрузить текущую цену:', error);
+          }
+        } else {
+          setLivePrice(null);
+        }
+      }
+
+      // Восстанавливаем опционы и позиции
+      let optionsToSet = config.state.options || [];
+      
+      // В режиме редактирования убираем флаги блокировки
+      if (editMode) {
+        optionsToSet = optionsToSet.map(opt => ({
+          ...opt,
+          isLockedPosition: false
+        }));
+      }
+
+      setOptions(optionsToSet);
+      setPositions(config.state.positions || []);
+      setSelectedExpirationDate(config.state.selectedExpirationDate || '');
+      setDaysPassed(calculatedDaysPassed);
+      setUserAdjustedDays(false);
+
+      setShowOptionLines(config.state.showOptionLines !== undefined ? config.state.showOptionLines : true);
+      setShowProbabilityZones(config.state.showProbabilityZones !== undefined ? config.state.showProbabilityZones : true);
+      setChartDisplayMode(config.state.chartDisplayMode || 'profit-loss-dollar');
+
+      // Восстанавливаем режим калькулятора
+      let restoredMode = CALCULATOR_MODES.STOCKS;
+      if (config.state.calculatorMode) {
+        restoredMode = config.state.calculatorMode;
+        setCalculatorMode(restoredMode);
+      } else if (ticker) {
+        const detectedType = detectInstrumentTypeByPattern(ticker);
+        if (detectedType === 'futures') {
+          restoredMode = CALCULATOR_MODES.FUTURES;
+        } else if (detectedType === 'crypto') {
+          restoredMode = CALCULATOR_MODES.CRYPTO;
+        }
+        setCalculatorMode(restoredMode);
+      }
+
+      // Загружаем настройки фьючерса если нужно
+      if (restoredMode === CALCULATOR_MODES.FUTURES && ticker) {
+        const futureInfo = getFutureByTicker(ticker);
+        setSelectedFuture(futureInfo);
+      } else {
+        setSelectedFuture(null);
+      }
+
+      // Восстанавливаем dealInfo и dealSettings
+      if (config.dealInfo) {
+        setDealInfo(config.dealInfo);
+        setActiveCalculatorTab('deal');
+      } else {
+        setDealInfo(null);
+        setActiveCalculatorTab('calculator');
+      }
+
+      if (config.dealSettings) {
+        setDealSettings(config.dealSettings);
+        if (config.dealSettings.targetAssetPricePercent !== undefined) {
+          const calculatedTargetPrice = Math.round(
+            (config.state.currentPrice || 0) * (1 + config.dealSettings.targetAssetPricePercent / 100) * 100
+          ) / 100;
+          setTargetPrice(calculatedTargetPrice);
+        }
+      }
+
+      setIsInitialized(true);
+      console.log('✅ Конфигурация из БД загружена:', config.name);
+    } catch (error) {
+      console.error('❌ Ошибка загрузки конфигурации из БД:', error);
+      alert(`Ошибка загрузки: ${error.message}`);
+    }
+  };
+
   // Функция сохранения конфигурации
   const handleSaveConfiguration = (configuration) => {
     const saved = localStorage.getItem('universalCalculatorConfigurations');
@@ -2910,6 +3034,44 @@ function UniversalOptionsCalculator() {
     }
   };
 
+  // Функция сохранения конфигурации в БД
+  // ЗАЧЕМ: Сохранение позиции в базу данных для доступа всем пользователям
+  const handleSaveToDB = async (configuration) => {
+    try {
+      // Получаем userId из Supabase если пользователь залогинен
+      let userId = null;
+      if (supabase) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          userId = session.user.id;
+        }
+      }
+
+      // Подготавливаем данные для API
+      const configData = {
+        name: configuration.name,
+        description: configuration.description,
+        author: configuration.author,
+        ticker: configuration.ticker,
+        entryDate: configuration.entryDate,
+        isLocked: configuration.isLocked,
+        state: configuration.state,
+        dealSettings: configuration.dealSettings,
+        dealInfo: configuration.dealInfo,
+        userId: userId
+      };
+
+      // Отправляем на сервер
+      const result = await createConfiguration(configData);
+      
+      console.log('✅ Конфигурация сохранена в БД:', result.data);
+      alert(`Конфигурация успешно сохранена в БД!\nID: ${result.data.id}`);
+    } catch (error) {
+      console.error('❌ Ошибка сохранения в БД:', error);
+      alert(`Ошибка при сохранении в БД: ${error.message}`);
+    }
+  };
+
   // Функция получения текущего состояния для сохранения
   const getCurrentState = () => {
     return {
@@ -2942,7 +3104,7 @@ function UniversalOptionsCalculator() {
     selectedTicker: selectedTicker,
     calculatorMode: calculatorMode,
     contractMultiplier: contractMultiplier,
-    stockClassification: calculatorMode === CALCULATOR_MODES.STOCKS ? stockClassification : null
+    stockClassification: null
   });
 
   return (
@@ -3017,70 +3179,6 @@ function UniversalOptionsCalculator() {
                     {selectedFuture ? `$${contractMultiplier}` : '—'}
                   </span>
                 </div>
-              )}
-
-              {/* Селектор группы акции (только для режима stocks, не для крипто) */}
-              {calculatorMode === CALCULATOR_MODES.STOCKS && selectedTicker && !CRYPTO_TICKERS.includes(selectedTicker.toUpperCase()) && (
-                <StockGroupSelector
-                  symbol={selectedTicker}
-                  classification={stockClassification}
-                  onGroupChange={(newGroup, multipliers) => {
-                    // Обновляем только классификацию без сброса опционов
-                    // ВАЖНО: Сохраняем originalGroup для корректного определения "авто"
-                    const originalGroup = stockClassification?.originalGroup || stockClassification?.group || 'growth';
-                    setStockClassification({
-                      ...stockClassification,
-                      group: newGroup,
-                      down_mult: multipliers.down_mult,
-                      up_mult: multipliers.up_mult,
-                      originalGroup: originalGroup,
-                      overridden: newGroup !== originalGroup
-                    });
-                  }}
-                  onRefreshClassification={refreshClassification}
-                  isLoading={!stockClassification && selectedTicker}
-                  compact={false}
-                  disabled={false}
-                />
-              )}
-
-              {/* Переключатель режима калибровки (только для откалиброванных тикеров) */}
-              {calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification?.ticker_override && (
-                <TooltipProvider>
-                  <div className="flex items-center gap-1 rounded-lg border border-border bg-muted/30 p-0.5">
-                    {[
-                      { id: 'standard', label: 'Стабильный', hint: '6 месяцев данных — стабильные коэффициенты' },
-                      { id: 'weighted', label: 'Взвешенный', hint: 'Свежие данные важнее — акцент на последних неделях' },
-                      { id: 'recent',   label: 'Свежий',     hint: 'Только последняя неделя — максимально актуально' },
-                    ].map(({ id, label, hint }) => {
-                      const available = stockClassification?.available_modes?.includes(id);
-                      const isActive = calibrationMode === id;
-                      return (
-                        <Tooltip key={id}>
-                          <TooltipTrigger asChild>
-                            <button
-                              onClick={() => available && setCalibrationMode(id)}
-                              disabled={!available}
-                              className={[
-                                'px-2 py-0.5 rounded text-xs font-medium transition-all',
-                                isActive
-                                  ? 'bg-background shadow text-foreground'
-                                  : available
-                                    ? 'text-muted-foreground hover:text-foreground'
-                                    : 'text-muted-foreground/40 cursor-not-allowed',
-                              ].join(' ')}
-                            >
-                              {label}
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom" className="max-w-[200px] text-xs">
-                            {available ? hint : `Режим «${label}» не откалиброван для ${selectedTicker}`}
-                          </TooltipContent>
-                        </Tooltip>
-                      );
-                    })}
-                  </div>
-                </TooltipProvider>
               )}
             </div>
 
@@ -3363,6 +3461,7 @@ function UniversalOptionsCalculator() {
                       isLoadingDates={isLoadingDates}
                       selectedStrategyName={selectedStrategyName}
                       onSaveConfiguration={() => setSaveConfigDialogOpen(true)}
+                      onSaveToDB={() => setSaveToDBDialogOpen(true)}
                       onLockConfiguration={() => setLockConfigDialogOpen(true)}
                       onResetCalculator={resetCalculator}
                       daysPassed={daysPassed}
@@ -3431,7 +3530,7 @@ function UniversalOptionsCalculator() {
                         // ОТКЛЮЧЕНО: В универсальном калькуляторе данные приходят от расширения
                         // Не загружаем детали опционов с внешних API
                       }}
-                      stockClassification={calculatorMode === CALCULATOR_MODES.STOCKS ? stockClassification : null}
+                      stockClassification={null}
                     />
                   ) : (
                     <div className="w-full h-[80px] flex items-center justify-center text-muted-foreground text-sm">
@@ -3497,7 +3596,7 @@ function UniversalOptionsCalculator() {
                 dividendYield={useDividends ? dividendYield : 0}
                 calculatorMode={calculatorMode}
                 contractMultiplier={contractMultiplier}
-                stockClassification={calculatorMode === 'stocks' ? stockClassification : null}
+                stockClassification={null}
                 shouldShowBlock={shouldShowBlock}
                 isFuturesMissingSettings={isFuturesMissingSettings}
                 isAIEnabled={isAIEnabled}
@@ -3586,6 +3685,16 @@ function UniversalOptionsCalculator() {
           onSave={handleSaveConfiguration}
           currentState={getCurrentState()}
           isLocked={true}
+          dealInfo={dealInfo}
+          dealSettings={dealSettings}
+        />
+
+        {/* Диалог сохранения в БД */}
+        <SaveConfigurationDialog
+          isOpen={saveToDBDialogOpen}
+          onClose={() => setSaveToDBDialogOpen(false)}
+          onSave={handleSaveToDB}
+          currentState={getCurrentState()}
           dealInfo={dealInfo}
           dealSettings={dealSettings}
         />

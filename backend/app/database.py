@@ -67,5 +67,6 @@ def init_db():
     from app.models import analysis_history  # Import models
     from app.models import user  # Import user models
     from app.models import crypto_rating  # Import crypto rating models
+    from app.models import saved_configuration  # Import saved configurations
     Base.metadata.create_all(bind=engine)
     print("✅ Database tables created successfully")
