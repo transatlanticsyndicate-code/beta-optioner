@@ -78,6 +78,8 @@ function OptionsTableV3({
   isEditMode = false, // Режим редактирования конфигурации
   hasChanges = false, // Есть ли изменения в режиме редактирования
   onSaveEditedConfiguration = null, // Функция сохранения изменений
+  configSource = null, // Источник конфигурации ('db' или 'localStorage')
+  onSaveDBConfiguration = null, // Функция сохранения изменений конфигурации из БД
   positions = [], // Позиции базового актива для волшебного подбора
   onAddMagicOption = null, // Функция добавления опциона из волшебного подбора
   isAIEnabled = false, // Включен ли AI для прогнозирования волатильности
@@ -90,6 +92,19 @@ function OptionsTableV3({
   isFuturesMissingSettings = false, // Флаг: отсутствуют настройки фьючерса (блокирует расчёты)
   stockClassification = null // Классификация акции для корректировки P&L (только для режима stocks)
 }) {
+  // DEBUG: Логирование параметров для отладки сохранения конфигурации из БД
+  React.useEffect(() => {
+    if (isEditMode && hasChanges) {
+      console.log('🔍 [OptionsTableV3] Параметры кнопки сохранения:', {
+        isEditMode,
+        hasChanges,
+        configSource,
+        onSaveDBConfiguration: typeof onSaveDBConfiguration,
+        onSaveEditedConfiguration: typeof onSaveEditedConfiguration
+      });
+    }
+  }, [isEditMode, hasChanges, configSource, onSaveDBConfiguration, onSaveEditedConfiguration]);
+
   // DEBUG: Закомментировано для production
   // console.log('🤖 [OptionsTable] Получены пропсы:', {
   //   isAIEnabled,
@@ -474,7 +489,16 @@ function OptionsTableV3({
                   <Button
                     size="sm"
                     className="h-8 px-3 bg-red-500 hover:bg-red-600 text-white animate-pulse"
-                    onClick={() => onSaveEditedConfiguration?.()}
+                    onClick={() => {
+                      console.log('🖱️ [OptionsTableV3] Клик на "Сохранить изменения"', { configSource, hasChanges, isEditMode });
+                      if (configSource === 'db') {
+                        console.log('📤 [OptionsTableV3] Вызов onSaveDBConfiguration');
+                        onSaveDBConfiguration?.();
+                      } else {
+                        console.log('💾 [OptionsTableV3] Вызов onSaveEditedConfiguration');
+                        onSaveEditedConfiguration?.();
+                      }
+                    }}
                   >
                     <Save className="h-4 w-4 mr-1" />
                     Сохранить изменения

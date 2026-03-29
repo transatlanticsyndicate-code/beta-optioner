@@ -282,6 +282,14 @@ function UniversalOptionsCalculator() {
   // ЗАЧЕМ: Показывать кнопку "Сохранить изменения" только при наличии изменений
   const [hasChanges, setHasChanges] = useState(false);
 
+  // State для отслеживания исходного состояния конфигурации из БД
+  // ЗАЧЕМ: Сравнивать текущее состояние с исходным для определения наличия изменений
+  const [originalDBConfig, setOriginalDBConfig] = useState(null);
+
+  // State для отслеживания источника загруженной конфигурации (БД или localStorage)
+  // ЗАЧЕМ: Определить, какую функцию сохранения использовать
+  const [configSource, setConfigSource] = useState(null); // 'db' или 'localStorage'
+
   // State для настроек калькулятора
   // IMPORTANT: daysPassed - прошедшие дни от сегодня (новая логика для корректной работы с разными сроками экспирации)
   // Каждый опцион имеет свой initialDaysToExpiration, а actualDaysRemaining = max(0, initialDaysToExpiration - daysPassed)
@@ -2633,6 +2641,43 @@ function UniversalOptionsCalculator() {
     }
   };
 
+  // Функция проверки наличия изменений в конфигурации из БД
+  // ЗАЧЕМ: Определить, изменилась ли позиция после открытия из БД
+  const checkDBConfigChanges = () => {
+    if (!originalDBConfig || configSource !== 'db') {
+      return false;
+    }
+
+    const currentState = {
+      selectedTicker,
+      currentPrice,
+      priceChange,
+      options: JSON.stringify(options),
+      positions: JSON.stringify(positions),
+      selectedExpirationDate,
+      daysPassed,
+      showOptionLines,
+      showProbabilityZones,
+      chartDisplayMode,
+      calculatorMode,
+    };
+
+    // Сравниваем текущее состояние с исходным
+    return (
+      currentState.selectedTicker !== originalDBConfig.selectedTicker ||
+      currentState.currentPrice !== originalDBConfig.currentPrice ||
+      JSON.stringify(currentState.priceChange) !== JSON.stringify(originalDBConfig.priceChange) ||
+      currentState.options !== originalDBConfig.options ||
+      currentState.positions !== originalDBConfig.positions ||
+      currentState.selectedExpirationDate !== originalDBConfig.selectedExpirationDate ||
+      currentState.daysPassed !== originalDBConfig.daysPassed ||
+      currentState.showOptionLines !== originalDBConfig.showOptionLines ||
+      currentState.showProbabilityZones !== originalDBConfig.showProbabilityZones ||
+      currentState.chartDisplayMode !== originalDBConfig.chartDisplayMode ||
+      currentState.calculatorMode !== originalDBConfig.calculatorMode
+    );
+  };
+
   // Отслеживание изменений в режиме редактирования
   // ЗАЧЕМ: Показывать кнопку "Сохранить изменения" только при наличии изменений
   useEffect(() => {
@@ -2641,9 +2686,14 @@ function UniversalOptionsCalculator() {
       return;
     }
 
-    // Если есть какие-то изменения в опционах, позициях или других параметрах — отмечаем это
-    setHasChanges(true);
-  }, [isEditMode, loadedConfigId, options, positions, selectedExpirationDate, daysPassed, showOptionLines, showProbabilityZones, chartDisplayMode]);
+    // Для конфигураций из БД проверяем, изменилась ли позиция
+    if (configSource === 'db') {
+      setHasChanges(checkDBConfigChanges());
+    } else {
+      // Для конфигураций из localStorage просто отмечаем, что есть изменения
+      setHasChanges(true);
+    }
+  }, [isEditMode, loadedConfigId, configSource, originalDBConfig, options, positions, selectedExpirationDate, daysPassed, showOptionLines, showProbabilityZones, chartDisplayMode, calculatorMode, selectedTicker, currentPrice, priceChange]);
 
   // Автосохранение изменений в загруженную конфигурацию
   // ЗАЧЕМ: Автосохранение работает ТОЛЬКО для незафиксированных позиций И не в режиме редактирования
@@ -2908,6 +2958,23 @@ function UniversalOptionsCalculator() {
         }
       }
 
+      // Сохраняем исходное состояние конфигурации для отслеживания изменений
+      // ЗАЧЕМ: Сравнивать текущее состояние с исходным для определения наличия изменений
+      setOriginalDBConfig({
+        selectedTicker: config.state.selectedTicker || '',
+        currentPrice: config.state.currentPrice || 0,
+        priceChange: config.state.priceChange || { value: 0, percent: 0 },
+        options: JSON.stringify(optionsToSet),
+        positions: JSON.stringify(config.state.positions || []),
+        selectedExpirationDate: config.state.selectedExpirationDate || '',
+        daysPassed: calculatedDaysPassed,
+        showOptionLines: config.state.showOptionLines !== undefined ? config.state.showOptionLines : true,
+        showProbabilityZones: config.state.showProbabilityZones !== undefined ? config.state.showProbabilityZones : true,
+        chartDisplayMode: config.state.chartDisplayMode || 'profit-loss-dollar',
+        calculatorMode: restoredMode,
+      });
+      setConfigSource('db');
+
       setIsInitialized(true);
       console.log('✅ Конфигурация из БД загружена:', config.name);
     } catch (error) {
@@ -3031,6 +3098,82 @@ function UniversalOptionsCalculator() {
     } catch (error) {
       console.error('❌ Ошибка сохранения изменений:', error);
       alert('Ошибка при сохранении изменений');
+    }
+  };
+
+  // Функция сохранения изменений конфигурации из БД
+  // ЗАЧЕМ: Обновляет существующую конфигурацию в БД с новыми данными
+  const handleSaveDBConfiguration = async () => {
+    console.log('🔔 [handleSaveDBConfiguration] Вызвана функция', { loadedConfigId, configSource });
+    
+    if (!loadedConfigId || configSource !== 'db') {
+      console.warn('⚠️ [handleSaveDBConfiguration] Функция вернулась:', { loadedConfigId, configSource });
+      return;
+    }
+
+    try {
+      console.log('📝 [handleSaveDBConfiguration] Начинаем сохранение...');
+      
+      // Получаем userId из Supabase если пользователь залогинен
+      let userId = null;
+      if (supabase) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          userId = session.user.id;
+        }
+      }
+
+      // Генерируем новое название на основе текущих данных
+      const updatedName = generateConfigurationName();
+
+      // Подготавливаем данные для API
+      const configData = {
+        name: updatedName,
+        state: {
+          selectedTicker,
+          currentPrice,
+          priceChange,
+          options,
+          positions,
+          selectedExpirationDate,
+          daysPassed,
+          showOptionLines,
+          showProbabilityZones,
+          chartDisplayMode,
+          calculatorMode,
+        },
+      };
+
+      console.log('📤 [handleSaveDBConfiguration] Отправляем на сервер:', { loadedConfigId, configData });
+
+      // Отправляем на сервер
+      const result = await updateConfiguration(loadedConfigId, configData, userId);
+
+      console.log('✅ [handleSaveDBConfiguration] Ответ сервера:', result);
+
+      // Обновляем исходное состояние после сохранения
+      setOriginalDBConfig({
+        selectedTicker,
+        currentPrice,
+        priceChange,
+        options: JSON.stringify(options),
+        positions: JSON.stringify(positions),
+        selectedExpirationDate,
+        daysPassed,
+        showOptionLines,
+        showProbabilityZones,
+        chartDisplayMode,
+        calculatorMode,
+      });
+
+      // Сбрасываем флаг изменений
+      setHasChanges(false);
+
+      console.log('✅ Конфигурация в БД обновлена:', result.data);
+      alert('Изменения успешно сохранены в БД!');
+    } catch (error) {
+      console.error('❌ Ошибка сохранения в БД:', error);
+      alert(`Ошибка при сохранении в БД: ${error.message}`);
     }
   };
 
@@ -3473,6 +3616,8 @@ function UniversalOptionsCalculator() {
                       isEditMode={isEditMode}
                       hasChanges={hasChanges}
                       onSaveEditedConfiguration={handleSaveEditedConfiguration}
+                      configSource={configSource}
+                      onSaveDBConfiguration={handleSaveDBConfiguration}
                       positions={positions}
                       isAIEnabled={isAIEnabled}
                       aiVolatilityMap={aiVolatilityMap}

@@ -48,6 +48,8 @@ function OptionsTable({
   isEditMode = false, // Режим редактирования конфигурации
   hasChanges = false, // Есть ли изменения в режиме редактирования
   onSaveEditedConfiguration = null, // Функция сохранения изменений
+  configSource = null, // Источник конфигурации ('db' или 'localStorage')
+  onSaveDBConfiguration = null, // Функция сохранения изменений конфигурации из БД
   positions = [], // Позиции базового актива для волшебного подбора
   onAddMagicOption = null, // Функция добавления опциона из волшебного подбора
   onMagicSelectionComplete = null // Callback для передачи параметров подбора в OptionSelectionResult
@@ -463,7 +465,13 @@ function OptionsTable({
                   <Button
                     size="sm"
                     className="h-8 px-3 bg-red-500 hover:bg-red-600 text-white animate-pulse"
-                    onClick={() => onSaveEditedConfiguration?.()}
+                    onClick={() => {
+                      if (configSource === 'db') {
+                        onSaveDBConfiguration?.();
+                      } else {
+                        onSaveEditedConfiguration?.();
+                      }
+                    }}
                   >
                     <Save className="h-4 w-4 mr-1" />
                     Сохранить изменения
