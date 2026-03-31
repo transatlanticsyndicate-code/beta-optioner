@@ -2287,13 +2287,28 @@ function UniversalOptionsCalculator() {
     const hasContract = searchParams.has('contract');
 
     if (dbConfigId) {
+      // ЗАЩИТА: Не загружаем конфигурацию повторно, если она уже загружена
+      // ЗАЧЕМ: Избегаем дублирования запросов к БД и перезаписи состояния
+      if (loadedConfigId === dbConfigId && configSource === 'db') {
+        console.log('🛡️ [Universal] Конфигурация из БД уже загружена:', dbConfigId);
+        return;
+      }
+      
       // Загрузка конфигурации из БД
+      console.log('📥 [Universal] Загрузка конфигурации из БД:', dbConfigId);
       loadConfigurationFromDB(dbConfigId, editMode);
       setLoadedConfigId(dbConfigId);
       setIsEditMode(editMode);
       setHasChanges(false);
     } else if (configId) {
+      // ЗАЩИТА: Не загружаем конфигурацию повторно, если она уже загружена
+      if (loadedConfigId === configId && configSource === 'localStorage') {
+        console.log('🛡️ [Universal] Конфигурация из localStorage уже загружена:', configId);
+        return;
+      }
+      
       // Загрузка конфигурации из localStorage
+      console.log('📥 [Universal] Загрузка конфигурации из localStorage:', configId);
       loadConfiguration(configId, editMode);
       setLoadedConfigId(configId);
       setIsEditMode(editMode);
@@ -2316,7 +2331,7 @@ function UniversalOptionsCalculator() {
         console.log('🛡️ [Universal] Защита: loadedConfigId сохранён при изменении URL расширением:', hasActiveConfig);
       }
     }
-  }, [location.search]);
+  }, [location.search, loadedConfigId, configSource]);
 
   // Функция загрузки конфигурации
   // ЗАЧЕМ: Восстанавливает сохранённое состояние калькулятора

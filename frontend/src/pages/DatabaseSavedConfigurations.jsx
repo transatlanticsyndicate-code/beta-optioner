@@ -50,6 +50,10 @@ function DatabaseSavedConfigurations() {
   const [sortField, setSortField] = useState('createdAt');
   const [sortDirection, setSortDirection] = useState('desc');
 
+  // Состояние пагинации
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 50; // Показываем по 50 записей на странице
+
   // Состояние миграции
   const [showMigrationModal, setShowMigrationModal] = useState(false);
   const [migrationResult, setMigrationResult] = useState(null);
@@ -72,10 +76,13 @@ function DatabaseSavedConfigurations() {
     try {
       setLoading(true);
       setError(null);
-      const result = await getConfigurations({ limit: 100, offset: 0 });
+      // ЗАЧЕМ: Загружаем все конфигурации (на сервере может быть 300+)
+      // Увеличен лимит с 100 до 500 для загрузки всех записей
+      const result = await getConfigurations({ limit: 500, offset: 0 });
       
       if (result.status === 'success') {
         setConfigurations(result.data);
+        console.log(`✅ Загружено конфигураций: ${result.data.length} из ${result.total}`);
       } else {
         setError('Ошибка загрузки конфигураций');
       }
@@ -226,6 +233,21 @@ function DatabaseSavedConfigurations() {
       return 0;
     });
   }, [configurations, filterDate, filterTicker, filterAuthor, filterInstrumentType, sortField, sortDirection]);
+
+  // Пагинация отфильтрованных конфигураций
+  // ЗАЧЕМ: Рендерим только часть записей для улучшения производительности
+  const paginatedConfigurations = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredConfigurations.slice(startIndex, endIndex);
+  }, [filteredConfigurations, currentPage, itemsPerPage]);
+
+  const totalPages = Math.ceil(filteredConfigurations.length / itemsPerPage);
+
+  // Сброс на первую страницу при изменении фильтров
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterDate, filterTicker, filterAuthor, filterInstrumentType]);
 
   // Сброс всех фильтров
   const clearFilters = () => {
@@ -452,7 +474,7 @@ function DatabaseSavedConfigurations() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredConfigurations.map((config) => {
+                {paginatedConfigurations.map((config) => {
                   const instrumentType = getInstrumentType(config);
                   const isStocks = instrumentType === 'Акции';
                   const isCrypto = instrumentType === 'Крипто';
@@ -530,6 +552,36 @@ function DatabaseSavedConfigurations() {
                 })}
               </TableBody>
             </Table>
+
+            {/* Пагинация */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t">
+                <div className="text-sm text-muted-foreground">
+                  Показано {((currentPage - 1) * itemsPerPage) + 1}-{Math.min(currentPage * itemsPerPage, filteredConfigurations.length)} из {filteredConfigurations.length}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    Назад
+                  </Button>
+                  <div className="text-sm">
+                    Страница {currentPage} из {totalPages}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    Вперед
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
