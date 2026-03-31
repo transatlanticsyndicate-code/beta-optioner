@@ -130,6 +130,80 @@ function DatabaseSavedConfigurations() {
     navigate(`/tools/universal-calculator?dbConfig=${configId}&edit=true`);
   };
 
+  // Экспорт всех конфигураций в JSON файл
+  // ЗАЧЕМ: Резервное копирование данных перед миграцией на Supabase PostgreSQL
+  const handleExport = () => {
+    try {
+      const exportData = {
+        version: '1.0',
+        exportedAt: new Date().toISOString(),
+        exportedBy: 'Database Export',
+        source: 'database',
+        data: {
+          configurations: configurations,
+        },
+        stats: {
+          configurationsCount: configurations.length,
+        },
+      };
+
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      
+      const date = new Date().toISOString().split('T')[0];
+      link.href = url;
+      link.download = `db-configurations-export-${date}.json`;
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      alert(`Экспорт успешен!\nКонфигураций: ${configurations.length}`);
+    } catch (error) {
+      console.error('Ошибка экспорта:', error);
+      alert(`Ошибка экспорта: ${error.message}`);
+    }
+  };
+
+  // Импорт конфигураций из JSON файла
+  // ЗАЧЕМ: Восстановление данных из резервной копии
+  const handleImport = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const importData = JSON.parse(text);
+
+      // Валидация
+      if (!importData.data || !importData.data.configurations) {
+        alert('Неверный формат файла');
+        return;
+      }
+
+      const configs = importData.data.configurations;
+      
+      if (window.confirm(`Импортировать ${configs.length} конфигураций в БД?`)) {
+        const result = await createConfigurationsBatch(configs);
+        
+        if (result.status === 'success') {
+          alert(`Импорт успешен!\nИмпортировано: ${result.data.imported}\nПропущено: ${result.data.skipped}`);
+          await loadConfigurations(); // Перезагружаем список
+        } else {
+          alert(`Ошибка импорта: ${result.message || 'Неизвестная ошибка'}`);
+        }
+      }
+    } catch (error) {
+      console.error('Ошибка импорта:', error);
+      alert(`Ошибка импорта: ${error.message}`);
+    }
+    
+    // Сбрасываем input для повторного выбора того же файла
+    event.target.value = '';
+  };
+
   // Форматирование даты в UTC
   const formatDate = (dateString) => {
     if (!dateString) return '—';
@@ -382,9 +456,56 @@ function DatabaseSavedConfigurations() {
             Сбросить
           </Button>
           
-          {/* Кнопка миграции */}
+          {/* Кнопки управления данными */}
           <div className="flex gap-2 ml-4 border-l pl-4 border-gray-300">
             <TooltipProvider>
+              {/* Кнопка экспорта */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleExport}
+                    disabled={configurations.length === 0}
+                    className="text-xs"
+                  >
+                    <Download className="h-4 w-4 mr-1" />
+                    Экспорт
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Экспортировать все конфигурации в JSON файл</p>
+                </TooltipContent>
+              </Tooltip>
+
+              {/* Кнопка импорта */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => document.getElementById('import-file-input').click()}
+                    className="text-xs"
+                  >
+                    <Upload className="h-4 w-4 mr-1" />
+                    Импорт
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Импортировать конфигурации из JSON файла</p>
+                </TooltipContent>
+              </Tooltip>
+
+              {/* Скрытый input для выбора файла */}
+              <input
+                id="import-file-input"
+                type="file"
+                accept=".json"
+                onChange={handleImport}
+                style={{ display: 'none' }}
+              />
+
+              {/* Кнопка миграции */}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -393,7 +514,7 @@ function DatabaseSavedConfigurations() {
                     onClick={() => setShowMigrationModal(true)}
                     className="text-xs"
                   >
-                    <Upload className="h-4 w-4 mr-1" />
+                    <Save className="h-4 w-4 mr-1" />
                     Миграция из localStorage
                   </Button>
                 </TooltipTrigger>
