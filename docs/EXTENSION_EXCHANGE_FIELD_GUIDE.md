@@ -53,7 +53,21 @@ localStorage.setItem('calculatorState', JSON.stringify({
 - `NASDAQ:AAPL` → биржа = `NASDAQ`
 - `CME_MINI:ES` → биржа = `CME`
 
-Расширение может получить это значение из:
+**Самый простой способ** — получить информацию из самой ссылки на страницу опциона актива:
+
+```javascript
+// Пример: пользователь открыл страницу опционов
+// URL: https://www.tradingview.com/options/chain/?symbol=NYSE%3ASE
+
+const url = window.location.href;
+const match = url.match(/symbol=([A-Z_]+)%3A/);
+if (match) {
+  const exchange = match[1];  // "NYSE"
+  const ticker = url.match(/symbol=[A-Z_]+%3A([A-Z0-9]+)/)?.[1];  // "SE"
+}
+```
+
+Расширение может получить информацию о бирже также из:
 1. **HTML страницы** — парсить текст рядом с тикером
 2. **API TradingView** — если доступен
 3. **Таблица опционов** — информация о бирже часто есть в заголовке таблицы
