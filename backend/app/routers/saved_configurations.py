@@ -104,15 +104,23 @@ async def get_configuration(config_id: str, db: Session = Depends(get_db)):
     Получить одну конфигурацию по ID
     ЗАЧЕМ: Загрузка конфигурации в калькулятор
     """
+    import time
+    start_time = time.time()
+    
     try:
         config = db.query(SavedConfiguration).filter(SavedConfiguration.id == config_id).first()
         
         if not config:
             raise HTTPException(status_code=404, detail="Конфигурация не найдена")
         
+        result = config.to_dict()
+        
+        elapsed_time = (time.time() - start_time) * 1000  # в миллисекундах
+        print(f"⏱️ [GET /api/configurations/{config_id}] Время выполнения: {elapsed_time:.2f}ms")
+        
         return {
             "status": "success",
-            "data": config.to_dict()
+            "data": result
         }
     except HTTPException:
         raise
