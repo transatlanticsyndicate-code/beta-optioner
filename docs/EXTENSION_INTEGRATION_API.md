@@ -9,6 +9,12 @@
 - `tvc_refresh_result` — результаты от расширения к калькулятору
 - `calculatorState` — данные опционов (обновляются расширением)
 
+**URL параметры при открытии калькулятора:**
+- `?contract=ESH26` — код контракта
+- `?price=6910.75` — текущая цена базового актива
+- `?exchange=CME` — **НОВОЕ ПОЛЕ**: биржа (NYSE, NASDAQ, CBOT, CME, NYMEX и т.д.)
+- `?config=abc123` — ID конфигурации из БД
+
 ---
 
 ## Типы команд
@@ -218,6 +224,7 @@ localStorage.setItem('tvc_refresh_result', JSON.stringify({
   "selectedTicker": "CME_MINI:ESH2026",
   "selectedExpirationDate": "2026-01-16",
   "underlyingPrice": 5985.25,
+  "exchange": "CME",  // НОВОЕ ПОЛЕ: биржа для генерации правильной ссылки на TradingView
   "options": [
     {
       "id": "1768468327884",
@@ -244,6 +251,15 @@ localStorage.setItem('tvc_refresh_result', JSON.stringify({
 }
 ```
 
+**Новое поле `exchange`**:
+- **Тип**: string
+- **Описание**: Биржа, на которой торгуется инструмент
+- **Примеры значений**: `NYSE`, `NASDAQ`, `CME`, `CBOT`, `NYMEX`
+- **Зачем нужно**: Для генерации правильной ссылки на страницу опционов в TradingView
+  - Пример: `https://www.tradingview.com/options/chain/?symbol=NYSE%3ASE` (для SE на NYSE)
+  - Без этого поля калькулятор угадывает биржу по паттернам тикера, что приводит к ошибкам
+- **Как получить**: Расширение может получить информацию о бирже со страницы TradingView (обычно отображается рядом с тикером)
+
 ---
 
 ## Примечания для разработчика расширения
@@ -260,6 +276,20 @@ localStorage.setItem('tvc_refresh_result', JSON.stringify({
 
 6. **storage event** — калькулятор подписан на `storage` event и автоматически обновится при изменении `calculatorState`.
 
+7. **НОВОЕ: Поле `exchange` в `calculatorState`** — **ОБЯЗАТЕЛЬНО** добавить при записи данных:
+   - Получить информацию о бирже со страницы TradingView (обычно отображается рядом с тикером)
+   - Записать в `calculatorState.exchange` (например, `"NYSE"`, `"NASDAQ"`, `"CME"`, `"CBOT"`, `"NYMEX"`)
+   - **Зачем**: Калькулятор использует это значение для генерации правильной ссылки на TradingView
+   - **Примеры**:
+     - SE торгуется на NYSE → `exchange: "NYSE"` → ссылка: `https://www.tradingview.com/options/chain/?symbol=NYSE%3ASE`
+     - AAPL торгуется на NASDAQ → `exchange: "NASDAQ"` → ссылка: `https://www.tradingview.com/options/chain/?symbol=NASDAQ%3AAAPL`
+     - ES торгуется на CME → `exchange: "CME"` → ссылка: `https://www.tradingview.com/options/chain/?symbol=CME%3AES`
+
+8. **НОВОЕ: URL параметр `exchange` при открытии калькулятора** — передавать при открытии:
+   - При открытии калькулятора из расширения добавить параметр: `?contract=SE&price=123.45&exchange=NYSE`
+   - Калькулятор прочитает этот параметр и будет использовать его для ссылки на TradingView
+   - Если параметр отсутствует — калькулятор будет угадывать биржу по паттернам тикера (fallback)
+
 ---
 
 ## Файлы калькулятора, затронутые интеграцией
@@ -271,4 +301,12 @@ localStorage.setItem('tvc_refresh_result', JSON.stringify({
 
 ---
 
-*Документация создана: 2026-01-20*
+## История обновлений
+
+- **2026-03-31**: Добавлено поле `exchange` для передачи информации о бирже из расширения
+  - Новое поле в `calculatorState.exchange`
+  - Новый URL параметр `?exchange=NYSE`
+  - Обновлена функция `getTradingViewLink` в калькуляторе для использования `exchange`
+  - Добавлена поддержка fallback на паттерны тикера если `exchange` не передан
+
+- **2026-01-20**: Документация создана

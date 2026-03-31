@@ -23,13 +23,14 @@ const STORAGE_KEY = 'calculatorState';
 
 /**
  * Парсинг URL параметров
- * ЗАЧЕМ: Получение contract, price и config из URL при открытии калькулятора
+ * ЗАЧЕМ: Получение contract, price, exchange и config из URL при открытии калькулятора
  */
 function parseUrlParams() {
   const urlParams = new URLSearchParams(window.location.search);
   return {
     contractCode: urlParams.get('contract') || null,
     urlPrice: urlParams.get('price') ? parseFloat(urlParams.get('price')) : null,
+    exchange: urlParams.get('exchange') || null, // Биржа из расширения (NYSE, NASDAQ, CBOT и т.д.)
     // Проверяем, есть ли config в URL — если да, НЕ восстанавливаем данные от расширения
     // ЗАЧЕМ: Конфигурация из URL имеет приоритет над данными расширения
     hasConfigInUrl: !!urlParams.get('config')
@@ -112,7 +113,7 @@ export function useExtensionData() {
   // 3. Если нет URL параметра, но в localStorage есть сохранённые данные с тикером — восстанавливаем их
   // ЗАЧЕМ: При навигации между страницами URL параметры теряются, но данные должны восстанавливаться
   const [state, setState] = useState(() => {
-    const { contractCode, urlPrice, hasConfigInUrl } = urlParamsRef.current;
+    const { contractCode, urlPrice, exchange, hasConfigInUrl } = urlParamsRef.current;
     
     // ВАЖНО: Если есть config в URL — НЕ восстанавливаем данные от расширения
     // ЗАЧЕМ: Конфигурация из URL имеет приоритет, данные будут загружены через loadConfiguration
@@ -121,6 +122,7 @@ export function useExtensionData() {
       return {
         contractCode: null,
         urlPrice: null,
+        exchange: null,
         underlyingPrice: 0,
         ticker: '',
         expirationDate: '',
@@ -148,6 +150,8 @@ export function useExtensionData() {
       contractCode: contractCode || (hasStoredData ? storageState.selectedTicker : null),
       // Цена из URL (приоритет над localStorage)
       urlPrice: urlPrice,
+      // Биржа из URL (NYSE, NASDAQ, CBOT и т.д.)
+      exchange: exchange || storageState?.exchange || null,
       // Цена базового актива (URL > localStorage)
       underlyingPrice: urlPrice || storageState?.underlyingPrice || storageState?.currentPrice || 0,
       // Тикер контракта
@@ -271,6 +275,8 @@ export function useExtensionData() {
     contractCode: state.contractCode,
     // Цена из URL (?price=)
     urlPrice: state.urlPrice,
+    // Биржа из URL (?exchange=) или localStorage
+    exchange: state.exchange,
     // Цена базового актива (URL > localStorage)
     underlyingPrice: state.underlyingPrice,
     // Тикер контракта

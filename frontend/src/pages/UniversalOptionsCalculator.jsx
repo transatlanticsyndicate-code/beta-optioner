@@ -691,29 +691,29 @@ function UniversalOptionsCalculator() {
 
   // Функция генерации ссылки на TradingView для тикера
   // ЗАЧЕМ: Создаёт правильную ссылку на страницу опционов в TradingView с учётом биржи
-  const getTradingViewLink = useCallback((ticker) => {
+  // ПРИОРИТЕТ: exchange из расширения > паттерны тикера > NASDAQ по умолчанию
+  const getTradingViewLink = useCallback((ticker, exchangeFromExtension) => {
     if (!ticker) return null;
 
-    // Определяем биржу на основе паттернов тикера
-    let exchange = 'NASDAQ'; // По умолчанию NASDAQ для акций
-    
-    // Фьючерсы CBOT (зерновые: ZL, ZC, ZS, ZW, ZM и т.д.)
-    if (/^Z[LCSW]|^ZM/.test(ticker)) {
-      exchange = 'CBOT';
+    let exchange = exchangeFromExtension || 'NASDAQ'; // Приоритет: расширение > паттерны > NASDAQ
+
+    // Если расширение не передало exchange — определяем биржу на основе паттернов тикера
+    // ЗАЧЕМ: Fallback для старых версий расширения, которые не передают exchange
+    if (!exchangeFromExtension) {
+      // Фьючерсы CBOT (зерновые: ZL, ZC, ZS, ZW, ZM и т.д.)
+      if (/^Z[LCSW]|^ZM/.test(ticker)) {
+        exchange = 'CBOT';
+      }
+      // Фьючерсы CME (энергия, металлы: CL, NG, GC, SI и т.д.)
+      else if (/^(CL|NG|GC|SI|HG|RB|HO)/.test(ticker)) {
+        exchange = 'NYMEX';
+      }
+      // Фьючерсы CME (индексы, валюты: ES, NQ, YM, 6E и т.д.)
+      else if (/^(ES|NQ|YM|RTY|6[AEBCJSN])/.test(ticker)) {
+        exchange = 'CME';
+      }
+      // Остальные считаем NASDAQ (по умолчанию)
     }
-    // Фьючерсы CME (энергия, металлы: CL, NG, GC, SI и т.д.)
-    else if (/^(CL|NG|GC|SI|HG|RB|HO)/.test(ticker)) {
-      exchange = 'NYMEX';
-    }
-    // Фьючерсы CME (индексы, валюты: ES, NQ, YM, 6E и т.д.)
-    else if (/^(ES|NQ|YM|RTY|6[AEBCJSN])/.test(ticker)) {
-      exchange = 'CME';
-    }
-    // Акции NYSE (можно расширить список известных тикеров)
-    else if (/^(FND|T|BAC|WFC|JPM|C|GE|F|GM)$/.test(ticker)) {
-      exchange = 'NYSE';
-    }
-    // Остальные считаем NASDAQ
 
     const encodedSymbol = encodeURIComponent(`${exchange}:${ticker}`);
     return `https://www.tradingview.com/options/chain/?symbol=${encodedSymbol}`;
@@ -3349,7 +3349,7 @@ function UniversalOptionsCalculator() {
                 <span className="text-sm text-muted-foreground">Актив:</span>
                 {(() => {
                   const ticker = contractCode || selectedTicker;
-                  const tvLink = getTradingViewLink(ticker);
+                  const tvLink = getTradingViewLink(ticker, extensionTicker ? extensionExchange : null);
                   
                   if (tvLink) {
                     return (
