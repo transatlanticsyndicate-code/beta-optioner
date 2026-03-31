@@ -77,8 +77,8 @@ function DatabaseSavedConfigurations() {
       setLoading(true);
       setError(null);
       // ЗАЧЕМ: Загружаем все конфигурации (на сервере может быть 300+)
-      // Увеличен лимит с 100 до 500 для загрузки всех записей
-      const result = await getConfigurations({ limit: 500, offset: 0 });
+      // Максимальный лимит API = 100 (ограничение бэкенда)
+      const result = await getConfigurations({ limit: 100, offset: 0 });
       
       if (result.status === 'success') {
         setConfigurations(result.data);
