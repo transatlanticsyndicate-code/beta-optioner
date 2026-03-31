@@ -125,6 +125,41 @@ function DatabaseSavedConfigurations() {
     }
   };
 
+  // Удаление всех конфигураций
+  const handleDeleteAll = async () => {
+    if (!window.confirm('⚠️ Вы уверены, что хотите удалить ВСЕ конфигурации?\n\nЭто действие необратимо!')) {
+      return;
+    }
+
+    if (!window.confirm('Это действительно удалит все конфигурации. Вы уверены?')) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      let deleted = 0;
+      let failed = 0;
+
+      for (const config of configurations) {
+        try {
+          await deleteConfiguration(config.id, null);
+          deleted++;
+        } catch (err) {
+          console.error(`Ошибка удаления конфигурации ${config.id}:`, err);
+          failed++;
+        }
+      }
+
+      alert(`Удалено: ${deleted}\nОшибок: ${failed}`);
+      await loadConfigurations();
+    } catch (err) {
+      console.error('Ошибка удаления всех конфигураций:', err);
+      alert(`Ошибка: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Открытие конфигурации в режиме редактирования
   const handleEdit = (configId) => {
     navigate(`/tools/universal-calculator?dbConfig=${configId}&edit=true`);
@@ -520,6 +555,25 @@ function DatabaseSavedConfigurations() {
                 </TooltipTrigger>
                 <TooltipContent>
                   <p>Перенести конфигурации из localStorage в БД</p>
+                </TooltipContent>
+              </Tooltip>
+
+              {/* Кнопка удаления всех конфигураций */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={handleDeleteAll}
+                    disabled={configurations.length === 0 || loading}
+                    className="text-xs"
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Удалить всё
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Удалить все конфигурации из БД (требует подтверждения)</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
