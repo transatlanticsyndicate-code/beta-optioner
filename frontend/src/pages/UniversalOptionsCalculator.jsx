@@ -689,14 +689,43 @@ function UniversalOptionsCalculator() {
     });
   }, [selectedTicker, currentPrice, priceChange, options, positions, selectedExpirationDate, daysPassed, chartDisplayMode, showOptionLines, showProbabilityZones, strikesByDate, expirationDates]);
 
+  // Функция генерации ссылки на TradingView для тикера
+  // ЗАЧЕМ: Создаёт правильную ссылку на страницу опционов в TradingView с учётом биржи
+  const getTradingViewLink = useCallback((ticker) => {
+    if (!ticker) return null;
+
+    // Определяем биржу на основе паттернов тикера
+    let exchange = 'NASDAQ'; // По умолчанию NASDAQ для акций
+    
+    // Фьючерсы CBOT (зерновые: ZL, ZC, ZS, ZW, ZM и т.д.)
+    if (/^Z[LCSW]|^ZM/.test(ticker)) {
+      exchange = 'CBOT';
+    }
+    // Фьючерсы CME (энергия, металлы: CL, NG, GC, SI и т.д.)
+    else if (/^(CL|NG|GC|SI|HG|RB|HO)/.test(ticker)) {
+      exchange = 'NYMEX';
+    }
+    // Фьючерсы CME (индексы, валюты: ES, NQ, YM, 6E и т.д.)
+    else if (/^(ES|NQ|YM|RTY|6[AEBCJSN])/.test(ticker)) {
+      exchange = 'CME';
+    }
+    // Акции NYSE (можно расширить список известных тикеров)
+    else if (/^(FND|T|BAC|WFC|JPM|C|GE|F|GM)$/.test(ticker)) {
+      exchange = 'NYSE';
+    }
+    // Остальные считаем NASDAQ
+
+    const encodedSymbol = encodeURIComponent(`${exchange}:${ticker}`);
+    return `https://www.tradingview.com/options/chain/?symbol=${encodedSymbol}`;
+  }, []);
+
   const resetCalculator = useCallback(() => {
     setSelectedTicker('');
     setCurrentPrice(0);
-    setTargetPrice(0);
     setPriceChange({ value: 0, percent: 0 });
     setOptions([]);
     setPositions([]);
-    setSelectedExpirationDate(null); // ВАЖНО: Очищаем закэшированную дату экспирации
+    setSelectedExpirationDate(null);
     setDaysPassed(0);
     setChartDisplayMode('profit-loss-dollar');
     setUserAdjustedDays(false);
@@ -3318,7 +3347,26 @@ function UniversalOptionsCalculator() {
               {/* Код актива */}
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">Актив:</span>
-                <span className="text-lg font-bold">{contractCode || selectedTicker}</span>
+                {(() => {
+                  const ticker = contractCode || selectedTicker;
+                  const tvLink = getTradingViewLink(ticker);
+                  
+                  if (tvLink) {
+                    return (
+                      <a
+                        href={tvLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-lg font-bold text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline transition-colors"
+                        title="Открыть опционы на TradingView"
+                      >
+                        {ticker}
+                      </a>
+                    );
+                  }
+                  
+                  return <span className="text-lg font-bold">{ticker}</span>;
+                })()}
               </div>
 
               {/* Цена базового актива */}

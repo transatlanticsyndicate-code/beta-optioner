@@ -563,10 +563,10 @@ function DatabaseSavedConfigurations() {
                 <TooltipTrigger asChild>
                   <Button
                     size="sm"
-                    variant="destructive"
+                    variant="outline"
                     onClick={handleDeleteAll}
                     disabled={configurations.length === 0 || loading}
-                    className="text-xs"
+                    className="text-xs text-red-600 hover:text-red-700"
                   >
                     <Trash2 className="h-4 w-4 mr-1" />
                     Удалить всё
