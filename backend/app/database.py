@@ -21,11 +21,28 @@ if not DATABASE_URL:
 # Создать engine
 if DATABASE_URL.startswith("sqlite"):
     # SQLite не нужны параметры пула
+    # ВАЖНО: Включаем WAL режим для улучшения производительности при одновременных запросах
+    # ЗАЧЕМ: WAL (Write-Ahead Logging) позволяет одновременные чтения без блокировок
     engine = create_engine(
         DATABASE_URL,
-        connect_args={"check_same_thread": False}
+        connect_args={
+            "check_same_thread": False,
+            "timeout": 30  # Увеличиваем таймаут до 30 секунд для избежания блокировок
+        }
     )
-    print(f"✅ Используем SQLite: {DATABASE_URL}")
+    
+    # Включаем WAL режим для улучшения производительности
+    from sqlalchemy import event
+    @event.listens_for(engine, "connect")
+    def set_sqlite_pragma(dbapi_conn, connection_record):
+        cursor = dbapi_conn.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")  # Баланс между производительностью и надёжностью
+        cursor.execute("PRAGMA cache_size=-64000")  # 64MB кэш
+        cursor.execute("PRAGMA temp_store=MEMORY")  # Временные таблицы в памяти
+        cursor.close()
+    
+    print(f"✅ Используем SQLite с WAL режимом: {DATABASE_URL}")
 else:
     # PostgreSQL с параметрами пула
     engine = create_engine(
