@@ -1,100 +1,141 @@
 # 🚀 Агент Деплоя (Deploy Agent)
 
-**Роль:** Автоматический деплой на beta сервер
+**Роль:** Автоматический деплой на beta сервер по команде пользователя
+
+**Статус:** ✅ Активен и готов к работе
 
 ---
 
-##  Описание
+## 📋 Триггеры
 
-Агент отвечает за автоматический деплой изменений на beta сервер (beta.optioner.online).
+Агент активируется, когда пользователь говорит:
 
-**Триггер:** Пользователь говорит "задеплой", "deploy", "сделай деплой"
+- "задеплой" / "deploy" / "сделай деплой"
+- "закоммить, запушить и задеплоить"
+- "commit, push and deploy"
+- "сделай коммит и деплой"
+- "деплой на бету"
+
+**Разрешения:** ✅ Пользователь заранее дал все разрешения на коммит, пуш и деплой
 
 ---
 
-##  Процесс деплоя
+## ⚙️ Конфигурация
 
-### 1. Подготовка
+**Сервер:**
+- Хост: `89.117.52.143`
+- Пользователь: `root`
+- SSH ключ: `~/.ssh/id_rsa` (через ssh-agent)
+- Директория проекта: `/var/www/beta/`
 
-**Проверки:**
+**Проект:**
+- Remote: `origin` → `https://github.com/transatlanticsyndicate-code/beta-optioner.git`
+- Ветка: `main`
+- PM2 процесс: `optioner-backend-beta`
+- Frontend build: `/Users/andres/Desktop/WINDSURF/beta.optioner.online/frontend/build/`
+
+**Пути:**
+- Проект локально: `/Users/andres/Desktop/WINDSURF/beta.optioner.online/`
+- Backend на сервере: `/var/www/beta/backend/`
+- Frontend на сервере: `/var/www/beta/frontend/build/`
+
+---
+
+## 🔄 Процесс деплоя (7 шагов)
+
+### Шаг 1: Проверка перед деплоем
+
+**Проверить git статус:**
 ```bash
-# Убедиться, что frontend собирается
-cd /Users/andres/Desktop/WINDSURF/beta.optioner.online/frontend
-npm run build --dry-run 2>&1 | head -20
+git status
 ```
 
-**Сообщение пользователю:**
-```
- Начинаю деплой на beta сервер...
+**Если есть изменения:**
+- Продолжить деплой
 
-Проверка перед деплоем:
-✅ Frontend готов к сборке
-✅ Изменения закоммичены
-```
+**Если чисто:**
+- Сообщить: "Нет изменений для коммита. Продолжить деплой?"
 
-### 2. Сборка Frontend
-
-**Команда:**
+**Проверить сборку frontend:**
 ```bash
 cd /Users/andres/Desktop/WINDSURF/beta.optioner.online/frontend
-npm run build
+npm run build 2>&1 | tail -20
 ```
 
-**Ожидаемый результат:**
-```
-Creating an optimized production build...
-Compiled successfully!
+**Ожидаемо:** `Compiled successfully` или `The build folder is ready to be deployed`
+
+---
+
+### Шаг 2: Коммит всех изменений
+
+**Добавить все файлы (кроме .gitignore):**
+```bash
+git add -A
 ```
 
-**Сообщение:**
-```
-✅ Frontend собран
+**Создать коммит:**
+```bash
+git commit -m "Deploy: автоматический деплой изменений
+
+- Обновление frontend
+- Обновление backend
+- Документация и таски"
 ```
 
-### 3. Отправка на сервер
+**Если нет изменений:**
+- Пропустить этот шаг
 
-**Команда:**
+---
+
+### Шаг 3: Пуш на GitHub
+
+```bash
+git push origin main
+```
+
+**Ожидаемо:**
+```
+To https://github.com/transatlanticsyndicate-code/beta-optioner.git
+   <old-hash>..<new-hash>  main -> main
+```
+
+---
+
+### Шаг 4: Отправка Frontend Build на сервер
+
 ```bash
 rsync -avz --delete \
   /Users/andres/Desktop/WINDSURF/beta.optioner.online/frontend/build/ \
   root@89.117.52.143:/var/www/beta/frontend/build/
 ```
 
-**Параметры:**
-- `-a` — archive mode
-- `-v` — verbose
-- `-z` — сжатие
-- `--delete` — синхронизация удалений
+**Параметры rsync:**
+- `-a` — archive mode (сохраняет права, ссылки, времена)
+- `-v` — verbose (подробный вывод)
+- `-z` — сжатие при передаче
+- `--delete` — удалять файлы на сервере, если удалены локально
 
-**Сообщение:**
-```
-✅ Build отправлен на сервер (89.117.52.143)
-```
+---
 
-### 4. Обновление Backend
+### Шаг 5: Обновление Backend на сервере
 
-**Команда:**
 ```bash
 ssh root@89.117.52.143 "cd /var/www/beta && git pull origin main"
 ```
 
-**Ожидаемый результат:**
+**Ожидаемо:**
 ```
-Already up to date.
-# или
-Updating <hash>..<hash>
-```
-
-**Сообщение:**
-```
-✅ Backend обновлён
+Updating <old-hash>..<new-hash>
+Fast-forward
 ```
 
-### 5. Перезапуск сервисов
+---
+
+### Шаг 6: Перезапуск сервисов
 
 **Backend (PM2):**
 ```bash
-ssh root@89.117.52.143 "pm2 restart beta-backend"
+ssh root@89.117.52.143 "pm2 restart optioner-backend-beta"
 ```
 
 **Frontend (Nginx):**
@@ -102,40 +143,38 @@ ssh root@89.117.52.143 "pm2 restart beta-backend"
 ssh root@89.117.52.143 "systemctl reload nginx"
 ```
 
-**Сообщение:**
-```
-✅ Сервисы перезапущены
-```
+---
 
-### 6. Проверка
+### Шаг 7: Проверка после деплоя
 
-**Health check:**
+**Health Check API:**
 ```bash
 curl -s https://beta.optioner.online/api/health
 ```
 
-**Ожидаемый ответ:**
-```json
-{"status": "ok", "timestamp": "2026-04-02T..."}
-```
-
 **Проверка сайта:**
 ```bash
-curl -s -o /dev/null -w "%{http_code}" https://beta.optioner.online
-# Ожидаемо: 200
+curl -s -o /dev/null -w "%{http_code}\n" https://beta.optioner.online
 ```
 
-**Сообщение:**
-```
-✅ Health check пройден
+**Статус PM2:**
+```bash
+ssh root@89.117.52.143 "pm2 status optioner-backend-beta"
 ```
 
-### 7. Финальное сообщение
+**Ожидаемо:**
+- HTTP статус: `200`
+- PM2 статус: `online`
+
+---
+
+## ✅ Финальное сообщение
 
 ```
 🎉 Деплой завершён!
 
-✅ Frontend собран и отправлен
+✅ Изменения закоммичены и отправлены
+✅ Frontend собран и отправлен на сервер
 ✅ Backend обновлён и перезапущен
 ✅ Сервисы работают корректно
 
@@ -159,6 +198,8 @@ curl -s -o /dev/null -w "%{http_code}" https://beta.optioner.online
 
 **Действие:** Остановить деплой
 
+---
+
 ### Ошибка SSH
 
 **Сообщение:**
@@ -166,12 +207,14 @@ curl -s -o /dev/null -w "%{http_code}" https://beta.optioner.online
 ❌ Нет доступа к серверу
 
 Проверьте:
+- SSH ключ добавлен в ssh-agent: ssh-add -l
+- Публичный ключ установлен на сервере: ssh-copy-id root@89.117.52.143
 - Подключение к интернету
-- SSH доступ (root@89.117.52.143)
-- Правильность пароля/ключа
 ```
 
 **Действие:** Остановить деплой
+
+---
 
 ### Ошибка rsync
 
@@ -182,11 +225,27 @@ curl -s -o /dev/null -w "%{http_code}" https://beta.optioner.online
 [вывод ошибки]
 
 Проверьте:
-- Свободное место на сервере
+- Свободное место на сервере: ssh root@89.117.52.143 "df -h"
 - Права доступа к директории
 ```
 
 **Действие:** Остановить деплой
+
+---
+
+### Ошибка PM2
+
+**Сообщение:**
+```
+❌ Ошибка перезапуска backend
+
+[вывод ошибки]
+
+Проверьте логи:
+ssh root@89.117.52.143 "pm2 logs optioner-backend-beta --lines 50"
+```
+
+**Действие:** Показать логи, остановить деплой
 
 ---
 
@@ -196,79 +255,161 @@ curl -s -o /dev/null -w "%{http_code}" https://beta.optioner.online
 - Пароли
 - SSH ключи
 - Токены доступа
+- API ключи
 
 **Хранить в секрете:**
-- `root` пароль от сервера
-- SSH private key
-- API ключи
+- Пароль от сервера
+- Приватные SSH ключи
+- `.env` файлы (игнорируются через .gitignore)
 
 ---
 
-## 📊 Мониторинг
+## 📊 Мониторинг после деплоя
 
-**После деплоя проверить:**
-1. Сайт доступен (HTTP 200)
-2. API отвечает (`/api/health`)
-3. Нет ошибок в логах
+**Команды для проверки:**
 
-**Команды:**
+**Логи PM2:**
 ```bash
-# Логи PM2
-ssh root@89.117.52.143 "pm2 logs beta-backend --lines 50"
+ssh root@89.117.52.143 "pm2 logs optioner-backend-beta --lines 50 --nostream"
+```
 
-# Логи Nginx
+**Логи Nginx:**
+```bash
 ssh root@89.117.52.143 "tail -50 /var/log/nginx/beta.optioner.online.error.log"
+```
 
-# Статус сервисов
-ssh root@89.117.52.143 "pm2 status"
-ssh root@89.117.52.143 "systemctl status nginx"
+**Статус сервисов:**
+```bash
+ssh root@89.117.52.143 "pm2 status && systemctl status nginx"
+```
+
+**Использование памяти:**
+```bash
+ssh root@89.117.52.143 "pm2 info optioner-backend-beta | grep -A 10 'pid'"
 ```
 
 ---
 
-## 🎯 Примеры использования
+## 🎯 Примеры диалогов
 
-### Пользователь: "задеплой"
+### Пример 1: Успешный деплой
+
+**Пользователь:** "задеплой"
 
 **Агент:**
 ```
 🚀 Начинаю деплой на beta сервер...
 
-[шаги 1-7]
+[1/7] Проверка...
+✅ Frontend готов к сборке
+✅ Есть изменения для коммита
+
+[2/7] Коммит...
+✅ Изменения закоммичены (abc1234)
+
+[3/7] Пуш...
+✅ Отправлено на GitHub
+
+[4/7] Frontend...
+✅ Build отправлен на сервер (89.117.52.143)
+
+[5/7] Backend...
+✅ Код обновлён
+
+[6/7] Перезапуск...
+✅ Сервисы перезапущены
+
+[7/7] Проверка...
+✅ Health check пройден
+✅ Сайт доступен (HTTP 200)
 
 🎉 Деплой завершён!
-Сайт доступен: https://beta.optioner.online
+https://beta.optioner.online
 ```
 
-### Пользователь: "deploy"
+---
 
-**Агент:** (то же самое, процесс не зависит от языка)
+### Пример 2: Нет изменений
 
-### Пользователь: "сделай деплой после проверки"
+**Пользователь:** "сделай деплой"
 
 **Агент:**
 ```
-Сначала проверю, что всё готово к деплою...
+Проверяю изменения...
 
-[проверка сборки, тесты, линтер]
+✅ Нет изменений для коммита
+✅ Продолжаю деплой (только пуш и обновление сервера)
 
-✅ Всё готово, начинаю деплой...
-[шаги 1-7]
+[шаги деплоя]
+```
+
+---
+
+### Пример 3: Ошибка сборки
+
+**Пользователь:** "deploy"
+
+**Агент:**
+```
+🚀 Начинаю деплой...
+
+[1/7] Проверка сборки...
+❌ Ошибка сборки frontend
+
+Error: Cannot find module 'react'
+
+Пожалуйста, исправьте ошибки и попробуйте снова.
 ```
 
 ---
 
 ## 📚 Связанные документы
 
+- [`.windsurf/workflows/commit-push-deploy.md`](../workflows/commit-push-deploy.md) — workflow деплоя
 - [`tasks/deploy_agent.md`](../tasks/deploy_agent.md) — таска агента
-- [`DEPLOYMENT.md`](../DEPLOYMENT.md) — документация по деплою
-- [`scripts/deploy_beta.sh`](../scripts/deploy_beta.sh) — скрипт деплоя
+- [`DEPLOYMENT.md`](../DEPLOYMENT.md) — полная документация
 
 ---
 
-##  Команда
+## 🛠️ Быстрые команды
 
-**Агент деплоя** — автоматический деплой без участия человека.
+**Проверка SSH:**
+```bash
+ssh -o BatchMode=yes root@89.117.52.143 "echo 'SSH OK'"
+```
 
-**Время деплоя:** ~2-5 минут
-**Простой сайта:** 10-30 секунд
+**Проверка PM2:**
+```bash
+ssh root@89.117.52.143 "pm2 status"
+```
+
+**Проверка места на диске:**
+```bash
+ssh root@89.117.52.143 "df -h /var/www/beta"
+```
+
+**Экстренный откат:**
+```bash
+ssh root@89.117.52.143 "cd /var/www/beta && git revert HEAD && pm2 restart optioner-backend-beta"
+```
+
+---
+
+## ✅ Чек-лист агента
+
+Перед деплоем:
+- [ ] Git статус проверен
+- [ ] Frontend собирается без ошибок
+- [ ] SSH доступ работает
+
+После деплоя:
+- [ ] Build отправлен на сервер
+- [ ] Backend обновлён
+- [ ] Сервисы перезапущены
+- [ ] Health check пройден
+- [ ] Сайт доступен (HTTP 200)
+- [ ] Пользователь уведомлён
+
+---
+
+**Агент готов к работе!** 🚀
