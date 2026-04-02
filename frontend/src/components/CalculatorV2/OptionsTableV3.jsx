@@ -439,7 +439,8 @@ function OptionsTableV3({
           >
             💾 Сохранить в БД
           </Button>
-          <TooltipProvider>
+          {/* СКРЫТО: Кнопка "Обновить данные незалоченных опционов" */}
+          {/* <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -460,7 +461,7 @@ function OptionsTableV3({
                 <p>Обновить данные опционов</p>
               </TooltipContent>
             </Tooltip>
-          </TooltipProvider>
+          </TooltipProvider> */}
           {/* Кнопка "Сохранить изменения" в режиме редактирования */}
           {isEditMode && hasChanges && (
             <TooltipProvider>
