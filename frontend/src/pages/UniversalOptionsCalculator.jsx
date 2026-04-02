@@ -121,6 +121,7 @@ function UniversalOptionsCalculator() {
   const {
     contractCode,           // Код контракта из URL (?contract=)
     urlPrice,               // Цена из URL (?price=)
+    exchange: extensionExchange,      // Биржа от расширения (NYSE, NASDAQ, CBOT и т.д.)
     underlyingPrice: extensionPrice,  // Цена базового актива
     ticker: extensionTicker,          // Тикер от расширения
     expirationDate: extensionExpirationDate,  // Дата экспирации

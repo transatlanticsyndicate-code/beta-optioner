@@ -429,36 +429,16 @@ function OptionsTableV3({
 
           {/* Супер кнопка для расширенного подбора опционов */}
           <SuperButton onClick={() => setSuperModalOpen(true)} />
-          {/* Меню сохранения */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8"
-                disabled={false}
-                title="Сохранить конфигурацию или зафиксировать позиции"
-              >
-                Сохранить
-                <ChevronDown className="ml-1 h-3 w-3" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuItem onClick={() => onSaveConfiguration && onSaveConfiguration()}>
-                <span>Сохранить текущую конфигурацию</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onSaveToDB && onSaveToDB()}>
-                <span>💾 Сохранить в БД</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => onLockConfiguration && onLockConfiguration()}
-                className="text-red-600 flex items-center gap-1"
-              >
-                <LockIcon size={14} />
-                <span>Зафиксировать позиции</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {/* Кнопка сохранения в БД */}
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8"
+            onClick={() => onSaveToDB && onSaveToDB()}
+            title="Сохранить в БД"
+          >
+            💾 Сохранить в БД
+          </Button>
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>

@@ -47,8 +47,8 @@ function DatabaseSavedConfigurations() {
   const [filterInstrumentType, setFilterInstrumentType] = useState('all');
 
   // Состояние сортировки
-  const [sortField, setSortField] = useState('createdAt');
-  const [sortDirection, setSortDirection] = useState('desc');
+  const [sortField, setSortField] = useState('name');
+  const [sortDirection, setSortDirection] = useState('asc');
 
   // Состояние пагинации
   const [currentPage, setCurrentPage] = useState(1);
@@ -140,7 +140,10 @@ function DatabaseSavedConfigurations() {
       let deleted = 0;
       let failed = 0;
 
-      for (const config of configurations) {
+      // ЗАЧЕМ: Сохраняем копию массива для итерации, т.к. будем очищать state
+      const configsToDelete = [...configurations];
+
+      for (const config of configsToDelete) {
         try {
           await deleteConfiguration(config.id, null);
           deleted++;
@@ -150,7 +153,13 @@ function DatabaseSavedConfigurations() {
         }
       }
 
+      // ЗАЧЕМ: Очищаем локальный state сразу после удаления
+      // Это предотвращает появление записей обратно при перезагрузке
+      setConfigurations([]);
+
       alert(`Удалено: ${deleted}\nОшибок: ${failed}`);
+      
+      // Перезагружаем список с сервера для синхронизации
       await loadConfigurations();
     } catch (err) {
       console.error('Ошибка удаления всех конфигураций:', err);
