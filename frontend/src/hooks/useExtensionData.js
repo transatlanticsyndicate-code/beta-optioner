@@ -202,6 +202,9 @@ export function useExtensionData() {
       ...prev,
       // Цена: приоритет URL > localStorage
       underlyingPrice: urlPrice || storageState.underlyingPrice || prev.underlyingPrice,
+      // Биржа: приоритет URL > localStorage > предыдущее значение
+      // ЗАЧЕМ: Расширение может передать exchange в calculatorState, используем его как fallback
+      exchange: urlParamsRef.current.exchange || storageState.exchange || prev.exchange,
       ticker: storageState.selectedTicker || prev.ticker,
       expirationDate: storageState.selectedExpirationDate || prev.expirationDate,
       options: (storageState.options || []).map(adaptOption),
@@ -261,6 +264,7 @@ export function useExtensionData() {
     setState({
       contractCode: null,
       urlPrice: null,
+      exchange: null,
       underlyingPrice: 0,
       ticker: '',
       expirationDate: '',
