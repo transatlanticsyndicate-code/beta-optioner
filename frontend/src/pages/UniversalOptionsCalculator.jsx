@@ -768,10 +768,17 @@ function UniversalOptionsCalculator() {
 
     // Очищаем данные расширения (тикер контракта и временную метку)
     clearExtensionData();
-    
+
     // Сбрасываем сделку
     setDealInfo(null);
     setActiveCalculatorTab('calculator');
+
+    // ✅ Принудительная перезагрузка страницы
+    // ЗАЧЕМ: Гарантируем полную очистку состояния, предотвращаем восстановление данных из useEffect
+    setTimeout(() => {
+      console.log('🔄 [Universal] Перезагрузка страницы после сброса...');
+      window.location.reload();
+    }, 100);
   }, [clearExtensionData]);
 
   // Функция создания сделки
@@ -1802,11 +1809,11 @@ function UniversalOptionsCalculator() {
     setOptions(prevOptions => {
       // Находим опцион для сохранения override
       const targetOption = prevOptions.find(opt => opt.id === id);
-      
+
       // ВАЖНО: Сохраняем ручные изменения в отдельное хранилище
       // ЗАЧЕМ: Расширение перезаписывает localStorage.calculatorState, теряя изменения
-      // Поля, которые нужно сохранять: quantity, customPremium, customBid, customAsk, entryDate, actualPL, actualPLDate, actualPLPrice, manualIvOverride
-      const fieldsToOverride = ['quantity', 'customPremium', 'customBid', 'customAsk', 'entryDate', 'isPremiumModified', 'isBidModified', 'isAskModified', 'actualPL', 'actualPLDate', 'actualPLPrice', 'manualIvOverride'];
+      // Поля, которые нужно сохранять: quantity, customPremium, customBid, customAsk, entryDate, actualPL, actualPLDate, actualPLPrice, manualIvOverride, manualIvOverrideDate
+      const fieldsToOverride = ['quantity', 'customPremium', 'customBid', 'customAsk', 'entryDate', 'isPremiumModified', 'isBidModified', 'isAskModified', 'actualPL', 'actualPLDate', 'actualPLPrice', 'manualIvOverride', 'manualIvOverrideDate'];
       if (targetOption && fieldsToOverride.includes(field)) {
         saveUserOverride(targetOption, field, value);
       }

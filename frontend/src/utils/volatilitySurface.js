@@ -379,24 +379,91 @@ export const getOptionVolatility = (option, currentDaysToExpiration = null, simu
   const DEFAULT_IV = 25;
 
   // ЗАЧЕМ: manualIvOverride имеет приоритет над IV из API
-  // todayDaysToExpiration = дни от реального сегодня до экспирации (calculateDaysToExpirationFromToday)
-  // simDays >= todayDays → это сегодня или прошлое → возвращаем manualIvOverride напрямую
-  // simDays < todayDays → это будущее → проецируем вперёд от сегодняшней IV
+  // ВАЖНО: Пересчитываем IV от даты ввода manualIvOverride до целевой даты (сегодня или позиция ползунка)
+  // ЗАЧЕМ: IV должна равняться manualIvOverride только в день ввода, а в другие дни — пересчитываться
   if (manualIvOverride && manualIvOverride > 0) {
     const manualIVPercent = manualIvOverride < 1 ? manualIvOverride * 100 : manualIvOverride;
-    const todayDays = todayDaysToExpiration ?? currentDaysToExpiration;
-
-    // Сегодня или прошлое — возвращаем напрямую
-    if (todayDays === null || simulatedDaysToExpiration === null || simulatedDaysToExpiration >= todayDays) {
+    
+    // Получаем дату ввода manualIvOverride (если есть)
+    // ЗАЧЕМ: От этой даты начинается перерасчёт IV
+    // ВАЖНО: Миграция для старых записей — если нет manualIvOverrideDate, используем entryDate или today
+    let overrideDate = option.manualIvOverrideDate;
+    if (!overrideDate && manualIvOverride) {
+      // Миграция: для старых записей используем entryDate или сегодняшнюю дату
+      overrideDate = option.entryDate || new Date().toISOString().split('T')[0];
+      console.log('🔄 [getOptionVolatility] Миграция: используем entryDate вместо manualIvOverrideDate:', overrideDate);
+    }
+    
+    // DEBUG: Логируем для отладки
+    console.log('📊 [getOptionVolatility]', {
+      optionId: option.id,
+      manualIvOverride,
+      overrideDate,
+      manualIvOverrideDate: option.manualIvOverrideDate,
+      currentDaysToExpiration,
+      simulatedDaysToExpiration,
+      todayDaysToExpiration
+    });
+    
+    // Если даты ввода нет — возвращаем manualIvOverride (старое поведение для совместимости)
+    if (!overrideDate) {
+      console.log('  ⚠️ [getOptionVolatility] Нет overrideDate, возвращаем manualIvOverride');
       return manualIVPercent;
     }
-
-    // Будущее — проецируем от сегодняшней точки (todayDays, 40%) вперёд
-    if (simulatedDaysToExpiration > 0) {
-      return getProjectedIV(option, todayDays, simulatedDaysToExpiration, ivSurface, ouParams, manualIvOverride);
+    
+    // Определяем базовую точку: дни до экспирации на момент ввода Fact IV
+    // todayDaysToExpiration = дни до экспирации от СЕГОДНЯ
+    // daysSinceOverride = сколько дней прошло с момента ввода
+    // baseDays = дни до экспирации на момент ввода = todayDays + daysSinceOverride
+    const today = new Date().toISOString().split('T')[0];
+    const overrideDateObj = new Date(overrideDate);
+    const todayObj = new Date(today);
+    const daysSinceOverride = Math.floor((todayObj - overrideDateObj) / (1000 * 60 * 60 * 24));
+    
+    const todayDays = todayDaysToExpiration ?? currentDaysToExpiration ?? 0;
+    const baseDaysToExpiration = todayDays + daysSinceOverride;
+    
+    // Определяем целевую точку: куда смотрим (сегодня или позиция ползунка)
+    const targetDaysToExpiration = (simulatedDaysToExpiration !== null && simulatedDaysToExpiration !== undefined)
+      ? simulatedDaysToExpiration
+      : todayDays;
+    
+    console.log('  📅 [getOptionVolatility] Расчёт:', {
+      today,
+      daysSinceOverride,
+      todayDays,
+      baseDaysToExpiration,
+      targetDaysToExpiration
+    });
+    
+    // Если целевая дата == дате ввода — возвращаем manualIvOverride напрямую
+    // ЗАЧЕМ: В день ввода IV должна равняться введённому значению
+    const daysFromBaseToTarget = baseDaysToExpiration - targetDaysToExpiration;
+    const targetDate = new Date(overrideDate);
+    targetDate.setDate(targetDate.getDate() + daysFromBaseToTarget);
+    const targetDateStr = targetDate.toISOString().split('T')[0];
+    
+    console.log('  🎯 [getOptionVolatility] Целевая дата:', { targetDateStr, overrideDate });
+    
+    if (overrideDate === targetDateStr) {
+      console.log('  ✅ [getOptionVolatility] Дата совпадает, возвращаем manualIvOverride');
+      return manualIVPercent;
     }
-
-    return manualIVPercent;
+    
+    // Пересчитываем IV от даты ввода до целевой даты (сегодня или позиция ползунка)
+    // ЗАЧЕМ: Используем getProjectedIV для расчёта изменения IV за прошедшие/будущие дни
+    const projectedIV = getProjectedIV(
+      option,
+      baseDaysToExpiration,  // дни до экспирации от даты ввода (базовая точка)
+      targetDaysToExpiration,  // целевая дата (сегодня или позиция ползунка)
+      ivSurface,
+      ouParams,
+      manualIvOverride  // якорное значение IV
+    );
+    
+    console.log('   [getOptionVolatility] Projected IV:', projectedIV);
+    
+    return projectedIV;
   }
 
   // Стандартная логика без manualIvOverride

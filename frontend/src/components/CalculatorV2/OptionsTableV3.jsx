@@ -267,15 +267,26 @@ function OptionsTableV3({
 
   // Обработчик изменения фактической IV для опциона
   // ЗАЧЕМ: Позволяет пользователю корректировать волатильность для каждого опциона отдельно
+  // ВАЖНО: Сохраняем дату ввода (manualIvOverrideDate) для корректного перерасчёта IV в будущем
   const handleIvOverrideChange = React.useCallback((optionId, value) => {
     const numValue = value ? parseFloat(value) : null;
-    
+
     // Валидация: 1-200%
     if (numValue !== null && (numValue < 1 || numValue > 200)) {
       return;
     }
-    
-    handleFieldChange(optionId, 'manualIvOverride', numValue);
+
+    // Сохраняем manualIvOverride и дату ввода
+    // ЗАЧЕМ: Дата нужна для перерасчёта IV от якорного значения до текущей даты
+    if (numValue !== null) {
+      const today = new Date().toISOString().split('T')[0]; // ISO формат: YYYY-MM-DD
+      handleFieldChange(optionId, 'manualIvOverride', numValue);
+      handleFieldChange(optionId, 'manualIvOverrideDate', today);
+    } else {
+      // Если поле очищено — удаляем якорные значения
+      handleFieldChange(optionId, 'manualIvOverride', null);
+      handleFieldChange(optionId, 'manualIvOverrideDate', null);
+    }
   }, []);
 
   // Обработчик изменения фактической P&L для опциона
