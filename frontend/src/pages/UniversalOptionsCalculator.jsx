@@ -1312,8 +1312,15 @@ function UniversalOptionsCalculator() {
 
     // Если тикер изменился и это не первая инициализация
     if (prevTickerRef.current && prevTickerRef.current !== currentTicker && currentTicker) {
-      console.log('🔄 [Universal] Смена тикера с', prevTickerRef.current, 'на', currentTicker, '- очистка позиций');
-      setPositions([]);
+      console.log('🔄 [Universal] Смена тикера с', prevTickerRef.current, 'на', currentTicker, '- полный сброс калькулятора');
+      
+      // Полный сброс калькулятора перед добавлением опционов от нового тикера
+      // ЗАЧЕМ: Предотвращаем смешивание опционов от разных акций
+      resetCalculator();
+      
+      // Не обновляем prevTickerRef здесь — resetCalculator сбросит isInitialized,
+      // и при следующей инициализации prevTickerRef будет установлен заново
+      return;
     }
 
     // Обновляем ref для следующей проверки
@@ -1321,7 +1328,7 @@ function UniversalOptionsCalculator() {
       prevTickerRef.current = currentTicker;
       console.log('📝 [Universal] prevTickerRef обновлен на:', currentTicker);
     }
-  }, [isInitialized, extensionTicker, contractCode, selectedTicker, positions.length]);
+  }, [isInitialized, extensionTicker, contractCode, selectedTicker, positions.length, resetCalculator]);
 
   // === СИНХРОНИЗАЦИЯ С CHROME EXTENSION ===
   // ЗАЧЕМ: Автоматическое обновление при изменении данных расширением (storage event)
