@@ -470,33 +470,54 @@ function UniversalOptionsCalculator() {
 
   // Загрузка дивидендной доходности при выборе тикера
   // ЗАЧЕМ: Для модели Black-Scholes-Merton нужна dividend yield
+  // 🛑 ИСПРАВЛЕНИЕ: Добавлена проверка доступности API + debounce для предотвращения частых запросов
   useEffect(() => {
-    const fetchDividendYield = async () => {
-      if (!selectedTicker) {
-        setDividendYield(0);
-        return;
-      }
+    if (!selectedTicker) {
+      setDividendYield(0);
+      return;
+    }
+
+    // 🛑 НЕ запрашиваем dividend yield для крипто-тикеров и фьючерсов
+    if (CRYPTO_TICKERS.includes(selectedTicker) || calculatorMode === CALCULATOR_MODES.FUTURES) {
+      setDividendYield(0);
+      return;
+    }
+
+    // 🛑 Debounce: не запрашиваем чаще чем раз в 5 секунд
+    let cancelled = false;
+    const timeoutId = setTimeout(async () => {
+      if (cancelled) return;
 
       setDividendLoading(true);
       try {
-        const response = await fetch(`/api/polygon/dividend-yield/${selectedTicker}`);
+        const response = await fetch(`/api/polygon/dividend-yield/${selectedTicker}`, {
+          signal: AbortSignal.timeout(3000) // 🛑 Таймаут 3 секунды
+        });
         if (response.ok) {
           const data = await response.json();
-          setDividendYield(data.dividend_yield || 0);
-          console.log(`📊 Dividend yield для ${selectedTicker}: ${(data.dividend_yield * 100).toFixed(2)}%`);
+          if (!cancelled) {
+            setDividendYield(data.dividend_yield || 0);
+            console.log(`📊 Dividend yield для ${selectedTicker}: ${(data.dividend_yield * 100).toFixed(2)}%`);
+          }
         } else {
-          setDividendYield(0);
+          if (!cancelled) setDividendYield(0);
         }
       } catch (error) {
-        console.error('Ошибка загрузки dividend yield:', error);
-        setDividendYield(0);
+        // 🛑 НЕ логируем ошибки если это AbortError или NetworkError (бета сервер может быть недоступен)
+        if (error.name !== 'AbortError' && !cancelled) {
+          console.warn(`⚠️ Dividend yield недоступен для ${selectedTicker}: ${error.message}`);
+          setDividendYield(0);
+        }
       } finally {
-        setDividendLoading(false);
+        if (!cancelled) setDividendLoading(false);
       }
-    };
+    }, 500); // 🛑 Debounce 500ms
 
-    fetchDividendYield();
-  }, [selectedTicker]);
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
+  }, [selectedTicker, calculatorMode]);
 
   // State для позиций
   const [positions, setPositions] = useState([]); // Убрано демо-данные AAPL
@@ -1296,31 +1317,48 @@ function UniversalOptionsCalculator() {
 
   // === ОТСЛЕЖИВАНИЕ ИЗМЕНЕНИЯ ТИКЕРА ДЛЯ ОЧИСТКИ ПОЗИЦИЙ ===
   // ЗАЧЕМ: При переключении на другой инструмент очищаем позиции базового актива
+  // 🛑 ИСПРАВЛЕНИЕ: Используем ref для prevTicker и resetCalculatorFn чтобы избежать пересоздания эффекта
+  const resetCalculatorFn = useRef(resetCalculator);
+  resetCalculatorFn.current = resetCalculator;
+
   useEffect(() => {
     if (!isInitialized) return;
 
     const currentTicker = extensionTicker || contractCode || selectedTicker;
-
-    console.log('🔍 [Universal] Проверка тикера:', {
-      prevTicker: prevTickerRef.current,
-      currentTicker,
-      extensionTicker,
-      contractCode,
-      selectedTicker,
-      positionsCount: positions.length
-    });
+    const prevTicker = prevTickerRef.current;
 
     // Если тикер изменился и это не первая инициализация
-    if (prevTickerRef.current && prevTickerRef.current !== currentTicker && currentTicker) {
-      console.log('🔄 [Universal] Смена тикера с', prevTickerRef.current, 'на', currentTicker, '- полный сброс калькулятора');
+    if (prevTicker && prevTicker !== currentTicker && currentTicker) {
+      console.log('🔄 [Universal] Смена тикера с', prevTicker, 'на', currentTicker, '- полный сброс калькулятора');
+
+      // 🛑 КРИТИЧНОЕ ИСПРАВЛЕНИЕ: НЕ вызываем resetCalculator напрямую
+      // вместо этого очищаем только позиции и опционы, БЕЗ перезагрузки страницы
+      // ЗАЧЕМ: Перезагрузка страницы приводит к повторному срабатыванию эффекта → бесконечный цикл
       
-      // Полный сброс калькулятора перед добавлением опционов от нового тикера
-      // ЗАЧЕМ: Предотвращаем смешивание опционов от разных акций
-      resetCalculator();
+      // Очищаем опционы и позиции БЕЗ полной перезагрузки
+      setPositions([]);
+      setOptions([]);
+      setExpirationDates({});
+      setStrikesByDate({});
+      setSelectedExpirationDate(null);
+      setDaysPassed(0);
+      setSavedConfigDate(null);
+      setLoadedConfigId(null);
+      setIsEditMode(false);
+      setHasChanges(false);
+      setDealInfo(null);
+      setActiveCalculatorTab('calculator');
+      setOptionSelectionParams(null);
       
-      // Не обновляем prevTickerRef здесь — resetCalculator сбросит isInitialized,
-      // и при следующей инициализации prevTickerRef будет установлен заново
-      return;
+      // Очищаем localStorage
+      localStorage.removeItem('calculatorState');
+      localStorage.removeItem('optioner_user_overrides');
+      userOptionOverridesRef.current = {};
+
+      // Обновляем prevTickerRef ПОСЛЕ очистки
+      prevTickerRef.current = currentTicker;
+      console.log('📝 [Universal] prevTickerRef обновлен на:', currentTicker);
+      return; // ВАЖНО: НЕ продолжаем выполнение после очистки
     }
 
     // Обновляем ref для следующей проверки
@@ -1328,14 +1366,38 @@ function UniversalOptionsCalculator() {
       prevTickerRef.current = currentTicker;
       console.log('📝 [Universal] prevTickerRef обновлен на:', currentTicker);
     }
-  }, [isInitialized, extensionTicker, contractCode, selectedTicker, positions.length, resetCalculator]);
+  }, [isInitialized, extensionTicker, contractCode, selectedTicker]); // 🛑 Убраны positions.length и resetCalculator из зависимостей
+
+  // Ref для отслеживания предыдущих значений extensionOptions
+  // ЗАЧЕМ: Предотвращаем бесконечный цикл — сравниваем с предыдущими данными
+  const prevExtensionOptionsRef = useRef(null);
 
   // === СИНХРОНИЗАЦИЯ С CHROME EXTENSION ===
   // ЗАЧЕМ: Автоматическое обновление при изменении данных расширением (storage event)
   // ВАЖНО: НЕ синхронизируем если загружена конфигурация из URL — данные конфигурации имеют приоритет
   useEffect(() => {
     if (!isInitialized) return;
-    
+
+    // 🛑 КРИТИЧНОЕ ИСПРАВЛЕНИЕ: Сравниваем с предыдущими данными
+    // ЗАЧЕМ: Предотвращаем бесконечный цикл — эффект вызывается, но setOptions НЕ срабатывает если данные идентичны
+    const currentExtKey = JSON.stringify({
+      options: extensionOptions?.map(o => `${o.strike}-${o.type}-${o.date}-${o.quantity}`).sort(),
+      price: extensionPrice,
+      ticker: extensionTicker,
+      expiration: extensionExpirationDate
+    });
+
+    const prevKey = prevExtensionOptionsRef.current;
+
+    // Если данные не изменились — пропускаем
+    if (prevKey === currentExtKey) {
+      // console.log('⏭️ [Sync] Данные расширения не изменились — пропускаем');
+      return;
+    }
+
+    // Обновляем ref для следующей проверки
+    prevExtensionOptionsRef.current = currentExtKey;
+
     console.log('🔔 [SYNC TRIGGERED]', {
       loadedConfigId,
       isLocked,
@@ -1616,8 +1678,9 @@ function UniversalOptionsCalculator() {
       });
     }
 
-    // Обновляем цену
-    if (extensionPrice > 0) {
+    // Обновляем цену ТОЛЬКО если она изменилась
+    // 🛑 ИСПРАВЛЕНИЕ: НЕ вызываем setCurrentPrice если цена не изменилась
+    if (extensionPrice > 0 && extensionPrice !== currentPrice) {
       setCurrentPrice(extensionPrice);
       // Обновляем targetPrice только если она ещё не была изменена пользователем
       if (targetPrice === 0 || targetPrice === currentPrice) {
@@ -1625,7 +1688,8 @@ function UniversalOptionsCalculator() {
       }
     }
 
-    // Обновляем тикер
+    // Обновляем тикер ТОЛЬКО если он изменился
+    // 🛑 ИСПРАВЛЕНИЕ: НЕ вызываем setSelectedTicker если тикер не изменился
     if (extensionTicker && extensionTicker !== selectedTicker) {
       setSelectedTicker(extensionTicker);
     }
