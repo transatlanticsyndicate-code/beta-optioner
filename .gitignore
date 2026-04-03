@@ -118,3 +118,7 @@ creds.txt
 
 # Theta Terminal (локальный исполняемый файл, не нужен в репозитории)
 ThetaTerminalv3.jar
+
+# Локальные скрипты и инструменты разработчика
+scripts/restart-chrome.sh
+docs/chrome_debug/
