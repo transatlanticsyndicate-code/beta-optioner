@@ -122,3 +122,8 @@ ThetaTerminalv3.jar
 # Локальные скрипты и инструменты разработчика
 scripts/restart-chrome.sh
 docs/chrome_debug/
+
+# IDE и AI-инструменты (только локальные)
+.windsurf/
+.qwen/
+.workspaces/

@@ -1,8 +1,0 @@
-{
-  "folders": [
-    {"name": "Core", "path": "../core"},
-    {"name": "Docs", "path": "../docs"},
-    {"name": "Windsurf", "path": "../.windsurf"}
-  ],
-  "settings": {}
-}
