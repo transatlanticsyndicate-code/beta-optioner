@@ -1008,31 +1008,45 @@ function UniversalOptionsCalculator() {
             
             // Применяем savedOverrides из userOptionOverridesRef к загруженным опционам
             // ЗАЧЕМ: При перезагрузке расширением ручные изменения (actualPL, manualIvOverride, customAsk) терялись
+            // ВАЖНО: Если опцион пришёл от расширения и у него есть impliedVolatility — НЕ применяем manualIvOverride,
+            // потому что расширение передало актуальное impliedVolatility для колонки "IV"
             const todayDateRestore = new Date().toISOString().split('T')[0];
             optionsToSet = optionsToSet.map(opt => {
               const optionKey = getOptionKey(opt);
               const savedOverrides = userOptionOverridesRef.current[optionKey] || {};
-              
+
               // Исключаем entryDate из savedOverrides
               // ЗАЧЕМ: entryDate не должен перезаписываться из savedOverrides, только из конфигурации
               const { entryDate: _, ...overridesWithoutEntryDate } = savedOverrides;
-              const hasSavedOverrides = Object.keys(overridesWithoutEntryDate).length > 0;
               
+              // Если опцион пришёл от расширения и у него есть impliedVolatility — исключаем manualIvOverride
+              const isNewOptionFromExtension = !originalOptionKeys.has(optionKey);
+              if (isNewOptionFromExtension && opt.impliedVolatility && opt.impliedVolatility > 0) {
+                const { manualIvOverride, manualIvOverrideDate, ...otherOverrides } = overridesWithoutEntryDate;
+                const hasOtherOverrides = Object.keys(otherOverrides).length > 0;
+                if (hasOtherOverrides) {
+                  console.log('🔄 [Restore] Применяем savedOverrides (без manualIvOverride):', { optionKey, savedOverrides: otherOverrides });
+                  return { ...opt, ...otherOverrides };
+                }
+                return opt;
+              }
+              
+              const hasSavedOverrides = Object.keys(overridesWithoutEntryDate).length > 0;
+
               if (hasSavedOverrides) {
                 console.log('🔄 [Restore] Применяем savedOverrides:', { optionKey, savedOverrides: overridesWithoutEntryDate });
                 return { ...opt, ...overridesWithoutEntryDate };
               }
-              
+
               // Проверяем, был ли этот опцион в исходной конфигурации
               // ЗАЧЕМ: Отличить "новый опцион от расширения" от "старого сохраненного опциона"
               // Новый опцион = его нет в originalOptionKeys, старый = есть в originalOptionKeys
-              const isNewOptionFromExtension = !originalOptionKeys.has(optionKey);
-              
+
               if (isNewOptionFromExtension && opt.entryDate === fallbackEntryDate) {
                 console.log('📅 [Restore] Новый опцион от расширения, ставим сегодняшнюю дату:', { optionKey, old: opt.entryDate, new: todayDateRestore });
                 return { ...opt, entryDate: todayDateRestore };
               }
-              
+
               return opt;
             });
             
@@ -1281,10 +1295,24 @@ function UniversalOptionsCalculator() {
 
           // Восстанавливаем опционы с применением savedOverrides
           // ЗАЧЕМ: При перезагрузке ручные изменения (actualPL, manualIvOverride и др.) могут отсутствовать в localStorage
+          // ВАЖНО: Если опцион пришёл от расширения (isFromExtension=true), НЕ применяем manualIvOverride из savedOverrides,
+          // потому что расширение передало актуальное impliedVolatility, которое должно идти в колонку "IV", а не "Fact IV"
           const restoredOptions = (state.options || []).map(opt => {
             const base = { ...opt, entryDate: opt.entryDate || new Date().toISOString().split('T')[0] };
             const optionKey = getOptionKey(base);
             const savedOverrides = userOptionOverridesRef.current[optionKey] || {};
+            
+            // Если опцион пришёл от расширения и у него есть impliedVolatility — не применяем manualIvOverride
+            if (isFromExtension && base.impliedVolatility && base.impliedVolatility > 0) {
+              // Удаляем manualIvOverride из savedOverrides чтобы не затирать impliedVolatility от расширения
+              const { manualIvOverride, manualIvOverrideDate, ...otherOverrides } = savedOverrides;
+              if (Object.keys(otherOverrides).length > 0) {
+                return { ...base, ...otherOverrides };
+              }
+              return base;
+            }
+            
+            // Для опционов созданных вручную или без impliedVolatility — применяем все savedOverrides
             if (Object.keys(savedOverrides).length > 0) {
               return { ...base, ...savedOverrides };
             }
@@ -1533,11 +1561,13 @@ function UniversalOptionsCalculator() {
         }
 
         // Сливаем данные: берем свежие данные от расширения, но применяем сохраненные ручные изменения
+        // ВАЖНО: Если опцион пришёл от расширения и у него есть impliedVolatility — НЕ применяем manualIvOverride,
+        // потому что расширение передало актуальное impliedVolatility для колонки "IV"
         const mergedOptions = extensionOptions.map(extOption => {
           // Получаем сохраненные ручные изменения для этого опциона
           const optionKey = getOptionKey(extOption);
           const savedOverrides = userOptionOverridesRef.current[optionKey] || {};
-          
+
           // Ищем соответствующий опцион в текущих данных с более гибким сравнением
           const existingOption = prevOptions.find(existing => {
             const existingType = existing.type || existing.optionType || '';
@@ -1569,6 +1599,7 @@ function UniversalOptionsCalculator() {
 
           // Применяем сохраненные ручные изменения (приоритет: savedOverrides > existingOption > extOption)
           // ЗАЧЕМ: savedOverrides хранятся в отдельном localStorage, который расширение не перезаписывает
+          // ВАЖНО: Если опцион от расширения имеет impliedVolatility — НЕ берём manualIvOverride из savedOverrides
           const quantity = savedOverrides.quantity ?? existingOption?.quantity ?? extOption.quantity;
           const customBid = savedOverrides.customBid ?? existingOption?.customBid;
           const customAsk = savedOverrides.customAsk ?? existingOption?.customAsk;
@@ -1577,7 +1608,11 @@ function UniversalOptionsCalculator() {
           const actualPL = savedOverrides.actualPL ?? existingOption?.actualPL;
           const actualPLDate = savedOverrides.actualPLDate ?? existingOption?.actualPLDate;
           const actualPLPrice = savedOverrides.actualPLPrice ?? existingOption?.actualPLPrice;
-          const manualIvOverride = savedOverrides.manualIvOverride ?? existingOption?.manualIvOverride;
+          
+          // КЛЮЧЕВОЙ МОМЕНТ: Если опцион от расширения имеет свой impliedVolatility,
+          // НЕ применяем manualIvOverride из savedOverrides — пусть impliedVolatility идёт в колонку "IV"
+          const hasExtensionIV = extOption.impliedVolatility && extOption.impliedVolatility > 0;
+          const manualIvOverride = hasExtensionIV ? undefined : (savedOverrides.manualIvOverride ?? existingOption?.manualIvOverride);
           
           console.log('🔍 [Merge Debug]:', {
             optionKey,
@@ -2635,25 +2670,39 @@ function UniversalOptionsCalculator() {
           // Применяем savedOverrides из userOptionOverridesRef к загруженным опционам
           // ЗАЧЕМ: При повторном вызове loadConfiguration (перезагрузка расширением)
           // ручные изменения (actualPL, manualIvOverride, customAsk и др.) терялись
+          // ВАЖНО: Если опцион пришёл от расширения и у него есть impliedVolatility — НЕ применяем manualIvOverride,
+          // потому что расширение передало актуальное impliedVolatility для колонки "IV"
           const todayDate = new Date().toISOString().split('T')[0];
           optionsToSet = optionsToSet.map(opt => {
             const optionKey = getOptionKey(opt);
             const savedOverrides = userOptionOverridesRef.current[optionKey] || {};
-            
+
             // Исключаем entryDate из savedOverrides
             // ЗАЧЕМ: entryDate не должен перезаписываться из savedOverrides, только из конфигурации
             const { entryDate: _, ...overridesWithoutEntryDate } = savedOverrides;
-            const hasSavedOverrides = Object.keys(overridesWithoutEntryDate).length > 0;
-            
-            if (hasSavedOverrides) {
-              console.log('🔄 [LoadConfig] Применяем savedOverrides:', { optionKey, savedOverrides: overridesWithoutEntryDate });
-              return { ...opt, ...overridesWithoutEntryDate };
-            }
             
             // Проверяем, был ли этот опцион в исходной конфигурации
             // ЗАЧЕМ: Отличить "новый опцион от расширения" от "старого сохраненного опциона"
             // Новый опцион = его нет в originalOptionKeys, старый = есть в originalOptionKeys
             const isNewOptionFromExtension = !originalOptionKeys.has(optionKey);
+            
+            // Если опцион от расширения и у него есть impliedVolatility — исключаем manualIvOverride
+            if (isNewOptionFromExtension && opt.impliedVolatility && opt.impliedVolatility > 0) {
+              const { manualIvOverride, manualIvOverrideDate, ...otherOverrides } = overridesWithoutEntryDate;
+              const hasOtherOverrides = Object.keys(otherOverrides).length > 0;
+              if (hasOtherOverrides) {
+                console.log('🔄 [LoadConfig] Применяем savedOverrides (без manualIvOverride):', { optionKey, savedOverrides: otherOverrides });
+                return { ...opt, ...otherOverrides };
+              }
+              return opt;
+            }
+            
+            const hasSavedOverrides = Object.keys(overridesWithoutEntryDate).length > 0;
+
+            if (hasSavedOverrides) {
+              console.log('🔄 [LoadConfig] Применяем savedOverrides:', { optionKey, savedOverrides: overridesWithoutEntryDate });
+              return { ...opt, ...overridesWithoutEntryDate };
+            }
             
             if (isNewOptionFromExtension && opt.entryDate === fallbackEntryDate) {
               console.log('📅 [LoadConfig] Новый опцион от расширения, ставим сегодняшнюю дату:', { optionKey, old: opt.entryDate, new: todayDate });
