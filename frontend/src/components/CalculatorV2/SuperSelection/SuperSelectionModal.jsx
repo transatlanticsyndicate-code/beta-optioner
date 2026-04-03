@@ -565,7 +565,7 @@ function SuperSelectionModal({
                             <div className="space-y-4 border rounded-lg p-4 bg-slate-50">
                                 {/* 1. Прогноз (верх/низ в зависимости от режима) */}
                                 <div className="space-y-2">
-                                    <Label className="text-sm font-medium">
+                                    <Label htmlFor="super-growth-percent" className="text-sm font-medium">
                                         {activeMode === 'LONG'
                                             ? "Показать прогноз по верху (% и Цена)"
                                             : "Показать прогноз по низу (% и Цена)"
@@ -574,6 +574,7 @@ function SuperSelectionModal({
                                     <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
                                         <div className="relative">
                                             <Input
+                                                id="super-growth-percent"
                                                 type="number"
                                                 value={growthPercent}
                                                 onChange={handleGrowthPercentChange}
@@ -587,6 +588,7 @@ function SuperSelectionModal({
 
                                         <div className="relative">
                                             <Input
+                                                id="super-growth-price"
                                                 type="number"
                                                 value={growthPrice}
                                                 onChange={handleGrowthPriceChange}
@@ -603,7 +605,7 @@ function SuperSelectionModal({
 
                                 {/* 2. Цель падения/роста */}
                                 <div className="space-y-2">
-                                    <Label className="text-sm font-medium">
+                                    <Label htmlFor="super-drop-percent" className="text-sm font-medium">
                                         {activeMode === 'LONG' ? (
                                             step === 1
                                                 ? "Ищем опцион с минимальным убытком при падении актива на (% и Цена)"
@@ -617,6 +619,7 @@ function SuperSelectionModal({
                                     <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
                                         <div className="relative">
                                             <Input
+                                                id="super-drop-percent"
                                                 type="number"
                                                 value={dropPercent}
                                                 onChange={handleDropPercentChange}
@@ -630,6 +633,7 @@ function SuperSelectionModal({
 
                                         <div className="relative">
                                             <Input
+                                                id="super-drop-price"
                                                 type="number"
                                                 value={dropPrice}
                                                 onChange={handleDropPriceChange}
@@ -646,12 +650,13 @@ function SuperSelectionModal({
 
                                 {/* 3. Выход на день (для обоих шагов) */}
                                 <div className="space-y-2">
-                                    <Label className="text-sm font-medium">
+                                    <Label htmlFor="super-exit-day" className="text-sm font-medium">
                                         Выход на (день)
                                     </Label>
                                     <div className="flex items-center gap-2">
                                         <div className="relative w-full">
                                             <Input
+                                                id="super-exit-day"
                                                 type="number"
                                                 value={exitDay}
                                                 onChange={(e) => setExitDay(e.target.value)}

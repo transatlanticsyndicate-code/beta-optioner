@@ -151,7 +151,7 @@ function PriceAndTimeSettings({
       {/* Цена базового актива */}
       <div className="space-y-3">
         <div className="flex flex-col gap-1">
-          <Label className={`${compact ? 'text-xs' : 'text-sm'} font-medium`}>Цена базового актива</Label>
+          <Label htmlFor="base-asset-price" className={`${compact ? 'text-xs' : 'text-sm'} font-medium`}>Цена базового актива</Label>
           {!compact && (
             <span className="text-xs text-muted-foreground">
               допустимый диапазон: ${calculatedMinPrice.toFixed(2)} – ${calculatedMaxPrice.toFixed(2)}
@@ -161,11 +161,12 @@ function PriceAndTimeSettings({
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground min-w-[20px]">$</span>
           <Input
+            id="base-asset-price"
             type="number"
             value={priceInput}
             onChange={handlePriceInputChange}
             onFocus={() => { priceInputFocusedRef.current = true; }}
-            onBlur={() => { 
+            onBlur={() => {
               priceInputFocusedRef.current = false;
               setPriceInput(targetPrice.toFixed(2));
             }}

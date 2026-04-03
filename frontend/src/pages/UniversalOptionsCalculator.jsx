@@ -1335,13 +1335,17 @@ function UniversalOptionsCalculator() {
       // вместо этого очищаем только позиции и опционы, БЕЗ перезагрузки страницы
       // ЗАЧЕМ: Перезагрузка страницы приводит к повторному срабатыванию эффекта → бесконечный цикл
       
-      // Очищаем опционы и позиции БЕЗ полной перезагрузки
-      setPositions([]);
+      // 🛑 НЕ очищаем данные расширения — они будут использованы для инициализации нового тикера
+      // 🛑 НЕ вызываем clearExtensionData() — это вызывает storage event → бесконечный цикл
+      
+      // Очищаем только опционы и позиции
       setOptions([]);
+      setPositions([]);
       setExpirationDates({});
       setStrikesByDate({});
       setSelectedExpirationDate(null);
       setDaysPassed(0);
+      setUserAdjustedDays(false);
       setSavedConfigDate(null);
       setLoadedConfigId(null);
       setIsEditMode(false);
@@ -1349,11 +1353,17 @@ function UniversalOptionsCalculator() {
       setDealInfo(null);
       setActiveCalculatorTab('calculator');
       setOptionSelectionParams(null);
+      setIsDataCleared(false);
+      setShowDemoData(false);
       
-      // Очищаем localStorage
+      // НЕ очищаем selectedTicker — он будет обновлён расширением при добавлении нового опциона
+      // setSelectedTicker(''); // ← УБРАНО
+      
+      // Очищаем localStorage ТОЛЬКО calculatorState
       localStorage.removeItem('calculatorState');
-      localStorage.removeItem('optioner_user_overrides');
-      userOptionOverridesRef.current = {};
+      // 🛑 НЕ очищаем optioner_user_overrides — они могут понадобиться
+      // 🛑 НЕ очищаем URL параметры — расширение их установило
+      // 🛑 НЕ вызываем clearExtensionData()
 
       // Обновляем prevTickerRef ПОСЛЕ очистки
       prevTickerRef.current = currentTicker;
