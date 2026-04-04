@@ -73,9 +73,7 @@ export function parseDateAtStartOfDay(dateValue) {
     return null;
   }
 
-  // ВАЖНО: Используем UTC ('Z') чтобы дата всегда соответствовала календарному дню
-  // без сдвига из-за часового пояса пользователя
-  const parsedDate = new Date(`${normalizedDate}T00:00:00Z`);
+  const parsedDate = new Date(`${normalizedDate}T00:00:00`);
   return isValidDate(parsedDate) ? parsedDate : null;
 }
 
@@ -169,21 +167,21 @@ export function calculateDaysRemainingUTC(option, daysPassed = 0, defaultDays = 
     const [entryYear, entryMonth, entryDay] = entryDateStr.split('-').map(Number);
     const optionEntryDateUTC = Date.UTC(entryYear, entryMonth - 1, entryDay);
     
-    // oldestEntryDate создан через parseDateAtStartOfDay (UTC полночь)
+    // oldestEntryDate уже является Date объектом
     const oldestEntryDateUTC = Date.UTC(
       oldestEntryDate.getUTCFullYear(),
       oldestEntryDate.getUTCMonth(),
       oldestEntryDate.getUTCDate()
     );
-
+    
     // Разница в днях между датой входа опциона и самой старой датой входа
     const entryDiff = Math.ceil((optionEntryDateUTC - oldestEntryDateUTC) / (1000 * 60 * 60 * 24));
-
+    
     // actualDaysPassed = daysPassed - entryDiff
     // Если опцион куплен на 5 дней позже, для него прошло на 5 дней меньше
     actualDaysPassed = Math.max(0, daysPassed - entryDiff);
   }
-
+  
   // Оставшиеся дни = изначальные - прошедшие (симуляция)
   return Math.max(0, initialDaysToExpiration - actualDaysPassed);
 }
@@ -255,16 +253,15 @@ export function isOptionActiveAtDay(option, daysPassed, oldestEntryDate) {
   const [entryYear, entryMonth, entryDay] = entryDateStr.split('-').map(Number);
   const optionEntryDateUTC = Date.UTC(entryYear, entryMonth - 1, entryDay);
   
-  // oldestEntryDate создан через parseDateAtStartOfDay (UTC полночь)
   const oldestEntryDateUTC = Date.UTC(
     oldestEntryDate.getUTCFullYear(),
     oldestEntryDate.getUTCMonth(),
     oldestEntryDate.getUTCDate()
   );
-
+  
   // Разница в днях между датой входа опциона и самой старой датой входа
   const entryDiff = Math.ceil((optionEntryDateUTC - oldestEntryDateUTC) / (1000 * 60 * 60 * 24));
-
+  
   // Опцион активен, если daysPassed >= entryDiff (целевая дата >= даты входа опциона)
   return daysPassed >= entryDiff;
 }
@@ -284,7 +281,7 @@ export function isOptionExpiredAtDay(option, daysPassed, oldestEntryDate) {
   if (!normalizedExpirationDate) return false;
   
   // Вычисляем целевую дату в UTC полночь (timestamp)
-  // oldestEntryDate создан через parseDateAtStartOfDay (UTC полночь)
+  // ЗАЧЕМ: Сравниваем только даты без учета времени для консистентности между часовыми поясами
   const targetDateUTC = Date.UTC(
     oldestEntryDate.getUTCFullYear(),
     oldestEntryDate.getUTCMonth(),

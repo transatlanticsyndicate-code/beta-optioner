@@ -438,17 +438,17 @@ function OptionsCalculatorV3() {
           const firstDate = datesData.dates[0];
           
           datesData.dates.forEach(dateStr => {
-            const date = new Date(dateStr + 'T00:00:00Z');
-            const monthName = date.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' });
-            const year = date.getUTCFullYear();
-            const year2digit = date.toLocaleDateString('en-US', { year: '2-digit', timeZone: 'UTC' });
+            const date = new Date(dateStr + 'T00:00:00');
+            const monthName = date.toLocaleDateString('en-US', { month: 'short' });
+            const year = date.getFullYear();
+            const year2digit = date.toLocaleDateString('en-US', { year: '2-digit' });
             
             // Добавляем год к месяцу, если это не текущий год
             const monthKey = year !== currentYear 
               ? `${monthName} '${year2digit}` 
               : monthName;
             
-            const day = date.getUTCDate();
+            const day = date.getDate();
             if (!grouped[monthKey]) {
               grouped[monthKey] = [];
             }
@@ -813,22 +813,20 @@ function OptionsCalculatorV3() {
     let oldestEntryDate = null;
     options.forEach(opt => {
       const entryDateStr = opt.entryDate || new Date().toISOString().split('T')[0];
-      // ВАЖНО: Используем UTC ('Z') для единообразия расчётов
-      const entryDate = new Date(entryDateStr + 'T00:00:00Z');
+      const entryDate = new Date(entryDateStr + 'T00:00:00');
       if (!oldestEntryDate || entryDate < oldestEntryDate) {
         oldestEntryDate = entryDate;
       }
     });
-
+    
     // Вычисляем максимальное количество дней от самой старой даты входа до экспирации
     // ВАЖНО: Считаем от oldestEntryDate, а не от сегодня
     const baseDate = oldestEntryDate || new Date();
-    baseDate.setUTCHours(0, 0, 0, 0);
-
+    baseDate.setHours(0, 0, 0, 0);
+    
     const maxDays = options.reduce((max, opt) => {
       if (!opt.date) return max;
-      // ВАЖНО: Используем UTC ('Z') для единообразия расчётов
-      const expirationDate = new Date(opt.date + 'T00:00:00Z');
+      const expirationDate = new Date(opt.date + 'T00:00:00');
       const diffTime = expirationDate.getTime() - baseDate.getTime();
       const daysUntil = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       return Math.max(max, daysUntil);

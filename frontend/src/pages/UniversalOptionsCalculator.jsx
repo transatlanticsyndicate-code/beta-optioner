@@ -87,7 +87,7 @@ import { loadFuturesSettings, getPointValue, getFutureByTicker, isFuturesTicker,
 
 // Импорт хука для работы с данными от Chrome Extension TradingView Parser
 // ЗАЧЕМ: Получение опционов, тикера и цены из localStorage и URL параметров
-import { useExtensionData, useExtensionRefreshCommand } from '../hooks/useExtensionData';
+import { useExtensionData } from '../hooks/useExtensionData';
 
 // УБРАНО: AI модель не используется в универсальном калькуляторе
 // const AI_SUPPORTED_TICKERS = [...];
@@ -470,54 +470,33 @@ function UniversalOptionsCalculator() {
 
   // Загрузка дивидендной доходности при выборе тикера
   // ЗАЧЕМ: Для модели Black-Scholes-Merton нужна dividend yield
-  // 🛑 ИСПРАВЛЕНИЕ: Добавлена проверка доступности API + debounce для предотвращения частых запросов
   useEffect(() => {
-    if (!selectedTicker) {
-      setDividendYield(0);
-      return;
-    }
-
-    // 🛑 НЕ запрашиваем dividend yield для крипто-тикеров и фьючерсов
-    if (CRYPTO_TICKERS.includes(selectedTicker) || calculatorMode === CALCULATOR_MODES.FUTURES) {
-      setDividendYield(0);
-      return;
-    }
-
-    // 🛑 Debounce: не запрашиваем чаще чем раз в 5 секунд
-    let cancelled = false;
-    const timeoutId = setTimeout(async () => {
-      if (cancelled) return;
+    const fetchDividendYield = async () => {
+      if (!selectedTicker) {
+        setDividendYield(0);
+        return;
+      }
 
       setDividendLoading(true);
       try {
-        const response = await fetch(`/api/polygon/dividend-yield/${selectedTicker}`, {
-          signal: AbortSignal.timeout(3000) // 🛑 Таймаут 3 секунды
-        });
+        const response = await fetch(`/api/polygon/dividend-yield/${selectedTicker}`);
         if (response.ok) {
           const data = await response.json();
-          if (!cancelled) {
-            setDividendYield(data.dividend_yield || 0);
-            console.log(`📊 Dividend yield для ${selectedTicker}: ${(data.dividend_yield * 100).toFixed(2)}%`);
-          }
+          setDividendYield(data.dividend_yield || 0);
+          console.log(`📊 Dividend yield для ${selectedTicker}: ${(data.dividend_yield * 100).toFixed(2)}%`);
         } else {
-          if (!cancelled) setDividendYield(0);
-        }
-      } catch (error) {
-        // 🛑 НЕ логируем ошибки если это AbortError или NetworkError (бета сервер может быть недоступен)
-        if (error.name !== 'AbortError' && !cancelled) {
-          console.warn(`⚠️ Dividend yield недоступен для ${selectedTicker}: ${error.message}`);
           setDividendYield(0);
         }
+      } catch (error) {
+        console.error('Ошибка загрузки dividend yield:', error);
+        setDividendYield(0);
       } finally {
-        if (!cancelled) setDividendLoading(false);
+        setDividendLoading(false);
       }
-    }, 500); // 🛑 Debounce 500ms
-
-    return () => {
-      cancelled = true;
-      clearTimeout(timeoutId);
     };
-  }, [selectedTicker, calculatorMode]);
+
+    fetchDividendYield();
+  }, [selectedTicker]);
 
   // State для позиций
   const [positions, setPositions] = useState([]); // Убрано демо-данные AAPL
@@ -710,105 +689,6 @@ function UniversalOptionsCalculator() {
       superOptions: options.filter(o => o.isSuperOption).length
     });
   }, [selectedTicker, currentPrice, priceChange, options, positions, selectedExpirationDate, daysPassed, chartDisplayMode, showOptionLines, showProbabilityZones, strikesByDate, expirationDates]);
-
-  // === ПРИЁМ ОБНОВЛЁННЫХ IV И ЦЕНЫ ОТ РАСШИРЕНИЯ (sendPrIV_tocallc) ===
-  // ЗАЧЕМ: Расширение обновляет волатильность и цену при рефреше конфигурации.
-  // Данные приходят через tvc_refresh_command с type='sendPrIV_tocallc'.
-  // newIV → manualIvOverride (колонка Fact IV), currentPrice → цена тикера.
-  // ВАЖНО: Используем useEffect вместо callback — ждём пока опционы загрузятся в state,
-  // только после успешного применения помечаем команду как processed.
-  const { pendingRefresh, markProcessed } = useExtensionRefreshCommand();
-
-  useEffect(() => {
-    if (!pendingRefresh) return;
-    // Ждём пока опционы загрузятся
-    if (options.length === 0) {
-      console.log('⏳ [ExtRefresh] Ожидание загрузки опционов...');
-      return;
-    }
-
-    const { currentPrice: newPrice, options: refreshedOptions } = pendingRefresh;
-
-    // Обновляем цену базового актива
-    if (newPrice && newPrice > 0) {
-      setCurrentPrice(newPrice);
-      console.log('📥 [ExtRefresh] Цена обновлена:', newPrice);
-    }
-
-    // Обновляем Fact IV (manualIvOverride) для совпавших опционов
-    if (refreshedOptions && refreshedOptions.length > 0) {
-      const now = new Date();
-      const todayISO = now.toISOString().split('T')[0];
-      const todayDisplay = now.toLocaleDateString('ru-RU') + ' ' + now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-
-      let updatedCount = 0;
-      const updatedOptions = options.map(opt => {
-        // Ищем совпадение по type + strike + date
-        const match = refreshedOptions.find(ref => {
-          const typeMatch = (ref.type || '').toUpperCase() === (opt.type || '').toUpperCase();
-          const strikeMatch = Math.abs(parseFloat(ref.strike) - parseFloat(opt.strike)) < 0.5;
-          // Сравнение дат: приводим к YYYY-MM-DD
-          let dateMatch = false;
-          try {
-            const d1 = (opt.date || '').toString().split('T')[0];
-            const d2 = (ref.date || '').toString().split('T')[0];
-            dateMatch = d1 === d2;
-          } catch { dateMatch = false; }
-          return typeMatch && strikeMatch && dateMatch;
-        });
-
-        if (match && match.newIV != null && !isNaN(match.newIV)) {
-          updatedCount++;
-          return {
-            ...opt,
-            manualIvOverride: match.newIV,
-            manualIvOverrideDate: todayISO,
-            manualIvOverrideDisplayDate: todayDisplay
-          };
-        }
-        return opt;
-      });
-
-      console.log(`📥 [ExtRefresh] Fact IV обновлён у ${updatedCount} из ${refreshedOptions.length} опционов`);
-
-      if (updatedCount > 0) {
-        setOptions(updatedOptions);
-      }
-    }
-
-    // Помечаем команду как обработанную
-    markProcessed();
-
-    // Принудительное пересохранение конфигурации (включая зафиксированные)
-    // ЗАЧЕМ: Обновлённые IV и цена должны сохраниться, даже если позиция isLocked
-    if (loadedConfigId) {
-      // setTimeout чтобы setOptions успел применить обновления
-      setTimeout(() => {
-        try {
-          const saved = localStorage.getItem('universalCalculatorConfigurations');
-          if (!saved) return;
-          const configurations = JSON.parse(saved);
-          const configIndex = configurations.findIndex(c => c.id === loadedConfigId);
-          if (configIndex === -1) return;
-
-          // Читаем актуальные options через setState callback (read-only)
-          setOptions(currentOptions => {
-            configurations[configIndex].state = {
-              ...configurations[configIndex].state,
-              options: currentOptions,
-              currentPrice: newPrice || configurations[configIndex].state?.currentPrice
-            };
-            localStorage.setItem('universalCalculatorConfigurations', JSON.stringify(configurations));
-            console.log('💾 [ExtRefresh] Конфигурация пересохранена:', loadedConfigId);
-            return currentOptions; // Не меняем state
-          });
-        } catch (error) {
-          console.error('❌ [ExtRefresh] Ошибка пересохранения:', error);
-        }
-      }, 500);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingRefresh, options.length]);
 
   // Функция генерации ссылки на TradingView для тикера
   // ЗАЧЕМ: Создаёт правильную ссылку на страницу опционов в TradingView с учётом биржи
@@ -1107,45 +987,31 @@ function UniversalOptionsCalculator() {
             
             // Применяем savedOverrides из userOptionOverridesRef к загруженным опционам
             // ЗАЧЕМ: При перезагрузке расширением ручные изменения (actualPL, manualIvOverride, customAsk) терялись
-            // ВАЖНО: Если опцион пришёл от расширения и у него есть impliedVolatility — НЕ применяем manualIvOverride,
-            // потому что расширение передало актуальное impliedVolatility для колонки "IV"
             const todayDateRestore = new Date().toISOString().split('T')[0];
             optionsToSet = optionsToSet.map(opt => {
               const optionKey = getOptionKey(opt);
               const savedOverrides = userOptionOverridesRef.current[optionKey] || {};
-
+              
               // Исключаем entryDate из savedOverrides
               // ЗАЧЕМ: entryDate не должен перезаписываться из savedOverrides, только из конфигурации
               const { entryDate: _, ...overridesWithoutEntryDate } = savedOverrides;
-              
-              // Если опцион пришёл от расширения и у него есть impliedVolatility — исключаем manualIvOverride
-              const isNewOptionFromExtension = !originalOptionKeys.has(optionKey);
-              if (isNewOptionFromExtension && opt.impliedVolatility && opt.impliedVolatility > 0) {
-                const { manualIvOverride, manualIvOverrideDate, ...otherOverrides } = overridesWithoutEntryDate;
-                const hasOtherOverrides = Object.keys(otherOverrides).length > 0;
-                if (hasOtherOverrides) {
-                  console.log('🔄 [Restore] Применяем savedOverrides (без manualIvOverride):', { optionKey, savedOverrides: otherOverrides });
-                  return { ...opt, ...otherOverrides };
-                }
-                return opt;
-              }
-              
               const hasSavedOverrides = Object.keys(overridesWithoutEntryDate).length > 0;
-
+              
               if (hasSavedOverrides) {
                 console.log('🔄 [Restore] Применяем savedOverrides:', { optionKey, savedOverrides: overridesWithoutEntryDate });
                 return { ...opt, ...overridesWithoutEntryDate };
               }
-
+              
               // Проверяем, был ли этот опцион в исходной конфигурации
               // ЗАЧЕМ: Отличить "новый опцион от расширения" от "старого сохраненного опциона"
               // Новый опцион = его нет в originalOptionKeys, старый = есть в originalOptionKeys
-
+              const isNewOptionFromExtension = !originalOptionKeys.has(optionKey);
+              
               if (isNewOptionFromExtension && opt.entryDate === fallbackEntryDate) {
                 console.log('📅 [Restore] Новый опцион от расширения, ставим сегодняшнюю дату:', { optionKey, old: opt.entryDate, new: todayDateRestore });
                 return { ...opt, entryDate: todayDateRestore };
               }
-
+              
               return opt;
             });
             
@@ -1394,24 +1260,10 @@ function UniversalOptionsCalculator() {
 
           // Восстанавливаем опционы с применением savedOverrides
           // ЗАЧЕМ: При перезагрузке ручные изменения (actualPL, manualIvOverride и др.) могут отсутствовать в localStorage
-          // ВАЖНО: Если опцион пришёл от расширения (isFromExtension=true), НЕ применяем manualIvOverride из savedOverrides,
-          // потому что расширение передало актуальное impliedVolatility, которое должно идти в колонку "IV", а не "Fact IV"
           const restoredOptions = (state.options || []).map(opt => {
             const base = { ...opt, entryDate: opt.entryDate || new Date().toISOString().split('T')[0] };
             const optionKey = getOptionKey(base);
             const savedOverrides = userOptionOverridesRef.current[optionKey] || {};
-            
-            // Если опцион пришёл от расширения и у него есть impliedVolatility — не применяем manualIvOverride
-            if (isFromExtension && base.impliedVolatility && base.impliedVolatility > 0) {
-              // Удаляем manualIvOverride из savedOverrides чтобы не затирать impliedVolatility от расширения
-              const { manualIvOverride, manualIvOverrideDate, ...otherOverrides } = savedOverrides;
-              if (Object.keys(otherOverrides).length > 0) {
-                return { ...base, ...otherOverrides };
-              }
-              return base;
-            }
-            
-            // Для опционов созданных вручную или без impliedVolatility — применяем все savedOverrides
             if (Object.keys(savedOverrides).length > 0) {
               return { ...base, ...savedOverrides };
             }
@@ -1444,58 +1296,31 @@ function UniversalOptionsCalculator() {
 
   // === ОТСЛЕЖИВАНИЕ ИЗМЕНЕНИЯ ТИКЕРА ДЛЯ ОЧИСТКИ ПОЗИЦИЙ ===
   // ЗАЧЕМ: При переключении на другой инструмент очищаем позиции базового актива
-  // 🛑 ИСПРАВЛЕНИЕ: Используем ref для prevTicker и resetCalculatorFn чтобы избежать пересоздания эффекта
-  const resetCalculatorFn = useRef(resetCalculator);
-  resetCalculatorFn.current = resetCalculator;
-
   useEffect(() => {
     if (!isInitialized) return;
 
     const currentTicker = extensionTicker || contractCode || selectedTicker;
-    const prevTicker = prevTickerRef.current;
+
+    console.log('🔍 [Universal] Проверка тикера:', {
+      prevTicker: prevTickerRef.current,
+      currentTicker,
+      extensionTicker,
+      contractCode,
+      selectedTicker,
+      positionsCount: positions.length
+    });
 
     // Если тикер изменился и это не первая инициализация
-    if (prevTicker && prevTicker !== currentTicker && currentTicker) {
-      console.log('🔄 [Universal] Смена тикера с', prevTicker, 'на', currentTicker, '- полный сброс калькулятора');
-
-      // 🛑 КРИТИЧНОЕ ИСПРАВЛЕНИЕ: НЕ вызываем resetCalculator напрямую
-      // вместо этого очищаем только позиции и опционы, БЕЗ перезагрузки страницы
-      // ЗАЧЕМ: Перезагрузка страницы приводит к повторному срабатыванию эффекта → бесконечный цикл
+    if (prevTickerRef.current && prevTickerRef.current !== currentTicker && currentTicker) {
+      console.log('🔄 [Universal] Смена тикера с', prevTickerRef.current, 'на', currentTicker, '- полный сброс калькулятора');
       
-      // 🛑 НЕ очищаем данные расширения — они будут использованы для инициализации нового тикера
-      // 🛑 НЕ вызываем clearExtensionData() — это вызывает storage event → бесконечный цикл
+      // Полный сброс калькулятора перед добавлением опционов от нового тикера
+      // ЗАЧЕМ: Предотвращаем смешивание опционов от разных акций
+      resetCalculator();
       
-      // Очищаем только опционы и позиции
-      setOptions([]);
-      setPositions([]);
-      setExpirationDates({});
-      setStrikesByDate({});
-      setSelectedExpirationDate(null);
-      setDaysPassed(0);
-      setUserAdjustedDays(false);
-      setSavedConfigDate(null);
-      setLoadedConfigId(null);
-      setIsEditMode(false);
-      setHasChanges(false);
-      setDealInfo(null);
-      setActiveCalculatorTab('calculator');
-      setOptionSelectionParams(null);
-      setIsDataCleared(false);
-      setShowDemoData(false);
-      
-      // НЕ очищаем selectedTicker — он будет обновлён расширением при добавлении нового опциона
-      // setSelectedTicker(''); // ← УБРАНО
-      
-      // Очищаем localStorage ТОЛЬКО calculatorState
-      localStorage.removeItem('calculatorState');
-      // 🛑 НЕ очищаем optioner_user_overrides — они могут понадобиться
-      // 🛑 НЕ очищаем URL параметры — расширение их установило
-      // 🛑 НЕ вызываем clearExtensionData()
-
-      // Обновляем prevTickerRef ПОСЛЕ очистки
-      prevTickerRef.current = currentTicker;
-      console.log('📝 [Universal] prevTickerRef обновлен на:', currentTicker);
-      return; // ВАЖНО: НЕ продолжаем выполнение после очистки
+      // Не обновляем prevTickerRef здесь — resetCalculator сбросит isInitialized,
+      // и при следующей инициализации prevTickerRef будет установлен заново
+      return;
     }
 
     // Обновляем ref для следующей проверки
@@ -1503,38 +1328,14 @@ function UniversalOptionsCalculator() {
       prevTickerRef.current = currentTicker;
       console.log('📝 [Universal] prevTickerRef обновлен на:', currentTicker);
     }
-  }, [isInitialized, extensionTicker, contractCode, selectedTicker]); // 🛑 Убраны positions.length и resetCalculator из зависимостей
-
-  // Ref для отслеживания предыдущих значений extensionOptions
-  // ЗАЧЕМ: Предотвращаем бесконечный цикл — сравниваем с предыдущими данными
-  const prevExtensionOptionsRef = useRef(null);
+  }, [isInitialized, extensionTicker, contractCode, selectedTicker, positions.length, resetCalculator]);
 
   // === СИНХРОНИЗАЦИЯ С CHROME EXTENSION ===
   // ЗАЧЕМ: Автоматическое обновление при изменении данных расширением (storage event)
   // ВАЖНО: НЕ синхронизируем если загружена конфигурация из URL — данные конфигурации имеют приоритет
   useEffect(() => {
     if (!isInitialized) return;
-
-    // 🛑 КРИТИЧНОЕ ИСПРАВЛЕНИЕ: Сравниваем с предыдущими данными
-    // ЗАЧЕМ: Предотвращаем бесконечный цикл — эффект вызывается, но setOptions НЕ срабатывает если данные идентичны
-    const currentExtKey = JSON.stringify({
-      options: extensionOptions?.map(o => `${o.strike}-${o.type}-${o.date}-${o.quantity}`).sort(),
-      price: extensionPrice,
-      ticker: extensionTicker,
-      expiration: extensionExpirationDate
-    });
-
-    const prevKey = prevExtensionOptionsRef.current;
-
-    // Если данные не изменились — пропускаем
-    if (prevKey === currentExtKey) {
-      // console.log('⏭️ [Sync] Данные расширения не изменились — пропускаем');
-      return;
-    }
-
-    // Обновляем ref для следующей проверки
-    prevExtensionOptionsRef.current = currentExtKey;
-
+    
     console.log('🔔 [SYNC TRIGGERED]', {
       loadedConfigId,
       isLocked,
@@ -1660,13 +1461,11 @@ function UniversalOptionsCalculator() {
         }
 
         // Сливаем данные: берем свежие данные от расширения, но применяем сохраненные ручные изменения
-        // ВАЖНО: Если опцион пришёл от расширения и у него есть impliedVolatility — НЕ применяем manualIvOverride,
-        // потому что расширение передало актуальное impliedVolatility для колонки "IV"
         const mergedOptions = extensionOptions.map(extOption => {
           // Получаем сохраненные ручные изменения для этого опциона
           const optionKey = getOptionKey(extOption);
           const savedOverrides = userOptionOverridesRef.current[optionKey] || {};
-
+          
           // Ищем соответствующий опцион в текущих данных с более гибким сравнением
           const existingOption = prevOptions.find(existing => {
             const existingType = existing.type || existing.optionType || '';
@@ -1698,7 +1497,6 @@ function UniversalOptionsCalculator() {
 
           // Применяем сохраненные ручные изменения (приоритет: savedOverrides > existingOption > extOption)
           // ЗАЧЕМ: savedOverrides хранятся в отдельном localStorage, который расширение не перезаписывает
-          // ВАЖНО: Если опцион от расширения имеет impliedVolatility — НЕ берём manualIvOverride из savedOverrides
           const quantity = savedOverrides.quantity ?? existingOption?.quantity ?? extOption.quantity;
           const customBid = savedOverrides.customBid ?? existingOption?.customBid;
           const customAsk = savedOverrides.customAsk ?? existingOption?.customAsk;
@@ -1707,11 +1505,7 @@ function UniversalOptionsCalculator() {
           const actualPL = savedOverrides.actualPL ?? existingOption?.actualPL;
           const actualPLDate = savedOverrides.actualPLDate ?? existingOption?.actualPLDate;
           const actualPLPrice = savedOverrides.actualPLPrice ?? existingOption?.actualPLPrice;
-          
-          // КЛЮЧЕВОЙ МОМЕНТ: Если опцион от расширения имеет свой impliedVolatility,
-          // НЕ применяем manualIvOverride из savedOverrides — пусть impliedVolatility идёт в колонку "IV"
-          const hasExtensionIV = extOption.impliedVolatility && extOption.impliedVolatility > 0;
-          const manualIvOverride = hasExtensionIV ? undefined : (savedOverrides.manualIvOverride ?? existingOption?.manualIvOverride);
+          const manualIvOverride = savedOverrides.manualIvOverride ?? existingOption?.manualIvOverride;
           
           console.log('🔍 [Merge Debug]:', {
             optionKey,
@@ -1822,9 +1616,8 @@ function UniversalOptionsCalculator() {
       });
     }
 
-    // Обновляем цену ТОЛЬКО если она изменилась
-    // 🛑 ИСПРАВЛЕНИЕ: НЕ вызываем setCurrentPrice если цена не изменилась
-    if (extensionPrice > 0 && extensionPrice !== currentPrice) {
+    // Обновляем цену
+    if (extensionPrice > 0) {
       setCurrentPrice(extensionPrice);
       // Обновляем targetPrice только если она ещё не была изменена пользователем
       if (targetPrice === 0 || targetPrice === currentPrice) {
@@ -1832,8 +1625,7 @@ function UniversalOptionsCalculator() {
       }
     }
 
-    // Обновляем тикер ТОЛЬКО если он изменился
-    // 🛑 ИСПРАВЛЕНИЕ: НЕ вызываем setSelectedTicker если тикер не изменился
+    // Обновляем тикер
     if (extensionTicker && extensionTicker !== selectedTicker) {
       setSelectedTicker(extensionTicker);
     }
@@ -2769,39 +2561,25 @@ function UniversalOptionsCalculator() {
           // Применяем savedOverrides из userOptionOverridesRef к загруженным опционам
           // ЗАЧЕМ: При повторном вызове loadConfiguration (перезагрузка расширением)
           // ручные изменения (actualPL, manualIvOverride, customAsk и др.) терялись
-          // ВАЖНО: Если опцион пришёл от расширения и у него есть impliedVolatility — НЕ применяем manualIvOverride,
-          // потому что расширение передало актуальное impliedVolatility для колонки "IV"
           const todayDate = new Date().toISOString().split('T')[0];
           optionsToSet = optionsToSet.map(opt => {
             const optionKey = getOptionKey(opt);
             const savedOverrides = userOptionOverridesRef.current[optionKey] || {};
-
+            
             // Исключаем entryDate из savedOverrides
             // ЗАЧЕМ: entryDate не должен перезаписываться из savedOverrides, только из конфигурации
             const { entryDate: _, ...overridesWithoutEntryDate } = savedOverrides;
+            const hasSavedOverrides = Object.keys(overridesWithoutEntryDate).length > 0;
+            
+            if (hasSavedOverrides) {
+              console.log('🔄 [LoadConfig] Применяем savedOverrides:', { optionKey, savedOverrides: overridesWithoutEntryDate });
+              return { ...opt, ...overridesWithoutEntryDate };
+            }
             
             // Проверяем, был ли этот опцион в исходной конфигурации
             // ЗАЧЕМ: Отличить "новый опцион от расширения" от "старого сохраненного опциона"
             // Новый опцион = его нет в originalOptionKeys, старый = есть в originalOptionKeys
             const isNewOptionFromExtension = !originalOptionKeys.has(optionKey);
-            
-            // Если опцион от расширения и у него есть impliedVolatility — исключаем manualIvOverride
-            if (isNewOptionFromExtension && opt.impliedVolatility && opt.impliedVolatility > 0) {
-              const { manualIvOverride, manualIvOverrideDate, ...otherOverrides } = overridesWithoutEntryDate;
-              const hasOtherOverrides = Object.keys(otherOverrides).length > 0;
-              if (hasOtherOverrides) {
-                console.log('🔄 [LoadConfig] Применяем savedOverrides (без manualIvOverride):', { optionKey, savedOverrides: otherOverrides });
-                return { ...opt, ...otherOverrides };
-              }
-              return opt;
-            }
-            
-            const hasSavedOverrides = Object.keys(overridesWithoutEntryDate).length > 0;
-
-            if (hasSavedOverrides) {
-              console.log('🔄 [LoadConfig] Применяем savedOverrides:', { optionKey, savedOverrides: overridesWithoutEntryDate });
-              return { ...opt, ...overridesWithoutEntryDate };
-            }
             
             if (isNewOptionFromExtension && opt.entryDate === fallbackEntryDate) {
               console.log('📅 [LoadConfig] Новый опцион от расширения, ставим сегодняшнюю дату:', { optionKey, old: opt.entryDate, new: todayDate });

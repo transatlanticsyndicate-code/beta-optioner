@@ -70,7 +70,7 @@ function MarketIvOverrideControl({
   return (
     <div className="space-y-3 border-t border-border pt-4">
       <div className="flex flex-col gap-1">
-        <Label htmlFor={instanceId} className={`${compact ? 'text-xs' : 'text-sm'} font-medium`}>
+        <Label className={`${compact ? 'text-xs' : 'text-sm'} font-medium`}>
           Фактическая IV сегодня
         </Label>
         <span className="text-xs text-muted-foreground">

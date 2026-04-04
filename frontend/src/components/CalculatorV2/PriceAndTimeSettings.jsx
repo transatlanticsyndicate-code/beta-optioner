@@ -85,8 +85,8 @@ function PriceAndTimeSettings({
     if (!baseDate) {
       baseDate = new Date();
     }
-    baseDate.setUTCHours(0, 0, 0, 0);
-
+    baseDate.setHours(0, 0, 0, 0);
+    
     let maxDays = 0;
     options.forEach(option => {
       if (option.date) {
@@ -132,14 +132,13 @@ function PriceAndTimeSettings({
   // ЗАЧЕМ: Кнопка "С" должна устанавливать ползунок на сегодняшнюю дату,
   // а не на daysPassed=0, так как для сохраненных позиций нулевой день может быть в прошлом
   const getDaysPassedToToday = () => {
-    // Сегодня в UTC полночь
-    const now = new Date();
-    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
     // Базовая дата: дата сохранения (для зафиксированных) или самая старая дата входа
-    const baseDate = savedConfigDate ? (parseDateAtStartOfDay(savedConfigDate) || today) : (oldestEntryDate || today);
-    baseDate.setUTCHours(0, 0, 0, 0);
-
+    const baseDate = savedConfigDate ? (parseDateAtStartOfDay(savedConfigDate) || new Date()) : (oldestEntryDate || new Date());
+    baseDate.setHours(0, 0, 0, 0);
+    
     const diffTime = today.getTime() - baseDate.getTime();
     const daysToToday = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     
@@ -152,7 +151,7 @@ function PriceAndTimeSettings({
       {/* Цена базового актива */}
       <div className="space-y-3">
         <div className="flex flex-col gap-1">
-          <Label htmlFor="base-asset-price" className={`${compact ? 'text-xs' : 'text-sm'} font-medium`}>Цена базового актива</Label>
+          <Label className={`${compact ? 'text-xs' : 'text-sm'} font-medium`}>Цена базового актива</Label>
           {!compact && (
             <span className="text-xs text-muted-foreground">
               допустимый диапазон: ${calculatedMinPrice.toFixed(2)} – ${calculatedMaxPrice.toFixed(2)}
@@ -162,12 +161,11 @@ function PriceAndTimeSettings({
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground min-w-[20px]">$</span>
           <Input
-            id="base-asset-price"
             type="number"
             value={priceInput}
             onChange={handlePriceInputChange}
             onFocus={() => { priceInputFocusedRef.current = true; }}
-            onBlur={() => {
+            onBlur={() => { 
               priceInputFocusedRef.current = false;
               setPriceInput(targetPrice.toFixed(2));
             }}
@@ -228,15 +226,14 @@ function PriceAndTimeSettings({
           {options.length > 0 && (() => {
             // Базовая дата: дата сохранения (для зафиксированных) или самая старая дата входа
             const baseDate = savedConfigDate ? (parseDateAtStartOfDay(savedConfigDate) || new Date()) : (oldestEntryDate || new Date());
-            baseDate.setUTCHours(0, 0, 0, 0);
+            baseDate.setHours(0, 0, 0, 0);
             const targetDate = new Date(baseDate);
-            targetDate.setUTCDate(targetDate.getUTCDate() + daysPassed);
+            targetDate.setDate(targetDate.getDate() + daysPassed);
             const { isNonTrading, reason } = isNonTradingDay(targetDate);
             const formattedDate = targetDate.toLocaleDateString('ru-RU', {
               day: '2-digit',
               month: '2-digit',
-              year: 'numeric',
-              timeZone: 'UTC'
+              year: 'numeric'
             });
             return (
               <TooltipProvider>
@@ -276,9 +273,9 @@ function PriceAndTimeSettings({
           <span>
             {savedConfigDate ? (() => {
               const date = parseDateAtStartOfDay(savedConfigDate) || new Date();
-              return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', timeZone: 'UTC' });
+              return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
             })() : (oldestEntryDate ? (() => {
-              return oldestEntryDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', timeZone: 'UTC' });
+              return oldestEntryDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
             })() : '0 д.')}
           </span>
           <span>{options.length === 0 ? '—' : `${maxDaysToExpiration} д.`}</span>

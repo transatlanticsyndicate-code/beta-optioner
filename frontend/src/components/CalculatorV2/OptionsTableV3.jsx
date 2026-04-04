@@ -279,17 +279,13 @@ function OptionsTableV3({
     // Сохраняем manualIvOverride и дату ввода
     // ЗАЧЕМ: Дата нужна для перерасчёта IV от якорного значения до текущей даты
     if (numValue !== null) {
-      const now = new Date();
-      const todayISO = now.toISOString().split('T')[0]; // ISO формат для расчётов
-      const todayDisplay = now.toLocaleDateString('ru-RU') + ' ' + now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+      const today = new Date().toISOString().split('T')[0]; // ISO формат: YYYY-MM-DD
       handleFieldChange(optionId, 'manualIvOverride', numValue);
-      handleFieldChange(optionId, 'manualIvOverrideDate', todayISO);
-      handleFieldChange(optionId, 'manualIvOverrideDisplayDate', todayDisplay);
+      handleFieldChange(optionId, 'manualIvOverrideDate', today);
     } else {
       // Если поле очищено — удаляем якорные значения
       handleFieldChange(optionId, 'manualIvOverride', null);
       handleFieldChange(optionId, 'manualIvOverrideDate', null);
-      handleFieldChange(optionId, 'manualIvOverrideDisplayDate', null);
     }
   }, []);
 
@@ -896,12 +892,9 @@ function OptionsTableV3({
                     if (!optIV || optIV <= 0) return '—';
                     return optIV < 1 ? (optIV * 100).toFixed(1) : optIV.toFixed(1);
                   })()}
-                  title={option.manualIvOverrideDisplayDate || option.manualIvOverrideDate
-                    ? `Обновлено: ${option.manualIvOverrideDisplayDate || option.manualIvOverrideDate}`
-                    : ''}
                   disabled={option.isLockedPosition}
                   className="w-14 px-1 text-right text-xs border rounded"
-                  style={{
+                  style={{ 
                     fontSize: '0.7rem',
                     backgroundColor: option.manualIvOverride ? '#fef3c7' : 'transparent'
                   }}
