@@ -729,7 +729,8 @@ function UniversalOptionsCalculator() {
             ...opt,
             manualIvOverride: match.newIV,
             manualIvOverrideDate: todayISO,
-            manualIvOverrideDisplayDate: todayDisplay
+            manualIvOverrideDisplayDate: todayDisplay,
+            ivUpdatedFromExtension: true
           };
         }
         return opt;

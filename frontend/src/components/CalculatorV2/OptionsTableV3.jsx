@@ -900,9 +900,9 @@ function OptionsTableV3({
                     : ''}
                   disabled={option.isLockedPosition}
                   className="w-14 px-1 text-right text-xs border rounded"
-                  style={{ 
+                  style={{
                     fontSize: '0.7rem',
-                    backgroundColor: option.manualIvOverride ? '#fef3c7' : 'transparent'
+                    backgroundColor: option.ivUpdatedFromExtension ? '#dcfce7' : (option.manualIvOverride ? '#fef3c7' : 'transparent')
                   }}
                 />
 
