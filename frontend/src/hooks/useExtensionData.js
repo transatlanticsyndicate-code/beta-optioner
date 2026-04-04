@@ -303,6 +303,88 @@ export function useExtensionData() {
 export default useExtensionData;
 
 // ============================================================================
+// ХУК ДЛЯ ПРИЁМА КОМАНДЫ sendPrIV_tocallc ОТ РАСШИРЕНИЯ
+// ============================================================================
+
+/**
+ * Хук для polling tvc_refresh_command на наличие команды sendPrIV_tocallc
+ * ЗАЧЕМ: Расширение обновляет IV и цену базового актива при рефреше конфигурации.
+ * Возвращает pendingRefresh (данные для применения) и markProcessed (вызвать после применения).
+ *
+ * @param {number} pollInterval - Интервал polling в мс (по умолчанию 1500)
+ * @returns {{ pendingRefresh: Object|null, markProcessed: Function }}
+ */
+export function useExtensionRefreshCommand(pollInterval = 1500) {
+  const [pendingRefresh, setPendingRefresh] = useState(null);
+  const lastTimestampRef = useRef(0);
+
+  useEffect(() => {
+    const checkCommand = () => {
+      try {
+        const raw = localStorage.getItem('tvc_refresh_command');
+        if (!raw) return;
+
+        const command = JSON.parse(raw);
+
+        // Обрабатываем только sendPrIV_tocallc с новым timestamp
+        // ВАЖНО: НЕ проверяем processed — расширение может пометить его раньше нас (через DOM-инъекцию)
+        if (
+          command.type !== 'sendPrIV_tocallc' ||
+          command.timestamp <= lastTimestampRef.current
+        ) {
+          return;
+        }
+
+        lastTimestampRef.current = command.timestamp;
+
+        console.log('📥 [ExtRefresh] Обнаружена команда sendPrIV_tocallc:', {
+          ticker: command.ticker,
+          currentPrice: command.currentPrice,
+          optionsCount: command.options?.length || 0
+        });
+
+        setPendingRefresh({
+          ticker: command.ticker || '',
+          currentPrice: command.currentPrice || null,
+          timestamp: command.timestamp,
+          options: (command.options || []).map(o => ({
+            type: o.type === 'C' ? 'CALL' : (o.type === 'P' ? 'PUT' : o.type),
+            strike: o.strike,
+            date: o.date,
+            newIV: o.newIV
+          }))
+        });
+      } catch (error) {
+        console.error('❌ [ExtRefresh] Ошибка чтения tvc_refresh_command:', error);
+      }
+    };
+
+    const intervalId = setInterval(checkCommand, pollInterval);
+    checkCommand();
+
+    return () => clearInterval(intervalId);
+  }, [pollInterval]);
+
+  const markProcessed = useCallback(() => {
+    try {
+      const raw = localStorage.getItem('tvc_refresh_command');
+      if (raw) {
+        const command = JSON.parse(raw);
+        if (command.type === 'sendPrIV_tocallc' && !command.processed) {
+          command.processed = true;
+          localStorage.setItem('tvc_refresh_command', JSON.stringify(command));
+        }
+      }
+    } catch (e) {
+      console.error('❌ [ExtRefresh] Ошибка пометки processed:', e);
+    }
+    setPendingRefresh(null);
+  }, []);
+
+  return { pendingRefresh, markProcessed };
+}
+
+// ============================================================================
 // УТИЛИТЫ ДЛЯ ОТПРАВКИ КОМАНД В РАСШИРЕНИЕ
 // ============================================================================
 

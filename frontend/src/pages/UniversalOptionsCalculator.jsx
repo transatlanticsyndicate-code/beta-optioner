@@ -87,7 +87,7 @@ import { loadFuturesSettings, getPointValue, getFutureByTicker, isFuturesTicker,
 
 // Импорт хука для работы с данными от Chrome Extension TradingView Parser
 // ЗАЧЕМ: Получение опционов, тикера и цены из localStorage и URL параметров
-import { useExtensionData } from '../hooks/useExtensionData';
+import { useExtensionData, useExtensionRefreshCommand } from '../hooks/useExtensionData';
 
 // УБРАНО: AI модель не используется в универсальном калькуляторе
 // const AI_SUPPORTED_TICKERS = [...];
@@ -135,6 +135,7 @@ function UniversalOptionsCalculator() {
   // Ref для отслеживания предыдущего тикера
   // ЗАЧЕМ: Позволяет определить, когда тикер изменился, и очистить позиции базового актива
   const prevTickerRef = useRef(null);
+  const needExtRefreshSaveRef = useRef(false);
 
   // Установка заголовка страницы
   useEffect(() => {
@@ -689,6 +690,104 @@ function UniversalOptionsCalculator() {
       superOptions: options.filter(o => o.isSuperOption).length
     });
   }, [selectedTicker, currentPrice, priceChange, options, positions, selectedExpirationDate, daysPassed, chartDisplayMode, showOptionLines, showProbabilityZones, strikesByDate, expirationDates]);
+
+  // === ПРИЁМ ОБНОВЛЁННЫХ IV И ЦЕНЫ ОТ РАСШИРЕНИЯ (sendPrIV_tocallc) ===
+  const { pendingRefresh, markProcessed } = useExtensionRefreshCommand();
+
+  useEffect(() => {
+    if (!pendingRefresh) return;
+    if (options.length === 0) return;
+
+    const { currentPrice: newPrice, options: refreshedOptions } = pendingRefresh;
+
+    if (newPrice && newPrice > 0) {
+      setCurrentPrice(newPrice);
+    }
+
+    if (refreshedOptions && refreshedOptions.length > 0) {
+      const now = new Date();
+      const todayISO = now.toISOString().split('T')[0];
+      const todayDisplay = now.toLocaleDateString('ru-RU') + ' ' + now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+
+      let updatedCount = 0;
+      const updatedOptions = options.map(opt => {
+        const match = refreshedOptions.find(ref => {
+          const typeMatch = (ref.type || '').toUpperCase() === (opt.type || '').toUpperCase();
+          const strikeMatch = Math.abs(parseFloat(ref.strike) - parseFloat(opt.strike)) < 0.5;
+          let dateMatch = false;
+          try {
+            const d1 = (opt.date || '').toString().split('T')[0];
+            const d2 = (ref.date || '').toString().split('T')[0];
+            dateMatch = d1 === d2;
+          } catch { dateMatch = false; }
+          return typeMatch && strikeMatch && dateMatch;
+        });
+
+        if (match && match.newIV != null && !isNaN(match.newIV)) {
+          updatedCount++;
+          return {
+            ...opt,
+            manualIvOverride: match.newIV,
+            manualIvOverrideDate: todayISO,
+            manualIvOverrideDisplayDate: todayDisplay
+          };
+        }
+        return opt;
+      });
+
+      if (updatedCount > 0) {
+        setOptions(updatedOptions);
+      }
+    }
+
+    markProcessed();
+
+    if (loadedConfigId) {
+      needExtRefreshSaveRef.current = true;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingRefresh, options.length]);
+
+  // Пересохранение конфигурации после обновления от расширения
+  useEffect(() => {
+    if (!needExtRefreshSaveRef.current || !loadedConfigId) return;
+    needExtRefreshSaveRef.current = false;
+
+    if (configSource === 'db') {
+      (async () => {
+        try {
+          let userId = null;
+          if (supabase) {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user) userId = session.user.id;
+          }
+          await updateConfiguration(loadedConfigId, {
+            state: {
+              selectedTicker, currentPrice, priceChange, options, positions,
+              selectedExpirationDate, daysPassed, showOptionLines, showProbabilityZones,
+              chartDisplayMode, calculatorMode,
+            },
+          }, userId);
+          console.log('💾 [ExtRefresh] Конфигурация пересохранена в БД:', loadedConfigId);
+        } catch (error) {
+          console.error('❌ [ExtRefresh] Ошибка пересохранения в БД:', error);
+        }
+      })();
+    } else {
+      try {
+        const saved = localStorage.getItem('universalCalculatorConfigurations');
+        if (!saved) return;
+        const configurations = JSON.parse(saved);
+        const idx = configurations.findIndex(c => c.id === loadedConfigId);
+        if (idx === -1) return;
+        configurations[idx].state = { ...configurations[idx].state, options, currentPrice };
+        localStorage.setItem('universalCalculatorConfigurations', JSON.stringify(configurations));
+      } catch (error) {
+        console.error('❌ [ExtRefresh] Ошибка пересохранения в localStorage:', error);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [options, currentPrice, loadedConfigId]);
 
   // Функция генерации ссылки на TradingView для тикера
   // ЗАЧЕМ: Создаёт правильную ссылку на страницу опционов в TradingView с учётом биржи
