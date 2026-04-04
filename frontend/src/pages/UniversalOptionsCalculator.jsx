@@ -87,7 +87,7 @@ import { loadFuturesSettings, getPointValue, getFutureByTicker, isFuturesTicker,
 
 // Импорт хука для работы с данными от Chrome Extension TradingView Parser
 // ЗАЧЕМ: Получение опционов, тикера и цены из localStorage и URL параметров
-import { useExtensionData } from '../hooks/useExtensionData';
+import { useExtensionData, useExtensionRefreshCommand } from '../hooks/useExtensionData';
 
 // УБРАНО: AI модель не используется в универсальном калькуляторе
 // const AI_SUPPORTED_TICKERS = [...];
@@ -710,6 +710,105 @@ function UniversalOptionsCalculator() {
       superOptions: options.filter(o => o.isSuperOption).length
     });
   }, [selectedTicker, currentPrice, priceChange, options, positions, selectedExpirationDate, daysPassed, chartDisplayMode, showOptionLines, showProbabilityZones, strikesByDate, expirationDates]);
+
+  // === ПРИЁМ ОБНОВЛЁННЫХ IV И ЦЕНЫ ОТ РАСШИРЕНИЯ (sendPrIV_tocallc) ===
+  // ЗАЧЕМ: Расширение обновляет волатильность и цену при рефреше конфигурации.
+  // Данные приходят через tvc_refresh_command с type='sendPrIV_tocallc'.
+  // newIV → manualIvOverride (колонка Fact IV), currentPrice → цена тикера.
+  // ВАЖНО: Используем useEffect вместо callback — ждём пока опционы загрузятся в state,
+  // только после успешного применения помечаем команду как processed.
+  const { pendingRefresh, markProcessed } = useExtensionRefreshCommand();
+
+  useEffect(() => {
+    if (!pendingRefresh) return;
+    // Ждём пока опционы загрузятся
+    if (options.length === 0) {
+      console.log('⏳ [ExtRefresh] Ожидание загрузки опционов...');
+      return;
+    }
+
+    const { currentPrice: newPrice, options: refreshedOptions } = pendingRefresh;
+
+    // Обновляем цену базового актива
+    if (newPrice && newPrice > 0) {
+      setCurrentPrice(newPrice);
+      console.log('📥 [ExtRefresh] Цена обновлена:', newPrice);
+    }
+
+    // Обновляем Fact IV (manualIvOverride) для совпавших опционов
+    if (refreshedOptions && refreshedOptions.length > 0) {
+      const now = new Date();
+      const todayISO = now.toISOString().split('T')[0];
+      const todayDisplay = now.toLocaleDateString('ru-RU') + ' ' + now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+
+      let updatedCount = 0;
+      const updatedOptions = options.map(opt => {
+        // Ищем совпадение по type + strike + date
+        const match = refreshedOptions.find(ref => {
+          const typeMatch = (ref.type || '').toUpperCase() === (opt.type || '').toUpperCase();
+          const strikeMatch = Math.abs(parseFloat(ref.strike) - parseFloat(opt.strike)) < 0.5;
+          // Сравнение дат: приводим к YYYY-MM-DD
+          let dateMatch = false;
+          try {
+            const d1 = (opt.date || '').toString().split('T')[0];
+            const d2 = (ref.date || '').toString().split('T')[0];
+            dateMatch = d1 === d2;
+          } catch { dateMatch = false; }
+          return typeMatch && strikeMatch && dateMatch;
+        });
+
+        if (match && match.newIV != null && !isNaN(match.newIV)) {
+          updatedCount++;
+          return {
+            ...opt,
+            manualIvOverride: match.newIV,
+            manualIvOverrideDate: todayISO,
+            manualIvOverrideDisplayDate: todayDisplay
+          };
+        }
+        return opt;
+      });
+
+      console.log(`📥 [ExtRefresh] Fact IV обновлён у ${updatedCount} из ${refreshedOptions.length} опционов`);
+
+      if (updatedCount > 0) {
+        setOptions(updatedOptions);
+      }
+    }
+
+    // Помечаем команду как обработанную
+    markProcessed();
+
+    // Принудительное пересохранение конфигурации (включая зафиксированные)
+    // ЗАЧЕМ: Обновлённые IV и цена должны сохраниться, даже если позиция isLocked
+    if (loadedConfigId) {
+      // setTimeout чтобы setOptions успел применить обновления
+      setTimeout(() => {
+        try {
+          const saved = localStorage.getItem('universalCalculatorConfigurations');
+          if (!saved) return;
+          const configurations = JSON.parse(saved);
+          const configIndex = configurations.findIndex(c => c.id === loadedConfigId);
+          if (configIndex === -1) return;
+
+          // Читаем актуальные options через setState callback (read-only)
+          setOptions(currentOptions => {
+            configurations[configIndex].state = {
+              ...configurations[configIndex].state,
+              options: currentOptions,
+              currentPrice: newPrice || configurations[configIndex].state?.currentPrice
+            };
+            localStorage.setItem('universalCalculatorConfigurations', JSON.stringify(configurations));
+            console.log('💾 [ExtRefresh] Конфигурация пересохранена:', loadedConfigId);
+            return currentOptions; // Не меняем state
+          });
+        } catch (error) {
+          console.error('❌ [ExtRefresh] Ошибка пересохранения:', error);
+        }
+      }, 500);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingRefresh, options.length]);
 
   // Функция генерации ссылки на TradingView для тикера
   // ЗАЧЕМ: Создаёт правильную ссылку на страницу опционов в TradingView с учётом биржи

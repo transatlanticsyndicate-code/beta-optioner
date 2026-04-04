@@ -7,7 +7,7 @@
 set -euo pipefail
 
 # ============== Config ==============
-SSH_HOST="gelimo"
+SSH_HOST="root@89.117.52.143"
 REMOTE_DIR="/var/www/beta"
 LOCAL_FRONTEND="$(cd "$(dirname "$0")/.." && pwd)/frontend"
 PM2_APP="optioner-backend-beta"

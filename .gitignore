@@ -127,3 +127,6 @@ docs/chrome_debug/
 .windsurf/
 .qwen/
 .workspaces/
+
+# Расширения для браузера (локальная разработка, не коммитить)
+EXTENTIONS/
