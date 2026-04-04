@@ -2437,7 +2437,13 @@ function UniversalOptionsCalculator() {
         console.log('🛡️ [Universal] Конфигурация из БД уже загружена:', dbConfigId);
         return;
       }
-      
+
+      // ВАЖНО: Очищаем старые опционы и calculatorState ДО асинхронной загрузки
+      // ЗАЧЕМ: Без этого старый опцион из localStorage мелькает на экране (~1 сек)
+      // пока идёт загрузка конфигурации из БД
+      setOptions([]);
+      localStorage.removeItem('calculatorState');
+
       // Загрузка конфигурации из БД
       console.log('📥 [Universal] Загрузка конфигурации из БД:', dbConfigId);
       loadConfigurationFromDB(dbConfigId, editMode);
@@ -2451,6 +2457,10 @@ function UniversalOptionsCalculator() {
         return;
       }
       
+      // ВАЖНО: Очищаем старые опционы ДО загрузки конфигурации
+      // ЗАЧЕМ: Предотвращаем мелькание старого опциона из calculatorState
+      setOptions([]);
+
       // Загрузка конфигурации из localStorage
       console.log('📥 [Universal] Загрузка конфигурации из localStorage:', configId);
       loadConfiguration(configId, editMode);
