@@ -101,8 +101,8 @@ function PLHeatmapChart({ options = [], currentPrice = 0, positions = [] }) {
 
     // Форматируем даты для отображения
     const formattedDates = dates.map(date => {
-      const d = new Date(date + 'T00:00:00');
-      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const d = new Date(date + 'T00:00:00Z');
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
     });
 
     // Форматируем страйки для отображения

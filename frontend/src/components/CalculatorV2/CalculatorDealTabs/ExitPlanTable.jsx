@@ -347,14 +347,14 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
 
     // daysRemaining = дни от ДАТЫ ВЫХОДА до ЭКСПИРАЦИИ опциона
     // ЗАЧЕМ: Именно так считает таблица опционов — сколько дней осталось до экспирации на целевую дату
-    const exitDt = new Date(step.exitDate + 'T00:00:00');
-    const expDt = new Date(option.date + 'T00:00:00');
+    const exitDt = new Date(step.exitDate + 'T00:00:00Z');
+    const expDt = new Date(option.date + 'T00:00:00Z');
     const daysRemaining = Math.max(0, Math.ceil((expDt - exitDt) / (1000 * 60 * 60 * 24)));
 
     // currentDaysToExpiration = дни от ДАТЫ ВХОДА до ЭКСПИРАЦИИ (начальное значение для IV Surface)
     // ЗАЧЕМ: getOptionVolatility использует начальные дни как базу для интерполяции IV
     const entryDateStr = option.entryDate || new Date().toISOString().split('T')[0];
-    const entryDt = new Date(entryDateStr + 'T00:00:00');
+    const entryDt = new Date(entryDateStr + 'T00:00:00Z');
     const currentDaysToExpiration = Math.max(0, Math.ceil((expDt - entryDt) / (1000 * 60 * 60 * 24)));
 
     // todayDaysToExpiration = дни от РЕАЛЬНОГО СЕГОДНЯ до ЭКСПИРАЦИИ (для manualIvOverride)
@@ -428,7 +428,7 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
     // ЗАЧЕМ: Позволяет пользователю зафиксировать реальную P&L и проецировать от неё
     if (option.actualPL !== null && option.actualPL !== undefined && option.actualPLDate) {
       // Вычисляем дни от входа до даты ввода actualPL
-      const anchorDateObj = new Date(option.actualPLDate + 'T00:00:00');
+      const anchorDateObj = new Date(option.actualPLDate + 'T00:00:00Z');
       const anchorDaysPassed = Math.max(0, Math.ceil((anchorDateObj - entryDt) / (1000 * 60 * 60 * 24)));
       
       // Вычисляем дни от даты выхода до даты входа (для сравнения с anchorDaysPassed)

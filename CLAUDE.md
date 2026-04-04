@@ -49,12 +49,20 @@ Types: `feat`, `fix`, `refactor`, `hotfix`, `docs`, `test`, `chore`
 | `tasks/` | SDD task artifacts |
 | `scripts/` | Dev and deploy scripts |
 
+## Communication
+- **Language:** Russian always — all responses, questions, reports
+- **No code in responses** — user is not a programmer. Report at logic level: what changed, what effect, how verified. 1-3 sentences.
+- **No technical details** — no function names, line numbers, file contents, debug traces
+- **Questions** — situation + 2-3 options with consequences. No code.
+- Comments in code: Russian, explain WHY not HOW
+
 ## Rules
 - **Max 300 lines per file** — enforced by CI (GitHub Actions)
 - **No .env files committed** — use `.env.*.template` as reference
 - **No hardcoded secrets** — API keys, passwords only via environment variables
 - GATE is mandatory before each pipeline phase (see global `~/.claude/CLAUDE.md`)
 - Security check required in every VERIFY phase
+- **try-catch everywhere** — clear error messages for users
 
 ## Tests (to be organized)
 - Backend: `backend/tests/` — pytest

@@ -85,8 +85,8 @@ function PriceAndTimeSettings({
     if (!baseDate) {
       baseDate = new Date();
     }
-    baseDate.setHours(0, 0, 0, 0);
-    
+    baseDate.setUTCHours(0, 0, 0, 0);
+
     let maxDays = 0;
     options.forEach(option => {
       if (option.date) {
@@ -132,13 +132,14 @@ function PriceAndTimeSettings({
   // ЗАЧЕМ: Кнопка "С" должна устанавливать ползунок на сегодняшнюю дату,
   // а не на daysPassed=0, так как для сохраненных позиций нулевой день может быть в прошлом
   const getDaysPassedToToday = () => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
+    // Сегодня в UTC полночь
+    const now = new Date();
+    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+
     // Базовая дата: дата сохранения (для зафиксированных) или самая старая дата входа
-    const baseDate = savedConfigDate ? (parseDateAtStartOfDay(savedConfigDate) || new Date()) : (oldestEntryDate || new Date());
-    baseDate.setHours(0, 0, 0, 0);
-    
+    const baseDate = savedConfigDate ? (parseDateAtStartOfDay(savedConfigDate) || today) : (oldestEntryDate || today);
+    baseDate.setUTCHours(0, 0, 0, 0);
+
     const diffTime = today.getTime() - baseDate.getTime();
     const daysToToday = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     
@@ -227,14 +228,15 @@ function PriceAndTimeSettings({
           {options.length > 0 && (() => {
             // Базовая дата: дата сохранения (для зафиксированных) или самая старая дата входа
             const baseDate = savedConfigDate ? (parseDateAtStartOfDay(savedConfigDate) || new Date()) : (oldestEntryDate || new Date());
-            baseDate.setHours(0, 0, 0, 0);
+            baseDate.setUTCHours(0, 0, 0, 0);
             const targetDate = new Date(baseDate);
-            targetDate.setDate(targetDate.getDate() + daysPassed);
+            targetDate.setUTCDate(targetDate.getUTCDate() + daysPassed);
             const { isNonTrading, reason } = isNonTradingDay(targetDate);
             const formattedDate = targetDate.toLocaleDateString('ru-RU', {
               day: '2-digit',
               month: '2-digit',
-              year: 'numeric'
+              year: 'numeric',
+              timeZone: 'UTC'
             });
             return (
               <TooltipProvider>
@@ -274,9 +276,9 @@ function PriceAndTimeSettings({
           <span>
             {savedConfigDate ? (() => {
               const date = parseDateAtStartOfDay(savedConfigDate) || new Date();
-              return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
+              return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', timeZone: 'UTC' });
             })() : (oldestEntryDate ? (() => {
-              return oldestEntryDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
+              return oldestEntryDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', timeZone: 'UTC' });
             })() : '0 д.')}
           </span>
           <span>{options.length === 0 ? '—' : `${maxDaysToExpiration} д.`}</span>
