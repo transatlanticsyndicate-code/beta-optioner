@@ -787,7 +787,7 @@ function UniversalOptionsCalculator() {
     // Для крипто-режима (Binance) — пропускаем проверку таблицы опционов
     // ЗАЧЕМ: BinanceDealTab использует собственные поля ввода, таблица опционов не нужна
     if (calculatorMode === CALCULATOR_MODES.CRYPTO) {
-      const ticker = contractCode || selectedTicker;
+      const ticker = loadedConfigId ? (selectedTicker || contractCode) : (contractCode || selectedTicker);
       const deal = {
         ticker,
         optionsCount: 0,
@@ -827,7 +827,7 @@ function UniversalOptionsCalculator() {
     const finalOptionsCount = visibleOptions.reduce((sum, opt) => sum + Math.abs(opt.quantity || 1), 0);
 
     // Создаём информацию о сделке
-    const ticker = contractCode || selectedTicker;
+    const ticker = loadedConfigId ? (selectedTicker || contractCode) : (contractCode || selectedTicker);
     const isMultiDeal = visibleOptions.length > 1;
     
     const deal = {
@@ -3363,7 +3363,9 @@ function UniversalOptionsCalculator() {
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">Актив:</span>
                 {(() => {
-                  const ticker = contractCode || selectedTicker;
+                  // ЗАЧЕМ: При загруженной конфигурации selectedTicker имеет приоритет,
+                  // иначе contractCode из расширения (calculatorState) может показать стейл-тикер
+                  const ticker = loadedConfigId ? (selectedTicker || contractCode) : (contractCode || selectedTicker);
                   const tvLink = getTradingViewLink(ticker, extensionTicker ? extensionExchange : null);
                   
                   if (tvLink) {
