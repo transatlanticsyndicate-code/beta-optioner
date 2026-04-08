@@ -978,7 +978,7 @@ function OptionsTableV3({
                     />
                   ) : (
                     <span className={`text-xs font-bold ${option.isAssetPriceModified ? 'text-orange-500' : 'text-muted-foreground'}`}>
-                      {option.assetPriceAtEntry ? option.assetPriceAtEntry.toFixed(option.assetPriceAtEntry >= 100 ? 0 : 2) : '—'}
+                      {option.assetPriceAtEntry ? option.assetPriceAtEntry.toFixed(2) : '—'}
                     </span>
                   )}
                 </span>

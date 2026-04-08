@@ -135,7 +135,15 @@ function UniversalOptionsCalculator() {
   // Ref для отслеживания предыдущего тикера
   // ЗАЧЕМ: Позволяет определить, когда тикер изменился, и очистить позиции базового актива
   const prevTickerRef = useRef(null);
+  // Ref-флаг: идёт сброс калькулятора
+  // ЗАЧЕМ: Блокирует автосохранение и sync useEffect в том же рендер-цикле,
+  // где resetCalculator очистил localStorage — иначе они перезаписывают данные обратно
+  const isResettingRef = useRef(false);
   const needExtRefreshSaveRef = useRef(false);
+  // Таймстамп завершения инициализации
+  // ЗАЧЕМ: Игнорируем tvc_refresh_command, отправленные одновременно с начальной загрузкой опциона,
+  // чтобы IV оставалась в impliedVolatility (колонка IV), а не попадала в manualIvOverride (Fact IV)
+  const initCompletedAtRef = useRef(0);
 
   // Установка заголовка страницы
   useEffect(() => {
@@ -698,6 +706,17 @@ function UniversalOptionsCalculator() {
     if (!pendingRefresh) return;
     if (options.length === 0) return;
 
+    // ВАЖНО: Игнорируем refresh-команды, отправленные одновременно с начальной загрузкой
+    // ЗАЧЕМ: При добавлении опциона расширение шлёт И calculatorState (IV → impliedVolatility),
+    // И tvc_refresh_command (IV → manualIvOverride). Если обработать оба — IV попадёт в Fact IV
+    // вместо колонки IV. Порог 3 секунды покрывает задержку между записью расширением и обработкой.
+    if (pendingRefresh.timestamp && initCompletedAtRef.current &&
+        pendingRefresh.timestamp <= initCompletedAtRef.current + 3000) {
+      console.log('⏭️ [ExtRefresh] Пропуск — команда пришла одновременно с инициализацией');
+      markProcessed();
+      return;
+    }
+
     // ВАЖНО: Применяем данные только если тикер совпадает с текущим калькулятором
     // ЗАЧЕМ: В tvc_refresh_command может лежать устаревшая запись от другого тикера,
     // и без проверки она перезапишет цену базового актива на чужую
@@ -834,6 +853,10 @@ function UniversalOptionsCalculator() {
   }, []);
 
   const resetCalculator = useCallback(() => {
+    // ВАЖНО: Устанавливаем флаг СИНХРОННО, до любых setState
+    // ЗАЧЕМ: Блокирует автосохранение и sync в текущем рендер-цикле,
+    // которые ещё видят старый isInitialized=true и перезаписали бы localStorage
+    isResettingRef.current = true;
     setSelectedTicker('');
     setCurrentPrice(0);
     setPriceChange({ value: 0, percent: 0 });
@@ -973,6 +996,10 @@ function UniversalOptionsCalculator() {
   useEffect(() => {
     if (isInitialized) return;
 
+    // Сбрасываем флаг сброса при новой инициализации
+    // ЗАЧЕМ: После reload флаг должен быть false, чтобы эффекты работали нормально
+    isResettingRef.current = false;
+
     // === ДИАГНОСТИКА: Логируем полное состояние при инициализации ===
     // ЗАЧЕМ: Понять что именно видит калькулятор при добавлении опциона из TradingView
     const diagSearchParams = new URLSearchParams(window.location.search);
@@ -999,6 +1026,7 @@ function UniversalOptionsCalculator() {
     const configId = searchParams.get('config');
     if (configId) {
       console.log('⏭️ [Universal] Пропускаем инициализацию — есть config в URL:', configId);
+      initCompletedAtRef.current = Date.now();
       setIsInitialized(true);
       return;
     }
@@ -1159,6 +1187,7 @@ function UniversalOptionsCalculator() {
             });
             
             // Новые опционы от расширения будут добавлены через sync useEffect (Шаг 3)
+            initCompletedAtRef.current = Date.now();
             setIsInitialized(true);
             return;
           }
@@ -1288,10 +1317,17 @@ function UniversalOptionsCalculator() {
               // Сохраняем дополнительные параметры
               entryDate: savedOption.entryDate,
               simulationTargetPrice: savedOption.simulationTargetPrice,
+              // Цена базового актива на момент входа
+              assetPriceAtEntry: savedOption.assetPriceAtEntry || extOption.assetPriceAtEntry || extensionPrice || 0,
+              isAssetPriceModified: savedOption.isAssetPriceModified,
             };
           }
 
-          return extOption;
+          return {
+            ...extOption,
+            // Цена базового актива на момент входа
+            assetPriceAtEntry: extOption.assetPriceAtEntry || extensionPrice || 0,
+          };
         });
 
         setOptions(mergedOptions);
@@ -1350,6 +1386,7 @@ function UniversalOptionsCalculator() {
         }
       }
 
+      initCompletedAtRef.current = Date.now();
       setIsInitialized(true);
       return;
     }
@@ -1404,6 +1441,7 @@ function UniversalOptionsCalculator() {
       console.log('📡 [Universal] Ожидание данных от расширения...');
     }
 
+    initCompletedAtRef.current = Date.now();
     setIsInitialized(true);
   }, [isInitialized, isFromExtension, contractCode, extensionTicker, extensionPrice, extensionExpirationDate, extensionOptions]);
 
@@ -1425,14 +1463,51 @@ function UniversalOptionsCalculator() {
 
     // Если тикер изменился и это не первая инициализация
     if (prevTickerRef.current && prevTickerRef.current !== currentTicker && currentTicker) {
-      console.log('🔄 [Universal] Смена тикера с', prevTickerRef.current, 'на', currentTicker, '- полный сброс калькулятора');
-      
-      // Полный сброс калькулятора перед добавлением опционов от нового тикера
-      // ЗАЧЕМ: Предотвращаем смешивание опционов от разных акций
-      resetCalculator();
-      
-      // Не обновляем prevTickerRef здесь — resetCalculator сбросит isInitialized,
-      // и при следующей инициализации prevTickerRef будет установлен заново
+      console.log('🔄 [Universal] Смена тикера с', prevTickerRef.current, 'на', currentTicker, '- мягкий сброс');
+
+      // Мягкий сброс: очищаем старое состояние калькулятора, но НЕ трогаем данные расширения
+      // ЗАЧЕМ: Расширение уже записало новые данные (новый тикер) в localStorage и URL.
+      // Если вызвать полный resetCalculator — он удалит и новые данные, и при reload
+      // калькулятор окажется пустым. Мягкий сброс лишь обнуляет React state и
+      // перезапускает инициализацию, которая подхватит новые данные расширения.
+      isResettingRef.current = true;
+      setSelectedTicker('');
+      setCurrentPrice(0);
+      setPriceChange({ value: 0, percent: 0 });
+      setOptions([]);
+      setPositions([]);
+      setSelectedExpirationDate(null);
+      setDaysPassed(0);
+      setUserAdjustedDays(false);
+      setIsDataCleared(false);
+      setShowDemoData(false);
+      setStrikesByDate({});
+      setExpirationDates({});
+      setIsLocked(false);
+      setSavedConfigDate(null);
+      setLivePrice(null);
+      setOptionSelectionParams(null);
+      setCalculatorMode(CALCULATOR_MODES.STOCKS);
+      setSelectedFuture(null);
+      setLoadedConfigId(null);
+      setIsEditMode(false);
+      setHasChanges(false);
+      setDealInfo(null);
+      setActiveCalculatorTab('calculator');
+      // Очищаем ручные изменения опционов (от старого тикера)
+      localStorage.removeItem('optioner_user_overrides');
+      userOptionOverridesRef.current = {};
+      // Очищаем сохранённый loadedConfigId (если был)
+      localStorage.removeItem('universalCalc_loadedConfigId');
+      // Очищаем pending refresh от расширения
+      // ЗАЧЕМ: Расширение могло отправить sendPrIV_tocallc одновременно с добавлением опциона,
+      // и без очистки IV попадёт в Fact IV вместо колонки IV
+      markProcessed();
+      // Обновляем prevTickerRef на новый тикер
+      // ЗАЧЕМ: Предотвращаем повторный сброс при следующей инициализации
+      prevTickerRef.current = currentTicker;
+      // Сбрасываем isInitialized → init useEffect подхватит данные расширения
+      setIsInitialized(false);
       return;
     }
 
@@ -1448,7 +1523,10 @@ function UniversalOptionsCalculator() {
   // ВАЖНО: НЕ синхронизируем если загружена конфигурация из URL — данные конфигурации имеют приоритет
   useEffect(() => {
     if (!isInitialized) return;
-    
+    // ВАЖНО: Не синхронизируем если идёт сброс калькулятора
+    // ЗАЧЕМ: Предотвращаем запись данных в state после очистки resetCalculator
+    if (isResettingRef.current) return;
+
     console.log('🔔 [SYNC TRIGGERED]', {
       loadedConfigId,
       isLocked,
@@ -1767,6 +1845,10 @@ function UniversalOptionsCalculator() {
   // ВАЖНО: НЕ сохраняем если загружена конфигурация из URL — это предотвращает конфликты между вкладками
   useEffect(() => {
     if (!isInitialized) return;
+    // ВАЖНО: Не сохраняем если идёт сброс калькулятора
+    // ЗАЧЕМ: resetCalculator очищает localStorage, но эффекты текущего рендер-цикла
+    // ещё видят старый isInitialized=true и перезаписали бы данные обратно → бесконечный цикл
+    if (isResettingRef.current) return;
     // НЕ сохраняем в calculatorState если загружена конфигурация
     // ЗАЧЕМ: Предотвращает перезапись данных другой вкладки при открытии сохранённой конфигурации
     if (loadedConfigId) {
@@ -3165,6 +3247,7 @@ function UniversalOptionsCalculator() {
       });
       setConfigSource('db');
 
+      initCompletedAtRef.current = Date.now();
       setIsInitialized(true);
       console.log('✅ Конфигурация из БД загружена:', config.name);
     } catch (error) {

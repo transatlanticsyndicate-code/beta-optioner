@@ -167,11 +167,14 @@ export function calculateDaysRemainingUTC(option, daysPassed = 0, defaultDays = 
     const [entryYear, entryMonth, entryDay] = entryDateStr.split('-').map(Number);
     const optionEntryDateUTC = Date.UTC(entryYear, entryMonth - 1, entryDay);
     
-    // oldestEntryDate уже является Date объектом
+    // oldestEntryDate уже является Date объектом (создан через parseDateAtStartOfDay = local midnight)
+    // ВАЖНО: Используем getFullYear/Month/Date (local), а не getUTC*
+    // ЗАЧЕМ: parseDateAtStartOfDay создаёт дату в local time (new Date("YYYY-MM-DDT00:00:00")),
+    // и getUTC* в часовом поясе UTC+ сдвигает дату на день назад (00:00 local = 23:00 UTC предыдущего дня)
     const oldestEntryDateUTC = Date.UTC(
-      oldestEntryDate.getUTCFullYear(),
-      oldestEntryDate.getUTCMonth(),
-      oldestEntryDate.getUTCDate()
+      oldestEntryDate.getFullYear(),
+      oldestEntryDate.getMonth(),
+      oldestEntryDate.getDate()
     );
     
     // Разница в днях между датой входа опциона и самой старой датой входа
@@ -253,15 +256,17 @@ export function isOptionActiveAtDay(option, daysPassed, oldestEntryDate) {
   const [entryYear, entryMonth, entryDay] = entryDateStr.split('-').map(Number);
   const optionEntryDateUTC = Date.UTC(entryYear, entryMonth - 1, entryDay);
   
+  // ВАЖНО: Используем getFullYear/Month/Date (local), а не getUTC*
+  // ЗАЧЕМ: oldestEntryDate создан в local time, getUTC* в UTC+ сдвигает дату на день назад
   const oldestEntryDateUTC = Date.UTC(
-    oldestEntryDate.getUTCFullYear(),
-    oldestEntryDate.getUTCMonth(),
-    oldestEntryDate.getUTCDate()
+    oldestEntryDate.getFullYear(),
+    oldestEntryDate.getMonth(),
+    oldestEntryDate.getDate()
   );
-  
+
   // Разница в днях между датой входа опциона и самой старой датой входа
   const entryDiff = Math.ceil((optionEntryDateUTC - oldestEntryDateUTC) / (1000 * 60 * 60 * 24));
-  
+
   // Опцион активен, если daysPassed >= entryDiff (целевая дата >= даты входа опциона)
   return daysPassed >= entryDiff;
 }
@@ -282,10 +287,12 @@ export function isOptionExpiredAtDay(option, daysPassed, oldestEntryDate) {
   
   // Вычисляем целевую дату в UTC полночь (timestamp)
   // ЗАЧЕМ: Сравниваем только даты без учета времени для консистентности между часовыми поясами
+  // ВАЖНО: Используем getFullYear/Month/Date (local), а не getUTC*
+  // ЗАЧЕМ: oldestEntryDate создан в local time, getUTC* в UTC+ сдвигает дату на день назад
   const targetDateUTC = Date.UTC(
-    oldestEntryDate.getUTCFullYear(),
-    oldestEntryDate.getUTCMonth(),
-    oldestEntryDate.getUTCDate() + daysPassed
+    oldestEntryDate.getFullYear(),
+    oldestEntryDate.getMonth(),
+    oldestEntryDate.getDate() + daysPassed
   );
   
   // Парсим дату экспирации опциона в UTC полночь (timestamp)
