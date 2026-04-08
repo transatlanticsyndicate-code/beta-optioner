@@ -1673,6 +1673,9 @@ function UniversalOptionsCalculator() {
               // Сохраняем дополнительные параметры
               entryDate: entryDate,
               simulationTargetPrice: existingOption?.simulationTargetPrice,
+              // Цена базового актива на момент входа
+              assetPriceAtEntry: savedOverrides.assetPriceAtEntry ?? existingOption?.assetPriceAtEntry ?? (extensionPrice || 0),
+              isAssetPriceModified: savedOverrides.isAssetPriceModified ?? existingOption?.isAssetPriceModified,
             };
             console.log('🔄 [Merge] Опцион с ручными изменениями:', {
               strike: extOption.strike,
@@ -1689,7 +1692,9 @@ function UniversalOptionsCalculator() {
           return {
             ...extOption,
             // Для новых опционов от расширения добавляем entryDate
-            entryDate: extOption.entryDate || new Date().toISOString().split('T')[0]
+            entryDate: extOption.entryDate || new Date().toISOString().split('T')[0],
+            // Цена базового актива на момент входа
+            assetPriceAtEntry: extOption.assetPriceAtEntry || extensionPrice || 0,
           };
         });
 
@@ -1933,7 +1938,7 @@ function UniversalOptionsCalculator() {
       // ВАЖНО: Сохраняем ручные изменения в отдельное хранилище
       // ЗАЧЕМ: Расширение перезаписывает localStorage.calculatorState, теряя изменения
       // Поля, которые нужно сохранять: quantity, customPremium, customBid, customAsk, entryDate, actualPL, actualPLDate, actualPLPrice, manualIvOverride, manualIvOverrideDate
-      const fieldsToOverride = ['quantity', 'customPremium', 'customBid', 'customAsk', 'entryDate', 'isPremiumModified', 'isBidModified', 'isAskModified', 'actualPL', 'actualPLDate', 'actualPLPrice', 'manualIvOverride', 'manualIvOverrideDate'];
+      const fieldsToOverride = ['quantity', 'customPremium', 'customBid', 'customAsk', 'entryDate', 'isPremiumModified', 'isBidModified', 'isAskModified', 'actualPL', 'actualPLDate', 'actualPLPrice', 'manualIvOverride', 'manualIvOverrideDate', 'assetPriceAtEntry', 'isAssetPriceModified'];
       if (targetOption && fieldsToOverride.includes(field)) {
         saveUserOverride(targetOption, field, value);
       }
@@ -2083,13 +2088,16 @@ function UniversalOptionsCalculator() {
       // Дата входа в позицию (текущая дата в ISO формате YYYY-MM-DD)
       // ЗАЧЕМ: Фиксируем момент создания опциона для отслеживания времени нахождения в позиции
       entryDate: new Date().toISOString().split('T')[0],
+      // Цена базового актива на момент добавления опциона
+      // ЗАЧЕМ: Используется в расчётах P&L и целевой цены в Плане выхода
+      assetPriceAtEntry: currentPrice || 0,
     };
     console.log('✅ New option created:', newOption);
     setOptions(prevOptions => [...prevOptions, newOption]);
 
     // ОТКЛЮЧЕНО: В универсальном калькуляторе данные приходят от расширения
     // Не загружаем страйки и детали опционов с внешних API
-  }, [selectedExpirationDate, calculateAutoStrike, selectedTicker]);
+  }, [selectedExpirationDate, calculateAutoStrike, selectedTicker, currentPrice]);
 
   const [customStrategies, setCustomStrategies] = useState([]);
   useEffect(() => {
@@ -3646,6 +3654,8 @@ function UniversalOptionsCalculator() {
                             // Дата входа в позицию (текущая дата в ISO формате YYYY-MM-DD)
                             // ЗАЧЕМ: Фиксируем момент создания опциона для отслеживания времени нахождения в позиции
                             entryDate: new Date().toISOString().split('T')[0],
+                            // Цена базового актива на момент добавления опциона
+                            assetPriceAtEntry: currentPrice || 0,
                           };
                           setOptions(prevOptions => [...prevOptions, newOption]);
 
@@ -3858,6 +3868,8 @@ function UniversalOptionsCalculator() {
                           isGoldenOption: option.isGoldenOption || false, // Флаг для визуальной индикации золотой короны
                           isSuperOption: option.isSuperOption || false, // Флаг для визуальной индикации бриллианта (Super Selection)
                           entryDate: option.entryDate || new Date().toISOString().split('T')[0], // Дата входа
+                          // Цена базового актива на момент добавления опциона
+                          assetPriceAtEntry: option.assetPriceAtEntry || currentPrice || 0,
                         };
                         console.log('👑 OptionsCalculatorBasic: Создан новый опцион с isGoldenOption:', newOption.isGoldenOption, newOption);
                         setOptions(prevOptions => [...prevOptions, newOption]);

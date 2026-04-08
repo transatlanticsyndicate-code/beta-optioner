@@ -95,6 +95,7 @@ function OptionsTable({
   const [showAllStrikesForOption, setShowAllStrikesForOption] = React.useState({}); // { optionId: true/false }
   const [editingPremium, setEditingPremium] = React.useState(null); // optionId для редактирования премии
   const [editingEntryDate, setEditingEntryDate] = React.useState(null); // optionId для редактирования даты входа
+  const [editingAssetPrice, setEditingAssetPrice] = React.useState(null); // optionId для редактирования цены актива
   const [isRefreshingAll, setIsRefreshingAll] = React.useState(false); // Состояние обновления всех опционов
   const scrolledToAtm = React.useRef(new Set()); // Отслеживаем, для каких опционов уже был скролл
 
@@ -540,10 +541,10 @@ function OptionsTable({
       {hasOptions && (
         <div className="space-y-2">
           {/* Заголовки колонок — динамическая сетка в зависимости от hideColumns */}
-          <div className="grid items-center text-xs font-medium text-muted-foreground px-2" style={{ 
-            display: 'grid', 
-            gridTemplateColumns: `30px 90px 80px 90px 47px ${hideColumns.includes('premium') ? '' : '95px '}95px 95px ${hideColumns.includes('oi') ? '' : '75px '}40px 37px 60px 100px 40px`.replace(/\s+/g, ' ').trim(), 
-            gap: '8px' 
+          <div className="grid items-center text-xs font-medium text-muted-foreground px-2" style={{
+            display: 'grid',
+            gridTemplateColumns: `30px 90px 80px 90px 47px ${hideColumns.includes('premium') ? '' : '95px '}95px 95px ${hideColumns.includes('oi') ? '' : '75px '}40px 37px 60px 70px 100px 40px`.replace(/\s+/g, ' ').trim(),
+            gap: '8px'
           }}>
             <div></div>
             <div className="text-left ml-2">Тип</div>
@@ -557,6 +558,7 @@ function OptionsTable({
             <div className="text-right ml-2" style={{ fontSize: '0.7rem' }}>VOL</div>
             <div className="text-right ml-2" style={{ fontSize: '0.7rem' }}>IV</div>
             <div className="text-right ml-2">Вход</div>
+            <div className="text-right ml-2" style={{ fontSize: '0.7rem' }}>Цена</div>
             <div className="text-right ml-2">P&L</div>
             <div></div>
           </div>
@@ -580,10 +582,10 @@ function OptionsTable({
                 key={option.id}
                 className={`items-center text-sm border rounded-md p-2 ${isGrayedOut ? "[&_*]:!text-[#AAAAAA] [&_span]:!bg-gray-100" : ""
                   }`}
-                style={{ 
-                  display: 'grid', 
-                  gridTemplateColumns: `30px 90px 80px 90px 47px ${hideColumns.includes('premium') ? '' : '95px '}95px 95px ${hideColumns.includes('oi') ? '' : '75px '}40px 37px 60px 100px 40px`.replace(/\s+/g, ' ').trim(), 
-                  gap: '8px' 
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: `30px 90px 80px 90px 47px ${hideColumns.includes('premium') ? '' : '95px '}95px 95px ${hideColumns.includes('oi') ? '' : '75px '}40px 37px 60px 70px 100px 40px`.replace(/\s+/g, ' ').trim(),
+                  gap: '8px'
                 }}
               >
                 {/* Иконка видимости: Lock для зафиксированных позиций, Eye/EyeOff для обычных */}
@@ -1003,6 +1005,38 @@ function OptionsTable({
                   )}
                 </span>
 
+                {/* Цена базового актива на момент входа */}
+                <span
+                  className={`text-right ml-2 ${option.isLockedPosition ? 'cursor-default' : 'cursor-pointer'}`}
+                  onDoubleClick={() => !option.isLockedPosition && setEditingAssetPrice(option.id)}
+                >
+                  {editingAssetPrice === option.id && !option.isLockedPosition ? (
+                    <Input
+                      type="number"
+                      step="0.01"
+                      autoFocus
+                      defaultValue={option.assetPriceAtEntry || currentPrice || ''}
+                      onBlur={(e) => {
+                        const val = parseFloat(e.target.value);
+                        if (!isNaN(val) && val > 0) {
+                          handleFieldChange(option.id, 'assetPriceAtEntry', val);
+                          handleFieldChange(option.id, 'isAssetPriceModified', true);
+                        }
+                        setEditingAssetPrice(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') e.target.blur();
+                        if (e.key === 'Escape') setEditingAssetPrice(null);
+                      }}
+                      className="h-7 text-right text-xs px-1 border-input font-bold w-[65px]"
+                    />
+                  ) : (
+                    <span className={`text-xs font-bold ${option.isAssetPriceModified ? 'text-orange-500' : 'text-muted-foreground'}`}>
+                      {option.assetPriceAtEntry ? option.assetPriceAtEntry.toFixed(option.assetPriceAtEntry >= 100 ? 0 : 2) : '—'}
+                    </span>
+                  )}
+                </span>
+
                 {/* P/L (Прибыль/Убыток) */}
                 <span className="text-right ml-2 font-bold">
                   {(() => {
@@ -1079,10 +1113,12 @@ function OptionsTable({
                     console.log(`[Таблица] 💰 P/L расчёт ${option.type} Strike $${option.strike}: BID=$${option.bid?.toFixed(2) || 'N/A'}, ASK=$${option.ask?.toFixed(2) || 'N/A'}, Premium=$${effectivePremium?.toFixed(2) || 'N/A'}, EntryPrice=${option.action === 'Buy' ? (option.ask || effectivePremium) : (option.bid || effectivePremium)}`);
                     console.log(`[Таблица] 📈 IV расчёт ${option.type} Strike $${option.strike}: rawIV=${rawIV}, IV=${(optionVolatility * 100).toFixed(1)}%, currentDays=${currentDaysToExpiration}, daysRemaining=${optionDaysRemaining}, targetPrice=$${targetPrice || currentPrice}`);
 
+                    // Используем цену актива на момент входа для расчётов
+                    const optionAssetPrice = option.assetPriceAtEntry || currentPrice;
                     let pl = calculateOptionPLValue(
                       tempOpt,
                       targetPrice || currentPrice,
-                      currentPrice,
+                      optionAssetPrice,
                       optionDaysRemaining,
                       optionVolatility,
                       dividendYield
@@ -1120,7 +1156,7 @@ function OptionsTable({
           })}
 
           {/* Итоговая строка */}
-          <div className="items-center text-sm border-t-2 border-cyan-500 bg-cyan-50/50 rounded-md p-2 font-bold" style={{ display: 'grid', gridTemplateColumns: '30px 90px 80px 90px 47px 95px 95px 95px 75px 40px 37px 60px 100px 40px', gap: '8px' }}>
+          <div className="items-center text-sm border-t-2 border-cyan-500 bg-cyan-50/50 rounded-md p-2 font-bold" style={{ display: 'grid', gridTemplateColumns: '30px 90px 80px 90px 47px 95px 95px 95px 75px 40px 37px 60px 70px 100px 40px', gap: '8px' }}>
             <div></div>
             <div className="text-left ml-2">ИТОГО:</div>
             <div></div>
@@ -1158,6 +1194,7 @@ function OptionsTable({
                 );
               })()}
             </div>
+            <div></div>
             <div></div>
             <div></div>
             <div></div>
@@ -1216,15 +1253,16 @@ function OptionsTable({
                       ask: opt.isPremiumModified ? 0 : opt.ask,
                       bid: opt.isPremiumModified ? 0 : opt.bid
                     };
+                    const optAssetPrice = opt.assetPriceAtEntry || currentPrice;
                     let pl = calculateOptionPLValue(
                       tempOpt,
                       targetPrice || currentPrice,
-                      currentPrice,
+                      optAssetPrice,
                       optDaysRemaining,
                       optVolatility,
                       dividendYield
                     );
-                    
+
                     // Применяем корректировку P&L по группе акции
                     if (stockClassification) {
                       pl = adjustPLByStockGroup(pl, stockClassification);

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, ChevronDown, Trash2, Loader2, Save, RotateCcw, AlertTriangle, RefreshCw, Gem } from 'lucide-react';
+import { Eye, EyeOff, ChevronDown, Trash2, Loader2, Save, RotateCcw, AlertTriangle, RefreshCw, Gem, Info } from 'lucide-react';
 import { clearTickerCache } from '../../services/apiClient';
 import { invalidateOptionsForTicker } from '../../services/OptionsDataService';
 import { sendRefreshSpecificCommand } from '../../hooks/useExtensionData';
@@ -121,6 +121,7 @@ function OptionsTableV3({
   const [showAllStrikesForOption, setShowAllStrikesForOption] = React.useState({}); // { optionId: true/false }
   const [editingPremium, setEditingPremium] = React.useState(null); // optionId для редактирования премии
   const [editingEntryDate, setEditingEntryDate] = React.useState(null); // optionId для редактирования даты входа
+  const [editingAssetPrice, setEditingAssetPrice] = React.useState(null); // optionId для редактирования цены актива
   const [editingBid, setEditingBid] = React.useState(null); // optionId для редактирования bid
   const [editingAsk, setEditingAsk] = React.useState(null); // optionId для редактирования ask
   const [isRefreshingAll, setIsRefreshingAll] = React.useState(false); // Состояние обновления всех опционов
@@ -534,7 +535,7 @@ function OptionsTableV3({
           {/* ЗАЧЕМ: Клик по заголовку сортирует таблицу по этой колонке */}
           <div className="grid items-center text-xs font-medium text-muted-foreground px-2" style={{
             display: 'grid',
-            gridTemplateColumns: `30px 0.6fr 0.7fr 0.7fr 0.4fr ${hideColumns.includes('premium') ? '' : '0.8fr '}0.9fr 0.5fr ${hideColumns.includes('oi') ? '' : '0.6fr '}0.4fr 0.3fr 0.55fr 0.65fr 0.8fr 0.8fr 0.7fr 40px`.replace(/\s+/g, ' ').trim(),
+            gridTemplateColumns: `30px 0.6fr 0.7fr 0.7fr 0.4fr ${hideColumns.includes('premium') ? '' : '0.8fr '}0.9fr 0.5fr ${hideColumns.includes('oi') ? '' : '0.6fr '}0.4fr 0.3fr 0.55fr 0.65fr 0.55fr 0.8fr 0.8fr 0.7fr 40px`.replace(/\s+/g, ' ').trim(),
             gap: '6px'
           }}>
             <div></div>
@@ -583,6 +584,19 @@ function OptionsTableV3({
                 <span className="text-cyan-500">{sortDirection === 'asc' ? '↑' : '↓'}</span>
               )}
             </div>
+            <div className="text-right flex items-center justify-end gap-0.5" style={{ fontSize: '0.7rem' }}>
+              Актив
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="w-3 h-3 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Цена Актива на момент входа в позицию.<br/>Влияет только на расчет срезок в Плане выхода.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
             <div className="text-right" style={{ fontSize: '0.75rem' }}>P&L</div>
             <div className="text-right" style={{ fontSize: '0.75rem' }}>Fact P&L</div>
             <div className="text-right" style={{ fontSize: '0.75rem' }}>Close</div>
@@ -610,7 +624,7 @@ function OptionsTableV3({
                   }`}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: `30px 0.6fr 0.7fr 0.7fr 0.4fr ${hideColumns.includes('premium') ? '' : '0.8fr '}0.6fr 0.6fr ${hideColumns.includes('oi') ? '' : '0.6fr '}0.4fr 0.55fr 0.55fr 0.65fr 0.8fr 0.8fr 0.7fr 40px`.replace(/\s+/g, ' ').trim(),
+                  gridTemplateColumns: `30px 0.6fr 0.7fr 0.7fr 0.4fr ${hideColumns.includes('premium') ? '' : '0.8fr '}0.6fr 0.6fr ${hideColumns.includes('oi') ? '' : '0.6fr '}0.4fr 0.55fr 0.55fr 0.65fr 0.55fr 0.8fr 0.8fr 0.7fr 40px`.replace(/\s+/g, ' ').trim(),
                   gap: '6px'
                 }}
               >
@@ -937,6 +951,38 @@ function OptionsTableV3({
                   )}
                 </span>
 
+                {/* Цена базового актива на момент входа */}
+                <span
+                  className={`text-right ${option.isLockedPosition ? 'cursor-default' : 'cursor-pointer'}`}
+                  onDoubleClick={() => !option.isLockedPosition && setEditingAssetPrice(option.id)}
+                >
+                  {editingAssetPrice === option.id && !option.isLockedPosition ? (
+                    <Input
+                      type="number"
+                      step="0.01"
+                      autoFocus
+                      defaultValue={option.assetPriceAtEntry || currentPrice || ''}
+                      onBlur={(e) => {
+                        const val = parseFloat(e.target.value);
+                        if (!isNaN(val) && val > 0) {
+                          handleFieldChange(option.id, 'assetPriceAtEntry', val);
+                          handleFieldChange(option.id, 'isAssetPriceModified', true);
+                        }
+                        setEditingAssetPrice(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') e.target.blur();
+                        if (e.key === 'Escape') setEditingAssetPrice(null);
+                      }}
+                      className="h-7 text-right text-xs px-1 border-input font-bold w-[60px]"
+                    />
+                  ) : (
+                    <span className={`text-xs font-bold ${option.isAssetPriceModified ? 'text-orange-500' : 'text-muted-foreground'}`}>
+                      {option.assetPriceAtEntry ? option.assetPriceAtEntry.toFixed(option.assetPriceAtEntry >= 100 ? 0 : 2) : '—'}
+                    </span>
+                  )}
+                </span>
+
                 {/* P/L (Прибыль/Убыток) */}
                 <span className="text-right font-bold">
                   {(() => {
@@ -1046,9 +1092,11 @@ function OptionsTableV3({
                     // ЗАЧЕМ: Режим "Фьючерсы" использует Black-76, режимы "Акции" и "Крипто" — BSM
                     // Для крипто (Binance) безрисковая ставка = 0, для акций — из FRED (null)
                     const rfrOpt = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
+                    // Цена актива на момент входа — для расчётов P&L
+                    const optionAssetPrice = option.assetPriceAtEntry || currentPrice;
                     let pl = calculatorMode === CALCULATOR_MODES.FUTURES
                       ? calculateFuturesOptionPLValue(tempOpt, targetPrice || currentPrice, optionDaysRemaining, contractMultiplier, optionVolatility)
-                      : calculateStockOptionPLValue(tempOpt, targetPrice || currentPrice, currentPrice, optionDaysRemaining, optionVolatility, dividendYield, contractMultiplier, rfrOpt);
+                      : calculateStockOptionPLValue(tempOpt, targetPrice || currentPrice, optionAssetPrice, optionDaysRemaining, optionVolatility, dividendYield, contractMultiplier, rfrOpt);
 
                     // Применяем корректировку P&L по группе акции (только для режима stocks, не для крипто)
                     if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
@@ -1062,26 +1110,26 @@ function OptionsTableV3({
                       const anchorDateObj = new Date(option.actualPLDate + 'T00:00:00Z');
                       const oldestEntryDateObj = oldestEntry || new Date();
                       const anchorDaysPassed = Math.round((anchorDateObj - oldestEntryDateObj) / (1000 * 60 * 60 * 24));
-                      
+
                       // Если текущий день < дня ввода — показываем стандартный расчёт
                       // Если текущий день >= дня ввода — используем якорную формулу
                       if (daysPassed >= anchorDaysPassed) {
                         // Вычисляем теоретическую цену на момент якоря
                         const anchorDaysToExp = calculateDaysRemainingUTC(option, anchorDaysPassed, 30, oldestEntry);
                         const rfrAnchor = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
-                        
+
                         // IV на момент якоря: используем manualIvOverride если задан, иначе marketIV
                         const anchorIV = option.manualIvOverride !== null && option.manualIvOverride !== undefined
                           ? (option.manualIvOverride / 100)
                           : optionVolatility;
-                        
+
                         // ВАЖНО: plAtAnchor считается при ЦЕНЕ АКТИВА НА МОМЕНТ ВВОДА якоря (actualPLPrice)
                         // ЗАЧЕМ: Якорь фиксирует P&L при конкретной цене, дельта должна учитывать изменение цены
                         const anchorPrice = option.actualPLPrice || currentPrice;
-                        
+
                         let plAtAnchor = calculatorMode === CALCULATOR_MODES.FUTURES
                           ? calculateFuturesOptionPLValue(tempOpt, anchorPrice, anchorDaysToExp, contractMultiplier, anchorIV)
-                          : calculateStockOptionPLValue(tempOpt, anchorPrice, currentPrice, anchorDaysToExp, anchorIV, dividendYield, contractMultiplier, rfrAnchor);
+                          : calculateStockOptionPLValue(tempOpt, anchorPrice, optionAssetPrice, anchorDaysToExp, anchorIV, dividendYield, contractMultiplier, rfrAnchor);
                         
                         if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
                           plAtAnchor = adjustPLByStockGroup(plAtAnchor, stockClassification);
@@ -1212,9 +1260,10 @@ function OptionsTableV3({
 
                     // Расчёт raw P&L
                     const rfrOpt = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
+                    const optionAssetPrice = option.assetPriceAtEntry || currentPrice;
                     let pl = calculatorMode === CALCULATOR_MODES.FUTURES
                       ? calculateFuturesOptionPLValue(tempOpt, targetPrice || currentPrice, optionDaysRemaining, contractMultiplier, optionVolatility)
-                      : calculateStockOptionPLValue(tempOpt, targetPrice || currentPrice, currentPrice, optionDaysRemaining, optionVolatility, dividendYield, contractMultiplier, rfrOpt);
+                      : calculateStockOptionPLValue(tempOpt, targetPrice || currentPrice, optionAssetPrice, optionDaysRemaining, optionVolatility, dividendYield, contractMultiplier, rfrOpt);
 
                     // Применяем корректировку P&L по группе акции
                     if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
@@ -1226,7 +1275,7 @@ function OptionsTableV3({
                       const anchorDateObj = new Date(option.actualPLDate + 'T00:00:00Z');
                       const oldestEntryDateObj = oldestEntry || new Date();
                       const anchorDaysPassed = Math.round((anchorDateObj - oldestEntryDateObj) / (1000 * 60 * 60 * 24));
-                      
+
                       if (daysPassed >= anchorDaysPassed) {
                         const anchorDaysToExp = calculateDaysRemainingUTC(option, anchorDaysPassed, 30, oldestEntry);
                         const rfrAnchor = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
@@ -1234,10 +1283,10 @@ function OptionsTableV3({
                           ? (option.manualIvOverride / 100)
                           : optionVolatility;
                         const anchorPrice = option.actualPLPrice || currentPrice;
-                        
+
                         let plAtAnchor = calculatorMode === CALCULATOR_MODES.FUTURES
                           ? calculateFuturesOptionPLValue(tempOpt, anchorPrice, anchorDaysToExp, contractMultiplier, anchorIV)
-                          : calculateStockOptionPLValue(tempOpt, anchorPrice, currentPrice, anchorDaysToExp, anchorIV, dividendYield, contractMultiplier, rfrAnchor);
+                          : calculateStockOptionPLValue(tempOpt, anchorPrice, optionAssetPrice, anchorDaysToExp, anchorIV, dividendYield, contractMultiplier, rfrAnchor);
                         
                         if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
                           plAtAnchor = adjustPLByStockGroup(plAtAnchor, stockClassification);
@@ -1288,7 +1337,7 @@ function OptionsTableV3({
           })}
 
           {/* Итоговая строка */}
-          <div className="items-center text-sm border-t-2 border-cyan-500 bg-cyan-50/50 rounded-md p-2 font-bold" style={{ display: 'grid', gridTemplateColumns: `30px 0.6fr 0.7fr 0.7fr 0.4fr ${hideColumns.includes('premium') ? '' : '0.8fr '}0.6fr 0.6fr ${hideColumns.includes('oi') ? '' : '0.6fr '}0.4fr 0.4fr 0.55fr 0.65fr 0.8fr 0.8fr 0.7fr 40px`.replace(/\s+/g, ' ').trim(), gap: '6px' }}>
+          <div className="items-center text-sm border-t-2 border-cyan-500 bg-cyan-50/50 rounded-md p-2 font-bold" style={{ display: 'grid', gridTemplateColumns: `30px 0.6fr 0.7fr 0.7fr 0.4fr ${hideColumns.includes('premium') ? '' : '0.8fr '}0.6fr 0.6fr ${hideColumns.includes('oi') ? '' : '0.6fr '}0.4fr 0.4fr 0.55fr 0.65fr 0.55fr 0.8fr 0.8fr 0.7fr 40px`.replace(/\s+/g, ' ').trim(), gap: '6px' }}>
             <div></div>
             <div className="text-left">ИТОГО:</div>
             <div></div>
@@ -1298,6 +1347,7 @@ function OptionsTableV3({
             <div></div>
             <div></div>
             {!hideColumns.includes('oi') && <div></div>}
+            <div></div>
             <div></div>
             <div></div>
             <div></div>
@@ -1371,9 +1421,10 @@ function OptionsTableV3({
                     // Выбираем модель расчёта в зависимости от режима калькулятора
                     // Для крипто (Binance) безрисковая ставка = 0, для акций — из FRED (null)
                     const rfrSum = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
+                    const optAssetPrice = opt.assetPriceAtEntry || currentPrice;
                     let pl = calculatorMode === CALCULATOR_MODES.FUTURES
                       ? calculateFuturesOptionPLValue(tempOpt, targetPrice || currentPrice, optDaysRemaining, contractMultiplier, optVolatility)
-                      : calculateStockOptionPLValue(tempOpt, targetPrice || currentPrice, currentPrice, optDaysRemaining, optVolatility, dividendYield, contractMultiplier, rfrSum);
+                      : calculateStockOptionPLValue(tempOpt, targetPrice || currentPrice, optAssetPrice, optDaysRemaining, optVolatility, dividendYield, contractMultiplier, rfrSum);
 
                     // Применяем корректировку P&L по группе акции (только для режима stocks, не для крипто)
                     if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
@@ -1387,25 +1438,25 @@ function OptionsTableV3({
                       const anchorDateObj = new Date(opt.actualPLDate + 'T00:00:00Z');
                       const oldestEntryDateObj = oldestEntry || new Date();
                       const anchorDaysPassed = Math.round((anchorDateObj - oldestEntryDateObj) / (1000 * 60 * 60 * 24));
-                      
+
                       // Если текущий день >= дня ввода — используем якорную формулу
                       if (daysPassed >= anchorDaysPassed) {
                         // Вычисляем теоретическую цену на момент якоря
                         const anchorDaysToExp = calculateDaysRemainingUTC(opt, anchorDaysPassed, 30, oldestEntry);
                         const rfrAnchor = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
-                        
+
                         // IV на момент якоря: используем manualIvOverride если задан, иначе marketIV
                         const anchorIV = opt.manualIvOverride !== null && opt.manualIvOverride !== undefined
                           ? (opt.manualIvOverride / 100)
                           : optVolatility;
-                        
+
                         // ВАЖНО: plAtAnchor считается при ЦЕНЕ АКТИВА НА МОМЕНТ ВВОДА якоря (actualPLPrice)
                         // ЗАЧЕМ: Якорь фиксирует P&L при конкретной цене, дельта должна учитывать изменение цены
                         const anchorPrice = opt.actualPLPrice || currentPrice;
-                        
+
                         let plAtAnchor = calculatorMode === CALCULATOR_MODES.FUTURES
                           ? calculateFuturesOptionPLValue(tempOpt, anchorPrice, anchorDaysToExp, contractMultiplier, anchorIV)
-                          : calculateStockOptionPLValue(tempOpt, anchorPrice, currentPrice, anchorDaysToExp, anchorIV, dividendYield, contractMultiplier, rfrAnchor);
+                          : calculateStockOptionPLValue(tempOpt, anchorPrice, optAssetPrice, anchorDaysToExp, anchorIV, dividendYield, contractMultiplier, rfrAnchor);
                         
                         if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
                           plAtAnchor = adjustPLByStockGroup(plAtAnchor, stockClassification);

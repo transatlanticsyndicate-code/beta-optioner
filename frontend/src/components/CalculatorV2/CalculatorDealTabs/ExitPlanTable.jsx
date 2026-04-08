@@ -99,15 +99,17 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
           const existingStep = prevSteps[index];
           
           const percent = existingStep ? existingStep.percent : (defaultPercents[index] || (index + 1) * 15);
-          const dollars = currentPrice ? (currentPrice * (1 + percent / 100)) : 0;
-          
+          // Целевая цена рассчитывается от цены актива на момент входа в конкретный опцион
+          const basePrice = option.assetPriceAtEntry || currentPrice;
+          const dollars = basePrice ? (basePrice * (1 + percent / 100)) : 0;
+
           // Используем ручное количество если нет forceRedistribute
           const quantity = (existingStep && !forceRedistribute) ? existingStep.quantity : autoQuantity;
-          
+
           // Рассчитываем дату выхода по умолчанию (+N месяцев от сегодня)
           const defaultExitDate = calculateDefaultExitDate(index);
           const exitDate = existingStep?.exitDate || validateExitDate(defaultExitDate, option.date);
-          
+
           return {
             id: index + 1,
             percent,
@@ -137,14 +139,16 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
           const existingStep = prevSteps[index];
           
           const percent = existingStep ? existingStep.percent : (defaultPercents[index] || (index + 1) * 15);
-          const dollars = currentPrice ? (currentPrice * (1 + percent / 100)) : 0;
-          
+          // Целевая цена рассчитывается от цены актива на момент входа в конкретный опцион
+          const basePrice = option.assetPriceAtEntry || currentPrice;
+          const dollars = basePrice ? (basePrice * (1 + percent / 100)) : 0;
+
           const quantity = (existingStep && !forceRedistribute) ? existingStep.quantity : autoQuantity;
-          
+
           // Рассчитываем дату выхода по умолчанию (+N месяцев от сегодня)
           const defaultExitDate = calculateDefaultExitDate(index);
           const exitDate = existingStep?.exitDate || validateExitDate(defaultExitDate, option.date);
-          
+
           return {
             id: index + 1,
             percent,
@@ -189,13 +193,14 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
     const newPercent = parseFloat(value) || 0;
     const newSteps = [...steps];
     newSteps[index].percent = newPercent;
-    
-    // Пересчитываем доллары
-    if (currentPrice > 0) {
-      const newDollars = currentPrice * (1 + newPercent / 100);
+
+    // Пересчитываем доллары от цены актива конкретного опциона
+    const basePrice = newSteps[index].optionRef?.assetPriceAtEntry || currentPrice;
+    if (basePrice > 0) {
+      const newDollars = basePrice * (1 + newPercent / 100);
       newSteps[index].dollars = Math.round(newDollars * 100) / 100;
     }
-    
+
     setSteps(newSteps);
   };
 
@@ -204,10 +209,11 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
     const newDollars = parseFloat(value) || 0;
     const newSteps = [...steps];
     newSteps[index].dollars = newDollars;
-    
-    // Пересчитываем проценты
-    if (currentPrice > 0) {
-      const newPercent = (newDollars / currentPrice - 1) * 100;
+
+    // Пересчитываем проценты от цены актива конкретного опциона
+    const basePrice = newSteps[index].optionRef?.assetPriceAtEntry || currentPrice;
+    if (basePrice > 0) {
+      const newPercent = (newDollars / basePrice - 1) * 100;
       newSteps[index].percent = Math.round(newPercent * 100) / 100;
     }
     
@@ -398,6 +404,9 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
       contractMultiplier
     });
 
+    // Цена актива на момент входа — для расчётов P&L
+    const optionBasePrice = option.assetPriceAtEntry || currentPrice;
+
     // Вызываем ТУ ЖЕ функцию расчёта P&L, что и таблица опционов
     let pl = 0;
     if (calculatorMode === CALCULATOR_MODES.FUTURES) {
@@ -412,7 +421,7 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
       pl = calculateOptionPLValue(
         tempOpt,
         targetAssetPrice,
-        currentPrice,
+        optionBasePrice,
         daysRemaining,
         optionVolatility,
         dividendYield
@@ -461,7 +470,7 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
           plAtAnchor = calculateOptionPLValue(
             tempOpt,
             anchorPrice,
-            currentPrice,
+            optionBasePrice,
             anchorDaysToExp,
             anchorIV,
             dividendYield
