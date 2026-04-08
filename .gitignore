@@ -46,6 +46,8 @@ secrets/
 
 # Database
 *.db
+*.db-shm
+*.db-wal
 *.sqlite3
 db.sqlite3
 
@@ -133,6 +135,9 @@ EXTENTIONS/
 
 # Claude Code (локальные настройки агента)
 .claude/
+
+# MCP конфигурация (локальная)
+.mcp.json
 
 # Локальные инструкции (не нужны в репозитории)
 DEPLOY_INSTRUCTIONS.md
