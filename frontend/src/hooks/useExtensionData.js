@@ -316,7 +316,10 @@ export default useExtensionData;
  */
 export function useExtensionRefreshCommand(pollInterval = 1500) {
   const [pendingRefresh, setPendingRefresh] = useState(null);
-  const lastTimestampRef = useRef(0);
+  // ВАЖНО: Инициализируем текущим временем, а не 0
+  // ЗАЧЕМ: Иначе при монтировании нового калькулятора хук подхватит старую команду
+  // от предыдущего тикера, которая просто лежала в localStorage
+  const lastTimestampRef = useRef(Date.now());
 
   useEffect(() => {
     const checkCommand = () => {

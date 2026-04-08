@@ -698,6 +698,19 @@ function UniversalOptionsCalculator() {
     if (!pendingRefresh) return;
     if (options.length === 0) return;
 
+    // ВАЖНО: Применяем данные только если тикер совпадает с текущим калькулятором
+    // ЗАЧЕМ: В tvc_refresh_command может лежать устаревшая запись от другого тикера,
+    // и без проверки она перезапишет цену базового актива на чужую
+    if (pendingRefresh.ticker && selectedTicker &&
+        pendingRefresh.ticker.toUpperCase() !== selectedTicker.toUpperCase()) {
+      console.log('⚠️ [ExtRefresh] Пропуск — тикер не совпадает:', {
+        refresh: pendingRefresh.ticker,
+        current: selectedTicker
+      });
+      markProcessed();
+      return;
+    }
+
     const { currentPrice: newPrice, options: refreshedOptions } = pendingRefresh;
 
     if (newPrice && newPrice > 0) {
@@ -747,7 +760,7 @@ function UniversalOptionsCalculator() {
       needExtRefreshSaveRef.current = true;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingRefresh, options.length]);
+  }, [pendingRefresh, options.length, selectedTicker]);
 
   // Пересохранение конфигурации после обновления от расширения
   useEffect(() => {
