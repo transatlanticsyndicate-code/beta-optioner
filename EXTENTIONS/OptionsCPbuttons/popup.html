@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      width: 240px;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 13px;
+      background: #1e222d;
+      color: #d1d4dc;
+    }
+    h1 {
+      font-size: 14px;
+      margin: 0 0 12px 0;
+      color: #d1d4dc;
+    }
+    .env-selector {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: #2a2e39;
+      border: 1px solid #363a45;
+      border-radius: 6px;
+      margin-bottom: 12px;
+    }
+    .env-selector label { color: #787b86; font-size: 12px; }
+    .env-selector select {
+      background: #2a2e39; color: #d1d4dc;
+      border: 1px solid #363a45; border-radius: 4px;
+      padding: 4px 8px; font-size: 12px; cursor: pointer;
+    }
+    .env-selector select:focus { outline: none; border-color: #2962ff; }
+    .btn {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 8px;
+      border: none;
+      border-radius: 6px;
+      background: #2962ff;
+      color: white;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn:hover { background: #1e4bd8; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .status {
+      padding: 6px 10px;
+      background: #2a2e39;
+      border: 1px solid #363a45;
+      border-radius: 6px;
+      margin-bottom: 8px;
+    }
+    .stat-row { display: flex; justify-content: space-between; margin-bottom: 2px; }
+    .stat-label { color: #787b86; font-size: 11px; }
+    .stat-value { font-weight: 600; font-size: 11px; }
+    .version { font-size: 10px; color: #787b86; text-align: center; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Options CP Buttons</h1>
+
+  <div class="env-selector">
+    <label>Сервер:</label>
+    <select id="envSelect">
+      <option value="production">Production</option>
+      <option value="localhost">Localhost</option>
+    </select>
+  </div>
+
+  <div class="status" id="statsBlock">
+    <div class="stat-row">
+      <span class="stat-label">Позиций:</span>
+      <span class="stat-value" id="posCount">0</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Тикеров:</span>
+      <span class="stat-value" id="tickerCount">0</span>
+    </div>
+  </div>
+
+  <button id="showPanel" class="btn">Показать панель</button>
+
+  <div class="version" id="version"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
