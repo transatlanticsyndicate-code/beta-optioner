@@ -1591,10 +1591,11 @@ function UniversalOptionsCalculator() {
           });
           
           if (newOptions.length > 0) {
-            // Добавляем entryDate к новым опционам (сегодняшняя дата)
+            // Добавляем entryDate и assetPriceAtEntry к новым опционам
             const enrichedNewOptions = newOptions.map(opt => ({
               ...opt,
-              entryDate: new Date().toISOString().split('T')[0] // Всегда сегодняшняя дата для новых опционов
+              entryDate: new Date().toISOString().split('T')[0],
+              assetPriceAtEntry: opt.assetPriceAtEntry || extensionPrice || currentPrice || 0
             }));
             console.log('➕ [Universal] Добавлено новых опционов к конфигурации:', enrichedNewOptions.length);
             return [...updatedPrevOptions, ...enrichedNewOptions];
