@@ -252,28 +252,54 @@ function handleOpenOptionerTab(message, sendResponse) {
       if (tabs.length > 0) {
         const tabId = tabs[0].id;
         const currentUrl = tabs[0].url || '';
-
-        // Проверяем: открыта ли сохранённая конфигурация (URL содержит ?config=)
-        // ЗАЧЕМ: Если конфигурация загружена — нельзя перезагружать страницу, иначе потеряем позицию
-        const hasConfigInUrl = /[?&]config=/.test(currentUrl);
+        console.log('[EXT2 BG] handleOpenOptionerTab: currentUrl =', currentUrl);
 
         // Проверяем: открыт ли калькулятор на другом тикере
         const currentContractMatch = currentUrl.match(/[?&]contract=([^&]+)/);
         const currentContract = currentContractMatch ? currentContractMatch[1] : null;
         const isSameTicker = currentContract && currentContract.toLowerCase() === shortTicker.toLowerCase();
 
-        if (hasConfigInUrl) {
-          // Конфигурация загружена — НЕ перезагружаем, инжектим поверх через StorageEvent
-          // ЗАЧЕМ: React калькулятор сам добавит новые опционы к конфигурации
-          chrome.tabs.update(tabId, { active: true }, () => {
-            if (chrome.runtime.lastError) return;
-            freshFetchAndInject(tabId, positions, ticker, underlyingPrice, exchange);
-          });
-        } else if (!isSameTicker) {
-          // Тикер изменился — обновляем URL и ждём загрузки перед инжектом
-          chrome.tabs.update(tabId, { active: true, url: calcUrl }, () => {
-            if (chrome.runtime.lastError) return;
-            openAndWait(tabId);
+        // Проверяем: открыта ли сохранённая конфигурация
+        // Два индикатора: URL (?config= / ?dbConfig=) или localStorage (universalCalc_loadedConfigId)
+        // ЗАЧЕМ: URL может быть очищен после загрузки, но loadedConfigId в localStorage остаётся
+        const hasConfigInUrl = /[?&](?:config|dbConfig)=/.test(currentUrl);
+
+        if (hasConfigInUrl || !isSameTicker) {
+          // Проверяем localStorage — есть ли загруженная конфигурация
+          chrome.scripting.executeScript({
+            target: { tabId },
+            func: () => localStorage.getItem('universalCalc_loadedConfigId')
+          }).then(results => {
+            const loadedConfigId = results?.[0]?.result;
+            console.log('[EXT2 BG] loadedConfigId =', loadedConfigId, 'hasConfigInUrl =', hasConfigInUrl);
+
+            if (loadedConfigId || hasConfigInUrl) {
+              // Конфигурация загружена — НЕ перезагружаем, инжектим поверх через StorageEvent
+              // ЗАЧЕМ: React калькулятор сам добавит новые опционы к конфигурации
+              chrome.tabs.update(tabId, { active: true }, () => {
+                if (chrome.runtime.lastError) return;
+                freshFetchAndInject(tabId, positions, ticker, underlyingPrice, exchange);
+              });
+            } else {
+              // Нет конфигурации, другой тикер — обновляем URL и ждём загрузки
+              chrome.tabs.update(tabId, { active: true, url: calcUrl }, () => {
+                if (chrome.runtime.lastError) return;
+                openAndWait(tabId);
+              });
+            }
+          }).catch(() => {
+            // Если не удалось прочитать localStorage — fallback на проверку URL
+            if (hasConfigInUrl) {
+              chrome.tabs.update(tabId, { active: true }, () => {
+                if (chrome.runtime.lastError) return;
+                freshFetchAndInject(tabId, positions, ticker, underlyingPrice, exchange);
+              });
+            } else {
+              chrome.tabs.update(tabId, { active: true, url: calcUrl }, () => {
+                if (chrome.runtime.lastError) return;
+                openAndWait(tabId);
+              });
+            }
           });
         } else {
           // Тот же тикер — просто активируем вкладку и инжектим данные
