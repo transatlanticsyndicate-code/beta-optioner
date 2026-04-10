@@ -5,3 +5,4 @@
 
 export { ScenarioCard } from './ScenarioCard';
 export { LiquidityWarning } from './LiquidityWarning';
+export { GreeksWarning } from './GreeksWarning';

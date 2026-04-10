@@ -16,6 +16,7 @@ import {
 import { calculateIntrinsicValueBlack76 } from '../utils/black76';
 import { getOptionVolatility } from '../utils/volatilitySurface';
 import { assessLiquidity, LIQUIDITY_LEVELS } from '../utils/liquidityCheck';
+import { assessAllGreeks } from '../utils/greeksCheck';
 import { calculateDaysRemainingUTC, getOldestEntryDate, calculateDaysToExpirationFromToday } from '../utils/dateUtils';
 
 // Режимы калькулятора
@@ -149,7 +150,9 @@ export const usePositionExitCalculator = ({
           exercise: [],
           closeOptions: [],
           closeAll: []
-        }
+        },
+        liquidityWarnings: [],
+        greeksWarnings: []
       };
     }
 
@@ -217,6 +220,10 @@ export const usePositionExitCalculator = ({
       })
       .filter(Boolean);
 
+    // Проверяем греки всех опционов
+    // ЗАЧЕМ: Предупреждаем пользователя о рисковых значениях Delta, Gamma, Theta
+    const greeksWarnings = assessAllGreeks(visibleOptions, currentPrice);
+
     // Применяем коэффициент к деталям расчета (каждому элементу в массиве)
     // ЗАЧЕМ: Детализация в карточках сценариев должна показывать скорректированные значения
     // ВАЖНО: Коэффициенты разные для положительных и отрицательных P&L,
@@ -253,7 +260,8 @@ export const usePositionExitCalculator = ({
         closeOptions: adjustedCloseOptionsDetails,
         closeAll: adjustedCloseAllDetails
       },
-      liquidityWarnings // Предупреждения о низкой ликвидности
+      liquidityWarnings, // Предупреждения о низкой ликвидности
+      greeksWarnings // Предупреждения о рисковых значениях греков
     };
   }, [underlyingPrice, daysPassed, options, positions, currentPrice, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap, calculatorMode, contractMultiplier, stockClassification]);
 };

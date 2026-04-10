@@ -71,7 +71,7 @@ import {
 import OptionsTableV3 from '../components/CalculatorV2/OptionsTableV3';
 import FinancialControl from '../components/CalculatorV2/FinancialControl';
 import ExitCalculator from '../components/CalculatorV2/ExitCalculator';
-import { ScenarioCard, LiquidityWarning } from '../components/CalculatorV2/ExitCalculator/components';
+import { ScenarioCard, LiquidityWarning, GreeksWarning } from '../components/CalculatorV2/ExitCalculator/components';
 import OptionSelectionResult from '../components/CalculatorV2/OptionSelectionResult';
 import CalculatorDealTabs from '../components/CalculatorV2/CalculatorDealTabs';
 import { getDaysUntilExpirationUTC, calculateDaysRemainingUTC } from '../utils/dateUtils';
@@ -3508,7 +3508,7 @@ function UniversalOptionsCalculator() {
 
   // Расчет P&L для сценария "Закрыть всё в выбранную дату"
   // ЗАЧЕМ: Отображение блока в левой колонке с результатами выхода из позиции
-  const { plCloseAll, details, liquidityWarnings } = usePositionExitCalculator({
+  const { plCloseAll, details, liquidityWarnings, greeksWarnings } = usePositionExitCalculator({
     underlyingPrice: targetPrice,
     daysPassed: daysPassed,
     options: displayOptions,
@@ -3836,6 +3836,11 @@ function UniversalOptionsCalculator() {
               {/* Предупреждение о низкой ликвидности */}
               {selectedTicker && displayOptions.length > 0 && liquidityWarnings && (
                 <LiquidityWarning warnings={liquidityWarnings} />
+              )}
+
+              {/* Предупреждения по грекам */}
+              {selectedTicker && displayOptions.length > 0 && greeksWarnings && (
+                <GreeksWarning warnings={greeksWarnings} />
               )}
 
               {/* СКРЫТО: Сценарий "Закрыть всё в выбранную дату" */}

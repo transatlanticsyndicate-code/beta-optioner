@@ -12,7 +12,7 @@ import { usePositionExitCalculator } from '../../../hooks/usePositionExitCalcula
 import ExitTimeDecayChart from '../ExitTimeDecayChart';
 import PriceAndTimeSettings from '../PriceAndTimeSettings';
 import { getPriceRange } from './utils/formatters';
-import { ScenarioCard, LiquidityWarning } from './components';
+import { ScenarioCard, LiquidityWarning, GreeksWarning } from './components';
 import { CALCULATOR_MODES } from '../../../utils/universalPricing';
 
 export function ExitCalculator({ 
@@ -53,7 +53,7 @@ export function ExitCalculator({
 
   // Расчет P&L через хук
   // ЗАЧЕМ: Использование IV Surface для точной интерполяции волатильности
-  const { plExercise, plCloseOptions, plCloseAll, details, liquidityWarnings } = usePositionExitCalculator({
+  const { plExercise, plCloseOptions, plCloseAll, details, liquidityWarnings, greeksWarnings } = usePositionExitCalculator({
     underlyingPrice: targetPrice,
     daysPassed: daysPassed,
     options,
@@ -143,6 +143,9 @@ export function ExitCalculator({
                 <div className="flex-1 space-y-3">
                   {/* Предупреждение о низкой ликвидности */}
                   <LiquidityWarning warnings={liquidityWarnings} />
+
+                  {/* Предупреждения по грекам */}
+                  <GreeksWarning warnings={greeksWarnings} />
 
                   {/* Два сценария рядом */}
                   <div className="grid grid-cols-2 gap-3">
