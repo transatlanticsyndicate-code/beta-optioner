@@ -53,10 +53,10 @@ function TopNav() {
       <div className="font-medium text-base hidden sm:flex items-center space-x-3 truncate max-w-[600px]">
         <span className="text-foreground">{pageTitle}</span>
         {location.pathname === '/tools/options-calculator' && (
-          <span className="text-sm text-cyan-500 font-medium">v35</span>
+          <span className="text-sm text-cyan-500 font-medium">v36</span>
         )}
         {location.pathname === '/tools/universal-calculator' && (
-          <span className="text-sm text-cyan-500 font-medium">v35</span>
+          <span className="text-sm text-cyan-500 font-medium">v36</span>
         )}
       </div>
 

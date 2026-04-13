@@ -4,13 +4,15 @@
  * Затрагивает: UniversalOptionsCalculator, OptionsMetrics, PLChart, OptionSelectionResult, ExitCalculator
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Calculator, FileText } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../ui/tabs';
 import { Card, CardContent } from '../../ui/card';
 
 // Импорт компонентов калькулятора
 import OptionsMetrics from '../OptionsMetrics';
+import VolatilityMetrics from '../VolatilityMetrics';
+import { fetchVolatilityMetrics } from '../../../services/barchartApi';
 import PLChart from '../PLChart';
 import OptionSelectionResult from '../OptionSelectionResult';
 import ExitCalculator from '../ExitCalculator';
@@ -102,6 +104,44 @@ function CalculatorDealTabs({
   const [dollarsInputValuePutExit, setDollarsInputValuePutExit] = useState('');
   const [isDollarsInputFocusedPutExit, setIsDollarsInputFocusedPutExit] = useState(false);
   
+  // State для данных волатильности (barchart.com)
+  const [volatilityData, setVolatilityData] = useState(null);
+  const [volatilityLoading, setVolatilityLoading] = useState(false);
+  const [volatilityLastUpdated, setVolatilityLastUpdated] = useState(null);
+  const lastVolatilityTickerRef = useRef(null);
+
+  // Загрузка данных волатильности
+  const loadVolatilityData = useCallback(async (ticker) => {
+    if (!ticker) return;
+    setVolatilityLoading(true);
+    try {
+      const data = await fetchVolatilityMetrics(ticker);
+      setVolatilityData(data);
+      if (data) {
+        setVolatilityLastUpdated(Date.now());
+      }
+    } catch (e) {
+      console.error('❌ [VolatilityMetrics] Ошибка загрузки:', e);
+    } finally {
+      setVolatilityLoading(false);
+    }
+  }, []);
+
+  // Автозагрузка при появлении/смене тикера
+  useEffect(() => {
+    if (selectedTicker && selectedTicker !== lastVolatilityTickerRef.current) {
+      lastVolatilityTickerRef.current = selectedTicker;
+      loadVolatilityData(selectedTicker);
+    }
+  }, [selectedTicker, loadVolatilityData]);
+
+  // Обработчик кнопки обновить
+  const handleVolatilityRefresh = useCallback(() => {
+    if (selectedTicker) {
+      loadVolatilityData(selectedTicker);
+    }
+  }, [selectedTicker, loadVolatilityData]);
+
   // State для отслеживания отправки срезок
   // ЗАЧЕМ: После отправки показываем кнопку перехода на TradingView вместо кнопки отправки
   const [slicesSent, setSlicesSent] = useState(false);
@@ -603,6 +643,18 @@ function CalculatorDealTabs({
 
         {/* Таб "Калькулятор" — содержит все компоненты анализа */}
         <TabsContent value="calculator" className="space-y-6 mt-4">
+          {/* Метрики волатильности — над метриками опционов */}
+          {shouldShowBlock('metrics-block') && !isFuturesMissingSettings && (
+            <Card className="w-full relative" style={{ borderColor: '#b8b8b8' }}>
+              <VolatilityMetrics
+                data={volatilityData}
+                loading={volatilityLoading}
+                onRefresh={handleVolatilityRefresh}
+                lastUpdated={volatilityLastUpdated}
+              />
+            </Card>
+          )}
+
           {/* Метрики опционов */}
           {shouldShowBlock('metrics-block') && !isFuturesMissingSettings && (
             <Card className="w-full relative" style={{ borderColor: '#b8b8b8' }}>
