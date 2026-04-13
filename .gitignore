@@ -141,3 +141,7 @@ docs/chrome_debug/
 
 # Локальные инструкции (не нужны в репозитории)
 DEPLOY_INSTRUCTIONS.md
+
+# Архивы расширений и внутренние доки багфиксов
+EXTENTIONS/*.zip
+docs/EXTENSION_BUGFIX_*.md
