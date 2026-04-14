@@ -4,15 +4,14 @@
  * Затрагивает: UniversalOptionsCalculator, OptionsMetrics, PLChart, OptionSelectionResult, ExitCalculator
  */
 
-import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Calculator, FileText } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../ui/tabs';
 import { Card, CardContent } from '../../ui/card';
 
 // Импорт компонентов калькулятора
 import OptionsMetrics from '../OptionsMetrics';
-import VolatilityMetrics from '../VolatilityMetrics';
-import { fetchVolatilityMetrics } from '../../../services/barchartApi';
+import VolatilityGauge from '../VolatilityGauge';
 import PLChart from '../PLChart';
 import OptionSelectionResult from '../OptionSelectionResult';
 import ExitCalculator from '../ExitCalculator';
@@ -74,6 +73,12 @@ function CalculatorDealTabs({
   dealInfo,
   dealSettings,
   setDealSettings,
+
+  // Пропсы для блока волатильности
+  volatilityData,
+  volatilityLoading,
+  volatilityLastUpdated,
+  onVolatilityRefresh,
 }) {
   // Активный таб: 'calculator' или 'deal'
   // ЗАЧЕМ: Поддержка управления табом как изнутри, так и извне (при создании сделки)
@@ -104,44 +109,6 @@ function CalculatorDealTabs({
   const [dollarsInputValuePutExit, setDollarsInputValuePutExit] = useState('');
   const [isDollarsInputFocusedPutExit, setIsDollarsInputFocusedPutExit] = useState(false);
   
-  // State для данных волатильности (barchart.com)
-  const [volatilityData, setVolatilityData] = useState(null);
-  const [volatilityLoading, setVolatilityLoading] = useState(false);
-  const [volatilityLastUpdated, setVolatilityLastUpdated] = useState(null);
-  const lastVolatilityTickerRef = useRef(null);
-
-  // Загрузка данных волатильности
-  const loadVolatilityData = useCallback(async (ticker) => {
-    if (!ticker) return;
-    setVolatilityLoading(true);
-    try {
-      const data = await fetchVolatilityMetrics(ticker);
-      setVolatilityData(data);
-      if (data) {
-        setVolatilityLastUpdated(Date.now());
-      }
-    } catch (e) {
-      console.error('❌ [VolatilityMetrics] Ошибка загрузки:', e);
-    } finally {
-      setVolatilityLoading(false);
-    }
-  }, []);
-
-  // Автозагрузка при появлении/смене тикера
-  useEffect(() => {
-    if (selectedTicker && selectedTicker !== lastVolatilityTickerRef.current) {
-      lastVolatilityTickerRef.current = selectedTicker;
-      loadVolatilityData(selectedTicker);
-    }
-  }, [selectedTicker, loadVolatilityData]);
-
-  // Обработчик кнопки обновить
-  const handleVolatilityRefresh = useCallback(() => {
-    if (selectedTicker) {
-      loadVolatilityData(selectedTicker);
-    }
-  }, [selectedTicker, loadVolatilityData]);
-
   // State для отслеживания отправки срезок
   // ЗАЧЕМ: После отправки показываем кнопку перехода на TradingView вместо кнопки отправки
   const [slicesSent, setSlicesSent] = useState(false);
@@ -643,18 +610,6 @@ function CalculatorDealTabs({
 
         {/* Таб "Калькулятор" — содержит все компоненты анализа */}
         <TabsContent value="calculator" className="space-y-6 mt-4">
-          {/* Метрики волатильности — над метриками опционов */}
-          {shouldShowBlock('metrics-block') && !isFuturesMissingSettings && (
-            <Card className="w-full relative" style={{ borderColor: '#b8b8b8' }}>
-              <VolatilityMetrics
-                data={volatilityData}
-                loading={volatilityLoading}
-                onRefresh={handleVolatilityRefresh}
-                lastUpdated={volatilityLastUpdated}
-              />
-            </Card>
-          )}
-
           {/* Метрики опционов */}
           {shouldShowBlock('metrics-block') && !isFuturesMissingSettings && (
             <Card className="w-full relative" style={{ borderColor: '#b8b8b8' }}>
@@ -676,29 +631,44 @@ function CalculatorDealTabs({
             </Card>
           )}
 
-          {/* График P&L */}
-          <Card className="w-full relative" style={{ borderColor: '#b8b8b8' }}>
-            <CardContent className="pt-4 pb-4 px-6">
-              <PLChart
-                options={options}
-                currentPrice={currentPrice}
-                positions={positions}
-                showOptionLines={showOptionLines}
-                daysPassed={daysPassed}
-                showProbabilityZones={showProbabilityZones}
-                targetPrice={targetPrice}
-                ivSurface={ivSurface}
-                dividendYield={dividendYield}
-                isAIEnabled={isAIEnabled}
-                aiVolatilityMap={aiVolatilityMap}
-                fetchAIVolatility={fetchAIVolatility}
-                selectedTicker={selectedTicker}
-                calculatorMode={calculatorMode}
-                contractMultiplier={contractMultiplier}
-                stockClassification={stockClassification}
-              />
-            </CardContent>
-          </Card>
+          {/* Волатильность (30%) + График P&L (70%) */}
+          <div className="grid grid-cols-1 lg:grid-cols-[30%_70%] gap-4">
+            {/* Левая колонка: волатильность */}
+            {selectedTicker && (
+              <Card className="relative" style={{ borderColor: '#b8b8b8' }}>
+                <VolatilityGauge
+                  data={volatilityData}
+                  loading={volatilityLoading}
+                  onRefresh={onVolatilityRefresh}
+                  lastUpdated={volatilityLastUpdated}
+                />
+              </Card>
+            )}
+
+            {/* Правая колонка: график P&L */}
+            <Card className={`relative ${!selectedTicker ? 'lg:col-span-2' : ''}`} style={{ borderColor: '#b8b8b8' }}>
+              <CardContent className="pt-1 pb-1 px-2">
+                <PLChart
+                  options={options}
+                  currentPrice={currentPrice}
+                  positions={positions}
+                  showOptionLines={showOptionLines}
+                  daysPassed={daysPassed}
+                  showProbabilityZones={showProbabilityZones}
+                  targetPrice={targetPrice}
+                  ivSurface={ivSurface}
+                  dividendYield={dividendYield}
+                  isAIEnabled={isAIEnabled}
+                  aiVolatilityMap={aiVolatilityMap}
+                  fetchAIVolatility={fetchAIVolatility}
+                  selectedTicker={selectedTicker}
+                  calculatorMode={calculatorMode}
+                  contractMultiplier={contractMultiplier}
+                  stockClassification={stockClassification}
+                />
+              </CardContent>
+            </Card>
+          </div>
 
           {/* Результат подбора опционов */}
           <OptionSelectionResult

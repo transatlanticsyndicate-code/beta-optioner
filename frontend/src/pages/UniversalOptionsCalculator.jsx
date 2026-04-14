@@ -74,6 +74,8 @@ import ExitCalculator from '../components/CalculatorV2/ExitCalculator';
 import { ScenarioCard, LiquidityWarning, GreeksWarning } from '../components/CalculatorV2/ExitCalculator/components';
 import OptionSelectionResult from '../components/CalculatorV2/OptionSelectionResult';
 import CalculatorDealTabs from '../components/CalculatorV2/CalculatorDealTabs';
+import VolatilityGauge from '../components/CalculatorV2/VolatilityGauge';
+import { fetchVolatilityMetrics } from '../services/barchartApi';
 import { getDaysUntilExpirationUTC, calculateDaysRemainingUTC } from '../utils/dateUtils';
 import { WhatsNewModal, shouldShowModal } from '../components/WhatsNewModal';
 import { buildIVSurface } from '../utils/volatilitySurface';
@@ -221,6 +223,12 @@ function UniversalOptionsCalculator() {
   // State для выбранного тикера
   const [selectedTicker, setSelectedTicker] = useState("");
 
+  // State для данных волатильности (barchart.com)
+  const [volatilityData, setVolatilityData] = useState(null);
+  const [volatilityLoading, setVolatilityLoading] = useState(false);
+  const [volatilityLastUpdated, setVolatilityLastUpdated] = useState(null);
+  const lastVolatilityTickerRef = useRef(null);
+
   // State для отслеживания завершения инициализации
   // ЗАЧЕМ: Предотвращает мигание предупреждений до загрузки данных
   const [isInitialized, setIsInitialized] = useState(false);
@@ -231,6 +239,33 @@ function UniversalOptionsCalculator() {
   const isFuturesMissingSettings = useMemo(() => {
     return isInitialized && calculatorMode === CALCULATOR_MODES.FUTURES && !selectedFuture && (extensionTicker || contractCode || selectedTicker);
   }, [isInitialized, calculatorMode, selectedFuture, extensionTicker, contractCode, selectedTicker]);
+  // Загрузка данных волатильности с barchart.com
+  const loadVolatilityData = useCallback(async (ticker) => {
+    if (!ticker) return;
+    setVolatilityLoading(true);
+    try {
+      const data = await fetchVolatilityMetrics(ticker);
+      setVolatilityData(data);
+      if (data) setVolatilityLastUpdated(Date.now());
+    } catch (e) {
+      console.error('❌ [Volatility] Ошибка загрузки:', e);
+    } finally {
+      setVolatilityLoading(false);
+    }
+  }, []);
+
+  // Автозагрузка волатильности при смене тикера
+  useEffect(() => {
+    if (selectedTicker && selectedTicker !== lastVolatilityTickerRef.current) {
+      lastVolatilityTickerRef.current = selectedTicker;
+      loadVolatilityData(selectedTicker);
+    }
+  }, [selectedTicker, loadVolatilityData]);
+
+  const handleVolatilityRefresh = useCallback(() => {
+    if (selectedTicker) loadVolatilityData(selectedTicker);
+  }, [selectedTicker, loadVolatilityData]);
+
   const [isDataCleared, setIsDataCleared] = useState(false);
   const [showDemoData, setShowDemoData] = useState(false);
   const [currentPrice, setCurrentPrice] = useState(0); // Начальное значение 0, обновляется при выборе тикера
@@ -4062,6 +4097,10 @@ function UniversalOptionsCalculator() {
                 dealInfo={dealInfo}
                 dealSettings={dealSettings}
                 setDealSettings={setDealSettings}
+                volatilityData={volatilityData}
+                volatilityLoading={volatilityLoading}
+                volatilityLastUpdated={volatilityLastUpdated}
+                onVolatilityRefresh={handleVolatilityRefresh}
               />
             </div>
           </div>

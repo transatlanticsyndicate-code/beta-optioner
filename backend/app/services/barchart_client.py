@@ -25,11 +25,23 @@ class BarchartClient:
         # Поля API для метрик волатильности
         self.api_fields = ",".join([
             "optionsWeightedImpliedVolatility",
+            "optionsWeightedImpliedVolatilityChange",
             "historicVolatility30d",
             "optionsImpliedVolatilityRank1y",
             "optionsImpliedVolatilityPercentile1y",
             "optionsWeightedImpliedVolatility5d",
             "optionsWeightedImpliedVolatility1m",
+            "optionsWeightedImpliedVolatility3m",
+            "optionsIntradayVs30dHistoricIV",
+            "optionsVolatilityLabel",
+            "optionsWeightedImpliedVolatilityHigh1y",
+            "optionsWeightedImpliedVolatilityHighDate1y",
+            "optionsWeightedImpliedVolatilityLow1y",
+            "optionsWeightedImpliedVolatilityLowDate1y",
+            "optionsWeightedImpliedVolatilityHigh3m",
+            "optionsWeightedImpliedVolatilityHighDate3m",
+            "optionsWeightedImpliedVolatilityLow3m",
+            "optionsWeightedImpliedVolatilityLowDate3m",
         ])
 
     def get_volatility_metrics(self, ticker: str) -> Optional[Dict]:
@@ -79,17 +91,32 @@ class BarchartClient:
             # Берём raw-значения (числа, не строки с %)
             raw = items[0].get("raw", {})
 
+            # Форматированные значения (строки с %)
+            formatted = items[0]
+
             result = {
                 "impliedVolatility": self._to_percent(raw.get("optionsWeightedImpliedVolatility")),
+                "ivChange": self._to_percent(raw.get("optionsWeightedImpliedVolatilityChange")),
                 "historicVolatility": self._to_number(raw.get("historicVolatility30d")),
                 "ivRank": self._to_number(raw.get("optionsImpliedVolatilityRank1y")),
                 "ivPercentile": self._to_percent(raw.get("optionsImpliedVolatilityPercentile1y")),
                 "ivAvg5D": self._to_percent(raw.get("optionsWeightedImpliedVolatility5d")),
                 "ivAvg1M": self._to_percent(raw.get("optionsWeightedImpliedVolatility1m")),
+                "ivAvg3M": self._to_percent(raw.get("optionsWeightedImpliedVolatility3m")),
+                "ivHvRatio": self._to_number(raw.get("optionsIntradayVs30dHistoricIV")),
+                "volatilityLabel": raw.get("optionsVolatilityLabel"),
+                "ivHigh3m": self._to_percent(raw.get("optionsWeightedImpliedVolatilityHigh3m")),
+                "ivHigh3mDate": formatted.get("optionsWeightedImpliedVolatilityHighDate3m"),
+                "ivLow3m": self._to_percent(raw.get("optionsWeightedImpliedVolatilityLow3m")),
+                "ivLow3mDate": formatted.get("optionsWeightedImpliedVolatilityLowDate3m"),
+                "ivHigh52w": self._to_percent(raw.get("optionsWeightedImpliedVolatilityHigh1y")),
+                "ivHigh52wDate": formatted.get("optionsWeightedImpliedVolatilityHighDate1y"),
+                "ivLow52w": self._to_percent(raw.get("optionsWeightedImpliedVolatilityLow1y")),
+                "ivLow52wDate": formatted.get("optionsWeightedImpliedVolatilityLowDate1y"),
             }
 
             found = sum(1 for v in result.values() if v is not None)
-            print(f"✅ [Barchart] {ticker}: получено {found}/6 метрик волатильности")
+            print(f"✅ [Barchart] {ticker}: получено {found} метрик волатильности")
 
             return result
 

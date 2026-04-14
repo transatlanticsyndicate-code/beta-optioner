@@ -31,11 +31,23 @@ export async function fetchVolatilityMetrics(ticker) {
 
     return {
       impliedVolatility: data.impliedVolatility,
+      ivChange: data.ivChange,
       historicVolatility: data.historicVolatility,
       ivRank: data.ivRank,
       ivPercentile: data.ivPercentile,
       ivAvg5D: data.ivAvg5D,
       ivAvg1M: data.ivAvg1M,
+      ivAvg3M: data.ivAvg3M,
+      ivHvRatio: data.ivHvRatio,
+      volatilityLabel: data.volatilityLabel,
+      ivHigh3m: data.ivHigh3m,
+      ivHigh3mDate: data.ivHigh3mDate,
+      ivLow3m: data.ivLow3m,
+      ivLow3mDate: data.ivLow3mDate,
+      ivHigh52w: data.ivHigh52w,
+      ivHigh52wDate: data.ivHigh52wDate,
+      ivLow52w: data.ivLow52w,
+      ivLow52wDate: data.ivLow52wDate,
     };
   } catch (error) {
     console.error(`❌ [Barchart] Ошибка запроса для ${ticker}:`, error);
