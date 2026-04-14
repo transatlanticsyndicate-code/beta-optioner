@@ -79,6 +79,7 @@ import { fetchVolatilityMetrics } from '../services/barchartApi';
 import { getDaysUntilExpirationUTC, calculateDaysRemainingUTC } from '../utils/dateUtils';
 import { WhatsNewModal, shouldShowModal } from '../components/WhatsNewModal';
 import { buildIVSurface } from '../utils/volatilitySurface';
+import { calculateTotalGreeks, calculatePLMetrics } from '../utils/metricsCalculator';
 import { usePositionExitCalculator } from '../hooks/usePositionExitCalculator';
 // УБРАНО: AI модель не используется в универсальном калькуляторе
 // import aiPredictionService from '../services/aiPredictionService';
@@ -701,6 +702,85 @@ function UniversalOptionsCalculator() {
     });
     return surface;
   }, [options]);
+
+  // Снимок текущего состояния открытого калькулятора
+  // ЗАЧЕМ: Внешние потребители (расширение или иной сервис) могут забирать все ключевые данные
+  // открытой в данный момент конфигурации калькулятора из одного ключа localStorage
+  const calculatorSnapshot = useMemo(() => {
+    try {
+      const completeOptions = options.filter(opt => {
+        const hasPrice = (opt.premium !== undefined && opt.premium !== null)
+          || (opt.bid !== undefined && opt.bid !== null)
+          || (opt.ask !== undefined && opt.ask !== null);
+        return opt.date && opt.strike && hasPrice && opt.visible !== false;
+      });
+
+      const greeks = completeOptions.length > 0
+        ? calculateTotalGreeks(completeOptions)
+        : { delta: 0, gamma: 0, theta: 0, vega: 0 };
+
+      const plMetrics = completeOptions.length > 0
+        ? calculatePLMetrics(
+            completeOptions,
+            currentPrice,
+            positions,
+            daysPassed,
+            ivSurface,
+            dividendYield,
+            isAIEnabled,
+            aiVolatilityMap,
+            targetPrice,
+            selectedTicker,
+            calculatorMode,
+            contractMultiplier
+          )
+        : { maxLoss: 0, maxProfit: 0, breakevens: [], riskReward: '—' };
+
+      return {
+        ticker: selectedTicker,
+        assetPrice: currentPrice,
+        optionsTable: options,
+        plMetrics: {
+          maxLoss: plMetrics.maxLoss,
+          maxProfit: plMetrics.maxProfit,
+          breakevens: plMetrics.breakevens,
+          riskReward: plMetrics.riskReward,
+          greeks
+        },
+        volatility: volatilityData,
+        updatedAt: new Date().toISOString()
+      };
+    } catch (err) {
+      console.error('Ошибка при построении снимка калькулятора:', err);
+      return null;
+    }
+  }, [
+    selectedTicker,
+    currentPrice,
+    options,
+    positions,
+    daysPassed,
+    ivSurface,
+    dividendYield,
+    isAIEnabled,
+    aiVolatilityMap,
+    targetPrice,
+    calculatorMode,
+    contractMultiplier,
+    volatilityData
+  ]);
+
+  // Запись снимка в localStorage при любом изменении входных данных
+  // ЗАЧЕМ: Потребителям всегда нужен актуальный срез открытого калькулятора в едином ключе
+  useEffect(() => {
+    try {
+      if (calculatorSnapshot) {
+        localStorage.setItem('currentCalculatorSnapshot', JSON.stringify(calculatorSnapshot));
+      }
+    } catch (err) {
+      console.error('Ошибка сохранения снимка калькулятора в localStorage:', err);
+    }
+  }, [calculatorSnapshot]);
 
   // Функции для сохранения и загрузки состояния калькулятора
   const saveCalculatorState = useCallback(() => {
