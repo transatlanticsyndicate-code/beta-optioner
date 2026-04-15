@@ -535,7 +535,7 @@ function OptionsTableV3({
           {/* ЗАЧЕМ: Клик по заголовку сортирует таблицу по этой колонке */}
           <div className="grid items-center text-xs font-medium text-muted-foreground px-2" style={{
             display: 'grid',
-            gridTemplateColumns: `30px 0.6fr 0.7fr 0.7fr 0.4fr ${hideColumns.includes('premium') ? '' : '0.8fr '}0.9fr 0.5fr ${hideColumns.includes('oi') ? '' : '0.6fr '}0.4fr 0.3fr 0.55fr 0.65fr 0.55fr 0.8fr 0.8fr 0.7fr 40px`.replace(/\s+/g, ' ').trim(),
+            gridTemplateColumns: `30px minmax(0,0.9fr) minmax(0,0.7fr) minmax(0,0.7fr) minmax(0,0.9fr) ${hideColumns.includes('premium') ? '' : 'minmax(0,0.8fr) '}minmax(0,0.6fr) minmax(0,0.6fr) ${hideColumns.includes('oi') ? '' : 'minmax(0,0.6fr) '}minmax(0,0.4fr) minmax(0,0.55fr) minmax(0,0.55fr) minmax(0,0.65fr) minmax(0,0.55fr) minmax(0,0.8fr) minmax(0,0.8fr) minmax(0,0.7fr) 40px`.replace(/\s+/g, ' ').trim(),
             gap: '6px'
           }}>
             <div></div>
@@ -548,8 +548,8 @@ function OptionsTableV3({
                 <span className="text-cyan-500">{sortDirection === 'asc' ? '↑' : '↓'}</span>
               )}
             </div>
-            <div 
-              className="text-right cursor-pointer hover:text-foreground select-none flex items-center justify-end gap-1"
+            <div
+              className="text-center cursor-pointer hover:text-foreground select-none flex items-center justify-center gap-1"
               onClick={() => handleSort('date')}
             >
               Expir.
@@ -557,8 +557,8 @@ function OptionsTableV3({
                 <span className="text-cyan-500">{sortDirection === 'asc' ? '↑' : '↓'}</span>
               )}
             </div>
-            <div 
-              className="text-right cursor-pointer hover:text-foreground select-none flex items-center justify-end gap-1"
+            <div
+              className="text-center cursor-pointer hover:text-foreground select-none flex items-center justify-center gap-1"
               onClick={() => handleSort('strike')}
             >
               Страйк
@@ -566,16 +566,16 @@ function OptionsTableV3({
                 <span className="text-cyan-500">{sortDirection === 'asc' ? '↑' : '↓'}</span>
               )}
             </div>
-            <div className="text-right">Кол.</div>
-            {!hideColumns.includes('premium') && <div className="text-right">Премия</div>}
-            <div className="text-right">BID</div>
-            <div className="text-right">ASK</div>
-            {!hideColumns.includes('oi') && <div className="text-right">OI</div>}
-            <div className="text-right" style={{ fontSize: '0.7rem' }}>VOL</div>
-            <div className="text-right" style={{ fontSize: '0.7rem' }}>IV</div>
-            <div className="text-right" style={{ fontSize: '0.7rem' }}>Fact IV</div>
-            <div 
-              className="text-right cursor-pointer hover:text-foreground select-none flex items-center justify-end gap-1"
+            <div className="text-center">Кол.</div>
+            {!hideColumns.includes('premium') && <div className="text-center">Премия</div>}
+            <div className="text-center">BID</div>
+            <div className="text-center">ASK</div>
+            {!hideColumns.includes('oi') && <div className="text-center">OI</div>}
+            <div className="text-center" style={{ fontSize: '0.7rem' }}>VOL</div>
+            <div className="text-center" style={{ fontSize: '0.7rem' }}>IV</div>
+            <div className="text-center" style={{ fontSize: '0.7rem' }}>Fact IV</div>
+            <div
+              className="text-center cursor-pointer hover:text-foreground select-none flex items-center justify-center gap-1"
               onClick={() => handleSort('entry')}
               style={{ fontSize: '0.75rem' }}
             >
@@ -584,7 +584,7 @@ function OptionsTableV3({
                 <span className="text-cyan-500">{sortDirection === 'asc' ? '↑' : '↓'}</span>
               )}
             </div>
-            <div className="text-right flex items-center justify-end gap-0.5" style={{ fontSize: '0.7rem' }}>
+            <div className="text-center flex items-center justify-center gap-0.5" style={{ fontSize: '0.7rem' }}>
               Актив
               <TooltipProvider>
                 <Tooltip>
@@ -597,9 +597,9 @@ function OptionsTableV3({
                 </Tooltip>
               </TooltipProvider>
             </div>
-            <div className="text-right" style={{ fontSize: '0.75rem' }}>P&L</div>
-            <div className="text-right" style={{ fontSize: '0.75rem' }}>Fact P&L</div>
-            <div className="text-right" style={{ fontSize: '0.75rem' }}>Close</div>
+            <div className="text-center" style={{ fontSize: '0.75rem' }}>P&L</div>
+            <div className="text-center" style={{ fontSize: '0.75rem' }}>Fact P&L</div>
+            <div className="text-center" style={{ fontSize: '0.75rem' }}>Close</div>
             <div></div>
           </div>
 
@@ -624,7 +624,7 @@ function OptionsTableV3({
                   }`}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: `30px 0.6fr 0.7fr 0.7fr 0.4fr ${hideColumns.includes('premium') ? '' : '0.8fr '}0.6fr 0.6fr ${hideColumns.includes('oi') ? '' : '0.6fr '}0.4fr 0.55fr 0.55fr 0.65fr 0.55fr 0.8fr 0.8fr 0.7fr 40px`.replace(/\s+/g, ' ').trim(),
+                  gridTemplateColumns: `30px minmax(0,0.9fr) minmax(0,0.7fr) minmax(0,0.7fr) minmax(0,0.9fr) ${hideColumns.includes('premium') ? '' : 'minmax(0,0.8fr) '}minmax(0,0.6fr) minmax(0,0.6fr) ${hideColumns.includes('oi') ? '' : 'minmax(0,0.6fr) '}minmax(0,0.4fr) minmax(0,0.55fr) minmax(0,0.55fr) minmax(0,0.65fr) minmax(0,0.55fr) minmax(0,0.8fr) minmax(0,0.8fr) minmax(0,0.7fr) 40px`.replace(/\s+/g, ' ').trim(),
                   gap: '6px'
                 }}
               >
@@ -1337,7 +1337,7 @@ function OptionsTableV3({
           })}
 
           {/* Итоговая строка */}
-          <div className="items-center text-sm border-t-2 border-cyan-500 bg-cyan-50/50 rounded-md p-2 font-bold" style={{ display: 'grid', gridTemplateColumns: `30px 0.6fr 0.7fr 0.7fr 0.4fr ${hideColumns.includes('premium') ? '' : '0.8fr '}0.6fr 0.6fr ${hideColumns.includes('oi') ? '' : '0.6fr '}0.4fr 0.4fr 0.55fr 0.65fr 0.55fr 0.8fr 0.8fr 0.7fr 40px`.replace(/\s+/g, ' ').trim(), gap: '6px' }}>
+          <div className="items-center text-sm border-t-2 border-cyan-500 bg-cyan-50/50 rounded-md p-2 font-bold" style={{ display: 'grid', gridTemplateColumns: `30px minmax(0,0.9fr) minmax(0,0.7fr) minmax(0,0.7fr) minmax(0,0.9fr) ${hideColumns.includes('premium') ? '' : 'minmax(0,0.8fr) '}minmax(0,0.6fr) minmax(0,0.6fr) ${hideColumns.includes('oi') ? '' : 'minmax(0,0.6fr) '}minmax(0,0.4fr) minmax(0,0.55fr) minmax(0,0.55fr) minmax(0,0.65fr) minmax(0,0.55fr) minmax(0,0.8fr) minmax(0,0.8fr) minmax(0,0.7fr) 40px`.replace(/\s+/g, ' ').trim(), gap: '6px' }}>
             <div></div>
             <div className="text-left">ИТОГО:</div>
             <div></div>
