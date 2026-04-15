@@ -535,7 +535,7 @@ function OptionsTableV3({
           {/* ЗАЧЕМ: Клик по заголовку сортирует таблицу по этой колонке */}
           <div className="grid items-center text-xs font-medium text-muted-foreground px-2" style={{
             display: 'grid',
-            gridTemplateColumns: `30px minmax(0,0.9fr) minmax(0,0.7fr) minmax(0,0.7fr) minmax(0,0.9fr) ${hideColumns.includes('premium') ? '' : 'minmax(0,0.8fr) '}minmax(0,0.6fr) minmax(0,0.6fr) ${hideColumns.includes('oi') ? '' : 'minmax(0,0.6fr) '}minmax(0,0.4fr) minmax(0,0.55fr) minmax(0,0.55fr) minmax(0,0.65fr) minmax(0,0.55fr) minmax(0,0.8fr) minmax(0,0.8fr) minmax(0,0.7fr) 40px`.replace(/\s+/g, ' ').trim(),
+            gridTemplateColumns: `30px minmax(0,0.9fr) minmax(0,0.7fr) minmax(0,0.7fr) minmax(0,0.55fr) ${hideColumns.includes('premium') ? '' : 'minmax(0,0.8fr) '}minmax(0,0.6fr) minmax(0,0.6fr) ${hideColumns.includes('oi') ? '' : 'minmax(0,0.6fr) '}minmax(0,0.4fr) minmax(0,0.55fr) minmax(0,0.55fr) minmax(0,0.65fr) minmax(0,0.55fr) minmax(0,1.1fr) minmax(0,1.1fr) minmax(0,0.7fr) 40px`.replace(/\s+/g, ' ').trim(),
             gap: '6px'
           }}>
             <div></div>
@@ -624,7 +624,7 @@ function OptionsTableV3({
                   }`}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: `30px minmax(0,0.9fr) minmax(0,0.7fr) minmax(0,0.7fr) minmax(0,0.9fr) ${hideColumns.includes('premium') ? '' : 'minmax(0,0.8fr) '}minmax(0,0.6fr) minmax(0,0.6fr) ${hideColumns.includes('oi') ? '' : 'minmax(0,0.6fr) '}minmax(0,0.4fr) minmax(0,0.55fr) minmax(0,0.55fr) minmax(0,0.65fr) minmax(0,0.55fr) minmax(0,0.8fr) minmax(0,0.8fr) minmax(0,0.7fr) 40px`.replace(/\s+/g, ' ').trim(),
+                  gridTemplateColumns: `30px minmax(0,0.9fr) minmax(0,0.7fr) minmax(0,0.7fr) minmax(0,0.55fr) ${hideColumns.includes('premium') ? '' : 'minmax(0,0.8fr) '}minmax(0,0.6fr) minmax(0,0.6fr) ${hideColumns.includes('oi') ? '' : 'minmax(0,0.6fr) '}minmax(0,0.4fr) minmax(0,0.55fr) minmax(0,0.55fr) minmax(0,0.65fr) minmax(0,0.55fr) minmax(0,1.1fr) minmax(0,1.1fr) minmax(0,0.7fr) 40px`.replace(/\s+/g, ' ').trim(),
                   gap: '6px'
                 }}
               >
@@ -675,12 +675,12 @@ function OptionsTableV3({
                   className="h-7 text-right font-medium text-sm px-1 border-input bg-gray-50 cursor-default"
                   placeholder=""
                 />
-                <div className="flex items-center gap-2 text-right">
+                <div className="flex items-center gap-1 text-right">
                   <Input
                     type="number"
                     value={option.quantity}
                     onChange={(e) => !option.isLockedPosition && handleFieldChange(option.id, 'quantity', parseInt(e.target.value) || 0)}
-                    className="h-7 text-right text-muted-foreground text-sm px-1 font-bold w-[58px]"
+                    className="h-7 text-right text-muted-foreground text-sm px-1 font-bold w-[34px]"
                     disabled={option.isLockedPosition}
                   />
                   {/* Скрываем кнопки +/- для зафиксированных позиций */}
@@ -1337,7 +1337,7 @@ function OptionsTableV3({
           })}
 
           {/* Итоговая строка */}
-          <div className="items-center text-sm border-t-2 border-cyan-500 bg-cyan-50/50 rounded-md p-2 font-bold" style={{ display: 'grid', gridTemplateColumns: `30px minmax(0,0.9fr) minmax(0,0.7fr) minmax(0,0.7fr) minmax(0,0.9fr) ${hideColumns.includes('premium') ? '' : 'minmax(0,0.8fr) '}minmax(0,0.6fr) minmax(0,0.6fr) ${hideColumns.includes('oi') ? '' : 'minmax(0,0.6fr) '}minmax(0,0.4fr) minmax(0,0.55fr) minmax(0,0.55fr) minmax(0,0.65fr) minmax(0,0.55fr) minmax(0,0.8fr) minmax(0,0.8fr) minmax(0,0.7fr) 40px`.replace(/\s+/g, ' ').trim(), gap: '6px' }}>
+          <div className="items-center text-sm border-t-2 border-cyan-500 bg-cyan-50/50 rounded-md p-2 font-bold" style={{ display: 'grid', gridTemplateColumns: `30px minmax(0,0.9fr) minmax(0,0.7fr) minmax(0,0.7fr) minmax(0,0.55fr) ${hideColumns.includes('premium') ? '' : 'minmax(0,0.8fr) '}minmax(0,0.6fr) minmax(0,0.6fr) ${hideColumns.includes('oi') ? '' : 'minmax(0,0.6fr) '}minmax(0,0.4fr) minmax(0,0.55fr) minmax(0,0.55fr) minmax(0,0.65fr) minmax(0,0.55fr) minmax(0,1.1fr) minmax(0,1.1fr) minmax(0,0.7fr) 40px`.replace(/\s+/g, ' ').trim(), gap: '6px' }}>
             <div></div>
             <div className="text-left">ИТОГО:</div>
             <div></div>
@@ -1347,8 +1347,6 @@ function OptionsTableV3({
             <div></div>
             <div></div>
             {!hideColumns.includes('oi') && <div></div>}
-            <div></div>
-            <div></div>
             <div></div>
             <div></div>
             <div></div>
@@ -1479,6 +1477,8 @@ function OptionsTableV3({
                 );
               })()}
             </div>
+            <div></div>
+            <div></div>
             <div></div>
             <div></div>
           </div>
