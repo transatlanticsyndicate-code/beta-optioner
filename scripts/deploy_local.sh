@@ -53,6 +53,8 @@ rsync -az --delete \
   --exclude='venv/' \
   --exclude='*.db' \
   --exclude='*.db-journal' \
+  --exclude='*.db-wal' \
+  --exclude='*.db-shm' \
   -e "ssh" \
   "$(dirname "$LOCAL_FRONTEND")/backend/" \
   "$SSH_HOST:$REMOTE_DIR/backend/"
@@ -61,6 +63,8 @@ rsync -az --delete \
 log "Restarting backend on server..."
 ssh "$SSH_HOST" "
   cd $REMOTE_DIR/backend
+  # ЗАЧЕМ: Принудительный checkpoint WAL перед рестартом — сливаем все данные в основной .db файл
+  sqlite3 beta_options_analyzer.db 'PRAGMA wal_checkpoint(TRUNCATE);' 2>/dev/null || true
   source venv/bin/activate
   pip install -r requirements.txt -q
   pm2 restart $PM2_APP 2>/dev/null || pm2 start $REMOTE_DIR/ecosystem.beta.config.js

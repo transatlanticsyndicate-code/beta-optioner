@@ -2,7 +2,7 @@
 Database configuration and session management
 """
 import os
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
@@ -38,6 +38,7 @@ if DATABASE_URL.startswith("sqlite"):
         cursor = dbapi_conn.cursor()
         cursor.execute("PRAGMA journal_mode=WAL")
         cursor.execute("PRAGMA synchronous=NORMAL")  # Баланс между производительностью и надёжностью
+        cursor.execute("PRAGMA wal_autocheckpoint=100")  # ЗАЧЕМ: Чаще сливаем WAL в основной файл (каждые ~400KB)
         cursor.execute("PRAGMA cache_size=-64000")  # 64MB кэш
         cursor.execute("PRAGMA temp_store=MEMORY")  # Временные таблицы в памяти
         cursor.close()
@@ -86,4 +87,16 @@ def init_db():
     from app.models import crypto_rating  # Import crypto rating models
     from app.models import saved_configuration  # Import saved configurations
     Base.metadata.create_all(bind=engine)
+
+    # ЗАЧЕМ: Принудительный checkpoint при старте — сливаем все данные из WAL в основной .db файл
+    # Защита от потери данных при внезапном перезапуске или деплое
+    if DATABASE_URL and DATABASE_URL.startswith("sqlite"):
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("PRAGMA wal_checkpoint(TRUNCATE)"))
+                conn.commit()
+            print("✅ WAL checkpoint completed")
+        except Exception as e:
+            print(f"⚠️ WAL checkpoint failed: {e}")
+
     print("✅ Database tables created successfully")

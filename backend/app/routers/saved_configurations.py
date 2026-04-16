@@ -41,7 +41,7 @@ class ConfigurationUpdate(BaseModel):
 
 @router.get("")
 async def get_configurations(
-    limit: int = Query(50, ge=1, le=100),
+    limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     ticker: Optional[str] = None,
     author: Optional[str] = None,
@@ -96,6 +96,32 @@ async def get_configurations(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка получения конфигураций: {str(e)}")
+
+
+@router.delete("/all")
+async def delete_all_configurations(
+    user_id: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Удалить все конфигурации
+    ЗАЧЕМ: Массовое удаление всех позиций одним запросом (вместо цикла по одной)
+    """
+    try:
+        query = db.query(SavedConfiguration)
+        if user_id:
+            query = query.filter(SavedConfiguration.user_id == user_id)
+        count = query.count()
+        query.delete(synchronize_session=False)
+        db.commit()
+        return {
+            "status": "success",
+            "message": f"Удалено конфигураций: {count}",
+            "deleted": count
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка удаления конфигураций: {str(e)}")
 
 
 @router.get("/{config_id}")

@@ -162,6 +162,55 @@ export const deleteConfiguration = async (configId, userId = null) => {
 };
 
 /**
+ * Получить ВСЕ конфигурации с автоматической пагинацией
+ * ЗАЧЕМ: Загрузка полного списка для экспорта и отображения (обходит лимит API в 500)
+ */
+export const getAllConfigurations = async (params = {}) => {
+  const pageSize = 500;
+  let allData = [];
+  let offset = 0;
+  let total = Infinity;
+
+  while (offset < total) {
+    const result = await getConfigurations({ ...params, limit: pageSize, offset });
+    if (result.status !== 'success') {
+      throw new Error('Ошибка загрузки конфигураций');
+    }
+    allData = [...allData, ...result.data];
+    total = result.total;
+    offset += pageSize;
+  }
+
+  return { status: 'success', data: allData, total };
+};
+
+/**
+ * Удалить ВСЕ конфигурации одним запросом
+ * ЗАЧЕМ: Массовое удаление без цикла по одной записи
+ */
+export const deleteAllConfigurations = async (userId = null) => {
+  try {
+    const params = new URLSearchParams();
+    if (userId) params.append('user_id', userId);
+    const queryString = params.toString();
+
+    const response = await fetch(`${API_BASE_URL}/api/configurations/all${queryString ? '?' + queryString : ''}`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Ошибка удаления всех конфигураций:', error);
+    throw error;
+  }
+};
+
+/**
  * Массовое создание конфигураций
  * ЗАЧЕМ: Миграция из localStorage в БД
  */

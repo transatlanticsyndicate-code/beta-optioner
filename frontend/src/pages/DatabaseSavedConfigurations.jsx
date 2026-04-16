@@ -31,7 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../components/ui/select';
-import { getConfigurations, deleteConfiguration, createConfigurationsBatch } from '../services/configurationsApi';
+import { getConfigurations, deleteConfiguration, createConfigurationsBatch, getAllConfigurations, deleteAllConfigurations } from '../services/configurationsApi';
 import { supabase } from '../services/supabase';
 
 function DatabaseSavedConfigurations() {
@@ -76,10 +76,9 @@ function DatabaseSavedConfigurations() {
     try {
       setLoading(true);
       setError(null);
-      // ЗАЧЕМ: Загружаем все конфигурации (на сервере может быть 300+)
-      // Максимальный лимит API = 100 (ограничение бэкенда)
-      const result = await getConfigurations({ limit: 100, offset: 0 });
-      
+      // ЗАЧЕМ: Загружаем ВСЕ конфигурации с автопагинацией (обходим лимит API)
+      const result = await getAllConfigurations();
+
       if (result.status === 'success') {
         setConfigurations(result.data);
         console.log(`✅ Загружено конфигураций: ${result.data.length} из ${result.total}`);
@@ -126,6 +125,7 @@ function DatabaseSavedConfigurations() {
   };
 
   // Удаление всех конфигураций
+  // ЗАЧЕМ: Используем серверный bulk-delete вместо цикла — удаляет ВСЕ записи, не только загруженные
   const handleDeleteAll = async () => {
     if (!window.confirm('⚠️ Вы уверены, что хотите удалить ВСЕ конфигурации?\n\nЭто действие необратимо!')) {
       return;
@@ -137,29 +137,9 @@ function DatabaseSavedConfigurations() {
 
     try {
       setLoading(true);
-      let deleted = 0;
-      let failed = 0;
-
-      // ЗАЧЕМ: Сохраняем копию массива для итерации, т.к. будем очищать state
-      const configsToDelete = [...configurations];
-
-      for (const config of configsToDelete) {
-        try {
-          await deleteConfiguration(config.id, null);
-          deleted++;
-        } catch (err) {
-          console.error(`Ошибка удаления конфигурации ${config.id}:`, err);
-          failed++;
-        }
-      }
-
-      // ЗАЧЕМ: Очищаем локальный state сразу после удаления
-      // Это предотвращает появление записей обратно при перезагрузке
+      const result = await deleteAllConfigurations(null);
       setConfigurations([]);
-
-      alert(`Удалено: ${deleted}\nОшибок: ${failed}`);
-      
-      // Перезагружаем список с сервера для синхронизации
+      alert(`Удалено: ${result.deleted}`);
       await loadConfigurations();
     } catch (err) {
       console.error('Ошибка удаления всех конфигураций:', err);
