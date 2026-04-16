@@ -121,6 +121,10 @@ function CalculatorDealTabs({
   // ЗАЧЕМ: Используется в кнопке "Перейти на график TradingView"
   const [tradingViewUrl, setTradingViewUrl] = useState(null);
   
+  // State для шагов плана выхода из ExitPlanTable
+  // ЗАЧЕМ: Сохранять ручные изменения шагов в dealSettings для восстановления при открытии
+  const [exitPlanSteps, setExitPlanSteps] = useState(null);
+
   // State для негативного сценария (Buy PUT) — аналогичные состояния
   // ЗАЧЕМ: Негативный сценарий имеет свои собственные срезки и ссылку на график
   const [slicesSentPut, setSlicesSentPut] = useState(false);
@@ -197,6 +201,7 @@ function CalculatorDealTabs({
     if (dealSettings.exitStepsCount !== undefined) setExitStepsCount(dealSettings.exitStepsCount);
     if (dealSettings.targetAssetPricePercentPut !== undefined) setTargetAssetPricePercentPut(dealSettings.targetAssetPricePercentPut);
     if (dealSettings.targetAssetPricePercentPutExit !== undefined) setTargetAssetPricePercentPutExit(dealSettings.targetAssetPricePercentPutExit);
+    if (dealSettings.exitPlanSteps) setExitPlanSteps(dealSettings.exitPlanSteps);
 
     console.log('📊 Состояние срезок восстановлено из dealSettings:', {
       slicesSent: dealSettings.slicesSent,
@@ -321,15 +326,16 @@ function CalculatorDealTabs({
         frozenExitPlanPut,
         targetAssetPricePercentPut,
         targetAssetPricePercentPutExit,
+        exitPlanSteps: exitPlanSteps || null,
       };
-      console.log('💾 [SAVING] setDealSettings вызван, targetAssetPricePercent:', targetAssetPricePercent);
+      console.log('💾 [SAVING] setDealSettings вызван, exitPlanSteps:', exitPlanSteps?.length, 'шагов, первый percent:', exitPlanSteps?.[0]?.percent);
       // Помечаем объект как уже обработанный ДО передачи в родитель
       // ЗАЧЕМ: Когда useEffect([dealSettings]) получит этот объект — пропустит его (уже обработан)
       // Это разрывает цикл: saving → setDealSettings → useEffect([dealSettings]) → setState → saving
       lastProcessedSettingsRef.current = newSettings;
       setDealSettings(newSettings);
     }
-  }, [dealInfo, targetAssetPricePercent, exitStepsCount, exitPlan, slicesSent, tradingViewUrl, frozenExitPlan, slicesSentPut, tradingViewUrlPut, frozenExitPlanPut, targetAssetPricePercentPut, targetAssetPricePercentPutExit, setDealSettings]);
+  }, [dealInfo, targetAssetPricePercent, exitStepsCount, exitPlan, slicesSent, tradingViewUrl, frozenExitPlan, slicesSentPut, tradingViewUrlPut, frozenExitPlanPut, targetAssetPricePercentPut, targetAssetPricePercentPutExit, exitPlanSteps, setDealSettings]);
 
   // Обработчик изменения процентов (позитивный сценарий)
   // ЗАЧЕМ: При изменении % — обновляем targetPrice в блоке симуляции
@@ -750,9 +756,9 @@ function CalculatorDealTabs({
               options={options}
             />
           ) : dealInfo ? (
-            <ExitPlanTable 
+            <ExitPlanTable
               ticker={selectedTicker}
-              currentPrice={currentPrice} 
+              currentPrice={currentPrice}
               dealInfo={dealInfo}
               options={options}
               calculatorMode={calculatorMode}
@@ -762,6 +768,8 @@ function CalculatorDealTabs({
               ivSurface={ivSurface}
               slicesSent={slicesSent}
               setSlicesSent={setSlicesSent}
+              savedSteps={exitPlanSteps}
+              onStepsChange={setExitPlanSteps}
             />
           ) : (
             <Card className="w-full" style={{ borderColor: '#b8b8b8' }}>

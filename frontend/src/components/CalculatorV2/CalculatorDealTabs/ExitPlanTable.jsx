@@ -10,7 +10,7 @@ import { calculateDaysToExpirationFromToday } from '../../../utils/dateUtils';
  * Таблица Плана выхода для сделки
  * ЗАЧЕМ: Позволяет гибко настраивать цели по цене и количеству для каждого шага выхода
  */
-function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode = CALCULATOR_MODES.STOCKS, contractMultiplier = 100, dividendYield = 0, stockClassification = null, ivSurface = null, slicesSent = false, setSlicesSent }) {
+function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode = CALCULATOR_MODES.STOCKS, contractMultiplier = 100, dividendYield = 0, stockClassification = null, ivSurface = null, slicesSent = false, setSlicesSent, savedSteps = null, onStepsChange = null }) {
   // Дефолтные проценты для 4 шагов
   const defaultPercents = [15, 30, 45, 60];
   
@@ -20,6 +20,8 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
   // Refs для отслеживания изменений и предотвращения перезаписи ручного ввода
   const lastSeenTotalQuantityRef = useRef(null);
   const lastSeenDealIdRef = useRef(null);
+  // Ref для предотвращения перезаписи восстановленных шагов автоинициализацией
+  const restoredFromSavedRef = useRef(false);
 
   // Функция расчёта даты выхода по умолчанию
   // ЗАЧЕМ: Каждый шаг получает дату +N месяцев от сегодня (шаг 1 = +1 месяц, шаг 2 = +2 месяца и т.д.)
@@ -46,14 +48,46 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
     return exitDate;
   };
 
+  // Восстановление шагов из savedSteps (открытие сохранённой позиции)
+  // ЗАЧЕМ: При открытии сохранённой позиции восстанавливаем ручные изменения пользователя
+  useEffect(() => {
+    if (!savedSteps || savedSteps.length === 0) return;
+    setSteps(savedSteps);
+    restoredFromSavedRef.current = true;
+    console.log('🔄 [ExitPlanTable] Восстановлены шаги из dealSettings:', savedSteps.length, 'шагов');
+  }, [savedSteps]);
+
+  // Уведомление родителя об изменении шагов (для сохранения в dealSettings)
+  // ЗАЧЕМ: Передаём steps наверх чтобы они попали в dealSettings и сохранились
+  useEffect(() => {
+    if (onStepsChange && steps.length > 0) {
+      // Сохраняем только данные, без ссылок на опционы (optionRef содержит циклические ссылки)
+      const stepsToSave = steps.map(s => ({
+        id: s.id,
+        percent: s.percent,
+        dollars: s.dollars,
+        quantity: s.quantity,
+        exitDate: s.exitDate,
+      }));
+      onStepsChange(stepsToSave);
+    }
+  }, [steps, onStepsChange]);
+
   // Инициализация шагов при первом рендере или изменении dealInfo/options
   useEffect(() => {
     if (!dealInfo) return;
 
+    // Пропускаем автоинициализацию если шаги только что восстановлены из сохранённой позиции
+    // ЗАЧЕМ: savedSteps содержит ручные изменения пользователя, автоинициализация их затрёт
+    if (restoredFromSavedRef.current) {
+      restoredFromSavedRef.current = false;
+      return;
+    }
+
     // Берём все видимые опционы из текущей таблицы (options prop)
     // ЗАЧЕМ: Это позволяет автоматически добавлять/удалять опционы в плане выхода
     const visibleOptions = (options || []).filter(opt => opt.visible !== false);
-    
+
     // Если нет видимых опционов, очищаем таблицу
     if (visibleOptions.length === 0) {
       setSteps([]);
@@ -66,7 +100,7 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
     // Проверяем, новая ли это сделка или первая загрузка
     const dealId = dealInfo.createdAt;
     const isNewDeal = lastSeenDealIdRef.current !== dealId;
-    
+
     if (isNewDeal || lastSeenDealIdRef.current === null) {
       lastSeenDealIdRef.current = dealId;
       lastSeenTotalQuantityRef.current = null; // Принудительный сброс количеств
