@@ -237,8 +237,16 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPrice, dealInfo, options, savedSteps]);
 
-  // Обработчик изменения процентов
-  const handlePercentChange = (index, value) => {
+  // Локальный стейт для инпута процентов — предотвращает пересчёт при каждом нажатии
+  const [percentInputState, setPercentInputState] = useState({});
+
+  const handlePercentInput = (index, value) => {
+    setPercentInputState(prev => ({ ...prev, [index]: value }));
+  };
+
+  const handlePercentBlur = (index) => {
+    const value = percentInputState[index];
+    if (value === undefined) return;
     const newPercent = parseFloat(value) || 0;
     const newSteps = [...steps];
     newSteps[index].percent = newPercent;
@@ -251,10 +259,26 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
     }
 
     setSteps(newSteps);
+    setPercentInputState(prev => { const n = { ...prev }; delete n[index]; return n; });
   };
 
-  // Обработчик изменения долларов
-  const handleDollarsChange = (index, value) => {
+  const handlePercentKeyDown = (index, e) => {
+    if (e.key === 'Enter') e.target.blur();
+  };
+
+  // Локальный стейт для инпута долларов — предотвращает пересчёт при каждом нажатии
+  // ЗАЧЕМ: Без этого ввод "1000" превращается в "$1.01" после первой цифры
+  const [dollarsInputState, setDollarsInputState] = useState({});
+
+  // Обработчик изменения долларов (локальный ввод, без пересчёта)
+  const handleDollarsInput = (index, value) => {
+    setDollarsInputState(prev => ({ ...prev, [index]: value }));
+  };
+
+  // Применение введённого значения при потере фокуса
+  const handleDollarsBlur = (index) => {
+    const value = dollarsInputState[index];
+    if (value === undefined) return;
     const newDollars = parseFloat(value) || 0;
     const newSteps = [...steps];
     newSteps[index].dollars = newDollars;
@@ -265,8 +289,13 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
       const newPercent = (newDollars / basePrice - 1) * 100;
       newSteps[index].percent = Math.round(newPercent * 100) / 100;
     }
-    
+
     setSteps(newSteps);
+    setDollarsInputState(prev => { const n = { ...prev }; delete n[index]; return n; });
+  };
+
+  const handleDollarsKeyDown = (index, e) => {
+    if (e.key === 'Enter') e.target.blur();
   };
 
   // Обработчик изменения количества
@@ -608,8 +637,11 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
                     <div className="relative">
                       <input
                         type="number"
-                        value={step.percent}
-                        onChange={(e) => handlePercentChange(index, e.target.value)}
+                        value={percentInputState[index] !== undefined ? percentInputState[index] : step.percent}
+                        onChange={(e) => handlePercentInput(index, e.target.value)}
+                        onFocus={(e) => setPercentInputState(prev => ({ ...prev, [index]: String(step.percent) }))}
+                        onBlur={() => handlePercentBlur(index)}
+                        onKeyDown={(e) => handlePercentKeyDown(index, e)}
                         className="w-full h-8 px-2 pr-6 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-transparent"
                         step="0.1"
                       />
@@ -622,8 +654,11 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
                       <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
                       <input
                         type="number"
-                        value={step.dollars}
-                        onChange={(e) => handleDollarsChange(index, e.target.value)}
+                        value={dollarsInputState[index] !== undefined ? dollarsInputState[index] : step.dollars}
+                        onChange={(e) => handleDollarsInput(index, e.target.value)}
+                        onFocus={(e) => setDollarsInputState(prev => ({ ...prev, [index]: String(step.dollars) }))}
+                        onBlur={() => handleDollarsBlur(index)}
+                        onKeyDown={(e) => handleDollarsKeyDown(index, e)}
                         className="w-full h-8 pl-5 pr-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-transparent"
                         step="0.01"
                       />
