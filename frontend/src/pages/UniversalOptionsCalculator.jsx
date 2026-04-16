@@ -3537,7 +3537,7 @@ function UniversalOptionsCalculator() {
         dealInfo: dealInfo || null,
       };
 
-      console.log('📤 [handleSaveDBConfiguration] Отправляем на сервер:', { loadedConfigId, configData });
+      console.log('📤 [handleSaveDBConfiguration] Отправляем на сервер:', { loadedConfigId, dealSettingsTargetPercent: configData.dealSettings?.targetAssetPricePercent, configData });
 
       // Отправляем на сервер
       const result = await updateConfiguration(loadedConfigId, configData, userId);

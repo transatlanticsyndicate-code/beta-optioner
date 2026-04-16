@@ -178,6 +178,7 @@ function CalculatorDealTabs({
     lastProcessedSettingsRef.current = dealSettings;
     // Пропустить следующую итерацию saving useEffect — local state ещё не обновился
     skipNextSaveRef.current = true;
+    console.log('🔄 [RESTORE] Восстанавливаем dealSettings, targetAssetPricePercent:', dealSettings.targetAssetPricePercent, 'текущий local:', targetAssetPricePercent);
 
     if (dealSettings.slicesSent !== undefined) setSlicesSent(dealSettings.slicesSent);
     if (dealSettings.tradingViewUrl !== undefined) setTradingViewUrl(dealSettings.tradingViewUrl);
@@ -295,6 +296,7 @@ function CalculatorDealTabs({
     // ЗАЧЕМ: setState асинхронный — saving useEffect видит старые значения и перезаписывает dealSettings
     if (skipNextSaveRef.current) {
       skipNextSaveRef.current = false;
+      console.log('⏭️ [SAVING] ПРОПУЩЕНО (skipNextSaveRef), targetAssetPricePercent:', targetAssetPricePercent, 'dealSettings.targetAssetPricePercent:', dealSettings?.targetAssetPricePercent);
       return;
     }
     // Не сохраняем если идёт сброс при создании новой сделки
@@ -320,6 +322,7 @@ function CalculatorDealTabs({
         targetAssetPricePercentPut,
         targetAssetPricePercentPutExit,
       };
+      console.log('💾 [SAVING] setDealSettings вызван, targetAssetPricePercent:', targetAssetPricePercent);
       // Помечаем объект как уже обработанный ДО передачи в родитель
       // ЗАЧЕМ: Когда useEffect([dealSettings]) получит этот объект — пропустит его (уже обработан)
       // Это разрывает цикл: saving → setDealSettings → useEffect([dealSettings]) → setState → saving
