@@ -139,6 +139,12 @@ function CalculatorDealTabs({
   // ЗАЧЕМ: Saving useEffect сравнивает с этим значением чтобы не сохранять данные во время сброса
   const resetCreatedAtRef = React.useRef(null);
 
+  // Ref для предотвращения перезаписи dealSettings при восстановлении
+  // ЗАЧЕМ: После восстановления dealSettings из сохранённой позиции, saving useEffect видит
+  // ещё старые значения local state (setState асинхронный) и перезаписывает dealSettings дефолтами.
+  // Этот флаг заставляет saving useEffect пропустить одну итерацию, пока state не обновится.
+  const skipNextSaveRef = React.useRef(false);
+
   // Сбрасываем срезки при создании НОВОЙ сделки (изменился dealInfo.createdAt)
   // ЗАЧЕМ: Надёжный сброс независимо от race condition с dealSettings
   React.useEffect(() => {
@@ -170,6 +176,8 @@ function CalculatorDealTabs({
 
     // Восстанавливаем state из внешнего dealSettings (открытие сохранённой позиции)
     lastProcessedSettingsRef.current = dealSettings;
+    // Пропустить следующую итерацию saving useEffect — local state ещё не обновился
+    skipNextSaveRef.current = true;
 
     if (dealSettings.slicesSent !== undefined) setSlicesSent(dealSettings.slicesSent);
     if (dealSettings.tradingViewUrl !== undefined) setTradingViewUrl(dealSettings.tradingViewUrl);
@@ -283,6 +291,12 @@ function CalculatorDealTabs({
   // Сохраняем настройки таба Сделка при изменении
   // ЗАЧЕМ: Передать настройки в диалог сохранения позиции
   React.useEffect(() => {
+    // Пропускаем сохранение пока local state не обновился после восстановления
+    // ЗАЧЕМ: setState асинхронный — saving useEffect видит старые значения и перезаписывает dealSettings
+    if (skipNextSaveRef.current) {
+      skipNextSaveRef.current = false;
+      return;
+    }
     // Не сохраняем если идёт сброс при создании новой сделки
     // ЗАЧЕМ: Предотвращаем перезапись dealSettings старыми slicesSent/frozenExitPlan до их сброса
     if (resetCreatedAtRef.current && resetCreatedAtRef.current === dealInfo?.createdAt && slicesSent) return;

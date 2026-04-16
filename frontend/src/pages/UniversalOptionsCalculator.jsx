@@ -3475,6 +3475,8 @@ function UniversalOptionsCalculator() {
           chartDisplayMode,
           calculatorMode,
         },
+        dealSettings: dealSettings || null,
+        dealInfo: dealInfo || null,
       };
 
       localStorage.setItem('universalCalculatorConfigurations', JSON.stringify(configurations));
