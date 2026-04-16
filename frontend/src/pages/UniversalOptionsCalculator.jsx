@@ -3531,6 +3531,8 @@ function UniversalOptionsCalculator() {
           chartDisplayMode,
           calculatorMode,
         },
+        dealSettings: dealSettings || null,
+        dealInfo: dealInfo || null,
       };
 
       console.log('📤 [handleSaveDBConfiguration] Отправляем на сервер:', { loadedConfigId, configData });
