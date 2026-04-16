@@ -4244,6 +4244,8 @@ function UniversalOptionsCalculator() {
           onClose={() => setSaveConfigDialogOpen(false)}
           onSave={handleSaveConfiguration}
           currentState={getCurrentState()}
+          dealInfo={dealInfo}
+          dealSettings={dealSettings}
         />
 
         {/* Диалог фиксации позиций (isLocked=true) */}
