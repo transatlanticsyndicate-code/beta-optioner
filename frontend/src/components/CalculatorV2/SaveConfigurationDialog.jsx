@@ -162,7 +162,8 @@ function SaveConfigurationDialog({ isOpen, onClose, onSave, currentState, isLock
         });
       }
     }
-  }, [isOpen, isLocked, currentState, dealInfo]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   const handleSave = () => {
     if (!name.trim()) {
