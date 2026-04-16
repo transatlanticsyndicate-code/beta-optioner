@@ -535,7 +535,7 @@ function OptionsTableV3({
           {/* ЗАЧЕМ: Клик по заголовку сортирует таблицу по этой колонке */}
           <div className="grid items-center text-xs font-medium text-muted-foreground px-2" style={{
             display: 'grid',
-            gridTemplateColumns: `30px minmax(0,0.9fr) minmax(0,1.1fr) minmax(0,0.7fr) minmax(0,0.55fr) ${hideColumns.includes('premium') ? '' : 'minmax(0,0.8fr) '}minmax(0,0.6fr) minmax(0,0.6fr) ${hideColumns.includes('oi') ? '' : 'minmax(0,0.6fr) '}minmax(0,0.4fr) minmax(0,0.55fr) minmax(0,0.55fr) minmax(0,0.65fr) minmax(0,0.55fr) minmax(0,1.1fr) minmax(0,0.55fr) minmax(0,0.7fr) 40px`.replace(/\s+/g, ' ').trim(),
+            gridTemplateColumns: `30px minmax(0,0.9fr) minmax(0,0.9fr) minmax(0,0.7fr) minmax(0,0.55fr) ${hideColumns.includes('premium') ? '' : 'minmax(0,0.8fr) '}minmax(0,0.6fr) minmax(0,0.6fr) ${hideColumns.includes('oi') ? '' : 'minmax(0,0.6fr) '}minmax(0,0.4fr) minmax(0,0.55fr) minmax(0,0.55fr) minmax(0,0.65fr) minmax(0,0.55fr) minmax(0,1.1fr) minmax(0,0.75fr) minmax(0,0.7fr) 40px`.replace(/\s+/g, ' ').trim(),
             gap: '6px'
           }}>
             <div></div>
@@ -624,7 +624,7 @@ function OptionsTableV3({
                   }`}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: `30px minmax(0,0.9fr) minmax(0,1.1fr) minmax(0,0.7fr) minmax(0,0.55fr) ${hideColumns.includes('premium') ? '' : 'minmax(0,0.8fr) '}minmax(0,0.6fr) minmax(0,0.6fr) ${hideColumns.includes('oi') ? '' : 'minmax(0,0.6fr) '}minmax(0,0.4fr) minmax(0,0.55fr) minmax(0,0.55fr) minmax(0,0.65fr) minmax(0,0.55fr) minmax(0,1.1fr) minmax(0,0.55fr) minmax(0,0.7fr) 40px`.replace(/\s+/g, ' ').trim(),
+                  gridTemplateColumns: `30px minmax(0,0.9fr) minmax(0,0.9fr) minmax(0,0.7fr) minmax(0,0.55fr) ${hideColumns.includes('premium') ? '' : 'minmax(0,0.8fr) '}minmax(0,0.6fr) minmax(0,0.6fr) ${hideColumns.includes('oi') ? '' : 'minmax(0,0.6fr) '}minmax(0,0.4fr) minmax(0,0.55fr) minmax(0,0.55fr) minmax(0,0.65fr) minmax(0,0.55fr) minmax(0,1.1fr) minmax(0,0.75fr) minmax(0,0.7fr) 40px`.replace(/\s+/g, ' ').trim(),
                   gap: '6px'
                 }}
               >
@@ -663,12 +663,14 @@ function OptionsTableV3({
                     {option.type}
                   </span>
                 </div>
-                <Input
-                  value={option.date ? formatDateForDisplay(option.date) : ""}
-                  readOnly
-                  className="h-7 text-right text-xs text-muted-foreground px-1 border-input font-bold bg-gray-50 cursor-default"
-                  placeholder="Дата"
-                />
+                <div className="flex items-center justify-end">
+                  <Input
+                    value={option.date ? formatDateForDisplay(option.date) : ""}
+                    readOnly
+                    className="h-7 text-right text-xs text-muted-foreground px-1 border-input font-bold bg-gray-50 cursor-default w-[70px]"
+                    placeholder="Дата"
+                  />
+                </div>
                 <Input
                   value={option.strike || ""}
                   readOnly
@@ -1337,7 +1339,7 @@ function OptionsTableV3({
           })}
 
           {/* Итоговая строка */}
-          <div className="items-center text-sm border-t-2 border-cyan-500 bg-cyan-50/50 rounded-md p-2 font-bold" style={{ display: 'grid', gridTemplateColumns: `30px minmax(0,0.9fr) minmax(0,1.1fr) minmax(0,0.7fr) minmax(0,0.55fr) ${hideColumns.includes('premium') ? '' : 'minmax(0,0.8fr) '}minmax(0,0.6fr) minmax(0,0.6fr) ${hideColumns.includes('oi') ? '' : 'minmax(0,0.6fr) '}minmax(0,0.4fr) minmax(0,0.55fr) minmax(0,0.55fr) minmax(0,0.65fr) minmax(0,0.55fr) minmax(0,1.1fr) minmax(0,0.55fr) minmax(0,0.7fr) 40px`.replace(/\s+/g, ' ').trim(), gap: '6px' }}>
+          <div className="items-center text-sm border-t-2 border-cyan-500 bg-cyan-50/50 rounded-md p-2 font-bold" style={{ display: 'grid', gridTemplateColumns: `30px minmax(0,0.9fr) minmax(0,0.9fr) minmax(0,0.7fr) minmax(0,0.55fr) ${hideColumns.includes('premium') ? '' : 'minmax(0,0.8fr) '}minmax(0,0.6fr) minmax(0,0.6fr) ${hideColumns.includes('oi') ? '' : 'minmax(0,0.6fr) '}minmax(0,0.4fr) minmax(0,0.55fr) minmax(0,0.55fr) minmax(0,0.65fr) minmax(0,0.55fr) minmax(0,1.1fr) minmax(0,0.75fr) minmax(0,0.7fr) 40px`.replace(/\s+/g, ' ').trim(), gap: '6px' }}>
             <div></div>
             <div className="text-left">ИТОГО:</div>
             <div></div>
