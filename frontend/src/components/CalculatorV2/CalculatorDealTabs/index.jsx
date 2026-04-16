@@ -768,7 +768,7 @@ function CalculatorDealTabs({
               ivSurface={ivSurface}
               slicesSent={slicesSent}
               setSlicesSent={setSlicesSent}
-              savedSteps={exitPlanSteps}
+              savedSteps={exitPlanSteps || dealSettings?.exitPlanSteps || null}
               onStepsChange={setExitPlanSteps}
             />
           ) : (

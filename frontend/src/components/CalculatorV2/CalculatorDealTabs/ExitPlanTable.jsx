@@ -120,29 +120,32 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
     setSteps(prevSteps => {
       let newSteps = [];
       let forceRedistribute = false;
+      // При загрузке новой сделки используем savedSteps вместо prevSteps
+      // ЗАЧЕМ: prevSteps содержит данные ПРЕДЫДУЩЕЙ сделки, savedSteps — сохранённые пользователем значения
+      const sourceSteps = (isNewDeal && savedSteps && savedSteps.length > 0) ? savedSteps : prevSteps;
 
       if (!dealInfo.isMultiDeal) {
         // ЛОГИКА ДЛЯ ОБЫЧНОЙ СДЕЛКИ (1 опцион)
         const option = liveOptions[0];
         const totalQuantity = Math.abs(Number(option.quantity) || 1);
-        
+
         // Если общее количество изменилось извне — перераспределяем шаги
         if (lastSeenTotalQuantityRef.current !== totalQuantity) {
           forceRedistribute = true;
           lastSeenTotalQuantityRef.current = totalQuantity;
         }
-        
+
         // Определяем количество шагов: не более 4, не более количества контрактов
         const stepsCount = Math.min(4, totalQuantity);
-        
+
         // Распределяем количество контрактов по шагам
         const baseQuantity = Math.floor(totalQuantity / stepsCount);
         const remainder = totalQuantity % stepsCount;
-        
+
         newSteps = Array.from({ length: stepsCount }, (_, index) => {
           const autoQuantity = index < remainder ? baseQuantity + 1 : baseQuantity;
-          const existingStep = prevSteps[index];
-          
+          const existingStep = sourceSteps[index];
+
           const percent = existingStep ? existingStep.percent : (defaultPercents[index] || (index + 1) * 15);
           // Целевая цена рассчитывается от цены актива на момент входа в конкретный опцион
           const basePrice = option.assetPriceAtEntry || currentPrice;
@@ -181,8 +184,8 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
         // Количество шагов = количеству разных опционов (уже ограничено до 4 при создании)
         newSteps = sortedOptions.map((option, index) => {
           const autoQuantity = Math.abs(option.quantity || 1);
-          const existingStep = prevSteps[index];
-          
+          const existingStep = sourceSteps[index];
+
           const percent = existingStep ? existingStep.percent : (defaultPercents[index] || (index + 1) * 15);
           // Целевая цена рассчитывается от цены актива на момент входа в конкретный опцион
           const basePrice = option.assetPriceAtEntry || currentPrice;
@@ -231,7 +234,8 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
 
       return hasChanges ? newSteps : prevSteps;
     });
-  }, [currentPrice, dealInfo, options]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPrice, dealInfo, options, savedSteps]);
 
   // Обработчик изменения процентов
   const handlePercentChange = (index, value) => {
