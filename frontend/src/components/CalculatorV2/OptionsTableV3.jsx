@@ -1121,8 +1121,9 @@ function OptionsTableV3({
                         const rfrAnchor = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
 
                         // IV на момент якоря: используем manualIvOverride если задан, иначе marketIV
+                        // manualIvOverride хранится в процентах (150 = 150%), конвертацию делают функции расчёта
                         const anchorIV = option.manualIvOverride !== null && option.manualIvOverride !== undefined
-                          ? (option.manualIvOverride / 100)
+                          ? option.manualIvOverride
                           : optionVolatility;
 
                         // ВАЖНО: plAtAnchor считается при ЦЕНЕ АКТИВА НА МОМЕНТ ВВОДА якоря (actualPLPrice)
@@ -1281,8 +1282,9 @@ function OptionsTableV3({
                       if (daysPassed >= anchorDaysPassed) {
                         const anchorDaysToExp = calculateDaysRemainingUTC(option, anchorDaysPassed, 30, oldestEntry);
                         const rfrAnchor = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
+                        // manualIvOverride хранится в процентах, конвертацию делают функции расчёта
                         const anchorIV = option.manualIvOverride !== null && option.manualIvOverride !== undefined
-                          ? (option.manualIvOverride / 100)
+                          ? option.manualIvOverride
                           : optionVolatility;
                         const anchorPrice = option.actualPLPrice || currentPrice;
 
@@ -1446,8 +1448,9 @@ function OptionsTableV3({
                         const rfrAnchor = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
 
                         // IV на момент якоря: используем manualIvOverride если задан, иначе marketIV
+                        // manualIvOverride хранится в процентах, конвертацию делают функции расчёта
                         const anchorIV = opt.manualIvOverride !== null && opt.manualIvOverride !== undefined
-                          ? (opt.manualIvOverride / 100)
+                          ? opt.manualIvOverride
                           : optVolatility;
 
                         // ВАЖНО: plAtAnchor считается при ЦЕНЕ АКТИВА НА МОМЕНТ ВВОДА якоря (actualPLPrice)
