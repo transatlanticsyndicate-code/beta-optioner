@@ -201,7 +201,7 @@ function CalculatorDealTabs({
     if (dealSettings.exitStepsCount !== undefined) setExitStepsCount(dealSettings.exitStepsCount);
     if (dealSettings.targetAssetPricePercentPut !== undefined) setTargetAssetPricePercentPut(dealSettings.targetAssetPricePercentPut);
     if (dealSettings.targetAssetPricePercentPutExit !== undefined) setTargetAssetPricePercentPutExit(dealSettings.targetAssetPricePercentPutExit);
-    // exitPlanSteps восстанавливается напрямую в ExitPlanTable через проп savedSteps
+    if (dealSettings.exitPlanSteps) setExitPlanSteps(dealSettings.exitPlanSteps);
 
     console.log('📊 Состояние срезок восстановлено из dealSettings:', {
       slicesSent: dealSettings.slicesSent,
@@ -768,7 +768,7 @@ function CalculatorDealTabs({
               ivSurface={ivSurface}
               slicesSent={slicesSent}
               setSlicesSent={setSlicesSent}
-              savedSteps={dealSettings?.exitPlanSteps || null}
+              savedSteps={exitPlanSteps}
               onStepsChange={setExitPlanSteps}
             />
           ) : (
