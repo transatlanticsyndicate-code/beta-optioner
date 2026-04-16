@@ -50,8 +50,14 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
 
   // Восстановление шагов из savedSteps (открытие сохранённой позиции)
   // ЗАЧЕМ: При открытии сохранённой позиции восстанавливаем ручные изменения пользователя
+  const lastRestoredStepsRef = useRef(null);
   useEffect(() => {
     if (!savedSteps || savedSteps.length === 0) return;
+    // Не восстанавливаем если это те же данные что мы сами отправили через onStepsChange
+    const serialized = JSON.stringify(savedSteps);
+    if (serialized === lastReportedStepsRef.current || serialized === lastRestoredStepsRef.current) return;
+    lastRestoredStepsRef.current = serialized;
+    lastReportedStepsRef.current = serialized; // Предотвращаем обратный цикл
     setSteps(savedSteps);
     restoredFromSavedRef.current = true;
     console.log('🔄 [ExitPlanTable] Восстановлены шаги из dealSettings:', savedSteps.length, 'шагов');
@@ -59,16 +65,21 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
 
   // Уведомление родителя об изменении шагов (для сохранения в dealSettings)
   // ЗАЧЕМ: Передаём steps наверх чтобы они попали в dealSettings и сохранились
+  const lastReportedStepsRef = useRef(null);
   useEffect(() => {
-    if (onStepsChange && steps.length > 0) {
-      // Сохраняем только данные, без ссылок на опционы (optionRef содержит циклические ссылки)
-      const stepsToSave = steps.map(s => ({
-        id: s.id,
-        percent: s.percent,
-        dollars: s.dollars,
-        quantity: s.quantity,
-        exitDate: s.exitDate,
-      }));
+    if (!onStepsChange || steps.length === 0) return;
+    // Сохраняем только данные, без ссылок на опционы (optionRef содержит циклические ссылки)
+    const stepsToSave = steps.map(s => ({
+      id: s.id,
+      percent: s.percent,
+      dollars: s.dollars,
+      quantity: s.quantity,
+      exitDate: s.exitDate,
+    }));
+    // Сравниваем с предыдущим значением чтобы избежать бесконечного цикла
+    const serialized = JSON.stringify(stepsToSave);
+    if (serialized !== lastReportedStepsRef.current) {
+      lastReportedStepsRef.current = serialized;
       onStepsChange(stepsToSave);
     }
   }, [steps, onStepsChange]);
