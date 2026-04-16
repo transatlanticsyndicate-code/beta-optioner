@@ -177,12 +177,23 @@ function CalculatorDealTabs({
     if (dealSettings.slicesSentPut !== undefined) setSlicesSentPut(dealSettings.slicesSentPut);
     if (dealSettings.tradingViewUrlPut !== undefined) setTradingViewUrlPut(dealSettings.tradingViewUrlPut);
     if (dealSettings.frozenExitPlanPut !== undefined) setFrozenExitPlanPut(dealSettings.frozenExitPlanPut);
+    if (dealSettings.targetAssetPricePercent !== undefined) {
+      setTargetAssetPricePercent(dealSettings.targetAssetPricePercent);
+      // Синхронизируем targetPrice на графике P&L
+      if (setTargetPrice && currentPrice > 0) {
+        const restoredDollars = Math.round(currentPrice * (1 + dealSettings.targetAssetPricePercent / 100) * 100) / 100;
+        setTargetPrice(restoredDollars);
+      }
+    }
+    if (dealSettings.exitStepsCount !== undefined) setExitStepsCount(dealSettings.exitStepsCount);
     if (dealSettings.targetAssetPricePercentPut !== undefined) setTargetAssetPricePercentPut(dealSettings.targetAssetPricePercentPut);
     if (dealSettings.targetAssetPricePercentPutExit !== undefined) setTargetAssetPricePercentPutExit(dealSettings.targetAssetPricePercentPutExit);
 
     console.log('📊 Состояние срезок восстановлено из dealSettings:', {
       slicesSent: dealSettings.slicesSent,
       frozenExitPlan: dealSettings.frozenExitPlan,
+      targetAssetPricePercent: dealSettings.targetAssetPricePercent,
+      exitStepsCount: dealSettings.exitStepsCount,
     });
   }, [dealSettings]);
   
