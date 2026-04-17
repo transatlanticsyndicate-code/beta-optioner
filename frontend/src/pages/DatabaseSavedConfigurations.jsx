@@ -242,20 +242,28 @@ function DatabaseSavedConfigurations() {
     });
   };
 
-  // Самая ранняя дата входа из опционов на момент сохранения (без времени)
-  // ЗАЧЕМ: config.entryDate хранит минимум уже при сохранении; для старых записей
-  // fallback — минимум из state.options[*].entryDate
+  // Самая ранняя дата входа (на момент сохранения)
+  // ЗАЧЕМ: предпочитаем минимум из state.options[*].entryDate (формат YYYY-MM-DD,
+  // без таймзоны — надёжно), fallback — config.entryDate из БД
   const getEntryDateValue = (config) => {
-    if (config.entryDate) return config.entryDate;
     const opts = config.state?.options || [];
     const withDates = opts.filter(o => o && o.entryDate);
-    if (withDates.length === 0) return null;
-    return withDates.reduce((min, o) => (o.entryDate < min ? o.entryDate : min), withDates[0].entryDate);
+    if (withDates.length > 0) {
+      return withDates.reduce((min, o) => (o.entryDate < min ? o.entryDate : min), withDates[0].entryDate);
+    }
+    return config.entryDate || null;
   };
 
   const formatEntryDate = (value) => {
     if (!value) return '—';
-    const iso = value.length === 10 ? `${value}T00:00:00.000Z` : value;
+    // ISO без таймзоны ("2026-04-13T00:00:00") трактуем как UTC, чтобы не уехать
+    // на день из-за часового пояса браузера
+    let iso = value;
+    if (value.length === 10) {
+      iso = `${value}T00:00:00.000Z`;
+    } else if (!/Z|[+-]\d{2}:?\d{2}$/.test(value)) {
+      iso = `${value}Z`;
+    }
     const date = new Date(iso);
     if (isNaN(date.getTime())) return '—';
     return date.toLocaleDateString('ru-RU', {
