@@ -84,6 +84,46 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
     }
   }, [steps, onStepsChange]);
 
+  // Снимок плана выхода в localStorage
+  // ЗАЧЕМ: Внешние потребители (расширение и др.) могут забирать актуальное состояние плана выхода
+  useEffect(() => {
+    try {
+      if (!steps || steps.length === 0) {
+        localStorage.removeItem('currentExitPlanSnapshot');
+        return;
+      }
+
+      const stepsWithPL = steps.map(step => ({
+        step: step.id,
+        percent: step.percent,
+        targetPrice: step.dollars,
+        quantity: step.quantity,
+        exitDate: step.exitDate,
+        option: step.optionRef ? {
+          type: step.optionRef.type,
+          action: step.optionRef.action,
+          strike: step.optionRef.strike,
+          expiration: step.optionRef.date,
+        } : null,
+        pl: calculateStepPL(step),
+      }));
+
+      const totalPL = stepsWithPL.reduce((sum, s) => sum + s.pl, 0);
+
+      const snapshot = {
+        ticker,
+        currentPrice,
+        steps: stepsWithPL,
+        totalPL,
+        updatedAt: new Date().toISOString(),
+      };
+
+      localStorage.setItem('currentExitPlanSnapshot', JSON.stringify(snapshot));
+    } catch (err) {
+      console.error('Ошибка сохранения снимка плана выхода в localStorage:', err);
+    }
+  }, [steps, ticker, currentPrice]);
+
   // Инициализация шагов при первом рендере или изменении dealInfo/options
   useEffect(() => {
     if (!dealInfo) return;
