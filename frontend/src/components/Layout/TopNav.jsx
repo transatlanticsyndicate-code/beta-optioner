@@ -3,7 +3,6 @@ import { useLocation } from 'react-router-dom';
 import { Bell } from 'lucide-react';
 import ThemeToggle from '../ThemeToggle';
 import { Badge } from '../ui/badge';
-import SupabaseUserMenu from '../SupabaseUserMenu';
 import OptionsDataIndicator from '../OptionsDataIndicator';
 
 function TopNav() {
@@ -77,8 +76,7 @@ function TopNav() {
         {/* Theme Toggle */}
         {/* <ThemeToggle /> */}
 
-        {/* User Menu with Supabase SSO */}
-        <SupabaseUserMenu />
+        {/* User Menu отключён: аутентификация снята, портал открыт для всех */}
       </div>
     </nav>
   );

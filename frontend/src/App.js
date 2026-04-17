@@ -2,7 +2,6 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import LayoutWithSidebar from './components/Layout/LayoutWithSidebar';
 import ProtectedRoute from './components/ProtectedRoute';
-import Login from './pages/Login';
 import OptionsAnalyzer from './pages/OptionsAnalyzer';
 import AnalysisView from './pages/AnalysisView';
 import OptionsCalculatorBasic from './pages/OptionsCalculatorBasic';
@@ -20,10 +19,9 @@ import CryptoRating from './pages/CryptoRating';
 function App() {
   return (
     <Routes>
-      {/* Страница логина без Layout */}
-      <Route path="/login" element={<Login />} />
-      
-      {/* Остальные страницы с Layout - защищены аутентификацией */}
+      {/* Аутентификация отключена: старый /login ведёт на главную */}
+      <Route path="/login" element={<Navigate to="/" replace />} />
+
       <Route path="/*" element={
         <ProtectedRoute>
           <LayoutWithSidebar>
