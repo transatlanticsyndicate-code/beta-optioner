@@ -242,6 +242,30 @@ function DatabaseSavedConfigurations() {
     });
   };
 
+  // Самая ранняя дата входа из опционов на момент сохранения (без времени)
+  // ЗАЧЕМ: config.entryDate хранит минимум уже при сохранении; для старых записей
+  // fallback — минимум из state.options[*].entryDate
+  const getEntryDateValue = (config) => {
+    if (config.entryDate) return config.entryDate;
+    const opts = config.state?.options || [];
+    const withDates = opts.filter(o => o && o.entryDate);
+    if (withDates.length === 0) return null;
+    return withDates.reduce((min, o) => (o.entryDate < min ? o.entryDate : min), withDates[0].entryDate);
+  };
+
+  const formatEntryDate = (value) => {
+    if (!value) return '—';
+    const iso = value.length === 10 ? `${value}T00:00:00.000Z` : value;
+    const date = new Date(iso);
+    if (isNaN(date.getTime())) return '—';
+    return date.toLocaleDateString('ru-RU', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      timeZone: 'UTC',
+    });
+  };
+
   // Определение типа инструмента из конфигурации
   const getInstrumentType = (config) => {
     if (config.state?.calculatorMode) {
@@ -614,6 +638,7 @@ function DatabaseSavedConfigurations() {
                       <SortIcon field="createdAt" />
                     </span>
                   </TableHead>
+                  <TableHead>Дата входа</TableHead>
                   <TableHead
                     className="cursor-pointer select-none hover:text-foreground"
                     onClick={() => handleSort('ticker')}
@@ -647,6 +672,9 @@ function DatabaseSavedConfigurations() {
                     <TableRow key={config.id} className="hover:bg-gray-50">
                       <TableCell className="font-mono text-sm">
                         {formatDate(config.createdAt)}
+                      </TableCell>
+                      <TableCell className="font-mono text-sm">
+                        {formatEntryDate(getEntryDateValue(config))}
                       </TableCell>
                       <TableCell className="font-semibold">
                         {config.ticker || '—'}
