@@ -20,6 +20,10 @@ wheels/
 .installed.cfg
 *.egg
 
+# Исключение: crypto/src/lib/ — не Python, это папка с supabase-клиентом Vite-фронта
+!crypto/src/lib/
+!crypto/src/lib/**
+
 # Virtual Environment
 venv/
 env/
