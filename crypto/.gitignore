@@ -1,0 +1,13 @@
+node_modules
+dist
+.DS_Store
+*.local
+.gemini
+
+# Binaries and Large Files
+ibkr_bridge/dist_package/IBKRBridge
+IBKRBridge
+dist/
+build/
+*.zip
+*.pkg

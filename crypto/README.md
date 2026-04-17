@@ -1,73 +1,60 @@
-# Crypto Subdomain - crypto.optioner.online
+# Crypto Position Manager
 
-## Описание
-Поддомен для криптовалютных инструментов и калькуляторов опционов.
+Профессиональное веб-приложение для управления крипто-позициями и расчета сценариев дозакупки.
 
-## Структура
-```
-crypto/
-├── frontend/          # React приложение (будет собрано в build/)
-├── backend/           # FastAPI бэкенд
-└── logs/             # Логи PM2 (создается автоматически)
-```
+## 🚀 Архитектура проекта
 
-## Конфигурация
+Приложение построено на принципах разделения ответственности (**Separation of Concerns**) и модульности:
 
-### Nginx
-- Конфигурация: `nginx.crypto.conf`
-- Порт бэкенда: 8003
-- Путь к frontend build: `/var/www/crypto/frontend/build`
+### 1. **Data Layer (Store.ts)**
+- Управляет состоянием приложения (`State`).
+- Обеспечивает синхронизацию данных между `LocalStorage` (локально) и `Supabase` (облако).
+- Реализует механизм дебаунсинга для минимизации сетевых запросов.
+- Выполняет строгую валидацию структуры данных при загрузке.
 
-### PM2
-- Конфигурация: `ecosystem.crypto.config.js`
-- Процесс: `crypto-backend`
-- Порт: 8003
+### 2. **UI Layer (UI.ts)**
+- Отвечает за отрисовку интерфейса.
+- Использует точечные обновления DOM для высокой производительности и сохранения фокуса ввода.
+- Защищен от XSS-атак через экранирование пользовательского ввода.
 
-### Environment
-- Шаблон: `.env.crypto.template`
-- База данных: `crypto_optioner`
-- Окружение: `crypto`
+### 3. **Service Layer (PositionService.ts)**
+- Содержит всю бизнес-логику расчетов.
+- Интегрирован с `decimal.js` для гарантированной точности финансовых вычислений (исключает ошибки float64).
 
-## Деплой
+### 4. **Auth Layer (auth.ts)**
+- Интеграция с `Supabase Auth`.
+- Управление доступом к защищенным частям интерфейса.
 
-1. **Скопировать файлы на сервер**
+## 🛠 Технологический стек
+
+- **Язык**: TypeScript (строгая типизация)
+- **Сборщик**: Vite
+- **Расчеты**: Decimal.js
+- **Backend/Auth**: Supabase
+- **Стилизация**: Vanilla CSS (Modern Design System)
+
+## 🏃 Как запустить
+
+1. Установите зависимости:
    ```bash
-   scp -r crypto/ root@89.117.52.143:/var/www/
-   scp nginx.crypto.conf root@89.117.52.143:/etc/nginx/sites-available/
-   scp ecosystem.crypto.config.js root@89.117.52.143:/var/www/crypto/
+   npm install
    ```
 
-2. **Настроить Nginx**
-   ```bash
-   ln -s /etc/nginx/sites-available/nginx.crypto.conf /etc/nginx/sites-enabled/
-   nginx -t
-   systemctl reload nginx
+2. Настройте переменные окружения (создайте `.env` на основе `.env.example`):
+   ```
+   VITE_SUPABASE_URL=ваш_url
+   VITE_SUPABASE_ANON_KEY=ваш_ключ
    ```
 
-3. **Настроить SSL (certbot)**
+3. Запустите в режиме разработки:
    ```bash
-   certbot --nginx -d crypto.optioner.online
+   npm run dev
    ```
 
-4. **Создать базу данных**
+4. Сборка для продакшена:
    ```bash
-   sudo -u postgres psql
-   CREATE DATABASE crypto_optioner;
-   CREATE USER crypto_user WITH PASSWORD 'your_password';
-   GRANT ALL PRIVILEGES ON DATABASE crypto_optioner TO crypto_user;
+   npm run build
    ```
 
-5. **Настроить .env**
-   ```bash
-   cp .env.crypto.template /var/www/crypto/backend/.env
-   # Отредактировать .env с реальными значениями
-   ```
-
-6. **Запустить PM2**
-   ```bash
-   pm2 start ecosystem.crypto.config.js
-   pm2 save
-   ```
-
-## DNS
-Добавить A-запись для `crypto.optioner.online` → `89.117.52.143`
+---
+*Разработано с акцентом на производительность, безопасность и расширяемость.*

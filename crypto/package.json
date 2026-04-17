@@ -1,0 +1,20 @@
+{
+  "name": "crypto-position-manager",
+  "private": true,
+  "version": "7.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@types/decimal.js": "^0.0.32",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.94.0",
+    "decimal.js": "^10.6.0"
+  }
+}

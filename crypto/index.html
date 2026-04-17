@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Crypto Position Manager</title>
+    <link rel="icon" type="image/png" href="/cryptoB.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="stylesheet" href="./src/style.css" />
+</head>
+
+<body>
+    <div class="app-container">
+        <nav class="nav-panel">
+            <button class="nav-btn active">Крипто Менеджер</button>
+            <button class="nav-btn">Финансовый учет</button>
+            <button class="nav-btn">Еженедельная статистика</button>
+
+            <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+                <span
+                    style="font-size: 0.65rem; color: var(--text-secondary); font-family: var(--font-mono); opacity: 0.8; display: flex; align-items: center; gap: 4px; margin-right: 8px;">
+                    v10 by <a href="https://beta.optioner.online/" target="_blank" rel="noopener noreferrer"
+                        style="color: inherit; text-decoration: none; display: flex; align-items: center; gap: 4px; transition: opacity 0.2s;"
+                        onmouseover="this.style.opacity='1'; this.style.textDecoration='underline'"
+                        onmouseout="this.style.opacity='0.8'; this.style.textDecoration='none'">
+                        <img src="/optioner_logo.png" style="height: 10px; width: auto; vertical-align: middle;">
+                        OPTIONER.ONLINE
+                    </a>
+                </span>
+                <button id="theme-toggle-btn" title="Переключить тему">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+                    </svg>
+                </button>
+                <div id="auth-container"></div>
+            </div>
+        </nav>
+        <div id="view-crypto-manager" class="page-view">
+            <header>
+                <div class="header-main">
+                    <img src="/cryptoB.png" alt="Logo" class="app-logo" id="app-logo">
+                    <h1 class="page-title">Крипто Менеджер</h1>
+                </div>
+                <div>
+                    <p id="last-updated" style="color: var(--text-secondary); font-size: 0.8rem;"></p>
+                </div>
+                <div class="stats-grid" id="global-stats">
+                    <!-- Статистика будет вставлена здесь -->
+                </div>
+            </header>
+
+            <div id="public-view" style="display: none; flex: 1; align-items: center; justify-content: center;">
+                <!-- Login form for public view will be rendered here -->
+            </div>
+
+            <div id="protected-view" style="display: contents;">
+                <div class="add-asset-form">
+                    <input type="text" id="new-asset-name" placeholder="Введите тикер" class="ticker-input" />
+                    <select id="new-asset-scenario" class="scenario-select">
+                        <option value="" disabled selected hidden>Сценарий</option>
+                        <option value="1500">1500</option>
+                        <option value="3000">3000</option>
+                        <option value="6000">6000</option>
+                        <option value="12000">12000</option>
+                    </select>
+                    <button id="add-asset-btn">+ Добавить</button>
+                    <div class="form-divider"></div>
+                    <span class="filter-label">Фильтры</span>
+                    <input type="text" id="search-asset-input" placeholder="По тикеру" class="search-input" />
+                    <select id="filter-asset-scenario" class="scenario-filter-select">
+                        <option value="">По сценарию</option>
+                    </select>
+                    <button id="clear-search-btn" title="Очистить фильтры">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                            <path d="M3 3v5h5" />
+                        </svg>
+                    </button>
+
+                    <div class="form-actions">
+                        <button id="toggle-settings-btn" title="Настройки">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round">
+                                <path
+                                    d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                                <circle cx="12" cy="12" r="3" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Панель настроек -->
+                <section id="settings-panel" class="settings-panel">
+                    <h3>Настройка сценариев</h3>
+                    <div id="scenarios-editor">
+                        <!-- Редактор сценариев будет вставлен здесь -->
+                    </div>
+                    <div class="settings-footer" style="flex-wrap: wrap; gap: 8px;">
+                        <button id="add-scenario-btn">+ Добавить сценарий</button>
+
+                        <div style="flex-basis: 100%; height: 1px; background: var(--border-color); margin: 8px 0;">
+                        </div>
+
+                        <div style="display: flex; align-items: center; gap: 8px; flex: 1;">
+                            <input type="text" id="cmc-api-key" placeholder="CMC API Key"
+                                style="width: 150px; flex: 1;">
+                            <button id="update-rankings-btn" title="Обновить рейтинг">↻ Rank</button>
+                        </div>
+
+                        <button id="export-data-btn">Экспорт данных</button>
+                        <button id="import-data-btn">Импорт данных</button>
+                        <button id="reset-config-btn">Сбросить конфиг</button>
+                        <button id="full-reset-btn" class="danger-btn">СБРОСИТЬ ВСЁ</button>
+                    </div>
+                </section>
+
+
+                <section class="asset-table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th width="30"
+                                    style="text-align: center; color: var(--text-secondary); font-weight: normal; cursor: pointer;"
+                                    id="rank-header-sort">R <span id="rank-sort-indicator"
+                                        style="font-size: 0.8em; opacity: 0.7;"></span></th>
+                                <th width="30"></th>
+                                <th style="text-align: left; cursor: pointer;" id="asset-header-sort">
+                                    <div style="display: flex; align-items: center; gap: 4px;">
+                                        Актив
+                                        <span id="sort-indicator" style="font-size: 0.8em; opacity: 0.7;"></span>
+                                    </div>
+                                </th>
+                                <th style="text-align: left; z-index: 20;">
+                                    <div style="display: flex; align-items: center; gap: 6px;">
+                                        Сценарий
+                                        <div class="info-icon-wrapper"
+                                            style="position: relative; display: flex; align-items: center;">
+                                            <div class="info-icon">i</div>
+                                            <div class="custom-tooltip" id="scenario-tooltip">
+                                                <div class="tooltip-arrow"></div>
+                                                <div id="scenario-tooltip-content">
+                                                    <!-- Stats will be rendered here -->
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </th>
+                                <th style="text-align: center; cursor: pointer;" id="orders-header-sort">
+                                    <div style="display: flex; align-items: center; justify-content: center; gap: 4px;">
+                                        Ордера
+                                        <span id="orders-sort-indicator" style="font-size: 0.8em; opacity: 0.7;"></span>
+                                    </div>
+                                </th>
+
+
+                                <th style="text-align: right;">
+                                    <div>Сумма остатка</div>
+                                    <div id="total-remaining-header"
+                                        style="font-size: 0.75rem; color: var(--accent-color); font-family: var(--font-mono);">
+                                        0
+                                    </div>
+                                </th>
+
+
+                                <th style="text-align: center;" class="col-highlight">1</th>
+                                <th style="text-align: right;" class="col-highlight">Сумма</th>
+                                <th style="text-align: center;">2</th>
+                                <th style="text-align: right;">Сумма</th>
+                                <th style="text-align: center;" class="col-highlight">3</th>
+                                <th style="text-align: right;" class="col-highlight">Сумма</th>
+                                <th style="text-align: center;">4</th>
+                                <th style="text-align: right;">Сумма</th>
+
+                                <th style="text-align: right;" class="col-highlight">
+                                    <div>Сумма дозакупки</div>
+                                    <div id="total-add-header"
+                                        style="font-size: 0.75rem; color: var(--accent-color); font-family: var(--font-mono);">
+                                        0
+                                    </div>
+                                </th>
+
+                                <th width="40"></th>
+                            </tr>
+                        </thead>
+
+
+
+
+                        <tbody id="asset-list">
+                            <!-- Список активов будет вставлен здесь -->
+                        </tbody>
+                    </table>
+                </section>
+            </div>
+        </div>
+
+
+        <div id="view-financial-accounting" class="page-view" style="display: none;">
+            <header>
+                <div class="header-main">
+                    <img src="/finB.png" alt="Logo" class="app-logo" id="fin-app-logo">
+                    <h1 class="page-title">Финансовый учет</h1>
+                    <div class="header-divider"></div>
+                    <div class="period-filter">
+                        <span class="filter-label">ЗА ПЕРИОД</span>
+                        <select id="fin-date-filter-type" class="period-select">
+                            <option value="all">За все даты</option>
+                            <option value="year">За текущий год</option>
+                            <option value="last_year">За прошлый год</option>
+                            <option value="month">За текущий месяц</option>
+                            <option value="last_month">За прошлый месяц</option>
+                            <option value="custom">Выбрать даты</option>
+                        </select>
+                        <div id="fin-custom-date-group" class="custom-date-group" style="display: none;">
+                            <span class="date-sep">С</span>
+                            <input type="date" id="fin-filter-start-date" class="date-input" />
+                            <span class="date-sep">ПО</span>
+                            <input type="date" id="fin-filter-end-date" class="date-input" />
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <p id="fin-last-updated" style="color: var(--text-secondary); font-size: 0.8rem;"></p>
+                </div>
+                <div class="stats-grid" id="fin-global-stats">
+                    <div class="stat-card" id="fin-deposit-card">
+                        <div class="stat-label">Депозит</div>
+                        <div class="stat-value" id="fin-deposit-display">$0.00</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Ввод</div>
+                        <div id="fin-monthly-income" class="stat-value fin-positive">$0.00</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Вывод</div>
+                        <div id="fin-monthly-expense" class="stat-value fin-negative">$0.00</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Баланс</div>
+                        <div id="fin-total-balance" class="stat-value">$0.00</div>
+                    </div>
+                </div>
+            </header>
+
+            <div id="fin-protected-view" style="display: flex; flex-direction: column; flex: 1; min-height: 0;">
+                <div class="add-asset-form">
+                    <div class="form-row">
+                        <input type="date" id="fin-date-input" class="date-input" />
+                        <div id="fin-category-container" class="category-select-container"></div>
+                        <div id="fin-amount-group" class="amount-input-group">
+                            <input type="number" id="fin-amount-input" placeholder="Сумма ($)" min="0" step="0.01" />
+                        </div>
+                        <input type="text" id="fin-note-input" placeholder="Примечание" class="note-input" />
+                        <button id="fin-add-entry-btn">+ Добавить</button>
+                    </div>
+
+                    <div class="form-divider"></div>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <span style="font-size: 0.8rem; color: var(--text-secondary); white-space: nowrap;">Фильтр по
+                            категориям</span>
+                        <div id="fin-filter-category-container" class="category-select-container"></div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button id="fin-toggle-settings-btn" title="Настройки">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round">
+                                <path
+                                    d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                                <circle cx="12" cy="12" r="3" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <section id="fin-settings-panel" class="settings-panel">
+                    <h3>Настройки финансового учета</h3>
+
+                    <div style="display: flex; gap: 24px; margin-bottom: 1.5rem; align-items: stretch;">
+                        <div style="flex: 1;">
+                            <h4
+                                style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 0.75rem;">
+                                1. Типы (Группы)</h4>
+                            <div id="fin-types-editor">
+                                <!-- Редактор типов будет здесь -->
+                            </div>
+                            <button id="fin-add-type-btn">+ Добавить тип</button>
+                        </div>
+
+                        <div style="flex: 2;">
+                            <h4
+                                style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 0.75rem;">
+                                2. Детали (Категории)</h4>
+                            <div id="fin-categories-editor">
+                                <!-- Редактор категорий будет здесь -->
+                            </div>
+                            <button id="fin-add-category-btn">+ Добавить деталь</button>
+                        </div>
+                    </div>
+
+                </section>
+
+                <div class="fin-content-grid">
+                    <div class="fin-table-column">
+                        <section class="asset-table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th style="text-align: left; color: var(--text-secondary); font-weight: normal; cursor: pointer;"
+                                            id="fin-sort-date">Дата <span id="fin-sort-indicator"
+                                                style="font-size: 0.8em; opacity: 0.7;"></span></th>
+                                        <th style="text-align: left;">Категория</th>
+                                        <th style="text-align: right;">Сумма</th>
+                                        <th style="text-align: left;">Описание</th>
+                                        <th width="40"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="fin-entry-list">
+                                    <!-- JS Rendered -->
+                                </tbody>
+                            </table>
+                        </section>
+                    </div>
+                    <div class="fin-widgets-column">
+                        <div class="fin-widget-placeholder">
+                            <div class="fin-widget-content" id="fin-analytics-summary">
+                                <p style="color: var(--text-secondary); font-size: 0.85rem; text-align: center;">
+                                    Загрузка...</p>
+                            </div>
+                        </div>
+                        <div class="fin-widget-placeholder" style="margin-top: 1rem;">
+                            <div class="fin-widget-content" id="fin-analytics-chart-container">
+                                <div
+                                    style="height: 150px; display: flex; align-items: center; justify-content: center; background: var(--highlight-header); border-radius: 4px;">
+                                    <span style="font-size: 0.8rem; color: var(--text-secondary);">График</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-weekly-stats" class="page-view" style="display: none;">
+            <header>
+                <div class="header-main">
+                    <img src="/finB.png" alt="Logo" class="app-logo" id="weekly-app-logo">
+                    <h1 class="page-title">Еженедельная статистика</h1>
+                    <div class="header-divider"></div>
+                    <div class="period-filter">
+                        <span class="filter-label">ЗА ПЕРИОД</span>
+                        <select id="weekly-date-filter-type" class="period-select">
+                            <option value="all">За все даты</option>
+                            <option value="year">За текущий год</option>
+                            <option value="last_year">За прошлый год</option>
+                            <option value="month">За текущий месяц</option>
+                            <option value="last_month">За прошлый месяц</option>
+                            <option value="custom">Выбрать даты</option>
+                        </select>
+                        <div id="weekly-custom-date-group" class="custom-date-group" style="display: none;">
+                            <span class="date-sep">С</span>
+                            <input type="date" id="weekly-filter-start-date" class="date-input" />
+                            <span class="date-sep">ПО</span>
+                            <input type="date" id="weekly-filter-end-date" class="date-input" />
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <p id="weekly-last-updated" style="color: var(--text-secondary); font-size: 0.8rem;"></p>
+                </div>
+                <div class="stats-grid" id="weekly-global-stats">
+                    <div class="stat-card" id="weekly-deposit-card" style="display: none;">
+                        <div class="stat-label">Депозит</div>
+                        <div class="stat-value" id="weekly-deposit-display" style="color: var(--text-primary);">$0.00
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">ПРИБЫЛЬ ЗА ПЕРИОД</div>
+                        <div id="weekly-period-profit" class="stat-value"
+                            style="color: var(--success-color); font-weight: 600;">$0.00
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">НАКОПЛЕННАЯ ПРИБЫЛЬ</div>
+                        <div id="weekly-accumulated-profit" class="stat-value" style="color: var(--accent-color);">$0.00
+                        </div>
+                    </div>
+                    <div class="stat-card" id="weekly-positions-card">
+                        <div class="stat-label">Сумма в позициях</div>
+                        <div class="stat-value" id="weekly-positions-display" style="color: #FFA500;">$0.00</div>
+                    </div>
+                    <div class="stat-card" id="weekly-deposit-percent-card">
+                        <div class="stat-label">в % от депозита</div>
+                        <div class="stat-value" id="weekly-deposit-percent-display" style="color: #FFA500;">
+                            0%</div>
+                    </div>
+                </div>
+            </header>
+
+            <div id="weekly-protected-view" style="display: flex; flex-direction: column; flex: 1; min-height: 0;">
+                <div class="add-asset-form">
+                    <div class="form-row" style="display: flex; gap: 8px; align-items: center;">
+                        <input type="date" id="weekly-date-input" class="date-input" title="Дата" />
+                        <input type="number" id="weekly-profit-input" placeholder="Нед. прибыль" step="0.01"
+                            class="amount-input" style="width: 120px;" />
+                        <input type="number" id="weekly-loss-input" placeholder="Убыток портф." step="0.01"
+                            class="amount-input" style="width: 120px;" />
+                        <input type="number" id="weekly-positions-input" placeholder="В позициях" min="0" step="0.01"
+                            class="amount-input" style="width: 120px;" />
+                        <input type="number" id="weekly-usdt-input" placeholder="Вывод USDT" min="0" step="0.01"
+                            class="amount-input" style="width: 120px;" />
+                        <input type="number" id="weekly-eur-input" placeholder="Вывод EUR" min="0" step="0.01"
+                            class="amount-input" style="width: 120px;" />
+                        <button id="weekly-add-entry-btn" disabled>+ Добавить</button>
+                    </div>
+                </div>
+
+                <section id="weekly-settings-panel" class="settings-panel">
+                    <h3>Настройки статистики</h3>
+
+                    <div style="display: flex; gap: 24px; margin-bottom: 1.5rem; align-items: stretch;">
+                        <div style="flex: 1;">
+                            <h4
+                                style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 0.75rem;">
+                                1. Типы (Группы)</h4>
+                            <div id="weekly-types-editor">
+                                <!-- Редактор типов будет здесь -->
+                            </div>
+                            <button id="weekly-add-type-btn">+ Добавить тип</button>
+                        </div>
+
+                        <div style="flex: 2;">
+                            <h4
+                                style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 0.75rem;">
+                                2. Детали (Категории)</h4>
+                            <div id="weekly-categories-editor">
+                                <!-- Редактор категорий будет здесь -->
+                            </div>
+                            <button id="weekly-add-category-btn">+ Добавить деталь</button>
+                        </div>
+                    </div>
+
+                </section>
+
+                <div
+                    style="width: 100%; display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden;">
+                    <div class="fin-table-column" style="flex: 1; min-height: 0; overflow: hidden;">
+                        <section class="asset-table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th style="text-align: left; color: var(--text-secondary); font-weight: normal; cursor: pointer;"
+                                            id="weekly-sort-date">Дата <span id="weekly-sort-indicator"
+                                                style="font-size: 0.8em; opacity: 0.7;"></span></th>
+                                        <th
+                                            style="text-align: right; color: var(--text-secondary); font-weight: normal;">
+                                            Недельная прибыль</th>
+                                        <th
+                                            style="text-align: right; color: var(--text-secondary); font-weight: normal;">
+                                            Прибыль в % от Суммы в позициях</th>
+                                        <th
+                                            style="text-align: right; color: var(--text-secondary); font-weight: normal;">
+                                            Размер убытка портфеля</th>
+                                        <th
+                                            style="text-align: right; color: var(--text-secondary); font-weight: normal;">
+                                            Убыток в % от Суммы в позициях</th>
+                                        <th
+                                            style="text-align: right; color: var(--text-secondary); font-weight: normal;">
+                                            Сумма в позициях</th>
+                                        <th
+                                            style="text-align: right; color: var(--text-secondary); font-weight: normal;">
+                                            Готово на вывод USDT</th>
+                                        <th
+                                            style="text-align: right; color: var(--text-secondary); font-weight: normal;">
+                                            Готово на вывод EUR</th>
+                                        <th width="40"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="weekly-entry-list">
+                                    <!-- JS Rendered -->
+                                </tbody>
+                            </table>
+                        </section>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    </div>
+    </div>
+    </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+</body>
+
+</html>
