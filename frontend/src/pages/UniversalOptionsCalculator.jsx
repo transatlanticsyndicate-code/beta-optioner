@@ -1007,12 +1007,20 @@ function UniversalOptionsCalculator() {
     userOptionOverridesRef.current = {};
     console.log('🧹 [Universal] optioner_user_overrides очищен');
 
-    // Очищаем URL параметры (contract, price, config, edit)
+    // ВАЖНО: Очищаем сохранённые данные сделки и настроек вкладки «Сделка»
+    // ЗАЧЕМ: После полного сброса ни сделка, ни настройки (включая exitPlanSteps)
+    // не должны переноситься в следующий сеанс
+    localStorage.removeItem('optioner_deal_info');
+    localStorage.removeItem('optioner_deal_settings');
+    console.log('🧹 [Universal] optioner_deal_info и optioner_deal_settings очищены');
+
+    // Очищаем URL параметры (contract, price, config, dbConfig, edit)
     // ЗАЧЕМ: Предотвращаем восстановление данных из URL при обновлении страницы
     const url = new URL(window.location.href);
     url.searchParams.delete('contract');
     url.searchParams.delete('price');
     url.searchParams.delete('config');
+    url.searchParams.delete('dbConfig');
     url.searchParams.delete('edit');
     window.history.replaceState({}, '', url.pathname);
     console.log('🧹 [Universal] URL параметры очищены');
@@ -1020,8 +1028,9 @@ function UniversalOptionsCalculator() {
     // Очищаем данные расширения (тикер контракта и временную метку)
     clearExtensionData();
 
-    // Сбрасываем сделку
+    // Сбрасываем сделку и настройки вкладки «Сделка»
     setDealInfo(null);
+    setDealSettings(null);
     setActiveCalculatorTab('calculator');
 
     // ✅ Принудительная перезагрузка страницы
