@@ -658,8 +658,8 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
               <tr>
                 <th className="px-3 py-3 text-left font-medium w-16">Шаг</th>
                 <th className="px-3 py-3 text-left font-medium w-48">Опцион</th>
-                <th className="px-3 py-3 text-left font-medium w-32">Целевая цена +%</th>
-                <th className="px-3 py-3 text-left font-medium w-32">Целевая цена $</th>
+                <th className="px-3 py-3 text-left font-medium w-32">Цель актива +%</th>
+                <th className="px-3 py-3 text-left font-medium w-32">Цель актива $</th>
                 <th className="px-3 py-3 text-left font-medium w-24">Количество</th>
                 <th className="px-3 py-3 text-left font-medium w-32">Дата выхода</th>
                 <th className="px-3 py-3 text-right font-medium w-32">P&L</th>
