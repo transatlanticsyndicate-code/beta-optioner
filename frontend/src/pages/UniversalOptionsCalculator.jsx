@@ -3029,6 +3029,21 @@ function UniversalOptionsCalculator() {
     }
   };
 
+  // Нормализация dealSettings для сравнения
+  // ЗАЧЕМ: Сравнивать только user-editable поля, игнорируя derived (exitPlan) и авто-сохраняемые (slicesSent/frozenExitPlan)
+  const normalizeDealSettingsForCompare = (ds) => {
+    if (!ds) return null;
+    return JSON.stringify({
+      targetAssetPricePercent: ds.targetAssetPricePercent ?? null,
+      targetAssetPricePercentPut: ds.targetAssetPricePercentPut ?? null,
+      targetAssetPricePercentPutExit: ds.targetAssetPricePercentPutExit ?? null,
+      exitStepsCount: ds.exitStepsCount ?? null,
+      tradingViewUrl: ds.tradingViewUrl ?? null,
+      tradingViewUrlPut: ds.tradingViewUrlPut ?? null,
+      exitPlanSteps: ds.exitPlanSteps ?? null,
+    });
+  };
+
   // Функция проверки наличия изменений в конфигурации из БД
   // ЗАЧЕМ: Определить, изменилась ли позиция после открытия из БД
   const checkDBConfigChanges = () => {
@@ -3048,6 +3063,7 @@ function UniversalOptionsCalculator() {
       showProbabilityZones,
       chartDisplayMode,
       calculatorMode,
+      dealSettings: normalizeDealSettingsForCompare(dealSettings),
     };
 
     // Сравниваем текущее состояние с исходным
@@ -3062,7 +3078,8 @@ function UniversalOptionsCalculator() {
       currentState.showOptionLines !== originalDBConfig.showOptionLines ||
       currentState.showProbabilityZones !== originalDBConfig.showProbabilityZones ||
       currentState.chartDisplayMode !== originalDBConfig.chartDisplayMode ||
-      currentState.calculatorMode !== originalDBConfig.calculatorMode
+      currentState.calculatorMode !== originalDBConfig.calculatorMode ||
+      currentState.dealSettings !== originalDBConfig.dealSettings
     );
   };
 
@@ -3081,7 +3098,7 @@ function UniversalOptionsCalculator() {
       // Для конфигураций из localStorage просто отмечаем, что есть изменения
       setHasChanges(true);
     }
-  }, [isEditMode, loadedConfigId, configSource, originalDBConfig, options, positions, selectedExpirationDate, daysPassed, showOptionLines, showProbabilityZones, chartDisplayMode, calculatorMode, selectedTicker, currentPrice, priceChange]);
+  }, [isEditMode, loadedConfigId, configSource, originalDBConfig, options, positions, selectedExpirationDate, daysPassed, showOptionLines, showProbabilityZones, chartDisplayMode, calculatorMode, selectedTicker, currentPrice, priceChange, dealSettings]);
 
   // Автосохранение изменений в загруженную конфигурацию
   // ЗАЧЕМ: Автосохранение работает ТОЛЬКО для незафиксированных позиций И не в режиме редактирования
@@ -3360,6 +3377,7 @@ function UniversalOptionsCalculator() {
         showProbabilityZones: config.state.showProbabilityZones !== undefined ? config.state.showProbabilityZones : true,
         chartDisplayMode: config.state.chartDisplayMode || 'profit-loss-dollar',
         calculatorMode: restoredMode,
+        dealSettings: normalizeDealSettingsForCompare(config.dealSettings),
       });
       setConfigSource('db');
 
@@ -3557,6 +3575,7 @@ function UniversalOptionsCalculator() {
         showProbabilityZones,
         chartDisplayMode,
         calculatorMode,
+        dealSettings: normalizeDealSettingsForCompare(dealSettings),
       });
 
       // Сбрасываем флаг изменений
