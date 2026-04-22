@@ -132,6 +132,7 @@ function UniversalOptionsCalculator() {
     urlPrice,               // Цена из URL (?price=)
     exchange: extensionExchange,      // Биржа от расширения (NYSE, NASDAQ, CBOT и т.д.)
     underlyingPrice: extensionPrice,  // Цена базового актива
+    underlyingPriceConfidence: extensionPriceConfidence, // Уверенность в цене: 'high'|'low'|'none'
     ticker: extensionTicker,          // Тикер от расширения
     expirationDate: extensionExpirationDate,  // Дата экспирации
     options: extensionOptions,        // Массив опционов от расширения
@@ -140,6 +141,15 @@ function UniversalOptionsCalculator() {
     refreshFromStorage,     // Функция ручного обновления
     clearExtensionData      // Функция очистки данных расширения
   } = useExtensionData();
+
+  // Безопасная цена для «запекания» в assetPriceAtEntry сохраняемых опционов.
+  // ЗАЧЕМ: Если расширение не смогло однозначно привязать цену к текущему тикеру
+  // (уверенность 'low' или 'none'), не сохраняем её в БД — чтобы в сделке не осталась
+  // цена чужого тикера из watchlist/popup/сравнения. Текущая цена (currentPrice)
+  // при этом продолжает обновляться — её пользователь видит и может исправить вручную.
+  const safeExtensionPriceForEntry = (extensionPriceConfidence === 'high' || !extensionPriceConfidence)
+    ? extensionPrice
+    : 0;
 
   // Ref для отслеживания предыдущего тикера
   // ЗАЧЕМ: Позволяет определить, когда тикер изменился, и очистить позиции базового актива
@@ -1524,7 +1534,7 @@ function UniversalOptionsCalculator() {
               entryDate: savedOption.entryDate,
               simulationTargetPrice: savedOption.simulationTargetPrice,
               // Цена базового актива на момент входа
-              assetPriceAtEntry: savedOption.assetPriceAtEntry || extOption.assetPriceAtEntry || extensionPrice || 0,
+              assetPriceAtEntry: savedOption.assetPriceAtEntry || extOption.assetPriceAtEntry || safeExtensionPriceForEntry || 0,
               isAssetPriceModified: savedOption.isAssetPriceModified,
             };
           }
@@ -1532,7 +1542,9 @@ function UniversalOptionsCalculator() {
           return {
             ...extOption,
             // Цена базового актива на момент входа
-            assetPriceAtEntry: extOption.assetPriceAtEntry || currentPrice || extensionPrice || 0,
+            // Приоритет: assetPriceAtEntry с расширения → safeExtensionPriceForEntry (валидированная health-check)
+            // → fallback на currentPrice/extensionPrice (на случай старых билдов расширения)
+            assetPriceAtEntry: extOption.assetPriceAtEntry || safeExtensionPriceForEntry || currentPrice || extensionPrice || 0,
           };
         });
 
@@ -1802,10 +1814,11 @@ function UniversalOptionsCalculator() {
           
           if (newOptions.length > 0) {
             // Добавляем entryDate и assetPriceAtEntry к новым опционам
+            // Приоритет цены: explicit → safeExtensionPriceForEntry (health-check) → currentPrice → extensionPrice
             const enrichedNewOptions = newOptions.map(opt => ({
               ...opt,
               entryDate: new Date().toISOString().split('T')[0],
-              assetPriceAtEntry: opt.assetPriceAtEntry || currentPrice || extensionPrice || 0
+              assetPriceAtEntry: opt.assetPriceAtEntry || safeExtensionPriceForEntry || currentPrice || extensionPrice || 0
             }));
             console.log('➕ [Universal] Добавлено новых опционов к конфигурации:', enrichedNewOptions.length);
             return [...updatedPrevOptions, ...enrichedNewOptions];
@@ -1966,7 +1979,7 @@ function UniversalOptionsCalculator() {
               entryDate: entryDate,
               simulationTargetPrice: existingOption?.simulationTargetPrice,
               // Цена базового актива на момент входа
-              assetPriceAtEntry: savedOverrides.assetPriceAtEntry ?? existingOption?.assetPriceAtEntry ?? (extensionPrice || 0),
+              assetPriceAtEntry: savedOverrides.assetPriceAtEntry ?? existingOption?.assetPriceAtEntry ?? (safeExtensionPriceForEntry || 0),
               isAssetPriceModified: savedOverrides.isAssetPriceModified ?? existingOption?.isAssetPriceModified,
             };
             console.log('🔄 [Merge] Опцион с ручными изменениями:', {
@@ -1985,8 +1998,9 @@ function UniversalOptionsCalculator() {
             ...extOption,
             // Для новых опционов от расширения добавляем entryDate
             entryDate: extOption.entryDate || new Date().toISOString().split('T')[0],
-            // Цена базового актива на момент входа
-            assetPriceAtEntry: extOption.assetPriceAtEntry || currentPrice || extensionPrice || 0,
+            // Цена базового актива на момент входа.
+            // Приоритет: explicit → safeExtensionPriceForEntry (health-check) → currentPrice → extensionPrice
+            assetPriceAtEntry: extOption.assetPriceAtEntry || safeExtensionPriceForEntry || currentPrice || extensionPrice || 0,
           };
         });
 
@@ -3968,6 +3982,29 @@ function UniversalOptionsCalculator() {
   return (
     <div className="min-h-screen bg-background text-foreground" style={{ minWidth: '1570px', maxWidth: '1570px' }}>
       <div className="p-6">
+        {/* === ПРЕДУПРЕЖДЕНИЕ О НЕДОСТОВЕРНОЙ ЦЕНЕ БАЗОВОГО АКТИВА === */}
+        {/* ЗАЧЕМ: Если расширение не смогло однозначно привязать цену к текущему тикеру
+            (TradingView изменил вёрстку или в DOM присутствуют элементы других тикеров) —
+            показываем плашку, чтобы пользователь проверил цену перед сохранением сделки */}
+        {isFromExtension && extensionPriceConfidence && extensionPriceConfidence !== 'high' && (
+          <div className={`mb-4 border-2 rounded-lg p-3 ${
+            extensionPriceConfidence === 'none'
+              ? 'border-red-400 bg-red-50 dark:bg-red-950/30 text-red-800 dark:text-red-200'
+              : 'border-yellow-400 bg-yellow-50 dark:bg-yellow-950/30 text-yellow-900 dark:text-yellow-200'
+          }`}>
+            <div className="font-semibold text-sm mb-1">
+              {extensionPriceConfidence === 'none'
+                ? 'TradingView изменил вёрстку — цена базового актива не получена. Требуется обновление расширения.'
+                : 'Цена базового актива от расширения недостоверна.'}
+            </div>
+            <div className="text-xs opacity-90">
+              {extensionPriceConfidence === 'none'
+                ? 'Сохранённая сделка не будет содержать цену входа — задайте её вручную в таблице опционов. Сообщите разработчику о проблеме.'
+                : 'Возможно, в момент добавления позиции на странице TradingView был активен элемент другого тикера (watchlist, сравнение, всплывающая подсказка). Цена не будет автоматически сохранена в «Цену актива на момент входа» — проверьте и введите её вручную в таблице опционов.'}
+            </div>
+          </div>
+        )}
+
         {/* === ХЕДЕР С ДАННЫМИ ОТ РАСШИРЕНИЯ ИЛИ КОНФИГУРАЦИИ === */}
         {/* ЗАЧЕМ: Отображение контракта, цены и метаданных от TradingView Parser или загруженной конфигурации */}
         {/* ВАЖНО: Показываем если данные от расширения ИЛИ загружена конфигурация */}

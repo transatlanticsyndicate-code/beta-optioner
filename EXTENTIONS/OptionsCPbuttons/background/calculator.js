@@ -20,9 +20,9 @@ function cancelPendingCalcListener() {
 }
 
 // Re-fetch позиции из storage перед инжектом (SUPERBUG fix)
-function freshFetchAndInject(tabId, stalePositions, tickerName, price, fallbackExchange) {
+function freshFetchAndInject(tabId, stalePositions, tickerName, price, fallbackExchange, priceConfidence) {
   if (_injectionInProgress) {
-    _pendingInjection = { tabId, stalePositions, tickerName, price, fallbackExchange };
+    _pendingInjection = { tabId, stalePositions, tickerName, price, fallbackExchange, priceConfidence };
     return;
   }
 
@@ -37,27 +37,27 @@ function freshFetchAndInject(tabId, stalePositions, tickerName, price, fallbackE
 
       if (tickerPositions.length === 0 && stalePositions?.length > 0) {
         console.warn('[EXT2 BG] SUPERBUG prevented: stale data ignored');
-        injectDataIntoCalculator(tabId, [], tickerName, price, exchange);
+        injectDataIntoCalculator(tabId, [], tickerName, price, exchange, priceConfidence);
         return;
       }
 
-      injectDataIntoCalculator(tabId, tickerPositions, tickerName, price, exchange);
+      injectDataIntoCalculator(tabId, tickerPositions, tickerName, price, exchange, priceConfidence);
     } finally {
       _injectionInProgress = false;
       if (_pendingInjection) {
         const pending = _pendingInjection;
         _pendingInjection = null;
-        freshFetchAndInject(pending.tabId, pending.stalePositions, pending.tickerName, pending.price, pending.fallbackExchange);
+        freshFetchAndInject(pending.tabId, pending.stalePositions, pending.tickerName, pending.price, pending.fallbackExchange, pending.priceConfidence);
       }
     }
   });
 }
 
-function injectDataIntoCalculator(tabId, positionsData, tickerName, price, exchange) {
+function injectDataIntoCalculator(tabId, positionsData, tickerName, price, exchange, priceConfidence) {
 
   chrome.scripting.executeScript({
     target: { tabId },
-    func: (positions, ticker, underlyingPrice, exchange) => {
+    func: (positions, ticker, underlyingPrice, exchange, underlyingPriceConfidence) => {
       function convert(pos, t) {
         const shortTicker = t.replace(/20(\d{2})$/, '$1');
         return {
@@ -141,6 +141,10 @@ function injectDataIntoCalculator(tabId, positionsData, tickerName, price, excha
       }
       if (underlyingPrice) calcState.underlyingPrice = underlyingPrice;
       if (exchange) calcState.exchange = exchange;
+      // Уверенность в цене: 'high' | 'low' | 'none'
+      // ЗАЧЕМ: Калькулятор показывает жёлтую плашку и не «запекает» цену в assetPriceAtEntry,
+      // если уверенность не high — чтобы в БД не попадала цена чужого тикера.
+      if (underlyingPriceConfidence) calcState.underlyingPriceConfidence = underlyingPriceConfidence;
 
       localStorage.setItem('calculatorState', JSON.stringify(calcState));
 
@@ -151,7 +155,7 @@ function injectDataIntoCalculator(tabId, positionsData, tickerName, price, excha
         newValue: JSON.stringify(calcState)
       }));
     },
-    args: [positionsData, tickerName, price, exchange]
+    args: [positionsData, tickerName, price, exchange, priceConfidence || 'high']
   });
 }
 
@@ -208,7 +212,7 @@ function handleSyncConfigPositions(message, sendResponse) {
   });
 }
 
-async function getCalculatorUrlFromConfig(shortTicker, price, exchange) {
+async function getCalculatorUrlFromConfig(shortTicker, price, exchange, priceConfidence) {
   const result = await chrome.storage.local.get(['ext2_environment']);
   const env = result.ext2_environment || 'production';
   const base = env === 'localhost' ? 'http://localhost:3000' : 'https://beta.optioner.online';
@@ -216,16 +220,22 @@ async function getCalculatorUrlFromConfig(shortTicker, price, exchange) {
   if (shortTicker) url += `?contract=${encodeURIComponent(shortTicker)}`;
   if (price) url += `${shortTicker ? '&' : '?'}price=${encodeURIComponent(price)}`;
   if (exchange) url += `&exchange=${encodeURIComponent(exchange)}`;
+  // Передаём метку уверенности в калькулятор. По умолчанию пропускаем 'high', чтобы
+  // не засорять URL при нормальной работе.
+  if (priceConfidence && priceConfidence !== 'high') {
+    url += `&priceConfidence=${encodeURIComponent(priceConfidence)}`;
+  }
   return url;
 }
 
 function handleOpenOptionerTab(message, sendResponse) {
-  const { ticker, positions, underlyingPrice, exchange } = message;
+  const { ticker, positions, underlyingPrice, underlyingPriceConfidence, exchange } = message;
   if (!ticker) return;
 
   const shortTicker = ticker.replace(/20(\d{2})$/, '$1');
+  const priceConfidence = underlyingPriceConfidence || 'high';
 
-  getCalculatorUrlFromConfig(shortTicker, underlyingPrice, exchange).then(calcUrl => {
+  getCalculatorUrlFromConfig(shortTicker, underlyingPrice, exchange, priceConfidence).then(calcUrl => {
     chrome.tabs.query({ url: ['https://beta.optioner.online/tools/universal-calculator*', 'http://localhost:3000/tools/universal-calculator*'] }, (tabs) => {
       cancelPendingCalcListener();
 
@@ -237,7 +247,7 @@ function handleOpenOptionerTab(message, sendResponse) {
             if (_pendingCalcTimeout) { clearTimeout(_pendingCalcTimeout); _pendingCalcTimeout = null; }
             chrome.tabs.get(tabId, (tab) => {
               if (chrome.runtime.lastError || !tab) return;
-              setTimeout(() => freshFetchAndInject(tabId, positions, ticker, underlyingPrice, exchange), 500);
+              setTimeout(() => freshFetchAndInject(tabId, positions, ticker, underlyingPrice, exchange, priceConfidence), 500);
             });
           }
         }
@@ -281,7 +291,7 @@ function handleOpenOptionerTab(message, sendResponse) {
               // ЗАЧЕМ: React калькулятор сам добавит новые опционы к конфигурации
               chrome.tabs.update(tabId, { active: true }, () => {
                 if (chrome.runtime.lastError) return;
-                freshFetchAndInject(tabId, positions, ticker, underlyingPrice, exchange);
+                freshFetchAndInject(tabId, positions, ticker, underlyingPrice, exchange, priceConfidence);
               });
             } else {
               // Нет конфигурации, другой тикер — обновляем URL и ждём загрузки
@@ -295,7 +305,7 @@ function handleOpenOptionerTab(message, sendResponse) {
             if (hasConfigInUrl) {
               chrome.tabs.update(tabId, { active: true }, () => {
                 if (chrome.runtime.lastError) return;
-                freshFetchAndInject(tabId, positions, ticker, underlyingPrice, exchange);
+                freshFetchAndInject(tabId, positions, ticker, underlyingPrice, exchange, priceConfidence);
               });
             } else {
               chrome.tabs.update(tabId, { active: true, url: calcUrl }, () => {
@@ -308,7 +318,7 @@ function handleOpenOptionerTab(message, sendResponse) {
           // Тот же тикер — просто активируем вкладку и инжектим данные
           chrome.tabs.update(tabId, { active: true }, () => {
             if (chrome.runtime.lastError) return;
-            freshFetchAndInject(tabId, positions, ticker, underlyingPrice, exchange);
+            freshFetchAndInject(tabId, positions, ticker, underlyingPrice, exchange, priceConfidence);
           });
         }
       } else {
@@ -321,12 +331,13 @@ function handleOpenOptionerTab(message, sendResponse) {
 }
 
 function handleOpenOptionerTabNew(message, sendResponse) {
-  const { ticker, positions, underlyingPrice, exchange } = message;
+  const { ticker, positions, underlyingPrice, underlyingPriceConfidence, exchange } = message;
   if (!ticker) return;
 
   const shortTicker = ticker.replace(/20(\d{2})$/, '$1');
+  const priceConfidence = underlyingPriceConfidence || 'high';
 
-  getCalculatorUrlFromConfig(shortTicker, underlyingPrice, exchange).then(calcUrl => {
+  getCalculatorUrlFromConfig(shortTicker, underlyingPrice, exchange, priceConfidence).then(calcUrl => {
     cancelPendingCalcListener();
     chrome.tabs.create({ url: calcUrl, active: true }, (tab) => {
       if (chrome.runtime.lastError || !tab) return;
@@ -339,7 +350,7 @@ function handleOpenOptionerTabNew(message, sendResponse) {
           if (_pendingCalcTimeout) { clearTimeout(_pendingCalcTimeout); _pendingCalcTimeout = null; }
           chrome.tabs.get(tabId, (t) => {
             if (chrome.runtime.lastError || !t) return;
-            setTimeout(() => freshFetchAndInject(tabId, positions, ticker, underlyingPrice, exchange), 1000);
+            setTimeout(() => freshFetchAndInject(tabId, positions, ticker, underlyingPrice, exchange, priceConfidence), 1000);
           });
         }
       }

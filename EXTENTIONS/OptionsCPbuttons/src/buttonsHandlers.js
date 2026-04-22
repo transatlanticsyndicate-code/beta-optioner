@@ -14,6 +14,22 @@ function handleOptionClick(btn, optionType, action, strike) {
     return;
   }
 
+  // Health-check парсера. Если critical — блокируем добавление, чтобы в калькулятор
+  // не попадали битые данные, и сразу показываем пользователю, что сломалось.
+  if (typeof ext2RunHealthCheck === 'function') {
+    const health = ext2RunHealthCheck();
+    if (health.severity === 'critical') {
+      showPanel();
+      if (typeof updateHealthBanner === 'function') updateHealthBanner(health);
+      console.error(LOG_TAG, 'Добавление заблокировано — critical проблемы парсера:', health.issues);
+      return;
+    }
+    // Для warning — пускаем дальше, но плашка будет видна пользователю
+    if (health.severity === 'warning' && typeof updateHealthBanner === 'function') {
+      updateHealthBanner(health);
+    }
+  }
+
   // При фильтре ±N strikes одновременно видны строки разных экспираций с одинаковым страйком,
   // поэтому querySelector вернул бы всегда первую — ищем строку, совпадающую по экспирации из кнопки
   const allRows = document.querySelectorAll(`tr[data-strike="${strike}"]`);

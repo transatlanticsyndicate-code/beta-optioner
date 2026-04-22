@@ -4,7 +4,12 @@
 
 function openOptionerCalculator(ticker) {
   const tickerPositions = tvc_positions[ticker] || [];
-  const underlyingPrice = getUnderlyingPrice();
+
+  // Цена с меткой уверенности — «low» сигнализирует калькулятору, что цене
+  // доверять нельзя и нужно показать предупреждение пользователю.
+  const priceInfo = typeof ext2GetUnderlyingPriceWithConfidence === 'function'
+    ? ext2GetUnderlyingPriceWithConfidence()
+    : { price: getUnderlyingPrice(), confidence: 'high' };
 
   if (!chrome.runtime?.id) {
     console.warn(LOG_TAG, 'Extension context invalidated');
@@ -24,7 +29,8 @@ function openOptionerCalculator(ticker) {
     action: 'ext2_openOptionerTab',
     ticker,
     positions: tickerPositions,
-    underlyingPrice,
+    underlyingPrice: priceInfo.price,
+    underlyingPriceConfidence: priceInfo.confidence,
     exchange
   });
 }

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Options CP Buttons",
-  "version": "1.4.12",
+  "version": "1.5.1",
   "description": "Кнопки +C +P -C -P для доски опционов TradingView → Optioner Calculator",
 
   "permissions": ["storage", "activeTab", "tabs", "scripting"],
@@ -38,6 +38,7 @@
         "src/config.js",
         "src/utils.js",
         "src/parser.js",
+        "src/healthCheck.js",
         "src/storage.js",
         "src/optioner.js",
         "src/panel.js",

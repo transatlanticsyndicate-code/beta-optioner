@@ -18,6 +18,20 @@
   // 5. MutationObserver для новых строк
   setupObserver();
 
+  // 5.1 Первичный health-check после того, как таблица отрисована
+  // ЗАЧЕМ: Если TradingView поменял вёрстку — пользователь увидит предупреждение ещё до клика
+  setTimeout(() => {
+    if (typeof ext2RunHealthCheck === 'function') {
+      const health = ext2RunHealthCheck();
+      if (health.severity !== 'ok') {
+        // Показываем панель с плашкой — даже если позиций ещё нет
+        const p = document.querySelector('.ext2-panel');
+        if (p) p.dataset.userClosed = 'false';
+        showPanel();
+      }
+    }
+  }, 2500);
+
   // 6. Показать панель если есть позиции
   const ticker = getTickerFromUrl();
   if (ticker && tvc_positions[ticker]?.length > 0) {

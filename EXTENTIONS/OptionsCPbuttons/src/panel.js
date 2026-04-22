@@ -8,6 +8,8 @@ function showPanel() {
   if (panel.dataset.userClosed === 'true') return;
   panel.style.setProperty('display', 'flex', 'important');
   renderPanel();
+  // Обновляем плашку health-warnings при каждом показе панели
+  try { refreshHealthBanner(); } catch (e) {}
 }
 
 function hidePanel() {
@@ -47,14 +49,61 @@ function createPanel() {
   header.appendChild(title);
   header.appendChild(closeBtn);
 
+  // Плашка health-warnings — скрыта по умолчанию, показывается через updateHealthBanner()
+  // ЗАЧЕМ: Отдельный блок, чтобы не исчезал при перерисовке content (которая идёт через innerHTML)
+  const banner = document.createElement('div');
+  banner.className = 'ext2-panel-banner';
+  banner.style.display = 'none';
+
   const content = document.createElement('div');
   content.className = 'ext2-panel-content';
 
   panel.appendChild(header);
+  panel.appendChild(banner);
   panel.appendChild(content);
   document.body.appendChild(panel);
 
   return panel;
+}
+
+// Показать/обновить плашку health-warnings
+// health: { severity: 'ok'|'warning'|'critical', issues: [{ level, msg }] }
+function updateHealthBanner(health) {
+  const panel = document.querySelector('.ext2-panel');
+  if (!panel) return;
+  const banner = panel.querySelector('.ext2-panel-banner');
+  if (!banner) return;
+
+  if (!health || health.severity === 'ok') {
+    banner.style.display = 'none';
+    banner.innerHTML = '';
+    return;
+  }
+
+  const isCritical = health.severity === 'critical';
+  const title = isCritical
+    ? 'TradingView изменил вёрстку — расширение не может корректно считать данные. Требуется обновление расширения.'
+    : 'Внимание: часть данных может считываться неточно — возможно, TradingView изменил вёрстку или в DOM присутствуют элементы других тикеров.';
+
+  const items = (health.issues || [])
+    .map(i => `<li class="ext2-banner-item ext2-banner-${i.level}">${i.msg}</li>`)
+    .join('');
+
+  banner.className = `ext2-panel-banner ext2-banner-${health.severity}`;
+  banner.style.display = 'block';
+  banner.innerHTML = `
+    <div class="ext2-banner-title">${title}</div>
+    <ul class="ext2-banner-list">${items}</ul>
+    <div class="ext2-banner-footer">Сообщите разработчику и приложите содержимое этого блока.</div>
+  `;
+}
+
+// Запустить health-check и отрисовать плашку
+function refreshHealthBanner() {
+  if (typeof ext2RunHealthCheck !== 'function') return;
+  const health = ext2RunHealthCheck();
+  updateHealthBanner(health);
+  return health;
 }
 
 function renderPanel() {
@@ -163,11 +212,15 @@ function renderPanel() {
   content.querySelector('.ext2-btn-open-calc-new')?.addEventListener('click', () => {
     const ticker = getTickerFromUrl() || tvc_activeTab;
     if (!ticker) return;
+    const priceInfo = typeof ext2GetUnderlyingPriceWithConfidence === 'function'
+      ? ext2GetUnderlyingPriceWithConfidence()
+      : { price: getUnderlyingPrice(), confidence: 'high' };
     chrome.runtime.sendMessage({
       action: 'ext2_openOptionerTabNew',
       ticker,
       positions: tvc_positions[ticker] || [],
-      underlyingPrice: getUnderlyingPrice()
+      underlyingPrice: priceInfo.price,
+      underlyingPriceConfidence: priceInfo.confidence
     });
   });
 

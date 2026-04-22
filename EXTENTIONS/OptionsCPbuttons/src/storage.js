@@ -69,6 +69,13 @@ function addPosition(ticker, type, strike, expiration, bid, ask, price, volume, 
 
   const entry = (bid + ask) / 2;
 
+  // Цена базового актива с оценкой уверенности — для предупреждения калькулятора
+  // ЗАЧЕМ: Если уверенность low — калькулятор не «запекает» цену в assetPriceAtEntry,
+  // чтобы не сохранять в БД цену чужого тикера из watchlist/popup.
+  const _priceInfo = typeof ext2GetUnderlyingPriceWithConfidence === 'function'
+    ? ext2GetUnderlyingPriceWithConfidence()
+    : { price: typeof getUnderlyingPrice === 'function' ? getUnderlyingPrice() : 0, confidence: 'high' };
+
   tvc_positions[ticker].push({
     id: Date.now() + Math.random(),
     action,
@@ -92,7 +99,8 @@ function addPosition(ticker, type, strike, expiration, bid, ask, price, volume, 
     askIV: extraData.askIV || 0,
     intrinsicValue: extraData.intrinsicValue || 0,
     timeValue: extraData.timeValue || 0,
-    underlyingPrice: typeof getUnderlyingPrice === 'function' ? getUnderlyingPrice() : 0,
+    underlyingPrice: _priceInfo.price || 0,
+    underlyingPriceConfidence: _priceInfo.confidence || 'high',
     addedAt: new Date().toISOString(),
     sourceUrl: window.location.href
   });

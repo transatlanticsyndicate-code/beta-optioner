@@ -31,6 +31,10 @@ function parseUrlParams() {
     contractCode: urlParams.get('contract') || null,
     urlPrice: urlParams.get('price') ? parseFloat(urlParams.get('price')) : null,
     exchange: urlParams.get('exchange') || null, // Биржа из расширения (NYSE, NASDAQ, CBOT и т.д.)
+    // Метка уверенности в цене от расширения: 'high' | 'low' | 'none'
+    // ЗАЧЕМ: Если расширение не смогло однозначно привязать цену к тикеру, калькулятор
+    // показывает предупреждение и не «запекает» цену в assetPriceAtEntry.
+    priceConfidence: urlParams.get('priceConfidence') || null,
     // Проверяем, есть ли config в URL — если да, НЕ восстанавливаем данные от расширения
     // ЗАЧЕМ: Конфигурация из URL имеет приоритет над данными расширения
     hasConfigInUrl: !!urlParams.get('config')
@@ -116,8 +120,8 @@ export function useExtensionData() {
   // 3. Если нет URL параметра, но в localStorage есть сохранённые данные с тикером — восстанавливаем их
   // ЗАЧЕМ: При навигации между страницами URL параметры теряются, но данные должны восстанавливаться
   const [state, setState] = useState(() => {
-    const { contractCode, urlPrice, exchange, hasConfigInUrl } = urlParamsRef.current;
-    
+    const { contractCode, urlPrice, exchange, priceConfidence, hasConfigInUrl } = urlParamsRef.current;
+
     // ВАЖНО: Если есть config в URL — НЕ восстанавливаем данные от расширения
     // ЗАЧЕМ: Конфигурация из URL имеет приоритет, данные будут загружены через loadConfiguration
     if (hasConfigInUrl) {
@@ -127,6 +131,7 @@ export function useExtensionData() {
         urlPrice: null,
         exchange: null,
         underlyingPrice: 0,
+        underlyingPriceConfidence: 'high',
         ticker: '',
         expirationDate: '',
         options: [],
@@ -134,20 +139,20 @@ export function useExtensionData() {
         lastUpdated: null
       };
     }
-    
+
     // Всегда читаем localStorage для проверки сохранённых данных
     const storageState = readStorageState();
-    
+
     // Определяем, есть ли валидные данные для восстановления
     // ЗАЧЕМ: Если в localStorage есть тикер и опционы — это данные от расширения, которые нужно восстановить
-    const hasStoredData = storageState && 
+    const hasStoredData = storageState &&
       (storageState.selectedTicker || storageState.options?.length > 0);
-    
+
     // isFromExtension = true если:
     // 1. Есть URL параметр ?contract= (открытие из расширения)
     // 2. ИЛИ в localStorage есть сохранённые данные с тикером/опционами (возврат на страницу)
     const shouldRestoreFromExtension = !!contractCode || hasStoredData;
-    
+
     return {
       // Код контракта из URL (или из localStorage при восстановлении)
       contractCode: contractCode || (hasStoredData ? storageState.selectedTicker : null),
@@ -157,6 +162,8 @@ export function useExtensionData() {
       exchange: exchange || storageState?.exchange || null,
       // Цена базового актива (URL > localStorage)
       underlyingPrice: urlPrice || storageState?.underlyingPrice || storageState?.currentPrice || 0,
+      // Уверенность в цене: 'high' | 'low' | 'none'. URL > localStorage > 'high' по умолчанию.
+      underlyingPriceConfidence: priceConfidence || storageState?.underlyingPriceConfidence || 'high',
       // Тикер контракта
       ticker: storageState?.selectedTicker || contractCode || '',
       // Дата экспирации
@@ -199,12 +206,14 @@ export function useExtensionData() {
     }
     lastDataHashRef.current = dataHash;
 
-    const { urlPrice } = urlParamsRef.current;
+    const { urlPrice, priceConfidence } = urlParamsRef.current;
 
     setState(prev => ({
       ...prev,
       // Цена: приоритет URL > localStorage
       underlyingPrice: urlPrice || storageState.underlyingPrice || prev.underlyingPrice,
+      // Уверенность: приоритет URL > localStorage (свежее значение из расширения) > предыдущее значение
+      underlyingPriceConfidence: priceConfidence || storageState.underlyingPriceConfidence || prev.underlyingPriceConfidence || 'high',
       // Биржа: приоритет URL > localStorage > предыдущее значение
       // ЗАЧЕМ: Расширение может передать exchange в calculatorState, используем его как fallback
       exchange: urlParamsRef.current.exchange || storageState.exchange || prev.exchange,
@@ -269,6 +278,7 @@ export function useExtensionData() {
       urlPrice: null,
       exchange: null,
       underlyingPrice: 0,
+      underlyingPriceConfidence: 'high',
       ticker: '',
       expirationDate: '',
       options: [],
@@ -286,6 +296,8 @@ export function useExtensionData() {
     exchange: state.exchange,
     // Цена базового актива (URL > localStorage)
     underlyingPrice: state.underlyingPrice,
+    // Уверенность в цене: 'high' | 'low' | 'none'
+    underlyingPriceConfidence: state.underlyingPriceConfidence || 'high',
     // Тикер контракта
     ticker: state.ticker,
     // Дата экспирации

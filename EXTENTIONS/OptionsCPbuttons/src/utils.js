@@ -60,13 +60,14 @@ function getOptionTypeFromCellId(cellId) {
   return match[1] === 'C' ? 'CALL' : 'PUT';
 }
 
-// Цена underlying со страницы
-// ЗАЧЕМ: TradingView в правом виджет-баре использует класс `priceWrapper-XXXX`
-// (с er!), а в чейне страницы — `priceWrap-XXXX` (без er). Мы хотим только
-// чейновскую цену, поэтому ищем по селектору с дефисом — это уже отсекает
-// сайдбарный priceWrapper-. Дополнительно отсекаем по специфичным классам
-// именно правой панели (`widgetbar-widget*`, `widgetbar-page*`), на случай
-// если разметка отдельных виджетов изменится.
+// Цена underlying со страницы.
+// Основной путь — ext2GetUnderlyingPriceWithConfidence() из healthCheck.js: он валидирует
+// цену по тикеру и страйкам, защищая от чужой цены из watchlist/сайдбара.
+// Если healthCheck не загружен, используем безопасный fallback с отсеиванием правого виджет-бара.
+//
+// ЗАЧЕМ: TradingView в правом виджет-баре использует класс `priceWrapper-XXXX` (с -er!),
+// а в чейне страницы — `priceWrap-XXXX` (без -er). Чейновская цена ищется по селектору с дефисом,
+// плюс мы явно отсекаем элементы правой панели (`widgetbar-widget*`, `widgetbar-page*`).
 const TV_SIDEBAR_SKIP_SELECTOR = [
   '[class*="widgetbar-widget"]',
   '[class*="widgetbar-page"]',
@@ -82,14 +83,20 @@ function isInTvSidebar(el) {
 }
 
 function getUnderlyingPrice() {
-  // Метод 1: priceWrap- (с дефисом — отсекает priceWrapper- из сайдбара)
+  // Основной путь: валидация по тикеру и страйкам через healthCheck
+  if (typeof ext2GetUnderlyingPriceWithConfidence === 'function') {
+    const result = ext2GetUnderlyingPriceWithConfidence();
+    if (result && result.price > 0) return result.price;
+  }
+
+  // Fallback: priceWrap- (с дефисом — отсекает priceWrapper- из сайдбара)
   const priceWraps = document.querySelectorAll('[class*="priceWrap-"]');
   for (const el of priceWraps) {
     if (isInTvSidebar(el)) continue;
     const num = parseNumber(el.textContent);
     if (num > 0) return num;
   }
-  // Метод 2: любой [class*="price"] с числом, но мимо сайдбара
+  // Fallback: любой [class*="price"] с числом, но мимо сайдбара
   const priceEls = document.querySelectorAll('[class*="price"]');
   for (const el of priceEls) {
     if (isInTvSidebar(el)) continue;
@@ -100,8 +107,7 @@ function getUnderlyingPrice() {
       if (num > 0) return num;
     }
   }
-  // Метод 1-fallback: если по новой разметке priceWrap- ничего не нашлось,
-  // пробуем старый широкий вариант, тоже мимо сайдбара
+  // Fallback: старый широкий вариант priceWrap (без дефиса), тоже мимо сайдбара
   const wideWraps = document.querySelectorAll('[class*="priceWrap"]');
   for (const el of wideWraps) {
     if (isInTvSidebar(el)) continue;
@@ -111,7 +117,7 @@ function getUnderlyingPrice() {
       return num;
     }
   }
-  // Метод 3: title документа
+  // Последний fallback: title документа
   const titleMatch = document.title.match(/([\d,]+\.\d+)/);
   if (titleMatch) return parseNumber(titleMatch[1]);
   return null;
