@@ -119,6 +119,12 @@ const demoOptions = [
 // No conversion needed - use ISO dates directly
 
 function UniversalOptionsCalculator() {
+  // React Router navigate — используется вместо window.history.replaceState,
+  // чтобы внутренний state React Router (и useLocation()) тоже обновлялся;
+  // иначе зависимые useEffect видят устаревший location.search и перезапускают
+  // загрузку только что сброшенной конфигурации.
+  const navigate = useNavigate();
+
   // === ИНТЕГРАЦИЯ С CHROME EXTENSION ===
   // ЗАЧЕМ: Получение данных опционов от TradingView Parser через localStorage
   const {
@@ -1019,13 +1025,16 @@ function UniversalOptionsCalculator() {
 
     // Очищаем URL параметры (contract, price, config, dbConfig, edit)
     // ЗАЧЕМ: Предотвращаем восстановление данных из URL при обновлении страницы
+    // ВАЖНО: используем navigate(), а не window.history.replaceState — иначе
+    // React Router сохраняет старый location.search и useEffect немедленно
+    // перезапускает загрузку только что сброшенной конфигурации
     const url = new URL(window.location.href);
     url.searchParams.delete('contract');
     url.searchParams.delete('price');
     url.searchParams.delete('config');
     url.searchParams.delete('dbConfig');
     url.searchParams.delete('edit');
-    window.history.replaceState({}, '', url.pathname);
+    navigate(url.pathname + (url.search ? url.search : ''), { replace: true });
     console.log('🧹 [Universal] URL параметры очищены');
 
     // Очищаем данные расширения (тикер контракта и временную метку)
@@ -1042,7 +1051,7 @@ function UniversalOptionsCalculator() {
       console.log('🔄 [Universal] Перезагрузка страницы после сброса...');
       window.location.reload();
     }, 100);
-  }, [clearExtensionData]);
+  }, [clearExtensionData, navigate]);
 
   // Функция создания сделки
   // ЗАЧЕМ: Создаёт сделку с текущим количеством опционов (без автоподбора по лимиту)
