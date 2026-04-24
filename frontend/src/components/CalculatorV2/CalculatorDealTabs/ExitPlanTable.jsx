@@ -160,9 +160,13 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
     setSteps(prevSteps => {
       let newSteps = [];
       let forceRedistribute = false;
-      // При загрузке новой сделки используем savedSteps вместо prevSteps
-      // ЗАЧЕМ: prevSteps содержит данные ПРЕДЫДУЩЕЙ сделки, savedSteps — сохранённые пользователем значения
-      const sourceSteps = (isNewDeal && savedSteps && savedSteps.length > 0) ? savedSteps : prevSteps;
+      // При загрузке новой сделки источником служат сохранённые пользователем шаги
+      // (savedSteps) либо пустой массив — чтобы дефолтные проценты применились к новой сделке.
+      // ЗАЧЕМ: prevSteps содержат данные ПРЕДЫДУЩЕЙ сделки; если их брать, проценты/количество
+      // предыдущей сделки «переедут» в новую позицию (см. баг со «следом» плана выхода).
+      const sourceSteps = isNewDeal
+        ? (savedSteps && savedSteps.length > 0 ? savedSteps : [])
+        : prevSteps;
 
       if (!dealInfo.isMultiDeal) {
         // ЛОГИКА ДЛЯ ОБЫЧНОЙ СДЕЛКИ (1 опцион)
