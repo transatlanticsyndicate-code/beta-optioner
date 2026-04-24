@@ -1012,7 +1012,10 @@ function UniversalOptionsCalculator() {
     // не должны переноситься в следующий сеанс
     localStorage.removeItem('optioner_deal_info');
     localStorage.removeItem('optioner_deal_settings');
-    console.log('🧹 [Universal] optioner_deal_info и optioner_deal_settings очищены');
+    // Снимки для внешних потребителей (расширение TradingView) — иначе они видят устаревший план
+    localStorage.removeItem('currentExitPlanSnapshot');
+    localStorage.removeItem('currentCalculatorSnapshot');
+    console.log('🧹 [Universal] optioner_deal_info, optioner_deal_settings и снимки очищены');
 
     // Очищаем URL параметры (contract, price, config, dbConfig, edit)
     // ЗАЧЕМ: Предотвращаем восстановление данных из URL при обновлении страницы
@@ -3015,7 +3018,7 @@ function UniversalOptionsCalculator() {
             // Восстанавливаем полный объект dealSettings
             setDealSettings(config.dealSettings);
             console.log('📊 Настройки таба Сделка восстановлены:', config.dealSettings);
-            
+
             // Восстанавливаем целевую цену актива в блоке симуляции
             if (config.dealSettings.targetAssetPricePercent !== undefined) {
               const calculatedTargetPrice = Math.round(
@@ -3024,6 +3027,10 @@ function UniversalOptionsCalculator() {
               setTargetPrice(calculatedTargetPrice);
               console.log(`📊 Целевая цена актива восстановлена: ${calculatedTargetPrice} (${config.dealSettings.targetAssetPricePercent}%)`);
             }
+          } else {
+            // ЗАЧЕМ: Если у новой позиции нет dealSettings — явно зануляем,
+            // иначе старые настройки (и план выхода) «переедут» в новую позицию
+            setDealSettings(null);
           }
 
           console.log(`✅ Конфигурация загружена: ${config.name}${configIsLocked ? ' (🔒 зафиксирована)' : ''}`);
@@ -3370,6 +3377,10 @@ function UniversalOptionsCalculator() {
           ) / 100;
           setTargetPrice(calculatedTargetPrice);
         }
+      } else {
+        // ЗАЧЕМ: Если у новой позиции нет dealSettings — явно зануляем,
+        // иначе старые настройки (и план выхода) «переедут» в новую позицию
+        setDealSettings(null);
       }
 
       // Сохраняем исходное состояние конфигурации для отслеживания изменений

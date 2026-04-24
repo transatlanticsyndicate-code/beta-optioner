@@ -175,7 +175,24 @@ function CalculatorDealTabs({
   // ВАЖНО: lastProcessedSettingsRef предотвращает повторную обработку объекта из saving useEffect
   // (saving useEffect передаёт тот же объект через setDealSettings — он не триггерит восстановление)
   React.useEffect(() => {
-    if (dealSettings === null) return;
+    if (dealSettings === null) {
+      // Сброс калькулятора или открытие позиции без сделки — очищаем все локальные стейты.
+      // ЗАЧЕМ: Без этого старый план выхода «переедет» в следующую открытую позицию
+      setSlicesSent(false);
+      setTradingViewUrl(null);
+      setFrozenExitPlan(null);
+      setSlicesSentPut(false);
+      setTradingViewUrlPut(null);
+      setFrozenExitPlanPut(null);
+      setTargetAssetPricePercent(60);
+      setExitStepsCount(4);
+      setTargetAssetPricePercentPut(-10);
+      setTargetAssetPricePercentPutExit(-20);
+      setExitPlanSteps(null);
+      lastProcessedSettingsRef.current = null;
+      skipNextSaveRef.current = true;
+      return;
+    }
     if (dealSettings === lastProcessedSettingsRef.current) return;
 
     // Восстанавливаем state из внешнего dealSettings (открытие сохранённой позиции)
