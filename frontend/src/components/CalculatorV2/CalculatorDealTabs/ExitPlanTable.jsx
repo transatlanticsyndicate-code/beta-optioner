@@ -4,7 +4,7 @@ import { calculateOptionPLValue, adjustPLByStockGroup } from '../../../utils/opt
 import { calculateFuturesOptionPLValue } from '../../../utils/futuresPricing';
 import { CALCULATOR_MODES } from '../../../utils/universalPricing';
 import { getOptionVolatility } from '../../../utils/volatilitySurface';
-import { calculateDaysToExpirationFromToday } from '../../../utils/dateUtils';
+import { calculateDaysToExpirationFromToday, calculateDaysRemainingUTC, getOldestEntryDate } from '../../../utils/dateUtils';
 
 /**
  * Таблица Плана выхода для сделки
@@ -465,59 +465,58 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
   };
 
   // Расчёт P&L для конкретного шага на дату выхода
-  // ЗАЧЕМ: Использует ТЕ ЖЕ функции calculateOptionPLValue / calculateFuturesOptionPLValue,
-  // что и таблица опционов, для идентичного результата при одинаковых параметрах
+  // ЗАЧЕМ: Формула якоря синхронизирована с таблицей опционов (OptionsTableV3.jsx:1108-1157),
+  // чтобы P/L на шаге совпадала с тем, что показывает таблица опционов при
+  // daysPassed = дни от oldestEntry до step.exitDate и targetPrice = step.dollars.
   const calculateStepPL = (step) => {
     if (!step.optionRef || !step.dollars || step.quantity === 0 || !step.exitDate) return 0;
 
     const option = step.optionRef;
     const targetAssetPrice = step.dollars;
+    const MS_IN_DAY = 1000 * 60 * 60 * 24;
 
-    // daysRemaining = дни от ДАТЫ ВЫХОДА до ЭКСПИРАЦИИ опциона
-    // ЗАЧЕМ: Именно так считает таблица опционов — сколько дней осталось до экспирации на целевую дату
-    const exitDt = new Date(step.exitDate + 'T00:00:00');
-    const expDt = new Date(option.date + 'T00:00:00');
-    const daysRemaining = Math.max(0, Math.ceil((expDt - exitDt) / (1000 * 60 * 60 * 24)));
+    // База «день входа»: самая ранняя дата входа среди всех опционов позиции
+    // ЗАЧЕМ: Таблица опционов использует oldestEntry как базу для calculateDaysRemainingUTC
+    const oldestEntry = getOldestEntryDate(options) || new Date();
 
-    // currentDaysToExpiration = дни от ДАТЫ ВХОДА до ЭКСПИРАЦИИ (начальное значение для IV Surface)
-    // ЗАЧЕМ: getOptionVolatility использует начальные дни как базу для интерполяции IV
-    const entryDateStr = option.entryDate || new Date().toISOString().split('T')[0];
-    const entryDt = new Date(entryDateStr + 'T00:00:00');
-    const currentDaysToExpiration = Math.max(0, Math.ceil((expDt - entryDt) / (1000 * 60 * 60 * 24)));
+    // Эквивалент «симулированных дней» для даты выхода шага (как daysPassed в таблице опционов)
+    const exitDt = new Date(step.exitDate + 'T00:00:00Z');
+    const stepSimDays = Math.max(0, Math.round((exitDt - oldestEntry) / MS_IN_DAY));
 
-    // todayDaysToExpiration = дни от РЕАЛЬНОГО СЕГОДНЯ до ЭКСПИРАЦИИ (для manualIvOverride)
-    // ЗАЧЕМ: manualIvOverride привязан к реальному сегодня, а не к дате входа
-    const todayDaysToExpiration = calculateDaysToExpirationFromToday(option);
+    // currentDaysToExpiration — дни от входа (daysPassed=0) до экспирации
+    // optionDaysRemaining — дни от даты выхода до экспирации (аналог daysRemaining в OptionsTableV3)
+    const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0, 30, oldestEntry);
+    const optionDaysRemaining = calculateDaysRemainingUTC(option, stepSimDays, 30, oldestEntry);
 
-    // Получаем IV через ту же функцию getOptionVolatility с IV Surface
-    // ВАЖНО: Передаём manualIvOverride из опциона для учёта ручной IV
+    // todayDaysToExpiration — дни от реального сегодня до экспирации (для manualIvOverride)
+    const todaySimDays = calculateDaysToExpirationFromToday(option);
+
+    // Волатильность через ту же getOptionVolatility, что и таблица опционов
     const optionVolatility = getOptionVolatility(
       option,
       currentDaysToExpiration,
-      daysRemaining,
+      optionDaysRemaining,
       ivSurface,
       'simple',
       null,
       option.manualIvOverride,
-      todayDaysToExpiration
+      todaySimDays
     );
 
     // Подготовка объекта опциона — та же логика, что в таблице опционов
-    // ЗАЧЕМ: При ручной премии обнуляем ask/bid, чтобы getEntryPrice() внутри calculateOptionPLValue использовал premium
     const effectivePremium = option.isPremiumModified ? option.customPremium : option.premium;
     const tempOpt = {
       ...option,
       premium: effectivePremium,
       ask: option.isPremiumModified ? 0 : option.ask,
       bid: option.isPremiumModified ? 0 : option.bid,
-      quantity: step.quantity // Количество из шага плана выхода
+      quantity: step.quantity
     };
 
-    // ЛОГИРОВАНИЕ: Диагностика — те же параметры, что логирует таблица опционов
     console.log(`[План выхода] 💰 P/L расчёт ${option.type} Strike $${option.strike}:`, {
       targetPrice: targetAssetPrice,
-      currentDaysToExpiration,
-      daysRemaining,
+      stepSimDays,
+      optionDaysRemaining,
       IV: (optionVolatility * 100).toFixed(1) + '%',
       manualIvOverride: option.manualIvOverride,
       actualPL: option.actualPL,
@@ -526,16 +525,15 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
       contractMultiplier
     });
 
-    // Цена актива на момент входа — для расчётов P&L
-    const optionBasePrice = option.assetPriceAtEntry || currentPrice;
+    // Цена актива на момент входа в опцион — для BSM-расчёта
+    const optionAssetPrice = option.assetPriceAtEntry || currentPrice;
 
-    // Вызываем ТУ ЖЕ функцию расчёта P&L, что и таблица опционов
     let pl = 0;
     if (calculatorMode === CALCULATOR_MODES.FUTURES) {
       pl = calculateFuturesOptionPLValue(
         tempOpt,
         targetAssetPrice,
-        daysRemaining,
+        optionDaysRemaining,
         contractMultiplier,
         optionVolatility
       );
@@ -543,72 +541,49 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
       pl = calculateOptionPLValue(
         tempOpt,
         targetAssetPrice,
-        optionBasePrice,
-        daysRemaining,
+        optionAssetPrice,
+        optionDaysRemaining,
         optionVolatility,
         dividendYield
       );
     }
 
-    // Применяем корректировку P&L по группе акции (как в таблице опционов)
     if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
       pl = adjustPLByStockGroup(pl, stockClassification);
     }
 
-    // Логика якорной P&L: если пользователь ввел actualPL, используем её как якорь
-    // ЗАЧЕМ: Позволяет пользователю зафиксировать реальную P&L и проецировать от неё
+    // Якорная формула: полностью идентична таблице опционов (OptionsTableV3.jsx:1108-1157)
     if (option.actualPL !== null && option.actualPL !== undefined && option.actualPLDate) {
-      // Вычисляем дни от входа до даты ввода actualPL
-      const anchorDateObj = new Date(option.actualPLDate + 'T00:00:00');
-      const anchorDaysPassed = Math.max(0, Math.ceil((anchorDateObj - entryDt) / (1000 * 60 * 60 * 24)));
-      
-      // Вычисляем дни от даты выхода до даты входа (для сравнения с anchorDaysPassed)
-      const exitDaysPassed = Math.max(0, Math.ceil((exitDt - entryDt) / (1000 * 60 * 60 * 24)));
-      
-      // Если дата выхода >= даты ввода actualPL — используем якорную формулу
-      if (exitDaysPassed >= anchorDaysPassed) {
-        // Вычисляем теоретическую цену на момент якоря
-        const anchorDaysToExp = Math.max(0, Math.ceil((expDt - anchorDateObj) / (1000 * 60 * 60 * 24)));
-        
-        // IV на момент якоря: используем manualIvOverride если задан, иначе marketIV
+      const anchorDateObj = new Date(option.actualPLDate + 'T00:00:00Z');
+      const anchorDaysPassed = Math.round((anchorDateObj - oldestEntry) / MS_IN_DAY);
+
+      // Условие аналогично `daysPassed >= anchorDaysPassed` в таблице опционов
+      if (stepSimDays >= anchorDaysPassed) {
+        const anchorDaysToExp = calculateDaysRemainingUTC(option, anchorDaysPassed, 30, oldestEntry);
+
+        // ВАЖНО: manualIvOverride передаётся как процент (без /100) — строго как в OptionsTableV3
         const anchorIV = option.manualIvOverride !== null && option.manualIvOverride !== undefined
-          ? (option.manualIvOverride / 100)
+          ? option.manualIvOverride
           : optionVolatility;
-        
-        // ВАЖНО: plAtAnchor считается при ЦЕНЕ АКТИВА НА МОМЕНТ ВВОДА якоря (actualPLPrice)
-        // ЗАЧЕМ: Якорь фиксирует P&L при конкретной цене, дельта должна учитывать изменение цены
+
         const anchorPrice = option.actualPLPrice || currentPrice;
-        
-        let plAtAnchor = 0;
-        if (calculatorMode === CALCULATOR_MODES.FUTURES) {
-          plAtAnchor = calculateFuturesOptionPLValue(
-            tempOpt,
-            anchorPrice,
-            anchorDaysToExp,
-            contractMultiplier,
-            anchorIV
-          );
-        } else {
-          plAtAnchor = calculateOptionPLValue(
-            tempOpt,
-            anchorPrice,
-            optionBasePrice,
-            anchorDaysToExp,
-            anchorIV,
-            dividendYield
-          );
-        }
-        
+
+        let plAtAnchor = calculatorMode === CALCULATOR_MODES.FUTURES
+          ? calculateFuturesOptionPLValue(tempOpt, anchorPrice, anchorDaysToExp, contractMultiplier, anchorIV)
+          : calculateOptionPLValue(tempOpt, anchorPrice, optionAssetPrice, anchorDaysToExp, anchorIV, dividendYield);
+
         if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
           plAtAnchor = adjustPLByStockGroup(plAtAnchor, stockClassification);
         }
-        
-        // Итоговая P&L = actualPL + (текущая теор. P&L - теор. P&L на якоре)
+
         const plBeforeAnchor = pl;
         pl = option.actualPL + (pl - plAtAnchor);
-        
+
         console.log(`[План выхода] 🎯 Якорная формула применена:`, {
           actualPL: option.actualPL,
+          anchorPrice,
+          stepSimDays,
+          anchorDaysPassed,
           plBeforeAnchor: Math.round(plBeforeAnchor),
           plAtAnchor: Math.round(plAtAnchor),
           delta: Math.round(plBeforeAnchor - plAtAnchor),
