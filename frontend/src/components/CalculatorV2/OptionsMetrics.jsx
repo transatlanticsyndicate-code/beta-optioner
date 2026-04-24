@@ -91,7 +91,7 @@ function OptionsMetrics({ options = [], currentPrice = 0, positions = [], daysPa
         ? formatCurrency(calculatedMetrics.plMetrics.maxLoss)
         : '—',
       color: 'red',
-      tooltip: 'Максимальный возможный убыток стратегии.\nВНИМАНИЕ: при графике стремящемся в бесконечность сумма убытка ограничивается движением цены базового актива на 50%'
+      tooltip: 'Максимальный возможный убыток стратегии НА ДАТУ ЭКСПИРАЦИИ.\nВНИМАНИЕ: при графике стремящемся в бесконечность сумма убытка ограничивается движением цены базового актива на 100%.'
     },
     {
       priority: 1,
@@ -100,7 +100,7 @@ function OptionsMetrics({ options = [], currentPrice = 0, positions = [], daysPa
         ? (calculatedMetrics.plMetrics.maxProfit === Infinity ? '∞' : formatCurrency(calculatedMetrics.plMetrics.maxProfit))
         : '—',
       color: 'green',
-      tooltip: 'Максимальная возможная прибыль стратегии.\nВНИМАНИЕ: при графике стремящемся в бесконечность сумма прибыли ограничивается движением цены базового актива на 50%'
+      tooltip: 'Максимальная возможная прибыль стратегии НА ДАТУ ЭКСПИРАЦИИ.\nВНИМАНИЕ: при графике стремящемся в бесконечность сумма прибыли ограничивается движением цены базового актива на 100%.'
     },
     {
       priority: 1,

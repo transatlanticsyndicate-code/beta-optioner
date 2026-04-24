@@ -897,9 +897,12 @@ export function calculatePLDataForMetrics(options = [], currentPrice = 0, positi
     return { prices: [], totalPLArray: [] };
   }
 
-  // Диапазон цен (±50% от текущей цены)
-  const priceRange = 0.50;
-  const minPrice = currentPrice * (1 - priceRange);
+  // Диапазон цен для расчёта метрик (±100% от текущей цены, НА ДАТУ ЭКСПИРАЦИИ)
+  // ЗАЧЕМ: для стратегий с неограниченным риском (naked Sell CALL/PUT) нужен более широкий
+  // диапазон, чтобы MAX убыток / MAX прибыль отражали реалистичный худший сценарий.
+  const priceRange = 1.00;
+  // Нижняя граница не должна быть нулём — Black-Scholes использует log(S), и S=0 даст -Infinity.
+  const minPrice = Math.max(0.01, currentPrice * (1 - priceRange));
   const maxPrice = currentPrice * (1 + priceRange);
 
   const chartPoints = 500;
