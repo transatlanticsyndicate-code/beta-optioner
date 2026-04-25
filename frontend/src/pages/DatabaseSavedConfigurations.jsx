@@ -425,7 +425,18 @@ function DatabaseSavedConfigurations() {
     <div className="w-full max-w-full py-6 px-4">
       {/* Заголовок */}
       <div className="mb-4">
-        <h1 className="text-2xl font-bold">Сохранённые позиции из БД</h1>
+        <h1 className="text-2xl font-bold">
+          Сохранённые позиции из БД
+          {(() => {
+            const n = configurations.length;
+            const mod10 = n % 10;
+            const mod100 = n % 100;
+            let word = 'позиций';
+            if (mod10 === 1 && mod100 !== 11) word = 'позиция';
+            else if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) word = 'позиции';
+            return <span className="text-red-500 ml-2">— {n} {word}</span>;
+          })()}
+        </h1>
         <p className="text-sm text-muted-foreground mt-1">
           Конфигурации, сохранённые в базе данных и доступные всем пользователям
         </p>
