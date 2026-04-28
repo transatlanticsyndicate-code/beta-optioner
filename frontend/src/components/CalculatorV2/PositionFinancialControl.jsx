@@ -1,14 +1,15 @@
 import React, { useMemo } from 'react';
 import { calculateTotalPremium } from '../../utils/metricsCalculator';
 import { calculatePLMetrics } from '../../utils/metricsCalculator';
+import { calculatePortfolioPLAtPrice } from '../../utils/metricsCalculator';
 import { CALCULATOR_MODES } from '../../utils/universalPricing';
 
 /**
  * Компонент финансового контроля позиций
  * Отображает расчеты стоимости позиций, затрат на опционы и проверку лимитов
  */
-function PositionFinancialControl({ 
-  positions = [], 
+function PositionFinancialControl({
+  positions = [],
   options = [],
   currentPrice = 0,
   daysPassed = 0,
@@ -17,8 +18,13 @@ function PositionFinancialControl({
   instrumentCount = '',
   maxLossPercent = '',
   ivSurface = null,
+  isAIEnabled = false,
+  aiVolatilityMap = {},
+  targetPrice = 0,
   calculatorMode = CALCULATOR_MODES.STOCKS,
-  contractMultiplier = 100
+  contractMultiplier = 100,
+  dividendYield = 0,
+  selectedTicker = ''
 }) {
   // Рассчитываем стоимость позиций базового актива
   const positionsCost = useMemo(() => {
@@ -118,9 +124,40 @@ function PositionFinancialControl({
   // Проверяем, есть ли хотя бы одно превышение
   const hasAnyExcess = instrumentLimitExceeded || maxLossLimitExceeded;
 
+  // P&L базового актива и P&L TOTAL в точке симуляции (цена + дни)
+  // ЗАЧЕМ: пользователь должен видеть числа без наведения на график; обязаны совпадать с тултипом графика
+  const { underlyingPL, totalPL } = useMemo(() => {
+    if (!positions || positions.length === 0 || !currentPrice) {
+      return { underlyingPL: 0, totalPL: 0 };
+    }
+    const simPrice = Number(targetPrice) > 0 ? Number(targetPrice) : Number(currentPrice);
+    const result = calculatePortfolioPLAtPrice({
+      price: simPrice,
+      daysPassed,
+      positions,
+      options,
+      currentPrice,
+      ivSurface,
+      calculatorMode,
+      contractMultiplier,
+      dividendYield,
+      isAIEnabled,
+      aiVolatilityMap,
+      selectedTicker
+    });
+    return { underlyingPL: result.underlyingPL, totalPL: result.totalPL };
+  }, [positions, options, currentPrice, daysPassed, targetPrice, ivSurface, calculatorMode, contractMultiplier, dividendYield, isAIEnabled, aiVolatilityMap, selectedTicker]);
+
   // Форматирование чисел с разделителями
   const formatNumber = (num) => {
     return Math.round(num).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  };
+
+  // Подписанная сумма со знаком и форматом, как в столбце P&L таблицы и тултипе графика
+  const formatSignedAmount = (num) => {
+    const value = Number(num) || 0;
+    const sign = value > 0 ? '+' : (value < 0 ? '−' : '');
+    return `${sign}$ ${formatNumber(Math.abs(value))}`;
   };
 
   // Если нет позиций и опционов - не показываем блок
@@ -134,6 +171,25 @@ function PositionFinancialControl({
         hasAnyExcess ? 'border-red-500 animate-border-blink' : 'border-gray-300'
       }`}
     >
+      {/* P&L базового актива и P&L TOTAL — показываем только когда есть хотя бы одна позиция БА */}
+      {/* ЗАЧЕМ: пользователь хочет видеть «живой» P&L из графика прямо в карточке */}
+      {positions.length > 0 && (
+        <div className="space-y-2 pb-3 border-b">
+          <div className="flex justify-between text-xs text-gray-500">
+            <span>P&amp;L базового актива</span>
+            <span className={underlyingPL >= 0 ? 'text-green-600' : 'text-red-600'}>
+              {formatSignedAmount(underlyingPL)}
+            </span>
+          </div>
+          <div className="flex justify-between text-sm font-semibold">
+            <span>P&amp;L TOTAL</span>
+            <span className={totalPL >= 0 ? 'text-green-600' : 'text-red-600'}>
+              {formatSignedAmount(totalPL)}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Блок стоимости позиций */}
       <div className="space-y-2">
         <div className="flex justify-between text-xs text-gray-500">

@@ -11,6 +11,10 @@ import {
   calculateIntrinsicValue,
   PRICING_CONSTANTS
 } from './optionPricing';
+import { calculateFuturesOptionPLValue } from './futuresPricing';
+import { calculateDaysRemainingUTC, getOldestEntryDate, isOptionActiveAtDay } from './dateUtils';
+import { getOptionVolatility } from './volatilitySurface';
+import { CALCULATOR_MODES } from './universalPricing';
 
 /**
  * Получение цены входа в позицию
@@ -553,4 +557,104 @@ export function getValueColor(value, inverse = false) {
   } else {
     return value > 0 ? 'green' : 'red';
   }
+}
+
+/**
+ * Расчёт суммарного P&L портфеля в одной точке (цена + дни симуляции)
+ * ЗАЧЕМ: единая точка расчёта для UI-блоков, цифры обязаны совпадать с тултипом графика.
+ * Зеркалирует логику calculatePLDataForMetrics из PLChart.jsx, но для одной цены.
+ *
+ * @param {Object} params
+ * @param {number} params.price - симулируемая цена базового актива
+ * @param {number} params.daysPassed - прошедшие дни от даты входа
+ * @param {Array}  params.positions - позиции базового актива
+ * @param {Array}  params.options - опционы
+ * @param {number} params.currentPrice - текущая цена базового актива
+ * @param {Object} params.ivSurface - IV-поверхность
+ * @param {string} params.calculatorMode - 'stocks' | 'futures' | 'crypto'
+ * @param {number} params.contractMultiplier - множитель контракта
+ * @param {number} params.dividendYield - дивидендная доходность
+ * @param {boolean} params.isAIEnabled - включён ли AI-подбор IV
+ * @param {Object} params.aiVolatilityMap - кэш AI-волатильности
+ * @param {string} params.selectedTicker - тикер
+ * @returns {{ underlyingPL: number, optionsPL: number, totalPL: number }}
+ */
+export function calculatePortfolioPLAtPrice({
+  price,
+  daysPassed = 0,
+  positions = [],
+  options = [],
+  currentPrice = 0,
+  ivSurface = null,
+  calculatorMode = CALCULATOR_MODES.STOCKS,
+  contractMultiplier = 100,
+  dividendYield = 0,
+  isAIEnabled = false,
+  aiVolatilityMap = {},
+  selectedTicker = ''
+} = {}) {
+  if (!price || !currentPrice) {
+    return { underlyingPL: 0, optionsPL: 0, totalPL: 0 };
+  }
+
+  const visiblePositions = (positions || []).filter(p => p && p.visible !== false);
+  const visibleOptions = (options || []).filter(o => o && o.visible !== false);
+
+  // P&L по позициям базового актива (линейная зависимость, фьючерсы — с pointValue)
+  let underlyingPL = 0;
+  visiblePositions.forEach((position) => {
+    const { type, quantity, price: entryPrice } = position;
+    const qty = Number(quantity) || 0;
+    const entry = Number(entryPrice) || 0;
+    const multiplier = calculatorMode === CALCULATOR_MODES.FUTURES ? contractMultiplier : 1;
+    if (type === 'LONG') {
+      underlyingPL += (price - entry) * qty * multiplier;
+    } else if (type === 'SHORT') {
+      underlyingPL += (entry - price) * qty * multiplier;
+    }
+  });
+
+  // P&L по опционам (BSM для акций/крипто, Black-76 для фьючерсов)
+  let optionsPL = 0;
+  if (visibleOptions.length > 0) {
+    const oldestEntryDate = getOldestEntryDate(options);
+    visibleOptions.forEach((option) => {
+      // Опцион ещё не куплен на этот день симуляции — пропускаем
+      if (!isOptionActiveAtDay(option, daysPassed, oldestEntryDate)) return;
+
+      const optionDaysRemaining = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntryDate);
+      const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0, 30, oldestEntryDate);
+      let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface, 'simple');
+
+      // AI-волатильность (если включена и закэширована для этой цены/дня)
+      if (isAIEnabled && aiVolatilityMap && selectedTicker && price) {
+        const cacheKey = `${selectedTicker}_${option.strike}_${option.date}_${Number(price).toFixed(2)}_${optionDaysRemaining}`;
+        const aiIV = aiVolatilityMap[cacheKey];
+        if (aiIV) optionVolatility = aiIV;
+      }
+
+      // Учитываем ручную правку премии/Bid/Ask — как в графике
+      const tempOption = {
+        ...option,
+        premium: option.isPremiumModified ? option.customPremium : option.premium,
+        ask: option.isPremiumModified ? 0 : (option.isAskModified ? option.customAsk : option.ask),
+        bid: option.isPremiumModified ? 0 : (option.isBidModified ? option.customBid : option.bid),
+      };
+
+      let pl = 0;
+      if (calculatorMode === CALCULATOR_MODES.FUTURES) {
+        pl = calculateFuturesOptionPLValue(tempOption, price, optionDaysRemaining, contractMultiplier, optionVolatility);
+      } else {
+        const rfr = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
+        pl = calculateOptionPLValue(tempOption, price, currentPrice, optionDaysRemaining, optionVolatility, dividendYield, contractMultiplier, rfr);
+      }
+      optionsPL += pl || 0;
+    });
+  }
+
+  return {
+    underlyingPL,
+    optionsPL,
+    totalPL: underlyingPL + optionsPL
+  };
 }
