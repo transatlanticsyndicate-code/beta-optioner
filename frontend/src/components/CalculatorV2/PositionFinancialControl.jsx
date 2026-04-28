@@ -26,44 +26,29 @@ function PositionFinancialControl({
   dividendYield = 0,
   selectedTicker = ''
 }) {
-  // Рассчитываем стоимость позиций базового актива
+  // Стоимость позиций БА со знаком: LONG → затраты (−), SHORT → получили (+)
   const positionsCost = useMemo(() => {
     return positions.reduce((total, pos) => {
       if (!pos.visible) return total;
-      const cost = Math.abs(pos.quantity * pos.price);
-      return total + cost;
+      const sign = pos.type === 'SHORT' ? 1 : -1;
+      return total + sign * Math.abs(pos.quantity * pos.price);
     }, 0);
   }, [positions]);
 
-  // Получаем затраты на опционы (премия)
-  const { optionsPremium, optionsCost } = useMemo(() => {
-    const completeOptions = options.filter(opt => 
-      opt.date && 
-      opt.strike && 
+  // Премия опционов со знаком: Buy → −, Sell → + (calculateTotalPremium уже даёт со знаком)
+  const optionsCost = useMemo(() => {
+    const completeOptions = options.filter(opt =>
+      opt.date &&
+      opt.strike &&
       opt.premium !== undefined &&
       opt.premium !== null &&
       opt.visible !== false
     );
-    
-    // Получаем премию с учетом множителя контракта
-    // ЗАЧЕМ: Функция calculateTotalPremium уже умножает на contractMultiplier внутри
-    // Для акций: contractMultiplier = 100, для фьючерсов: contractMultiplier = pointValue
-    const premium = calculateTotalPremium(completeOptions, contractMultiplier);
-    
-    // Если премия положительная (кредит) - это уменьшает затраты
-    // Если премия отрицательная (дебет) - это увеличивает затраты
-    return {
-      optionsPremium: premium,
-      optionsCost: Math.abs(premium)
-    };
-  }, [options, calculatorMode, contractMultiplier]);
+    return calculateTotalPremium(completeOptions, contractMultiplier);
+  }, [options, contractMultiplier]);
 
-  // Итоговая сумма
-  // Если премия положительная (кредит), вычитаем из стоимости позиций
-  // Если премия отрицательная (дебет), прибавляем к стоимости позиций
-  const totalCost = optionsPremium >= 0 
-    ? Math.max(0, positionsCost - optionsCost)  // Вычитаем кредит, но не меньше 0
-    : positionsCost + optionsCost;              // Прибавляем дебет
+  // Итог = арифметическая сумма с учётом знаков (нетто кеш-флоу при входе)
+  const totalCost = positionsCost + optionsCost;
 
   // Рассчитываем лимит на инструмент
   const instrumentLimit = useMemo(() => {
@@ -74,9 +59,10 @@ function PositionFinancialControl({
     return Math.round(deposit / count);
   }, [financialControlEnabled, depositAmount, instrumentCount]);
 
-  // Проверяем превышение лимита на инструмент
-  const instrumentLimitExceeded = instrumentLimit && totalCost > instrumentLimit;
-  const instrumentExcessAmount = instrumentLimitExceeded ? totalCost - instrumentLimit : 0;
+  // Лимит превышен только при нетто-затратах (totalCost < 0); кредит лимит не нарушает
+  const usedCapital = totalCost < 0 ? Math.abs(totalCost) : 0;
+  const instrumentLimitExceeded = instrumentLimit && usedCapital > instrumentLimit;
+  const instrumentExcessAmount = instrumentLimitExceeded ? usedCapital - instrumentLimit : 0;
 
   // Рассчитываем MAX убыток из метрик
   const maxLoss = useMemo(() => {
@@ -190,19 +176,21 @@ function PositionFinancialControl({
         </div>
       )}
 
-      {/* Блок стоимости позиций */}
+      {/* Блок стоимости позиций — со знаками: LONG/Buy → −, SHORT/Sell → + */}
       <div className="space-y-2">
         <div className="flex justify-between text-xs text-gray-500">
           <span>Стоимость позиций</span>
-          <span>$ {formatNumber(positionsCost)}</span>
+          <span>{formatSignedAmount(positionsCost)}</span>
         </div>
         <div className="flex justify-between text-xs text-gray-500">
           <span>Затраты на опционы и маржин</span>
-          <span>$ {formatNumber(optionsCost)}</span>
+          <span>{formatSignedAmount(optionsCost)}</span>
         </div>
         <div className="flex justify-between text-sm font-semibold border-t pt-2">
           <span>Итого</span>
-          <span>$ {formatNumber(totalCost)}</span>
+          <span className={totalCost > 0 ? 'text-green-600' : (totalCost < 0 ? 'text-red-600' : '')}>
+            {formatSignedAmount(totalCost)}
+          </span>
         </div>
       </div>
 
