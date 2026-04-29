@@ -95,7 +95,10 @@ function adaptOption(option) {
     vega: option.vega || 0,
     impliedVolatility: effectiveIV,
     // Дата входа в позицию
-    entryDate: normalizedEntryDate
+    entryDate: normalizedEntryDate,
+    // Цена базового актива на момент добавления именно этой позиции —
+    // приходит из расширения (tvc_positions[i].underlyingPrice → calcState.options[i].assetPriceAtEntry)
+    assetPriceAtEntry: option.assetPriceAtEntry
   };
 }
 

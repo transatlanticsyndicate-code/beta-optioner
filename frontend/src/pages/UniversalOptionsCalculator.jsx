@@ -1462,7 +1462,7 @@ function UniversalOptionsCalculator() {
           return {
             ...extOption,
             // Цена базового актива на момент входа
-            assetPriceAtEntry: extOption.assetPriceAtEntry || extensionPrice || 0,
+            assetPriceAtEntry: extOption.assetPriceAtEntry || currentPrice || extensionPrice || 0,
           };
         });
 
@@ -1731,7 +1731,7 @@ function UniversalOptionsCalculator() {
             const enrichedNewOptions = newOptions.map(opt => ({
               ...opt,
               entryDate: new Date().toISOString().split('T')[0],
-              assetPriceAtEntry: opt.assetPriceAtEntry || extensionPrice || currentPrice || 0
+              assetPriceAtEntry: opt.assetPriceAtEntry || currentPrice || extensionPrice || 0
             }));
             console.log('➕ [Universal] Добавлено новых опционов к конфигурации:', enrichedNewOptions.length);
             return [...updatedPrevOptions, ...enrichedNewOptions];
@@ -1909,7 +1909,7 @@ function UniversalOptionsCalculator() {
             // Для новых опционов от расширения добавляем entryDate
             entryDate: extOption.entryDate || new Date().toISOString().split('T')[0],
             // Цена базового актива на момент входа
-            assetPriceAtEntry: extOption.assetPriceAtEntry || extensionPrice || 0,
+            assetPriceAtEntry: extOption.assetPriceAtEntry || currentPrice || extensionPrice || 0,
           };
         });
 

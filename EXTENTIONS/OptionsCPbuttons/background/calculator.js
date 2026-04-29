@@ -86,7 +86,10 @@ function injectDataIntoCalculator(tabId, positionsData, tickerName, price, excha
           bidIV: pos.bidIV || 0,
           askIV: pos.askIV || 0,
           intrinsicValue: pos.intrinsicValue || 0,
-          timeValue: pos.timeValue || 0
+          timeValue: pos.timeValue || 0,
+          // Цена базового актива в момент добавления именно этой позиции —
+          // у каждой строки в панели расширения своё значение, не общая «текущая»
+          assetPriceAtEntry: pos.underlyingPrice || 0
         };
       }
 
