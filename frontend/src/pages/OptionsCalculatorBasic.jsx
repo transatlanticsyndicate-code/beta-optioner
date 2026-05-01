@@ -156,6 +156,14 @@ function OptionsCalculatorV3() {
   const [dividendYield, setDividendYield] = useState(0); // Дивидендная доходность в десятичном формате
   const [dividendLoading, setDividendLoading] = useState(false);
 
+  // ЗАЧЕМ: на брокерском счёте акции покупаются с плечом, реально блокируется notional/leverage.
+  // Применяется к строке «Стоимость позиций» в блоке БА, к «Итого» и к проверке лимита на инструмент.
+  const [baseAssetLeverage, setBaseAssetLeverage] = useState(() => {
+    const saved = localStorage.getItem('baseAssetLeverage');
+    const parsed = parseFloat(saved);
+    return Number.isFinite(parsed) && parsed >= 1 ? parsed : 4;
+  });
+
   // State для синхронизированных настроек цены
   const [targetPrice, setTargetPrice] = useState(0);
 
@@ -208,6 +216,11 @@ function OptionsCalculatorV3() {
   useEffect(() => {
     localStorage.setItem('useDividends', JSON.stringify(useDividends));
   }, [useDividends]);
+
+  // Сохраняем плечо БА в localStorage при изменении
+  useEffect(() => {
+    localStorage.setItem('baseAssetLeverage', String(baseAssetLeverage));
+  }, [baseAssetLeverage]);
 
   // Сохраняем isAIEnabled в localStorage при изменении
   // ЗАЧЕМ: При переключении AI принудительно обновляем aiVolatilityMap для перерисовки компонентов
@@ -1995,6 +2008,7 @@ function OptionsCalculatorV3() {
                         aiVolatilityMap={aiVolatilityMap}
                         fetchAIVolatility={fetchAIVolatility}
                         targetPrice={targetPrice}
+                        leverage={baseAssetLeverage}
                       />
                     </>
                   )}
@@ -2084,6 +2098,8 @@ function OptionsCalculatorV3() {
                     dividendLoading={dividendLoading}
                     isAIEnabled={isAIEnabled}
                     setIsAIEnabled={setIsAIEnabled}
+                    baseAssetLeverage={baseAssetLeverage}
+                    setBaseAssetLeverage={setBaseAssetLeverage}
                   />
                 </Card>
               )}

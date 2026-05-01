@@ -24,16 +24,23 @@ function PositionFinancialControl({
   calculatorMode = CALCULATOR_MODES.STOCKS,
   contractMultiplier = 100,
   dividendYield = 0,
-  selectedTicker = ''
+  selectedTicker = '',
+  leverage = 1
 }) {
-  // Стоимость позиций БА со знаком: LONG → затраты (−), SHORT → получили (+)
+  // ЗАЧЕМ: плечо БА — маржинальное требование брокера, делит notional на N.
+  // Если значение мусорное (NaN, < 1, undefined) — работаем без плеча.
+  const effectiveLeverage = (typeof leverage === 'number' && Number.isFinite(leverage) && leverage >= 1) ? leverage : 1;
+
+  // Стоимость позиций БА со знаком: LONG → затраты (−), SHORT → получили (+).
+  // С учётом плеча: notional делится на effectiveLeverage (LONG и SHORT симметрично).
   const positionsCost = useMemo(() => {
-    return positions.reduce((total, pos) => {
+    const raw = positions.reduce((total, pos) => {
       if (!pos.visible) return total;
       const sign = pos.type === 'SHORT' ? 1 : -1;
       return total + sign * Math.abs(pos.quantity * pos.price);
     }, 0);
-  }, [positions]);
+    return raw / effectiveLeverage;
+  }, [positions, effectiveLeverage]);
 
   // Премия опционов со знаком: Buy → −, Sell → + (calculateTotalPremium уже даёт со знаком)
   const optionsCost = useMemo(() => {
@@ -146,6 +153,10 @@ function PositionFinancialControl({
     return `${sign}$ ${formatNumber(Math.abs(value))}`;
   };
 
+  const positionsCostLabel = effectiveLeverage > 1
+    ? `Стоимость позиций (плечо ${effectiveLeverage})`
+    : 'Стоимость позиций';
+
   // Если нет позиций и опционов - не показываем блок
   if (positions.length === 0 && options.length === 0) {
     return null;
@@ -179,7 +190,9 @@ function PositionFinancialControl({
       {/* Блок стоимости позиций — со знаками: LONG/Buy → −, SHORT/Sell → + */}
       <div className="space-y-2">
         <div className="flex justify-between text-xs text-gray-500">
-          <span>Стоимость позиций</span>
+          <span title={effectiveLeverage > 1 ? 'Делится на плечо. Маржинальное требование, не полная стоимость акций.' : undefined}>
+            {positionsCostLabel}
+          </span>
           <span>{formatSignedAmount(positionsCost)}</span>
         </div>
         <div className="flex justify-between text-xs text-gray-500">

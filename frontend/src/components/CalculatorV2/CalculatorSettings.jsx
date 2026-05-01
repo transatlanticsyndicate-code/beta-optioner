@@ -3,13 +3,14 @@ import { ChevronUp, ChevronDown } from 'lucide-react';
 import { Label } from '../ui/label';
 import { Switch } from '../ui/switch';
 import { Card } from '../ui/card';
+import { Input } from '../ui/input';
 import { useRiskFreeRate } from '../../hooks/useRiskFreeRate';
 
 /**
  * Компонент настроек калькулятора
  * ЗАЧЕМ: Управление отображением элементов графика, учёт дивидендов и информационные данные
  */
-function CalculatorSettings({ 
+function CalculatorSettings({
   showOptionLines = true,
   setShowOptionLines,
   useDividends = false,
@@ -18,8 +19,34 @@ function CalculatorSettings({
   dividendLoading = false,
   isAIEnabled = true,
   setIsAIEnabled,
+  baseAssetLeverage = 4,
+  setBaseAssetLeverage,
   calculatorMode = 'stocks' // Режим калькулятора: 'stocks' или 'futures'
 }) {
+  // ЗАЧЕМ: даём пользователю стереть поле и набрать новое значение, не дёргая внешний state на каждый промежуточный символ.
+  // Внешний state обновляется только когда ввод даёт валидное число >= 1.
+  const [leverageDraft, setLeverageDraft] = React.useState(String(baseAssetLeverage));
+
+  React.useEffect(() => {
+    setLeverageDraft(String(baseAssetLeverage));
+  }, [baseAssetLeverage]);
+
+  const handleLeverageChange = (e) => {
+    const raw = e.target.value;
+    setLeverageDraft(raw);
+    const parsed = parseFloat(raw);
+    if (Number.isFinite(parsed) && parsed >= 1) {
+      setBaseAssetLeverage(parsed);
+    }
+  };
+
+  const handleLeverageBlur = () => {
+    const parsed = parseFloat(leverageDraft);
+    if (!Number.isFinite(parsed) || parsed < 1) {
+      setBaseAssetLeverage(1);
+      setLeverageDraft('1');
+    }
+  };
   // Получаем актуальную безрисковую ставку от FRED API
   const { ratePercent, loading: rateLoading } = useRiskFreeRate();
 
@@ -93,6 +120,29 @@ function CalculatorSettings({
               />
             </div>
           )}
+
+          {/* Плечо для базового актива */}
+          {/* ЗАЧЕМ: на брокерском счёте акции маржинальные — реально блокируется notional/leverage. */}
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex flex-col">
+              <Label htmlFor="base-asset-leverage" className="text-sm font-normal">
+                Плечо для базового актива
+              </Label>
+              <span className="text-xs text-muted-foreground mt-0.5">
+                Делится на стоимость позиций БА. Премия опционов не делится.
+              </span>
+            </div>
+            <Input
+              id="base-asset-leverage"
+              type="number"
+              min={1}
+              step={0.5}
+              value={leverageDraft}
+              onChange={handleLeverageChange}
+              onBlur={handleLeverageBlur}
+              className="w-20 text-right"
+            />
+          </div>
 
           {/* Безрисковая ставка - информационный блок */}
           <div className="pt-2 border-t border-gray-200">
