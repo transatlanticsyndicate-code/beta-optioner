@@ -61,16 +61,34 @@ function getOptionTypeFromCellId(cellId) {
 }
 
 // Цена underlying со страницы
+// ЗАЧЕМ: пропускаем правый сайдбар TradingView (watchlist + блок деталей тикера) —
+// если он открыт и в нём выбран другой тикер, его цена иногда оказывается первой
+// в DOM-порядке и подменяет цену базового актива страницы опционов.
+const TV_SIDEBAR_SKIP_SELECTOR = [
+  '[class*="widgetbar"]',
+  '[class*="watchlist"]',
+  '[class*="watch-list"]',
+  '[class*="detailsWidget"]',
+  '[data-name="right-toolbar"]',
+  '[data-name="watchlist"]'
+].join(',');
+
+function isInTvSidebar(el) {
+  return !!el.closest(TV_SIDEBAR_SKIP_SELECTOR);
+}
+
 function getUnderlyingPrice() {
-  // Метод 1: элемент с ценой (priceWrap на странице опционов: "6,655.50USD")
-  const priceEl = document.querySelector('[class*="priceWrap"]');
-  if (priceEl) {
-    const num = parseNumber(priceEl.textContent);
+  // Метод 1: первый priceWrap, который НЕ в сайдбаре
+  const priceWraps = document.querySelectorAll('[class*="priceWrap"]');
+  for (const el of priceWraps) {
+    if (isInTvSidebar(el)) continue;
+    const num = parseNumber(el.textContent);
     if (num > 0) return num;
   }
-  // Метод 2: любой элемент с классом price содержащий число
+  // Метод 2: любой [class*="price"] с числом, но мимо сайдбара
   const priceEls = document.querySelectorAll('[class*="price"]');
   for (const el of priceEls) {
+    if (isInTvSidebar(el)) continue;
     const text = el.textContent.trim();
     const match = text.match(/([\d,]+\.\d+)/);
     if (match) {
