@@ -368,6 +368,14 @@ function UniversalOptionsCalculator() {
   const [dividendYield, setDividendYield] = useState(0); // Дивидендная доходность в десятичном формате
   const [dividendLoading, setDividendLoading] = useState(false);
 
+  // ЗАЧЕМ: на брокерском счёте акции покупаются с плечом, реально блокируется notional/leverage.
+  // Применяется к строке «Стоимость позиций» в блоке БА, к «Итого» и к проверке лимита на инструмент.
+  const [baseAssetLeverage, setBaseAssetLeverage] = useState(() => {
+    const saved = localStorage.getItem('baseAssetLeverage');
+    const parsed = parseFloat(saved);
+    return Number.isFinite(parsed) && parsed >= 1 ? parsed : 4;
+  });
+
   // Ref для хранения ручных изменений опционов
   // ЗАЧЕМ: Расширение перезаписывает localStorage.calculatorState при добавлении новых опционов,
   // теряя ручные изменения (quantity, customPremium, entryDate). Храним их отдельно.
@@ -515,6 +523,11 @@ function UniversalOptionsCalculator() {
   useEffect(() => {
     localStorage.setItem('useDividends', JSON.stringify(useDividends));
   }, [useDividends]);
+
+  // Сохраняем плечо БА в localStorage при изменении
+  useEffect(() => {
+    localStorage.setItem('baseAssetLeverage', String(baseAssetLeverage));
+  }, [baseAssetLeverage]);
 
   // УБРАНО: AI модель не используется в универсальном калькуляторе
   // useEffect для isAIEnabled удалён
@@ -3950,6 +3963,7 @@ function UniversalOptionsCalculator() {
                         targetPrice={targetPrice}
                         calculatorMode={calculatorMode}
                         contractMultiplier={contractMultiplier}
+                        leverage={baseAssetLeverage}
                       />
                     </>
                   )}
@@ -4037,6 +4051,8 @@ function UniversalOptionsCalculator() {
                     isAIEnabled={isAIEnabled}
                     setIsAIEnabled={setIsAIEnabled}
                     calculatorMode={calculatorMode}
+                    baseAssetLeverage={baseAssetLeverage}
+                    setBaseAssetLeverage={setBaseAssetLeverage}
                   />
                 </Card>
               )}
