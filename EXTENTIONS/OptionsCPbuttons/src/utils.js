@@ -61,11 +61,15 @@ function getOptionTypeFromCellId(cellId) {
 }
 
 // Цена underlying со страницы
-// ЗАЧЕМ: пропускаем правый сайдбар TradingView (watchlist + блок деталей тикера) —
-// если он открыт и в нём выбран другой тикер, его цена иногда оказывается первой
-// в DOM-порядке и подменяет цену базового актива страницы опционов.
+// ЗАЧЕМ: TradingView в правом виджет-баре использует класс `priceWrapper-XXXX`
+// (с er!), а в чейне страницы — `priceWrap-XXXX` (без er). Мы хотим только
+// чейновскую цену, поэтому ищем по селектору с дефисом — это уже отсекает
+// сайдбарный priceWrapper-. Дополнительно отсекаем по специфичным классам
+// именно правой панели (`widgetbar-widget*`, `widgetbar-page*`), на случай
+// если разметка отдельных виджетов изменится.
 const TV_SIDEBAR_SKIP_SELECTOR = [
-  '[class*="widgetbar"]',
+  '[class*="widgetbar-widget"]',
+  '[class*="widgetbar-page"]',
   '[class*="watchlist"]',
   '[class*="watch-list"]',
   '[class*="detailsWidget"]',
@@ -78,14 +82,14 @@ function isInTvSidebar(el) {
 }
 
 function getUnderlyingPrice() {
-  // Метод 1а: первый priceWrap, который НЕ в сайдбаре
-  const priceWraps = document.querySelectorAll('[class*="priceWrap"]');
+  // Метод 1: priceWrap- (с дефисом — отсекает priceWrapper- из сайдбара)
+  const priceWraps = document.querySelectorAll('[class*="priceWrap-"]');
   for (const el of priceWraps) {
     if (isInTvSidebar(el)) continue;
     const num = parseNumber(el.textContent);
     if (num > 0) return num;
   }
-  // Метод 2а: любой [class*="price"] с числом, но мимо сайдбара
+  // Метод 2: любой [class*="price"] с числом, но мимо сайдбара
   const priceEls = document.querySelectorAll('[class*="price"]');
   for (const el of priceEls) {
     if (isInTvSidebar(el)) continue;
@@ -96,22 +100,15 @@ function getUnderlyingPrice() {
       if (num > 0) return num;
     }
   }
-  // Метод 1б (fallback): если скип-лист отфильтровал ВСЁ — берём первый priceWrap
-  // как раньше. Лучше редкий неверный matching, чем «без цены вообще».
-  for (const el of priceWraps) {
+  // Метод 1-fallback: если по новой разметке priceWrap- ничего не нашлось,
+  // пробуем старый широкий вариант, тоже мимо сайдбара
+  const wideWraps = document.querySelectorAll('[class*="priceWrap"]');
+  for (const el of wideWraps) {
+    if (isInTvSidebar(el)) continue;
     const num = parseNumber(el.textContent);
     if (num > 0) {
-      console.warn('[Optioner] underlyingPrice: все priceWrap-элементы попали в скип-лист — взяли первый как fallback:', num);
+      console.warn('[Optioner] underlyingPrice: использован fallback на широкий priceWrap:', num);
       return num;
-    }
-  }
-  // Метод 2б (fallback): любой [class*="price"] с числом
-  for (const el of priceEls) {
-    const text = el.textContent.trim();
-    const match = text.match(/([\d,]+\.\d+)/);
-    if (match) {
-      const num = parseNumber(match[1]);
-      if (num > 0) return num;
     }
   }
   // Метод 3: title документа
