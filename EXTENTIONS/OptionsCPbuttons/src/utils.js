@@ -78,14 +78,14 @@ function isInTvSidebar(el) {
 }
 
 function getUnderlyingPrice() {
-  // Метод 1: первый priceWrap, который НЕ в сайдбаре
+  // Метод 1а: первый priceWrap, который НЕ в сайдбаре
   const priceWraps = document.querySelectorAll('[class*="priceWrap"]');
   for (const el of priceWraps) {
     if (isInTvSidebar(el)) continue;
     const num = parseNumber(el.textContent);
     if (num > 0) return num;
   }
-  // Метод 2: любой [class*="price"] с числом, но мимо сайдбара
+  // Метод 2а: любой [class*="price"] с числом, но мимо сайдбара
   const priceEls = document.querySelectorAll('[class*="price"]');
   for (const el of priceEls) {
     if (isInTvSidebar(el)) continue;
@@ -96,7 +96,25 @@ function getUnderlyingPrice() {
       if (num > 0) return num;
     }
   }
-  // Метод 3: title документа (fallback)
+  // Метод 1б (fallback): если скип-лист отфильтровал ВСЁ — берём первый priceWrap
+  // как раньше. Лучше редкий неверный matching, чем «без цены вообще».
+  for (const el of priceWraps) {
+    const num = parseNumber(el.textContent);
+    if (num > 0) {
+      console.warn('[Optioner] underlyingPrice: все priceWrap-элементы попали в скип-лист — взяли первый как fallback:', num);
+      return num;
+    }
+  }
+  // Метод 2б (fallback): любой [class*="price"] с числом
+  for (const el of priceEls) {
+    const text = el.textContent.trim();
+    const match = text.match(/([\d,]+\.\d+)/);
+    if (match) {
+      const num = parseNumber(match[1]);
+      if (num > 0) return num;
+    }
+  }
+  // Метод 3: title документа
   const titleMatch = document.title.match(/([\d,]+\.\d+)/);
   if (titleMatch) return parseNumber(titleMatch[1]);
   return null;
