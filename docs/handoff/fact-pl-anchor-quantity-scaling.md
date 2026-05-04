@@ -131,7 +131,20 @@ plDisplayed = actualPL × ratio + (plTheoreticalNow − plTheoreticalAtAnchor)
 | Дефолт при отсутствии (старые сохранения) | `null` → формула применяет fallback `actualPLQuantity = currentQuantity` (т.е. ratio = 1) |
 | Валидация при чтении | `Number(...) > 0`; иначе fallback |
 
-**Миграция совместимости:** для старых конфигураций, у которых уже сохранены `actualPL/actualPLDate/actualPLPrice` без `actualPLQuantity`, применяется fallback `actualPLQuantity = option.quantity` на момент чтения. Это даёт `ratio = 1` — то есть старое (некорректное) поведение для уже сохранённых якорей. Новые ввoды работают корректно. Без отдельной миграции данных это сознательный компромисс: пользователь может перевводом якоря «обновить» его до правильного поведения.
+**Миграция для старых конфигураций.** До фикса поле `actualPLQuantity` не сохранялось — у части пользователей в `localStorage` (и в БД-конфигурациях) уже лежат опционы с заполненным `actualPL`, но без `actualPLQuantity`. Без миграции формула в таких опционах откатывается на старое (некорректное) поведение, и пользователь продолжает видеть баг.
+
+Решение: при монтаже компонента, владеющего state опционов, прогнать одноразовую миграцию по списку опционов:
+
+```
+для каждого option:
+    если option.actualPL заполнен И option.actualPLQuantity отсутствует:
+        option.actualPLQuantity = option.quantity   (текущее количество в момент загрузки)
+        сохранить в overrides / localStorage, чтобы миграция не повторилась
+```
+
+Семантически это значит: «для старых якорей считаем, что Fact P&L был введён при текущем количестве». При первом изменении количества после миграции формула масштабирует якорь корректно. При перезагрузке миграция уже не сработает (поле теперь сохранено).
+
+Реализовано как `useEffect` зависящий от `options`. Безопасный no-op после первого прогона: условие `needsMigration` становится false, повторных `setOptions` не происходит.
 
 ---
 
@@ -194,7 +207,8 @@ plDisplayed = actualPL × ratio + (plTheoreticalNow − plTheoreticalAtAnchor)
 - [ ] В обработчике изменения количества контрактов **не** трогать `actualPLQuantity` (оставлять как есть).
 - [ ] Вынести якорную формулу в одну утилиту `applyAnchorPL(plRaw, plAtAnchorRaw, opt, currentQty)` или эквивалент. В старом проекте формула продублирована в 6 местах — это технический долг, в новом проекте его сразу не воспроизводить.
 - [ ] В плане выхода (ExitPlanTable-аналог) использовать `step.quantity` вместо `option.quantity` при расчёте ratio.
-- [ ] Сериализация конфигураций / расширения: `actualPLQuantity` сохраняется и восстанавливается так же, как `actualPL/Date/Price`. Если приходит без него — fallback `option.quantity` (ratio=1).
+- [ ] Сериализация конфигураций / расширения: `actualPLQuantity` сохраняется и восстанавливается так же, как `actualPL/Date/Price`. Если приходит без него — формула применяет fallback `option.quantity` (ratio=1).
+- [ ] Миграция для старых конфигураций (см. §7): одноразовый useEffect, который при загрузке опционов фиксирует `actualPLQuantity = option.quantity` для тех, у кого `actualPL` заполнен, а `actualPLQuantity` отсутствует. Сохраняет результат в overrides/localStorage, чтобы не повторяться. Без этой миграции у пользователей с уже сохранённым Fact P&L баг останется до ручного перевввода якоря.
 - [ ] Юнит-тесты на сценарии Q1–Q10.
 - [ ] Документация формулы в коде: одна строка комментария «ratio = current/anchor; якорь масштабируется так же, как дельта, иначе непропорциональный P&L» хватит — длинных эссе не нужно.
 
@@ -217,12 +231,13 @@ plDisplayed = actualPL × ratio + (plTheoreticalNow − plTheoreticalAtAnchor)
 | 2026-03-26 | `40fb80f` | Появление функции Fact P&L с багом (включена сразу некорректная формула). |
 | 2026-04-24 | `5de9f38` | Распространение якорной логики на план выхода (ExitPlanTable). |
 | 2026-05-02 | `14997b4` | Распространение якорной логики на ИТОГО и MAX убыток. |
-| 2026-05-04 | `fbfb075` | **Фикс:** масштабирование якоря по соотношению количеств (этот документ). |
+| 2026-05-04 | `fbfb075` | **Фикс:** масштабирование якоря по соотношению количеств. |
+| 2026-05-04 | `b25c8ce` | **Миграция:** одноразовая фиксация `actualPLQuantity` для старых конфигураций при загрузке опционов. |
 
 **Файлы, затронутые фиксом 2026-05-04:**
 
 - `frontend/src/components/CalculatorV2/OptionsTableV3.jsx` — обработчик ввода (`handleActualPLChange`) + 3 формулы якоря (P&L строки, Close Price, ИТОГО).
 - `frontend/src/hooks/usePositionExitCalculator.js` — 2 формулы якоря (сценарий 2, сценарий 3).
 - `frontend/src/components/CalculatorV2/CalculatorDealTabs/ExitPlanTable.jsx` — 1 формула якоря (с использованием `step.quantity`) + добавлено поле `actualPLQuantity` в инвалидацию snapshot.
-- `frontend/src/pages/UniversalOptionsCalculator.jsx` — добавлен `actualPLQuantity` в `fieldsToOverride` (сохранение в localStorage) и в merge при загрузке/расширении.
+- `frontend/src/pages/UniversalOptionsCalculator.jsx` — добавлен `actualPLQuantity` в `fieldsToOverride` (сохранение в localStorage), в merge при загрузке/расширении, и одноразовый `useEffect`-миграция для старых конфигураций.
 - `frontend/src/components/Layout/TopNav.jsx` — версия v37 → v38.
