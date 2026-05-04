@@ -299,21 +299,26 @@ function OptionsTableV3({
   const handleActualPLChange = React.useCallback((optionId, value) => {
     const numValue = value ? parseFloat(value) : null;
     
-    // Сохраняем actualPL, actualPLDate (сегодня) и actualPLPrice (текущая цена актива из блока "Симуляция")
+    // Сохраняем actualPL, actualPLDate (сегодня), actualPLPrice (цена актива в момент ввода) и actualPLQuantity (количество в момент ввода)
     // ЗАЧЕМ: actualPLPrice нужна для корректного расчёта якорной P&L при изменении цены актива
+    // ЗАЧЕМ: actualPLQuantity нужно, чтобы при изменении количества контрактов P&L масштабировалась пропорционально
     // ВАЖНО: Берём targetPrice (поле "Цена базового актива" в блоке "Симуляция"), fallback на currentPrice
     if (numValue !== null) {
       const today = new Date().toISOString().split('T')[0]; // ISO формат: YYYY-MM-DD
+      const opt = options.find(o => o.id === optionId);
+      const qtyAtAnchor = Number(opt?.quantity) || 1;
       handleFieldChange(optionId, 'actualPL', numValue);
       handleFieldChange(optionId, 'actualPLDate', today);
       handleFieldChange(optionId, 'actualPLPrice', targetPrice || currentPrice); // targetPrice = цена из блока "Симуляция"
+      handleFieldChange(optionId, 'actualPLQuantity', qtyAtAnchor);
     } else {
       // Если поле очищено — удаляем все якорные значения
       handleFieldChange(optionId, 'actualPL', null);
       handleFieldChange(optionId, 'actualPLDate', null);
       handleFieldChange(optionId, 'actualPLPrice', null);
+      handleFieldChange(optionId, 'actualPLQuantity', null);
     }
-  }, [targetPrice, currentPrice]);
+  }, [targetPrice, currentPrice, options]);
 
   // Обработчик обновления всех незалоченных опционов
   // ЗАЧЕМ: Позволяет пользователю быстро обновить рыночные данные для всех позиций
@@ -1139,12 +1144,21 @@ function OptionsTableV3({
                         }
                         
                         const plBeforeAnchor = pl;
-                        // Итоговая P&L = actualPL + (текущая теор. P&L - теор. P&L на якоре)
-                        pl = option.actualPL + (pl - plAtAnchor);
-                        
+                        // Итоговая P&L = actualPL × ratio + (текущая теор. P&L − теор. P&L на якоре)
+                        // ratio = текущее количество / количество в момент ввода Fact P&L
+                        // ЗАЧЕМ: Дельта (pl − plAtAnchor) уже масштабирована текущим количеством;
+                        // якорь тоже должен масштабироваться, иначе P&L растёт непропорционально количеству
+                        const anchorQty = Number(option.actualPLQuantity) > 0 ? Number(option.actualPLQuantity) : (Number(option.quantity) || 1);
+                        const currentQty = Number(option.quantity) || 0;
+                        const anchorRatio = anchorQty > 0 ? (currentQty / anchorQty) : 1;
+                        pl = option.actualPL * anchorRatio + (pl - plAtAnchor);
+
                         console.log(`🎯 [Якорь] ${option.type} Strike ${option.strike}:`, {
                           actualPL: option.actualPL,
                           actualPLPrice: option.actualPLPrice,
+                          actualPLQuantity: option.actualPLQuantity,
+                          currentQuantity: option.quantity,
+                          anchorRatio,
                           currentPrice,
                           targetPrice,
                           anchorPrice,
@@ -1295,8 +1309,12 @@ function OptionsTableV3({
                         if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
                           plAtAnchor = adjustPLByStockGroup(plAtAnchor, stockClassification);
                         }
-                        
-                        pl = option.actualPL + (pl - plAtAnchor);
+
+                        // Масштабируем якорь по текущему количеству (см. колонку P&L выше)
+                        const anchorQtyClose = Number(option.actualPLQuantity) > 0 ? Number(option.actualPLQuantity) : (Number(option.quantity) || 1);
+                        const currentQtyClose = Number(option.quantity) || 0;
+                        const anchorRatioClose = anchorQtyClose > 0 ? (currentQtyClose / anchorQtyClose) : 1;
+                        pl = option.actualPL * anchorRatioClose + (pl - plAtAnchor);
                       }
                     }
 
@@ -1464,9 +1482,13 @@ function OptionsTableV3({
                         if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
                           plAtAnchor = adjustPLByStockGroup(plAtAnchor, stockClassification);
                         }
-                        
-                        // Итоговая P&L = actualPL + (текущая теор. P&L - теор. P&L на якоре)
-                        pl = opt.actualPL + (pl - plAtAnchor);
+
+                        // Итоговая P&L = actualPL × ratio + (текущая теор. P&L − теор. P&L на якоре)
+                        // Масштабируем якорь по соотношению текущего количества к количеству в момент ввода Fact P&L
+                        const anchorQtySum = Number(opt.actualPLQuantity) > 0 ? Number(opt.actualPLQuantity) : (Number(opt.quantity) || 1);
+                        const currentQtySum = Number(opt.quantity) || 0;
+                        const anchorRatioSum = anchorQtySum > 0 ? (currentQtySum / anchorQtySum) : 1;
+                        pl = opt.actualPL * anchorRatioSum + (pl - plAtAnchor);
                       }
                     }
 

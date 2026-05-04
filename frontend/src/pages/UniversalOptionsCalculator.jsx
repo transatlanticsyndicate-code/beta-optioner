@@ -1846,8 +1846,9 @@ function UniversalOptionsCalculator() {
           const actualPL = savedOverrides.actualPL ?? existingOption?.actualPL;
           const actualPLDate = savedOverrides.actualPLDate ?? existingOption?.actualPLDate;
           const actualPLPrice = savedOverrides.actualPLPrice ?? existingOption?.actualPLPrice;
+          const actualPLQuantity = savedOverrides.actualPLQuantity ?? existingOption?.actualPLQuantity;
           const manualIvOverride = savedOverrides.manualIvOverride ?? existingOption?.manualIvOverride;
-          
+
           console.log('🔍 [Merge Debug]:', {
             optionKey,
             strike: extOption.strike,
@@ -1860,6 +1861,7 @@ function UniversalOptionsCalculator() {
             resultActualPL: actualPL,
             resultActualPLDate: actualPLDate,
             resultActualPLPrice: actualPLPrice,
+            resultActualPLQuantity: actualPLQuantity,
             resultManualIvOverride: manualIvOverride
           });
           
@@ -1893,6 +1895,7 @@ function UniversalOptionsCalculator() {
               actualPL: actualPL,
               actualPLDate: actualPLDate,
               actualPLPrice: actualPLPrice,
+              actualPLQuantity: actualPLQuantity,
               // Сохраняем ручную коррекцию IV
               manualIvOverride: manualIvOverride,
               // Сохраняем флаги происхождения опциона (Super/Golden)
@@ -2169,8 +2172,8 @@ function UniversalOptionsCalculator() {
 
       // ВАЖНО: Сохраняем ручные изменения в отдельное хранилище
       // ЗАЧЕМ: Расширение перезаписывает localStorage.calculatorState, теряя изменения
-      // Поля, которые нужно сохранять: quantity, customPremium, customBid, customAsk, entryDate, actualPL, actualPLDate, actualPLPrice, manualIvOverride, manualIvOverrideDate
-      const fieldsToOverride = ['quantity', 'customPremium', 'customBid', 'customAsk', 'entryDate', 'isPremiumModified', 'isBidModified', 'isAskModified', 'actualPL', 'actualPLDate', 'actualPLPrice', 'manualIvOverride', 'manualIvOverrideDate', 'assetPriceAtEntry', 'isAssetPriceModified'];
+      // Поля, которые нужно сохранять: quantity, customPremium, customBid, customAsk, entryDate, actualPL, actualPLDate, actualPLPrice, actualPLQuantity, manualIvOverride, manualIvOverrideDate
+      const fieldsToOverride = ['quantity', 'customPremium', 'customBid', 'customAsk', 'entryDate', 'isPremiumModified', 'isBidModified', 'isAskModified', 'actualPL', 'actualPLDate', 'actualPLPrice', 'actualPLQuantity', 'manualIvOverride', 'manualIvOverrideDate', 'assetPriceAtEntry', 'isAssetPriceModified'];
       if (targetOption && fieldsToOverride.includes(field)) {
         saveUserOverride(targetOption, field, value);
       }

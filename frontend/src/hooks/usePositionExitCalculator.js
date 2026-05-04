@@ -490,9 +490,15 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
         let plAtAnchor = calculatorMode === CALCULATOR_MODES.FUTURES
           ? calculateFuturesOptionPLValue(tempOption, anchorPrice, anchorDaysToExp, contractMultiplier, anchorIV)
           : calculateStockOptionPLValue(tempOption, anchorPrice, currentPrice, anchorDaysToExp, anchorIV, dividendYield, contractMultiplier, rfrScenario2);
-        
-        // Итоговая P&L = actualPL + (текущая теор. P&L - теор. P&L на якоре)
-        pl = option.actualPL + (pl - plAtAnchor);
+
+        // Итоговая P&L = actualPL × ratio + (текущая теор. P&L − теор. P&L на якоре)
+        // ratio = текущее количество / количество в момент ввода Fact P&L
+        // ЗАЧЕМ: Дельта (pl − plAtAnchor) уже масштабирована текущим количеством,
+        // якорь тоже должен масштабироваться, иначе P&L растёт непропорционально количеству
+        const anchorQtyS2 = Number(option.actualPLQuantity) > 0 ? Number(option.actualPLQuantity) : (Number(option.quantity) || 1);
+        const currentQtyS2 = Number(option.quantity) || 0;
+        const anchorRatioS2 = anchorQtyS2 > 0 ? (currentQtyS2 / anchorQtyS2) : 1;
+        pl = option.actualPL * anchorRatioS2 + (pl - plAtAnchor);
       }
     }
 
@@ -680,9 +686,13 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
         let plAtAnchor = calculatorMode === CALCULATOR_MODES.FUTURES
           ? calculateFuturesOptionPLValue(tempOption, anchorPrice, anchorDaysToExp, contractMultiplier, anchorIV)
           : calculateStockOptionPLValue(tempOption, anchorPrice, currentPrice, anchorDaysToExp, anchorIV, dividendYield, contractMultiplier, rfrScenario3);
-        
-        // Итоговая P&L = actualPL + (текущая теор. P&L - теор. P&L на якоре)
-        pl = option.actualPL + (pl - plAtAnchor);
+
+        // Итоговая P&L = actualPL × ratio + (текущая теор. P&L − теор. P&L на якоре)
+        // ratio = текущее количество / количество в момент ввода Fact P&L (см. сценарий 2)
+        const anchorQtyS3 = Number(option.actualPLQuantity) > 0 ? Number(option.actualPLQuantity) : (Number(option.quantity) || 1);
+        const currentQtyS3 = Number(option.quantity) || 0;
+        const anchorRatioS3 = anchorQtyS3 > 0 ? (currentQtyS3 / anchorQtyS3) : 1;
+        pl = option.actualPL * anchorRatioS3 + (pl - plAtAnchor);
       }
     }
 

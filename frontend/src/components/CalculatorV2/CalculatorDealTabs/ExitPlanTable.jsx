@@ -263,13 +263,14 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
           const newOpt = newSteps[i].optionRef;
           
           // Проверяем изменения в шагах и в optionRef (manualIvOverride, actualPL)
-          if (prevSteps[i].quantity !== newSteps[i].quantity || 
-              prevSteps[i].percent !== newSteps[i].percent || 
+          if (prevSteps[i].quantity !== newSteps[i].quantity ||
+              prevSteps[i].percent !== newSteps[i].percent ||
               prevSteps[i].dollars !== newSteps[i].dollars ||
               prevOpt?.manualIvOverride !== newOpt?.manualIvOverride ||
               prevOpt?.actualPL !== newOpt?.actualPL ||
               prevOpt?.actualPLDate !== newOpt?.actualPLDate ||
-              prevOpt?.actualPLPrice !== newOpt?.actualPLPrice) {
+              prevOpt?.actualPLPrice !== newOpt?.actualPLPrice ||
+              prevOpt?.actualPLQuantity !== newOpt?.actualPLQuantity) {
             hasChanges = true;
             break;
           }
@@ -577,10 +578,20 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
         }
 
         const plBeforeAnchor = pl;
-        pl = option.actualPL + (pl - plAtAnchor);
+        // Масштабируем якорь по количеству шага: actualPL соответствует actualPLQuantity (всей позиции в момент ввода),
+        // а текущий шаг закрывает step.quantity контрактов — пересчитываем долю якоря
+        // ЗАЧЕМ: Дельта (pl − plAtAnchor) уже считается по step.quantity (через tempOpt.quantity),
+        // якорь тоже должен быть в долях шага, иначе суммы не совпадут с таблицей опционов
+        const anchorQtyExit = Number(option.actualPLQuantity) > 0 ? Number(option.actualPLQuantity) : (Number(option.quantity) || 1);
+        const stepQty = Number(step.quantity) || 0;
+        const anchorRatioExit = anchorQtyExit > 0 ? (stepQty / anchorQtyExit) : 0;
+        pl = option.actualPL * anchorRatioExit + (pl - plAtAnchor);
 
         console.log(`[План выхода] 🎯 Якорная формула применена:`, {
           actualPL: option.actualPL,
+          actualPLQuantity: option.actualPLQuantity,
+          stepQuantity: step.quantity,
+          anchorRatio: anchorRatioExit,
           anchorPrice,
           stepSimDays,
           anchorDaysPassed,
