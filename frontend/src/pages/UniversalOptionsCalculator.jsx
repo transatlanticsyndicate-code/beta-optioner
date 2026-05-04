@@ -690,6 +690,31 @@ function UniversalOptionsCalculator() {
 
   const [options, setOptions] = useState([]);
 
+  // Миграция якорной P&L: для старых опционов, у которых заполнен actualPL, но не сохранён actualPLQuantity
+  // (фикс масштабирования якоря по количеству был добавлен 2026-05-04, ранее это поле не сохранялось).
+  // ЗАЧЕМ: Без actualPLQuantity формула якоря возвращается к старому (некорректному) поведению при смене количества.
+  // Миграция фиксирует actualPLQuantity = текущее quantity один раз при обнаружении, дальше формула работает корректно.
+  useEffect(() => {
+    if (!options || options.length === 0) return;
+    const needsMigration = options.some(opt =>
+      opt && opt.actualPL !== null && opt.actualPL !== undefined &&
+      (opt.actualPLQuantity === null || opt.actualPLQuantity === undefined)
+    );
+    if (!needsMigration) return;
+    setOptions(prev => prev.map(opt => {
+      if (opt.actualPL !== null && opt.actualPL !== undefined &&
+          (opt.actualPLQuantity === null || opt.actualPLQuantity === undefined)) {
+        const qty = Number(opt.quantity) > 0 ? Number(opt.quantity) : 1;
+        // Также сохраняем в overrides, чтобы миграция не повторялась при перезагрузке
+        try {
+          saveUserOverride(opt, 'actualPLQuantity', qty);
+        } catch (e) { /* мягкий fallback на случай отсутствия saveUserOverride в момент монтажа */ }
+        return { ...opt, actualPLQuantity: qty };
+      }
+      return opt;
+    }));
+  }, [options]);
+
 
   // Динамический расчёт количества опционов для отображения в хедере
   // ЗАЧЕМ: При изменении quantity в таблице опционов — название сделки автоматически обновляется
