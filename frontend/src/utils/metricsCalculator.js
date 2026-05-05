@@ -678,6 +678,24 @@ export function calculatePortfolioPLAtPrice({
         pl = adjustPLByStockGroup(pl, stockClassification);
       }
 
+      // [TEMP DEBUG] Сверка с таблицей — удалить после диагностики P&L TOTAL
+      try {
+        // eslint-disable-next-line no-console
+        console.log(`🔬 [P&L TOTAL debug] ${option.action} ${option.type} ${option.strike}:`, {
+          qty: option.quantity,
+          factIV: option.manualIvOverride,
+          marketIV: option.impliedVolatility,
+          usedVolatility: optionVolatility,
+          price,
+          optionAssetPrice,
+          optionDaysRemaining,
+          plBeforeAnchor: Math.round(pl),
+          actualPL: option.actualPL,
+          actualPLDate: option.actualPLDate,
+          actualPLQuantity: option.actualPLQuantity
+        });
+      } catch (e) { /* ignore */ }
+
       // Якорная P&L (Fact P&L): если пользователь зафиксировал реальную P&L — сдвигаем теоретическую дельту от якоря.
       // Полностью повторяет формулу из таблицы (OptionsTableV3.jsx) включая масштабирование по количеству.
       if (option.actualPL !== null && option.actualPL !== undefined && option.actualPLDate) {
