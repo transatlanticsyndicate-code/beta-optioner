@@ -25,7 +25,8 @@ function PositionFinancialControl({
   contractMultiplier = 100,
   dividendYield = 0,
   selectedTicker = '',
-  leverage = 1
+  leverage = 1,
+  stockClassification = null
 }) {
   // ЗАЧЕМ: плечо БА — маржинальное требование брокера, делит notional на N.
   // Если значение мусорное (NaN, < 1, undefined) — работаем без плеча.
@@ -136,10 +137,11 @@ function PositionFinancialControl({
       dividendYield,
       isAIEnabled,
       aiVolatilityMap,
-      selectedTicker
+      selectedTicker,
+      stockClassification
     });
     return { underlyingPL: result.underlyingPL, totalPL: result.totalPL };
-  }, [positions, options, currentPrice, daysPassed, targetPrice, ivSurface, calculatorMode, contractMultiplier, dividendYield, isAIEnabled, aiVolatilityMap, selectedTicker]);
+  }, [positions, options, currentPrice, daysPassed, targetPrice, ivSurface, calculatorMode, contractMultiplier, dividendYield, isAIEnabled, aiVolatilityMap, selectedTicker, stockClassification]);
 
   // Форматирование чисел с разделителями
   const formatNumber = (num) => {

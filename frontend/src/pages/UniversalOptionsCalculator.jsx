@@ -3992,6 +3992,7 @@ function UniversalOptionsCalculator() {
                         calculatorMode={calculatorMode}
                         contractMultiplier={contractMultiplier}
                         leverage={baseAssetLeverage}
+                        stockClassification={null}
                       />
                     </>
                   )}
