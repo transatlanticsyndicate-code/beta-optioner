@@ -36,6 +36,16 @@ class SavedConfiguration(Base):
     # Флаг фиксации позиции
     # ЗАЧЕМ: Если true — данные не обновляются при загрузке, позиция "заморожена"
     is_locked = Column(Boolean, default=False, nullable=False)
+
+    # Статус позиции: 'pending' (в ожидании, предварительная схема) или 'standard' (зафиксирована)
+    # ЗАЧЕМ: Различать предварительные планы сделок (которые при открытии должны
+    # подтянуть свежие котировки от расширения) и реально открытые позиции
+    # с замороженными датами входа.
+    # При status='standard' принудительно is_locked=true.
+    # DEFAULT='standard' — чтобы любая запись без явного статуса создавалась
+    # как зафиксированная (привычное «обычное сохранение, как раньше»).
+    # Pending появляется только при явном выборе пользователя в диалоге.
+    status = Column(String(20), default='standard', server_default='standard', nullable=False, index=True)
     
     # Полное состояние калькулятора (JSON)
     # ЗАЧЕМ: Сохраняет опционы, позиции, настройки графика, режим калькулятора
@@ -74,6 +84,7 @@ class SavedConfiguration(Base):
             "updatedAt": self.updated_at.isoformat() if self.updated_at else None,
             "entryDate": self.entry_date.isoformat() if self.entry_date else None,
             "isLocked": self.is_locked,
+            "status": self.status or 'standard',
             "state": self.state,
             "dealSettings": self.deal_settings,
             "dealInfo": self.deal_info,
@@ -86,3 +97,4 @@ Index('idx_saved_config_ticker', SavedConfiguration.ticker)
 Index('idx_saved_config_author', SavedConfiguration.author)
 Index('idx_saved_config_created_at', SavedConfiguration.created_at.desc())
 Index('idx_saved_config_user_id', SavedConfiguration.user_id)
+Index('idx_saved_config_status', SavedConfiguration.status)

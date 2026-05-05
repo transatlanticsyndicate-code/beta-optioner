@@ -45,6 +45,10 @@ function DatabaseSavedConfigurations() {
   const [filterTicker, setFilterTicker] = useState('');
   const [filterAuthor, setFilterAuthor] = useState('');
   const [filterInstrumentType, setFilterInstrumentType] = useState('all');
+  // Фильтр по статусу позиции: 'all' | 'pending' | 'standard'
+  // ЗАЧЕМ: По задаче пользователь должен иметь возможность отфильтровать
+  // только «В ожидании» или только «Зафиксирована».
+  const [filterStatus, setFilterStatus] = useState('all');
 
   // Состояние сортировки
   const [sortField, setSortField] = useState('name');
@@ -326,12 +330,12 @@ function DatabaseSavedConfigurations() {
       if (filterTicker && !config.ticker?.toLowerCase().includes(filterTicker.toLowerCase())) {
         return false;
       }
-      
+
       // Фильтр по автору
       if (filterAuthor && !config.author?.toLowerCase().includes(filterAuthor.toLowerCase())) {
         return false;
       }
-      
+
       // Фильтр по типу инструмента
       if (filterInstrumentType !== 'all') {
         const instrumentType = getInstrumentType(config);
@@ -342,7 +346,16 @@ function DatabaseSavedConfigurations() {
           return false;
         }
       }
-      
+
+      // Фильтр по статусу позиции
+      // ЗАЧЕМ: Старые записи в БД могут не иметь поля status — считаем такие 'pending'.
+      if (filterStatus !== 'all') {
+        const positionStatus = config.status === 'pending' ? 'pending' : 'standard';
+        if (positionStatus !== filterStatus) {
+          return false;
+        }
+      }
+
       return true;
     }).sort((a, b) => {
       let valA, valB;
@@ -355,6 +368,12 @@ function DatabaseSavedConfigurations() {
       } else if (sortField === 'name') {
         valA = (a.name || '').toLowerCase();
         valB = (b.name || '').toLowerCase();
+      } else if (sortField === 'status') {
+        // Сортировка по статусу: pending выше standard в asc-порядке
+        // ЗАЧЕМ: «В ожидании» — это активные планы, их полезно держать сверху.
+        // Fallback на 'standard' — старые записи без поля status считаются зафиксированными.
+        valA = (a.status === 'pending' ? 'pending' : 'standard');
+        valB = (b.status === 'pending' ? 'pending' : 'standard');
       } else {
         return 0;
       }
@@ -362,7 +381,7 @@ function DatabaseSavedConfigurations() {
       if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [configurations, filterDate, filterTicker, filterAuthor, filterInstrumentType, sortField, sortDirection]);
+  }, [configurations, filterDate, filterTicker, filterAuthor, filterInstrumentType, filterStatus, sortField, sortDirection]);
 
   // Пагинация отфильтрованных конфигураций
   // ЗАЧЕМ: Рендерим только часть записей для улучшения производительности
@@ -377,7 +396,7 @@ function DatabaseSavedConfigurations() {
   // Сброс на первую страницу при изменении фильтров
   useEffect(() => {
     setCurrentPage(1);
-  }, [filterDate, filterTicker, filterAuthor, filterInstrumentType]);
+  }, [filterDate, filterTicker, filterAuthor, filterInstrumentType, filterStatus]);
 
   // Сброс всех фильтров
   const clearFilters = () => {
@@ -385,6 +404,7 @@ function DatabaseSavedConfigurations() {
     setFilterTicker('');
     setFilterAuthor('');
     setFilterInstrumentType('all');
+    setFilterStatus('all');
   };
 
   // Миграция из localStorage в БД
@@ -449,7 +469,7 @@ function DatabaseSavedConfigurations() {
             <Filter className="h-4 w-4" />
             <h2 className="text-sm font-semibold">Фильтры</h2>
           </div>
-          <div className="flex-1 grid grid-cols-4 gap-4">
+          <div className="flex-1 grid grid-cols-5 gap-4">
             <div>
               <Popover>
                 <PopoverTrigger asChild>
@@ -513,11 +533,24 @@ function DatabaseSavedConfigurations() {
                 </SelectContent>
               </Select>
             </div>
+            {/* Фильтр по статусу позиции */}
+            <div>
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Статус..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Все статусы</SelectItem>
+                  <SelectItem value="pending">В ожидании</SelectItem>
+                  <SelectItem value="standard">Зафиксирована</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <Button
             size="sm"
             onClick={clearFilters}
-            disabled={!filterDate && !filterTicker && !filterAuthor && filterInstrumentType === 'all'}
+            disabled={!filterDate && !filterTicker && !filterAuthor && filterInstrumentType === 'all' && filterStatus === 'all'}
             className="text-xs bg-cyan-500 text-white hover:bg-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-300"
           >
             Сбросить
@@ -572,23 +605,6 @@ function DatabaseSavedConfigurations() {
                 style={{ display: 'none' }}
               />
 
-              {/* Кнопка миграции */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setShowMigrationModal(true)}
-                    className="text-xs"
-                  >
-                    <Save className="h-4 w-4 mr-1" />
-                    Миграция из localStorage
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Перенести конфигурации из localStorage в БД</p>
-                </TooltipContent>
-              </Tooltip>
 
               {/* Кнопка удаления всех конфигураций */}
               <Tooltip>
@@ -670,6 +686,15 @@ function DatabaseSavedConfigurations() {
                   <TableHead>Тип инструмента</TableHead>
                   <TableHead
                     className="cursor-pointer select-none hover:text-foreground"
+                    onClick={() => handleSort('status')}
+                  >
+                    <span className="inline-flex items-center">
+                      Статус
+                      <SortIcon field="status" />
+                    </span>
+                  </TableHead>
+                  <TableHead
+                    className="cursor-pointer select-none hover:text-foreground"
                     onClick={() => handleSort('name')}
                   >
                     <span className="inline-flex items-center">
@@ -708,6 +733,23 @@ function DatabaseSavedConfigurations() {
                         }`}>
                           {instrumentType}
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        {/* Лейбл статуса позиции
+                            ЗАЧЕМ: Жёлтый = «В ожидании» (предварительная схема),
+                            голубой = «Зафиксирована» (реально открытая позиция). */}
+                        {(() => {
+                          const positionStatus = config.status === 'pending' ? 'pending' : 'standard';
+                          return positionStatus === 'pending' ? (
+                            <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-yellow-100 text-yellow-800 border border-yellow-400 dark:bg-yellow-900/30 dark:text-yellow-300">
+                              ⏳ В ожидании
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-cyan-100 text-cyan-800 border border-cyan-400 dark:bg-cyan-900/30 dark:text-cyan-300">
+                              🔒 Зафиксирована
+                            </span>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell className="text-sm font-semibold">
                         <TooltipProvider>

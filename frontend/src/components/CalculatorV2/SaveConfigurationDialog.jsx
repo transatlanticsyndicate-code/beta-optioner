@@ -120,36 +120,56 @@ const generateConfigName = (currentState, isLocked = false) => {
 
 /**
  * Диалог сохранения конфигурации калькулятора
- * ЗАЧЕМ: Позволяет сохранить текущее состояние калькулятора для быстрого доступа
- * 
- * @param isLocked - если true, позиции будут зафиксированы (не обновляются при загрузке)
+ * ЗАЧЕМ: Позволяет сохранить текущее состояние калькулятора для быстрого доступа.
+ *
+ * Поддерживает выбор статуса позиции:
+ *  - 'pending' (В ожидании) — предварительная схема, ещё не вошли в позицию.
+ *    При открытии калькулятор автоматически подтянет свежие котировки от расширения.
+ *  - 'standard' (Зафиксирована) — реально открытая позиция с замороженными
+ *    датами входа. Эквивалент старой кнопки «Зафиксировать».
+ *
+ * @param isLocked - совместимость со старым localStorage-режимом: если true и статус
+ *                   не передан, то по умолчанию ставится 'standard'.
+ * @param showStatusSelector - показывать ли выбор статуса (по умолчанию true).
+ *                              false — для устаревших localStorage-диалогов.
  * @param dealInfo - информация о сделке (если существует)
  * @param dealSettings - настройки таба Сделка (целевая цена, шаги, план выхода)
  */
-function SaveConfigurationDialog({ isOpen, onClose, onSave, currentState, isLocked = false, dealInfo = null, dealSettings = null }) {
+function SaveConfigurationDialog({
+  isOpen,
+  onClose,
+  onSave,
+  currentState,
+  isLocked = false,
+  showStatusSelector = true,
+  dealInfo = null,
+  dealSettings = null,
+}) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [author, setAuthor] = useState('');
-  
+  // Статус позиции: 'pending' (В ожидании) | 'standard' (Зафиксирована).
+  // По умолчанию 'standard' — это привычное «обычное сохранение, как раньше».
+  // Pending пользователь должен выбрать явно — для предварительных схем сделок.
+  const [status, setStatus] = useState('standard');
+
+  const isStandard = status === 'standard';
+
   // Автозаполнение названия и автора при открытии диалога
-  // ЗАЧЕМ: Если есть сделка — используем её название, иначе генерируем автоматически
-  // Автор подставляется из данных залогиненного пользователя
   useEffect(() => {
     if (isOpen && currentState) {
-      // При фиксации позиции с существующей сделкой — используем название сделки
+      // Сбрасываем статус при каждом открытии диалога. Дефолт — 'standard'
+      // (привычное «обычное сохранение»). Pending выбирается явно пользователем.
+      setStatus('standard');
+
       let autoName = '';
       if (isLocked && dealInfo?.ticker) {
-        // Рассчитываем количество опционов как сумму всех quantity в видимых опционах
-        const visibleOptions = (currentState.options || []).filter(opt => opt.visible !== false);
-        const totalOptionsCount = visibleOptions.reduce((sum, opt) => sum + Math.abs(opt.quantity || 1), 0);
         autoName = `Сделка - ${dealInfo.ticker}`;
       } else {
         autoName = generateConfigName(currentState, isLocked);
       }
       setName(autoName);
-      
-      // Получаем имя залогиненного пользователя и подставляем в поле "автор"
-      // ЗАЧЕМ: Автоматически заполнять автора, чтобы пользователю не нужно было вводить имя вручную
+
       if (supabase) {
         supabase.auth.getSession().then(({ data: { session } }) => {
           if (session?.user) {
@@ -165,6 +185,10 @@ function SaveConfigurationDialog({ isOpen, onClose, onSave, currentState, isLock
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
+  // Эффективный признак фиксации: status='standard' ИЛИ старый prop isLocked
+  // (когда селектор статуса не показывается).
+  const effectiveLocked = isStandard || (!showStatusSelector && isLocked);
+
   const handleSave = () => {
     if (!name.trim()) {
       alert('Пожалуйста, введите название конфигурации');
@@ -172,36 +196,28 @@ function SaveConfigurationDialog({ isOpen, onClose, onSave, currentState, isLock
     }
 
     // Формируем объект конфигурации
-    // ЗАЧЕМ: Сохраняем полное состояние калькулятора для последующего восстановления
     const configuration = {
       id: Date.now().toString(),
       name: name.trim(),
       description: description.trim(),
       author: author.trim() || 'Неизвестный автор',
       ticker: currentState.selectedTicker || '',
-      // Используем текущее время для отображения даты/времени создания
-      // ЗАЧЕМ: Показывать реальное время сохранения конфигурации
       createdAt: new Date().toISOString(),
-      // Сохраняем минимальную дату входа отдельно для расчетов
-      // ЗАЧЕМ: Дата входа служит точкой отсчета для расчета дней, прошедших и оставшихся до экспирации
       entryDate: getMinEntryDate(currentState.options),
-      // isLocked: если true — позиции зафиксированы, данные не обновляются при загрузке
-      isLocked: isLocked,
+      // isLocked: связан со статусом — standard всегда означает заморозку дат
+      isLocked: effectiveLocked,
+      // Новый статус позиции. Если селектор не показан (старый legacy-режим),
+      // считаем сохранение зафиксированным — это согласуется с правилом
+      // «обычное сохранение по умолчанию = standard».
+      status: showStatusSelector ? status : 'standard',
       state: {
         selectedTicker: currentState.selectedTicker,
         currentPrice: currentState.currentPrice,
         priceChange: currentState.priceChange,
-        // При фиксации помечаем каждую позицию/опцион флагом isLockedPosition
-        // и сохраняем initialDaysToExpiration для корректного расчёта P&L
-        // ЗАЧЕМ: Позволяет добавлять новые позиции к зафиксированным, сохраняя старые заблокированными
-        options: isLocked 
+        options: effectiveLocked
           ? (currentState.options || []).map(opt => {
-              // Вычисляем дни до экспирации от ДАТЫ ВХОДА (entryDate), не от сегодня
-              // ЗАЧЕМ: initialDaysToExpiration = дни на момент входа в позицию.
-              // Если брать new Date() — при входе 06.03 и локе 20.03 получим 90 вместо 104
-              let initialDaysToExpiration = 30; // default
+              let initialDaysToExpiration = 30;
               if (opt.date) {
-                // Используем entryDate опциона, иначе fallback на сегодня
                 let entryUTC;
                 if (opt.entryDate) {
                   const [ey, em, ed] = opt.entryDate.split('-').map(Number);
@@ -217,7 +233,7 @@ function SaveConfigurationDialog({ isOpen, onClose, onSave, currentState, isLock
               return { ...opt, isLockedPosition: true, initialDaysToExpiration };
             })
           : currentState.options,
-        positions: isLocked
+        positions: effectiveLocked
           ? (currentState.positions || []).map(pos => ({ ...pos, isLockedPosition: true }))
           : currentState.positions,
         selectedExpirationDate: currentState.selectedExpirationDate,
@@ -225,22 +241,18 @@ function SaveConfigurationDialog({ isOpen, onClose, onSave, currentState, isLock
         showOptionLines: currentState.showOptionLines,
         showProbabilityZones: currentState.showProbabilityZones,
         chartDisplayMode: currentState.chartDisplayMode,
-        calculatorMode: currentState.calculatorMode, // Режим калькулятора: 'stocks' | 'futures'
+        calculatorMode: currentState.calculatorMode,
       },
-      // Сохраняем настройки таба Сделка если они есть
-      // ЗАЧЕМ: При загрузке зафиксированной позиции восстанавливаем все настройки сделки
       dealSettings: dealSettings || null,
-      // Сохраняем информацию о сделке если она есть
-      // ЗАЧЕМ: При загрузке конфигурации восстанавливаем сделку в калькуляторе
       dealInfo: dealInfo || null,
     };
 
     onSave(configuration);
-    
-    // Очистка полей
+
     setName('');
     setDescription('');
     setAuthor('');
+    setStatus('standard');
     onClose();
   };
 
@@ -248,26 +260,81 @@ function SaveConfigurationDialog({ isOpen, onClose, onSave, currentState, isLock
     setName('');
     setDescription('');
     setAuthor('');
+    setStatus('standard');
     onClose();
   };
+
+  // Заголовок и подпись диалога зависят от выбранного статуса
+  const dialogTitle = showStatusSelector
+    ? 'Сохранить конфигурацию калькулятора'
+    : (isLocked ? 'Зафиксировать позиции' : 'Сохранить конфигурацию калькулятора');
+
+  const dialogDescription = showStatusSelector
+    ? (isStandard
+        ? 'Позиция будет помечена как зафиксированная — даты входа замораживаются.'
+        : 'Позиция будет сохранена как «В ожидании» — котировки обновятся при открытии.')
+    : (isLocked
+        ? 'Позиции будут зафиксированы. При загрузке данные НЕ будут обновляться с рынка.'
+        : 'Сохраните текущее состояние калькулятора для быстрого доступа в будущем');
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[500px] z-[9999]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {isLocked && <LockIcon size={20} />}
-            {isLocked ? 'Зафиксировать позиции' : 'Сохранить конфигурацию калькулятора'}
+            {effectiveLocked && <LockIcon size={20} />}
+            {dialogTitle}
           </DialogTitle>
           <DialogDescription>
-            {isLocked 
-              ? 'Позиции будут зафиксированы. При загрузке данные НЕ будут обновляться с рынка.'
-              : 'Сохраните текущее состояние калькулятора для быстрого доступа в будущем'
-            }
+            {dialogDescription}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          {/* Выбор статуса позиции */}
+          {/* ЗАЧЕМ: Различать предварительные схемы (pending) и реально открытые позиции (standard) */}
+          {showStatusSelector && (
+            <div className="space-y-2">
+              <Label>
+                Статус позиции <span className="text-destructive">*</span>
+              </Label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setStatus('pending')}
+                  className={`flex flex-col items-start gap-1 rounded-lg border-2 p-3 text-left transition ${
+                    status === 'pending'
+                      ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20'
+                      : 'border-gray-200 hover:border-yellow-300'
+                  }`}
+                >
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800 border border-yellow-400 dark:bg-yellow-900/30 dark:text-yellow-300">
+                    В ожидании
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    Котировки обновятся при открытии через TradingView
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatus('standard')}
+                  className={`flex flex-col items-start gap-1 rounded-lg border-2 p-3 text-left transition ${
+                    status === 'standard'
+                      ? 'border-cyan-500 bg-cyan-50 dark:bg-cyan-900/20'
+                      : 'border-gray-200 hover:border-cyan-300'
+                  }`}
+                >
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-cyan-100 text-cyan-800 border border-cyan-400 dark:bg-cyan-900/30 dark:text-cyan-300">
+                    <LockIcon size={12} /> Зафиксирована
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    Реально открытая сделка, даты входа заморожены
+                  </span>
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="config-name">
               Название <span className="text-destructive">*</span>
@@ -303,18 +370,20 @@ function SaveConfigurationDialog({ isOpen, onClose, onSave, currentState, isLock
           </div>
 
           {currentState.selectedTicker && (
-            <div className={`rounded-lg p-3 text-sm ${isLocked ? 'bg-red-50 border border-red-200' : 'bg-muted'}`}>
+            <div className={`rounded-lg p-3 text-sm ${effectiveLocked ? 'bg-cyan-50 border border-cyan-200' : 'bg-yellow-50 border border-yellow-200'}`}>
               <div className="font-medium mb-1 flex items-center gap-1">
-                {isLocked && <LockIcon size={14} />}
-                {isLocked ? 'Будет зафиксировано:' : 'Будет сохранено:'}
+                {effectiveLocked && <LockIcon size={14} />}
+                {effectiveLocked ? 'Будет зафиксировано:' : 'Будет сохранено как «В ожидании»:'}
               </div>
               <ul className="space-y-1 text-muted-foreground">
                 <li>• Тикер: {currentState.selectedTicker}</li>
                 <li>• Опционов: {currentState.options?.length || 0}</li>
                 <li>• Позиций базового актива: {currentState.positions?.length || 0}</li>
                 <li>• Дата экспирации: {getExpirationDateFromOptions(currentState.options)}</li>
-                {isLocked && (
-                  <li className="text-red-600 font-medium">• Данные НЕ будут обновляться при загрузке</li>
+                {effectiveLocked ? (
+                  <li className="text-cyan-700 font-medium">• Данные НЕ будут обновляться при загрузке</li>
+                ) : (
+                  <li className="text-yellow-700 font-medium">• При открытии BID/ASK/VOL/IV/Актив обновятся через расширение TradingView</li>
                 )}
               </ul>
             </div>
@@ -325,12 +394,14 @@ function SaveConfigurationDialog({ isOpen, onClose, onSave, currentState, isLock
           <Button variant="outline" onClick={handleCancel}>
             Отмена
           </Button>
-          <Button 
+          <Button
             onClick={handleSave}
-            className={isLocked ? 'bg-red-500 hover:bg-red-600 flex items-center gap-1' : ''}
+            className={effectiveLocked
+              ? 'bg-cyan-500 hover:bg-cyan-600 flex items-center gap-1 text-white'
+              : 'bg-yellow-500 hover:bg-yellow-600 flex items-center gap-1 text-white'}
           >
-            {isLocked && <LockIcon size={16} className="[&_path]:fill-white" />}
-            {isLocked ? 'Зафиксировать' : 'Сохранить'}
+            {effectiveLocked && <LockIcon size={16} className="[&_path]:fill-white" />}
+            {effectiveLocked ? 'Сохранить как зафиксированную' : 'Сохранить в ожидании'}
           </Button>
         </DialogFooter>
       </DialogContent>

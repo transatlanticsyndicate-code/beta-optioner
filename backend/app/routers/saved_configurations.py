@@ -4,15 +4,21 @@ API роутер для сохранённых конфигураций унив
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy import desc, or_
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 from datetime import datetime
 
 from app.database import get_db
 from app.models.saved_configuration import SavedConfiguration
 
 router = APIRouter(prefix="/api/configurations", tags=["saved_configurations"])
+
+
+# Допустимые значения статуса позиции
+# ЗАЧЕМ: Жёсткая валидация — иначе клиент может прислать любой текст
+ALLOWED_STATUSES = {'pending', 'standard'}
 
 
 # Pydantic модели для валидации запросов
@@ -24,10 +30,22 @@ class ConfigurationCreate(BaseModel):
     ticker: str
     entryDate: Optional[str] = None
     isLocked: bool = False
+    status: Optional[str] = 'standard'
     state: dict
     dealSettings: Optional[dict] = None
     dealInfo: Optional[dict] = None
     userId: Optional[str] = None
+
+    @validator('status')
+    def validate_status(cls, v):
+        # ЗАЧЕМ: Дефолт 'standard' — если клиент не присылает status, сохранение
+        # считается зафиксированным (привычное поведение «обычного сохранения»).
+        # 'pending' появляется только при явном выборе пользователя в диалоге.
+        if v is None:
+            return 'standard'
+        if v not in ALLOWED_STATUSES:
+            raise ValueError(f"status должен быть одним из: {sorted(ALLOWED_STATUSES)}")
+        return v
 
 
 class ConfigurationUpdate(BaseModel):
@@ -37,6 +55,17 @@ class ConfigurationUpdate(BaseModel):
     state: Optional[dict] = None
     dealSettings: Optional[dict] = None
     dealInfo: Optional[dict] = None
+    status: Optional[str] = None
+    isLocked: Optional[bool] = None
+    entryDate: Optional[str] = None
+
+    @validator('status')
+    def validate_status(cls, v):
+        if v is None:
+            return v
+        if v not in ALLOWED_STATUSES:
+            raise ValueError(f"status должен быть одним из: {sorted(ALLOWED_STATUSES)}")
+        return v
 
 
 @router.get("")
@@ -46,30 +75,40 @@ async def get_configurations(
     ticker: Optional[str] = None,
     author: Optional[str] = None,
     search: Optional[str] = None,
+    status: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     """
     Получить список всех конфигураций с пагинацией и фильтрами
     ЗАЧЕМ: Отображение списка сохранённых позиций на странице
-    
+
     Параметры:
     - limit: количество записей (по умолчанию 50, макс 100)
     - offset: смещение для пагинации
     - ticker: фильтр по тикеру
     - author: фильтр по автору
     - search: поиск по названию, тикеру или автору
+    - status: фильтр по статусу (pending | standard)
     """
     try:
         query = db.query(SavedConfiguration)
-        
+
         # Фильтр по тикеру
         if ticker:
             query = query.filter(SavedConfiguration.ticker.ilike(f"%{ticker}%"))
-        
+
         # Фильтр по автору
         if author:
             query = query.filter(SavedConfiguration.author.ilike(f"%{author}%"))
-        
+
+        # Фильтр по статусу позиции
+        # ЗАЧЕМ: На странице списка пользователь может отфильтровать только pending
+        # или только standard, чтобы быстро находить нужные позиции.
+        if status:
+            if status not in ALLOWED_STATUSES:
+                raise HTTPException(status_code=400, detail=f"Недопустимое значение status: {status}")
+            query = query.filter(SavedConfiguration.status == status)
+
         # Поиск по названию, тикеру или автору
         if search:
             search_pattern = f"%{search}%"
@@ -172,6 +211,14 @@ async def create_configuration(
             except:
                 pass
         
+        # Нормализация статуса и связанного флага is_locked
+        # ЗАЧЕМ: status='standard' означает «реально вошли в позицию» —
+        # даты входа должны быть заморожены, поэтому всегда выставляем is_locked=true.
+        # status='pending' — предварительная схема, замораживать даты не нужно.
+        # Дефолт 'standard' — если клиент не прислал статус, сохраняем как «Зафиксирована».
+        position_status = config_data.status or 'standard'
+        is_locked_final = True if position_status == 'standard' else bool(config_data.isLocked)
+
         # Создаём новую запись
         new_config = SavedConfiguration(
             name=config_data.name,
@@ -179,17 +226,18 @@ async def create_configuration(
             author=config_data.author,
             ticker=config_data.ticker,
             entry_date=entry_date,
-            is_locked=config_data.isLocked,
+            is_locked=is_locked_final,
+            status=position_status,
             state=config_data.state,
             deal_settings=config_data.dealSettings,
             deal_info=config_data.dealInfo,
             user_id=config_data.userId
         )
-        
+
         db.add(new_config)
         db.commit()
         db.refresh(new_config)
-        
+
         return {
             "status": "success",
             "message": "Конфигурация успешно сохранена",
@@ -224,19 +272,101 @@ async def update_configuration(
         # ЗАЧЕМ: Защита от несанкционированного изменения чужих позиций
         if user_id and config.user_id and config.user_id != user_id:
             raise HTTPException(status_code=403, detail="Нет прав для редактирования этой конфигурации")
-        
-        # Обновляем только переданные поля
+
+        # Защита перехода смены статуса: standard → pending запрещён
+        # ЗАЧЕМ: Зафиксированная позиция означает реально открытую сделку с фактическими
+        # датами входа. Откат в «в ожидании» сломает эту семантику.
+        # Если в БД status NULL (старая запись до миграции) — считаем её 'standard'
+        # (по миграционной семантике: всё, что было до внедрения статусов = зафиксирована).
+        current_status = config.status or 'standard'
+        is_promotion_to_standard = (
+            config_data.status is not None
+            and current_status == 'pending'
+            and config_data.status == 'standard'
+        )
+
+        if config_data.status is not None:
+            if current_status == 'standard' and config_data.status == 'pending':
+                raise HTTPException(
+                    status_code=400,
+                    detail="Невозможно перевести зафиксированную позицию обратно в «В ожидании»"
+                )
+
+        # Обновляем простые поля
         if config_data.name is not None:
             config.name = config_data.name
         if config_data.description is not None:
             config.description = config_data.description
-        if config_data.state is not None:
-            config.state = config_data.state
         if config_data.dealSettings is not None:
             config.deal_settings = config_data.dealSettings
         if config_data.dealInfo is not None:
             config.deal_info = config_data.dealInfo
-        
+
+        # Применяем state из запроса (если передан)
+        if config_data.state is not None:
+            config.state = config_data.state
+
+        # Применяем смену статуса (после записи state — чтобы накладывать
+        # флаги isLockedPosition поверх свежего состояния)
+        if is_promotion_to_standard:
+            # Переход pending → standard: фиксируем даты входа
+            # ЗАЧЕМ: Момент перевода в «Зафиксирована» = момент реального входа.
+            # entry_date обновляется на сейчас, в state каждому опциону/позиции
+            # проставляется isLockedPosition=true и пересчитывается initialDaysToExpiration.
+            now_dt = datetime.utcnow()
+            config.status = 'standard'
+            config.is_locked = True
+            config.entry_date = now_dt
+
+            target_state = config.state or {}
+            today_utc_date = now_dt.date()
+            today_iso = today_utc_date.isoformat()
+
+            options = target_state.get('options') or []
+            for opt in options:
+                if not isinstance(opt, dict):
+                    continue
+                opt['isLockedPosition'] = True
+                if not opt.get('entryDate'):
+                    opt['entryDate'] = today_iso
+                try:
+                    exp_date_str = opt.get('date')
+                    if exp_date_str:
+                        exp_y, exp_m, exp_d = (int(p) for p in exp_date_str.split('-'))
+                        exp_date = datetime(exp_y, exp_m, exp_d).date()
+                        days = (exp_date - today_utc_date).days
+                        opt['initialDaysToExpiration'] = max(days, 0)
+                except Exception:
+                    pass
+
+            positions = target_state.get('positions') or []
+            for pos in positions:
+                if isinstance(pos, dict):
+                    pos['isLockedPosition'] = True
+
+            config.state = target_state
+            # SQLAlchemy не отслеживает изменения внутри dict (для JSON/JSONB),
+            # поэтому явно помечаем поле как изменённое.
+            flag_modified(config, 'state')
+        elif config_data.status is not None:
+            # Статус не меняется на standard, но прислан в запросе — допускаем
+            # обновление полей status/isLocked без затрагивания entry_date.
+            config.status = config_data.status
+            if config_data.isLocked is not None:
+                config.is_locked = bool(config_data.isLocked)
+        elif config_data.isLocked is not None:
+            # Статус не передан — но клиент хочет изменить isLocked
+            config.is_locked = bool(config_data.isLocked)
+
+        # Ручное обновление entry_date (только если статус НЕ менялся)
+        if config_data.entryDate is not None and not is_promotion_to_standard:
+            try:
+                config.entry_date = datetime.fromisoformat(
+                    config_data.entryDate.replace('Z', '+00:00')
+                )
+            except Exception:
+                pass
+
         db.commit()
         db.refresh(config)
         
@@ -311,19 +441,23 @@ async def create_configurations_batch(
                 except:
                     pass
             
+            position_status = config_data.status or 'standard'
+            is_locked_final = True if position_status == 'standard' else bool(config_data.isLocked)
+
             new_config = SavedConfiguration(
                 name=config_data.name,
                 description=config_data.description,
                 author=config_data.author,
                 ticker=config_data.ticker,
                 entry_date=entry_date,
-                is_locked=config_data.isLocked,
+                is_locked=is_locked_final,
+                status=position_status,
                 state=config_data.state,
                 deal_settings=config_data.dealSettings,
                 deal_info=config_data.dealInfo,
                 user_id=config_data.userId
             )
-            
+
             db.add(new_config)
             created_configs.append(new_config)
         

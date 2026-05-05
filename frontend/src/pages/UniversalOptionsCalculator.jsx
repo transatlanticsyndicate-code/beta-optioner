@@ -90,7 +90,7 @@ import { loadFuturesSettings, getPointValue, getFutureByTicker, isFuturesTicker,
 
 // Импорт хука для работы с данными от Chrome Extension TradingView Parser
 // ЗАЧЕМ: Получение опционов, тикера и цены из localStorage и URL параметров
-import { useExtensionData, useExtensionRefreshCommand } from '../hooks/useExtensionData';
+import { useExtensionData, useExtensionRefreshCommand, sendRefreshSpecificCommand } from '../hooks/useExtensionData';
 
 // УБРАНО: AI модель не используется в универсальном калькуляторе
 // const AI_SUPPORTED_TICKERS = [...];
@@ -153,6 +153,12 @@ function UniversalOptionsCalculator() {
   // ЗАЧЕМ: Игнорируем tvc_refresh_command, отправленные одновременно с начальной загрузкой опциона,
   // чтобы IV оставалась в impliedVolatility (колонка IV), а не попадала в manualIvOverride (Fact IV)
   const initCompletedAtRef = useRef(0);
+  // Таймер ожидания ответа расширения при открытии pending-позиции
+  // ЗАЧЕМ: Если расширение TradingView не отвечает в течение 5 секунд после запроса
+  // обновления BID/ASK/VOL/IV — показываем предупреждение и кнопку ручного запуска.
+  const refreshTimeoutRef = useRef(null);
+  // Защита от повторного автозапуска обновления для одной и той же конфигурации.
+  const pendingRefreshRunForRef = useRef(null);
 
   // Установка заголовка страницы
   useEffect(() => {
@@ -1042,6 +1048,12 @@ function UniversalOptionsCalculator() {
     setCalculatorMode(CALCULATOR_MODES.STOCKS); // Сбрасываем режим калькулятора на акции
     setSelectedFuture(null); // Сбрасываем выбранный фьючерс
     setLoadedConfigId(null); // Сбрасываем ID загруженной конфигурации
+    setLoadedConfigStatus(null); // Сбрасываем статус загруженной позиции
+    setLoadedConfigName(null);
+    setExtensionRefreshState('idle');
+    // Сбрасываем флаг "уже запустили обновление для этой конфигурации",
+    // чтобы при следующем открытии pending-позиции автообновление сработало снова.
+    pendingRefreshRunForRef.current = null;
     setIsEditMode(false); // Сбрасываем режим редактирования
     setHasChanges(false); // Сбрасываем флаг изменений
 
@@ -1669,6 +1681,10 @@ function UniversalOptionsCalculator() {
       setCalculatorMode(CALCULATOR_MODES.STOCKS);
       setSelectedFuture(null);
       setLoadedConfigId(null);
+      setLoadedConfigStatus(null);
+      setLoadedConfigName(null);
+      setExtensionRefreshState('idle');
+      pendingRefreshRunForRef.current = null;
       setIsEditMode(false);
       setHasChanges(false);
       setDealInfo(null);
@@ -2673,12 +2689,18 @@ function UniversalOptionsCalculator() {
   const [selectedStrategy, setSelectedStrategy] = useState("");
   const [selectedStrategyName, setSelectedStrategyName] = useState("");
 
-  // State для диалога сохранения конфигурации
-  const [saveConfigDialogOpen, setSaveConfigDialogOpen] = useState(false);
-  // State для диалога фиксации позиций (isLocked=true)
-  const [lockConfigDialogOpen, setLockConfigDialogOpen] = useState(false);
-  // State для диалога сохранения в БД
+  // State для диалога сохранения в БД (единственный режим сохранения позиции)
+  // ЗАЧЕМ: Старые localStorage-диалоги «Сохранить» и «Зафиксировать» убраны —
+  // вся логика теперь идёт через одну кнопку «💾 Сохранить в БД» с выбором статуса
+  // («В ожидании» / «Зафиксирована») внутри диалога.
   const [saveToDBDialogOpen, setSaveToDBDialogOpen] = useState(false);
+
+  // Метаданные загруженной из БД конфигурации для отображения в шапке калькулятора
+  // ЗАЧЕМ: Лейбл статуса (жёлтый / голубой) рисуется рядом с названием позиции,
+  // а кнопка «Обновить через TradingView» появляется при таймауте расширения.
+  const [loadedConfigStatus, setLoadedConfigStatus] = useState(null); // 'pending' | 'standard' | null
+  const [loadedConfigName, setLoadedConfigName] = useState(null);
+  const [extensionRefreshState, setExtensionRefreshState] = useState('idle'); // 'idle' | 'pending' | 'success' | 'timeout' | 'error'
 
   // State для сворачивания блока StrikeScale
   const [isStrikeScaleCollapsed, setIsStrikeScaleCollapsed] = useState(() => {
@@ -2765,6 +2787,8 @@ function UniversalOptionsCalculator() {
         // 1. Конфигурация НЕ загружена (ни в state, ни в localStorage)
         // 2. ИЛИ URL изменился НЕ из-за расширения (нет ?contract= в URL)
         setLoadedConfigId(null);
+        setLoadedConfigStatus(null);
+        setLoadedConfigName(null);
         setIsEditMode(false);
         setHasChanges(false);
       } else {
@@ -2779,6 +2803,12 @@ function UniversalOptionsCalculator() {
   // ВАЖНО: Если editMode=true — сбрасываем флаги блокировки для редактирования
   const loadConfiguration = async (configId, editMode = false) => {
     console.log('🔔 [LOAD CONFIG CALLED]', { configId, editMode, stack: new Error().stack?.split('\n')[2]?.trim() });
+    // localStorage-позиции не имеют системы статусов — гарантируем, что бейдж
+    // от предыдущей БД-позиции исчезнет, если пользователь открыл localStorage-позицию.
+    setLoadedConfigStatus(null);
+    setLoadedConfigName(null);
+    setExtensionRefreshState('idle');
+    pendingRefreshRunForRef.current = null;
     const saved = localStorage.getItem('universalCalculatorConfigurations');
     if (saved) {
       try {
@@ -3329,6 +3359,14 @@ function UniversalOptionsCalculator() {
       }
       setIsLocked(configIsLocked);
 
+      // Запоминаем статус и название позиции для отображения в шапке калькулятора
+      // ЗАЧЕМ: Лейбл «В ожидании» (жёлтый) / «Зафиксирована» (голубой) рядом с названием.
+      // Fallback на 'standard' — старые записи до миграции не имеют поля status,
+      // и по правилу миграции считаются зафиксированными.
+      const positionStatus = config.status === 'pending' ? 'pending' : 'standard';
+      setLoadedConfigStatus(positionStatus);
+      setLoadedConfigName(config.name || null);
+
       // Вычисляем daysPassed
       let calculatedDaysPassed = config.state.daysPassed || 0;
       const configEntryDate = config.entryDate || config.createdAt;
@@ -3465,25 +3503,75 @@ function UniversalOptionsCalculator() {
     }
   };
 
-  // Функция сохранения конфигурации
-  const handleSaveConfiguration = (configuration) => {
-    const saved = localStorage.getItem('universalCalculatorConfigurations');
-    let configurations = [];
-
-    if (saved) {
-      try {
-        configurations = JSON.parse(saved);
-      } catch (error) {
-        console.error('Ошибка парсинга сохраненных конфигураций:', error);
-      }
+  // Запросить у расширения свежие котировки (BID/ASK/VOL/IV) и цену актива.
+  // ЗАЧЕМ: При открытии позиции «В ожидании» нужно автоматически обновлять данные.
+  // Также вызывается вручную из шапки кнопкой «Обновить через TradingView», если
+  // расширение не ответило в первый раз.
+  const requestExtensionRefreshForLoadedPosition = useCallback((opts) => {
+    const optionsForRefresh = (opts || []).filter(o => o && o.date && o.strike);
+    if (optionsForRefresh.length === 0) {
+      console.warn('⚠️ [PendingRefresh] Нет опционов для обновления через расширение');
+      setExtensionRefreshState('error');
+      return;
     }
 
-    configurations.push(configuration);
-    localStorage.setItem('universalCalculatorConfigurations', JSON.stringify(configurations));
+    // Очищаем предыдущий таймер (если запрос перезапускается)
+    if (refreshTimeoutRef.current) {
+      clearTimeout(refreshTimeoutRef.current);
+      refreshTimeoutRef.current = null;
+    }
 
-    console.log('✅ Конфигурация сохранена:', configuration.name);
-    alert('Конфигурация успешно сохранена!');
-  };
+    setExtensionRefreshState('pending');
+    const ts = sendRefreshSpecificCommand(optionsForRefresh, true);
+    console.log('🔄 [PendingRefresh] Команда отправлена, timestamp=', ts);
+
+    // Таймаут на 5 сек: если расширение не ответило — показываем предупреждение
+    refreshTimeoutRef.current = setTimeout(() => {
+      // Проверяем актуальное состояние через setState callback,
+      // чтобы не пересчитывать таймер, если уже пришёл успех
+      setExtensionRefreshState(prev => prev === 'pending' ? 'timeout' : prev);
+    }, 5000);
+  }, []);
+
+  // Реакция на ответ расширения: pendingRefresh приходит из useExtensionRefreshCommand,
+  // когда расширение записало результат в localStorage. Считаем это «success».
+  useEffect(() => {
+    if (pendingRefresh && extensionRefreshState === 'pending') {
+      setExtensionRefreshState('success');
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+        refreshTimeoutRef.current = null;
+      }
+    }
+  }, [pendingRefresh, extensionRefreshState]);
+
+  // Очистка таймера при размонтировании, чтобы не было утечек.
+  useEffect(() => {
+    return () => {
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Автоматически запускаем обновление через расширение при открытии «В ожидании».
+  // ЗАЧЕМ: Условие задачи — для pending-позиций BID/ASK/VOL/IV/Актив должны
+  // подтянуться от TradingView сразу при открытии калькулятора.
+  // Запускается один раз: на смену loadedConfigId+loadedConfigStatus, после того
+  // как опционы установлены в state.
+  useEffect(() => {
+    // Не запускать в режиме редактирования (там пользователь правит данные руками)
+    if (isEditMode) return;
+    if (loadedConfigStatus !== 'pending') return;
+    if (!loadedConfigId) return;
+    if (!options || options.length === 0) return;
+    // Защита от повторного запуска для одной и той же конфигурации
+    if (pendingRefreshRunForRef.current === loadedConfigId) return;
+
+    pendingRefreshRunForRef.current = loadedConfigId;
+    console.log('🟡 [PendingRefresh] Запускаем автообновление для pending-позиции', loadedConfigId);
+    requestExtensionRefreshForLoadedPosition(options);
+  }, [loadedConfigId, loadedConfigStatus, options, isEditMode, requestExtensionRefreshForLoadedPosition]);
 
   // Функция генерирования названия конфигурации на основе текущих данных
   // ЗАЧЕМ: Автоматически создает название из тикера, опционов и даты экспирации
@@ -3664,6 +3752,81 @@ function UniversalOptionsCalculator() {
     }
   };
 
+  // Перевод pending-позиции в standard («Зафиксировать»)
+  // ЗАЧЕМ: По задаче — переход pending → standard происходит через редактирование.
+  // Реализовано как отдельная кнопка «Зафиксировать» в шапке калькулятора, которая
+  // вызывает PUT /api/configurations/{id} с полем status='standard'. Бэкенд
+  // фиксирует даты входа и обновляет state с флагами isLockedPosition.
+  const handlePromotePendingToStandard = async () => {
+    if (!loadedConfigId || configSource !== 'db') {
+      alert('Эта функция доступна только для позиций, сохранённых в БД');
+      return;
+    }
+    if (loadedConfigStatus !== 'pending') {
+      return;
+    }
+    const confirmed = window.confirm(
+      'Перевести позицию в статус «Зафиксирована»?\n\n' +
+      'Даты входа будут зафиксированы на текущий момент. Откатить переход обратно в «В ожидании» нельзя.'
+    );
+    if (!confirmed) return;
+
+    try {
+      let userId = null;
+      if (supabase) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          userId = session.user.id;
+        }
+      }
+
+      const configData = {
+        status: 'standard',
+        isLocked: true,
+        // Передаём свежее состояние, чтобы бэкенд накатил флаги
+        // isLockedPosition поверх актуальных данных, а не устаревшего state.
+        state: {
+          selectedTicker,
+          currentPrice,
+          priceChange,
+          options,
+          positions,
+          selectedExpirationDate,
+          daysPassed,
+          showOptionLines,
+          showProbabilityZones,
+          chartDisplayMode,
+          calculatorMode,
+        },
+        dealSettings: dealSettings || null,
+        dealInfo: dealInfo || null,
+      };
+
+      const result = await updateConfiguration(loadedConfigId, configData, userId);
+      console.log('✅ Позиция переведена в Зафиксирована:', result?.data);
+
+      // Локально обновляем состояние UI без перезагрузки
+      setLoadedConfigStatus('standard');
+      setIsLocked(true);
+      // Сбрасываем индикатор обновления — для standard он не нужен
+      setExtensionRefreshState('idle');
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+        refreshTimeoutRef.current = null;
+      }
+
+      // Применяем флаги isLockedPosition к опционам в локальном state, чтобы
+      // не было визуального рассинхрона до следующей загрузки.
+      setOptions(prev => prev.map(opt => ({ ...opt, isLockedPosition: true })));
+      setPositions(prev => prev.map(pos => ({ ...pos, isLockedPosition: true })));
+
+      alert('Позиция зафиксирована.');
+    } catch (error) {
+      console.error('❌ Ошибка перевода в зафиксирована:', error);
+      alert(`Не удалось зафиксировать позицию: ${error.message}`);
+    }
+  };
+
   // Функция сохранения конфигурации в БД
   // ЗАЧЕМ: Сохранение позиции в базу данных для доступа всем пользователям
   const handleSaveToDB = async (configuration) => {
@@ -3678,6 +3841,9 @@ function UniversalOptionsCalculator() {
       }
 
       // Подготавливаем данные для API
+      // ЗАЧЕМ: Поле status управляет дальнейшим поведением:
+      // - 'pending' → при открытии калькулятор автообновит котировки от расширения
+      // - 'standard' → даты входа заморожены, открывается без обновления
       const configData = {
         name: configuration.name,
         description: configuration.description,
@@ -3685,6 +3851,7 @@ function UniversalOptionsCalculator() {
         ticker: configuration.ticker,
         entryDate: configuration.entryDate,
         isLocked: configuration.isLocked,
+        status: configuration.status || 'standard',
         state: configuration.state,
         dealSettings: configuration.dealSettings,
         dealInfo: configuration.dealInfo,
@@ -3693,9 +3860,10 @@ function UniversalOptionsCalculator() {
 
       // Отправляем на сервер
       const result = await createConfiguration(configData);
-      
+
       console.log('✅ Конфигурация сохранена в БД:', result.data);
-      alert(`Конфигурация успешно сохранена в БД!\nID: ${result.data.id}`);
+      const statusLabel = configData.status === 'standard' ? 'Зафиксирована' : 'В ожидании';
+      alert(`Позиция сохранена со статусом «${statusLabel}»!\nID: ${result.data.id}`);
     } catch (error) {
       console.error('❌ Ошибка сохранения в БД:', error);
       alert(`Ошибка при сохранении в БД: ${error.message}`);
@@ -3832,6 +4000,73 @@ function UniversalOptionsCalculator() {
                 </div>
               )}
             </div>
+
+            {/* Лейбл статуса сохранённой позиции (для загруженных из БД)
+                ЗАЧЕМ: По задаче — рядом с названием позиции в шапке калькулятора
+                жёлтый бейдж «В ожидании» / голубой бейдж «Зафиксирована». */}
+            {loadedConfigId && loadedConfigStatus && (
+              <div className="inline-flex items-center gap-2 p-3 border-2 rounded-lg"
+                   style={{
+                     borderColor: loadedConfigStatus === 'pending' ? '#eab308' : '#06b6d4',
+                     backgroundColor: loadedConfigStatus === 'pending' ? 'rgba(254, 252, 232, 1)' : 'rgba(236, 254, 255, 1)',
+                     minHeight: '57px',
+                   }}>
+                {loadedConfigName && (
+                  <span className="text-sm font-semibold text-foreground max-w-[280px] truncate" title={loadedConfigName}>
+                    {loadedConfigName}
+                  </span>
+                )}
+                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border ${
+                  loadedConfigStatus === 'pending'
+                    ? 'bg-yellow-100 text-yellow-800 border-yellow-400 dark:bg-yellow-900/30 dark:text-yellow-300'
+                    : 'bg-cyan-100 text-cyan-800 border-cyan-400 dark:bg-cyan-900/30 dark:text-cyan-300'
+                }`}>
+                  {loadedConfigStatus === 'pending' ? '⏳ В ожидании' : '🔒 Зафиксирована'}
+                </span>
+
+                {/* Индикатор/кнопка обновления через расширение TradingView для pending-позиций */}
+                {loadedConfigStatus === 'pending' && !isEditMode && (
+                  <>
+                    {extensionRefreshState === 'pending' && (
+                      <span className="text-xs text-muted-foreground">Обновление через TradingView...</span>
+                    )}
+                    {extensionRefreshState === 'success' && (
+                      <span className="text-xs text-green-600 dark:text-green-400">✓ Обновлено</span>
+                    )}
+                    {(extensionRefreshState === 'timeout' || extensionRefreshState === 'error') && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-red-600 dark:text-red-400" title="Расширение TradingView не отвечает">
+                          ⚠ Расширение недоступно
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs border-yellow-500 text-yellow-700 hover:bg-yellow-50"
+                          onClick={() => requestExtensionRefreshForLoadedPosition(options)}
+                          title="Повторить запрос обновления через TradingView"
+                        >
+                          Обновить через TradingView
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Кнопка перевода pending → standard
+                        ЗАЧЕМ: По задаче — смена статуса возможна через редактирование.
+                        Кнопка доступна только для pending-позиций из БД. */}
+                    {configSource === 'db' && (
+                      <Button
+                        size="sm"
+                        className="h-7 text-xs bg-cyan-500 hover:bg-cyan-600 text-white"
+                        onClick={handlePromotePendingToStandard}
+                        title="Перевести позицию в статус «Зафиксирована»"
+                      >
+                        🔒 Зафиксировать
+                      </Button>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
 
             {/* Кнопка "+ СДЕЛКА" или название созданной сделки */}
             {!dealInfo ? (
@@ -4123,9 +4358,7 @@ function UniversalOptionsCalculator() {
                       loadingStrikesForDate={loadingStrikesForDate}
                       isLoadingDates={isLoadingDates}
                       selectedStrategyName={selectedStrategyName}
-                      onSaveConfiguration={() => setSaveConfigDialogOpen(true)}
                       onSaveToDB={() => setSaveToDBDialogOpen(true)}
-                      onLockConfiguration={() => setLockConfigDialogOpen(true)}
                       onResetCalculator={resetCalculator}
                       daysPassed={daysPassed}
                       targetPrice={targetPrice}
@@ -4342,28 +4575,9 @@ function UniversalOptionsCalculator() {
           />
         )}
 
-        {/* Диалог сохранения конфигурации */}
-        <SaveConfigurationDialog
-          isOpen={saveConfigDialogOpen}
-          onClose={() => setSaveConfigDialogOpen(false)}
-          onSave={handleSaveConfiguration}
-          currentState={getCurrentState()}
-          dealInfo={dealInfo}
-          dealSettings={dealSettings}
-        />
-
-        {/* Диалог фиксации позиций (isLocked=true) */}
-        <SaveConfigurationDialog
-          isOpen={lockConfigDialogOpen}
-          onClose={() => setLockConfigDialogOpen(false)}
-          onSave={handleSaveConfiguration}
-          currentState={getCurrentState()}
-          isLocked={true}
-          dealInfo={dealInfo}
-          dealSettings={dealSettings}
-        />
-
-        {/* Диалог сохранения в БД */}
+        {/* Диалог сохранения в БД (единственный режим сохранения)
+            ЗАЧЕМ: Внутри диалога — выбор статуса позиции «В ожидании» / «Зафиксирована».
+            Старые localStorage-диалоги «Сохранить» и «Зафиксировать» удалены. */}
         <SaveConfigurationDialog
           isOpen={saveToDBDialogOpen}
           onClose={() => setSaveToDBDialogOpen(false)}

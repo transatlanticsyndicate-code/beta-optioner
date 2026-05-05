@@ -12,7 +12,7 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || (typeof window !== 'undefi
  * Получить список всех конфигураций с фильтрами
  * ЗАЧЕМ: Загрузка списка для отображения на странице
  */
-export const getConfigurations = async ({ limit = 50, offset = 0, ticker = null, author = null, search = null } = {}) => {
+export const getConfigurations = async ({ limit = 50, offset = 0, ticker = null, author = null, search = null, status = null } = {}) => {
   try {
     const params = new URLSearchParams();
     params.append('limit', limit);
@@ -20,6 +20,7 @@ export const getConfigurations = async ({ limit = 50, offset = 0, ticker = null,
     if (ticker) params.append('ticker', ticker);
     if (author) params.append('author', author);
     if (search) params.append('search', search);
+    if (status) params.append('status', status);
 
     const response = await fetch(`${API_BASE_URL}/api/configurations?${params.toString()}`);
     
