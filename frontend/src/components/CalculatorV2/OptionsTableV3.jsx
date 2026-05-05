@@ -857,7 +857,10 @@ function OptionsTableV3({
                 )}
 
                 {/* Bid */}
+                {/* data-bid: числовое значение для расширения IBKR Bridge (LIMIT-цена для SELL/close-LONG) */}
                 <span
+                  data-field="bid"
+                  data-bid={option.isBidModified ? (option.customBid ?? '') : (option.bid ?? '')}
                   className={option.isBidModified ? "text-right text-orange-600 font-bold cursor-pointer" : `text-green-600 text-right ${option.isLockedPosition ? 'cursor-default' : 'cursor-pointer'}`}
                   onDoubleClick={() => !option.isLockedPosition && setEditingBid(option.id)}
                 >
@@ -898,7 +901,10 @@ function OptionsTableV3({
                 </span>
 
                 {/* Ask */}
+                {/* data-ask: числовое значение для расширения IBKR Bridge (LIMIT-цена для BUY/close-SHORT) */}
                 <span
+                  data-field="ask"
+                  data-ask={option.isAskModified ? (option.customAsk ?? '') : (option.ask ?? '')}
                   className={option.isAskModified ? "text-right text-orange-600 font-bold cursor-pointer" : `text-red-600 text-right ${option.isLockedPosition ? 'cursor-default' : 'cursor-pointer'}`}
                   onDoubleClick={() => !option.isLockedPosition && setEditingAsk(option.id)}
                 >

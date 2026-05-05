@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            width: 250px;
+            padding: 15px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            margin: 0;
+        }
+        h3 {
+            margin: 0 0 15px 0;
+            font-size: 14px;
+            color: #333;
+        }
+        .mode-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .mode-btn {
+            flex: 1;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            background: white;
+            cursor: pointer;
+            text-align: center;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        .mode-btn:hover {
+            border-color: #999;
+        }
+        .mode-btn.active {
+            border-color: #4CAF50;
+            background: #f0f8f0;
+            font-weight: bold;
+        }
+        .mode-btn.live.active {
+            border-color: #f44336;
+            background: #fff0f0;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            text-align: center;
+            margin-top: 10px;
+        }
+        .status.demo {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        .status.live {
+            background: #ffebee;
+            color: #c62828;
+            font-weight: bold;
+        }
+        .warning {
+            font-size: 11px;
+            color: #666;
+            margin-top: 10px;
+            padding: 8px;
+            background: #fff9e6;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h3>IBKR Bridge Settings</h3>
+    
+    <div class="mode-selector">
+        <button class="mode-btn demo" data-mode="demo">
+            📝 Demo
+        </button>
+        <button class="mode-btn live" data-mode="live">
+            ⚠️ Live
+        </button>
+    </div>
+    
+    <div id="status" class="status"></div>
+    
+    <div class="warning">
+        ⚠️ Make sure TWS/IB Gateway is running with the corresponding account type
+    </div>
+    
+    <script src="config.js"></script>
+    <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,120 @@
+.ibkr-btn-link {
+    display: none !important;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 20px !important;
+    width: 20px !important;
+    height: 20px !important;
+    min-width: 20px !important;
+    min-height: 20px !important;
+    box-sizing: border-box !important;
+    margin: 0 2px;
+    cursor: pointer;
+    text-decoration: none !important;
+    z-index: 0;
+    border-radius: 2px;
+    transition: all 0.1s ease-in-out;
+    font-size: 11px !important;
+    font-weight: 800 !important;
+    color: white !important;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.ibkr-btn-link img {
+    width: 12px !important;
+    height: 12px !important;
+}
+
+/* Colors based on user preference */
+.ibkr-btn-BUY {
+    background-color: #00c853 !important;
+    /* Proper Trading Green */
+}
+
+.ibkr-btn-SELL {
+    background-color: #d50000 !important;
+    /* Proper Trading Red */
+}
+
+/* Darken images for SELL to avoid confusion if they are green */
+
+/* Positioning: Always on the right side of the cell for better aesthetics */
+
+.ibkr-btn-link:hover {
+    filter: brightness(1.2);
+    transform: scale(1.1);
+    z-index: 10;
+}
+
+.ibkr-btn-link:active {
+    transform: scale(0.95);
+}
+
+/* Positioning in TradingView cell */
+td.ibkr-target {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    padding-right: 2px !important;
+}
+
+td.ibkr-target .ibkr-btn-link {
+    position: static !important;
+    transform: none !important;
+}
+
+/* Calculator fixes */
+.ibkr-btn-calc {
+    position: relative !important;
+    top: auto !important;
+    transform: none !important;
+    display: inline-flex !important;
+    margin-left: 4px !important;
+}
+
+/* Show calculator buttons even when TradingView buttons are hidden */
+.ibkr-btn-link.ibkr-btn-calc {
+    display: inline-flex !important;
+}
+
+#ibkr-bridge-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    color: white;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    margin-left: 15px;
+    vertical-align: middle;
+}
+
+#ibkr-bridge-status.ready {
+    background-color: #00c853;
+}
+
+#ibkr-bridge-status.loading {
+    background-color: #2962ff;
+}
+
+#ibkr-bridge-status.error {
+    background-color: #ff5252;
+}
+
+#ibkr-bridge-status .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: white;
+}
+
+.ibkr-btn-CLOSE {
+    background-color: #757575 !important;
+}
+.ibkr-btn-link.ibkr-btn-CLOSE {
+    color: white !important;
+}

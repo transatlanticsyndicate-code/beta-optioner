@@ -1,0 +1,51 @@
+{
+    "manifest_version": 3,
+    "name": "IBKR Bridge",
+    "version": "5.3",
+    "description": "Автоматический поиск соответствия контрактов. Прямая отправка LIMIT-ордеров на опционы в терминал IBKR из Калькулятора.",
+    "icons": {
+        "48": "ico.png",
+        "128": "ico.png"
+    },
+    "permissions": [
+        "activeTab",
+        "storage"
+    ],
+    "action": {
+        "default_popup": "popup.html",
+        "default_icon": "ico.png",
+        "default_title": "IBKR Bridge Settings"
+    },
+    "host_permissions": [
+        "http://localhost:5001/*",
+        "https://beta.optioner.online/*"
+    ],
+    "content_scripts": [
+        {
+            "matches": [
+                "https://*.tradingview.com/options/chain/*",
+                "https://beta.optioner.online/tools/universal-calculator*"
+            ],
+            "js": [
+                "config.js",
+                "utils.js",
+                "positions.js",
+                "content.js"
+            ],
+            "css": [
+                "styles.css"
+            ]
+        }
+    ],
+    "web_accessible_resources": [
+        {
+            "resources": [
+                "ibkrCALL.jpg",
+                "ibkrPUT.jpg"
+            ],
+            "matches": [
+                "<all_urls>"
+            ]
+        }
+    ]
+}

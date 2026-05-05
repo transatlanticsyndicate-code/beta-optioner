@@ -1,0 +1,34 @@
+{
+    "monitored_tickers": [
+        {
+            "symbol": "GC",
+            "exchange": "COMEX",
+            "type": "FUT",
+            "description": "Gold"
+        },
+        {
+            "symbol": "CL",
+            "exchange": "NYMEX",
+            "type": "FUT",
+            "description": "Crude Oil"
+        },
+        {
+            "symbol": "ES",
+            "exchange": "CME",
+            "type": "FUT",
+            "description": "S&P 500"
+        },
+        {
+            "symbol": "NQ",
+            "exchange": "CME",
+            "type": "FUT",
+            "description": "Nasdaq 100"
+        }
+    ],
+    "update_frequency": "weekly",
+    "ib_connection": {
+        "host": "127.0.0.1",
+        "port": 7497,
+        "clientId": 1
+    }
+}
