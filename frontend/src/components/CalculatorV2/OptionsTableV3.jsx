@@ -90,7 +90,8 @@ function OptionsTableV3({
   calculatorMode = 'stocks', // Режим калькулятора: 'stocks' | 'futures'
   contractMultiplier = 100, // Множитель контракта: 100 для акций, pointValue для фьючерсов
   isFuturesMissingSettings = false, // Флаг: отсутствуют настройки фьючерса (блокирует расчёты)
-  stockClassification = null // Классификация акции для корректировки P&L (только для режима stocks)
+  stockClassification = null, // Классификация акции для корректировки P&L (только для режима stocks)
+  onOptionsTotalPLChange = null // Callback для подъёма «ИТОГО» опционов в родителя (используется в P&L TOTAL карточки «Базовый актив»)
 }) {
   // DEBUG: Логирование параметров для отладки сохранения конфигурации из БД
   React.useEffect(() => {
@@ -131,6 +132,103 @@ function OptionsTableV3({
   // ЗАЧЕМ: Позволяет пользователю сортировать опционы по разным колонкам
   const [sortColumn, setSortColumn] = React.useState('date'); // По умолчанию сортировка по дате экспирации
   const [sortDirection, setSortDirection] = React.useState('asc'); // asc | desc
+
+  // ИТОГО таблицы опционов — единое вычисление для отображения в строке «ИТОГО»
+  // и для подъёма наверх в P&L TOTAL карточки «Базовый актив».
+  // ЗАЧЕМ: Чтобы P&L TOTAL = P&L актива + ИТОГО таблицы, число должно быть ОДНО.
+  // Никаких параллельных пересчётов в других местах — только это значение.
+  const optionsTableTotalPL = React.useMemo(() => {
+    if (!options || options.length === 0 || !currentPrice) return 0;
+    return options
+      .filter(opt => {
+        if (opt.visible === false || !opt.strike) return false;
+        const hasPremium = opt.isPremiumModified
+          ? (opt.customPremium !== null && opt.customPremium !== undefined)
+          : (opt.premium !== null && opt.premium !== undefined);
+        return hasPremium;
+      })
+      .reduce((sum, opt) => {
+        const oldestEntry = getOldestEntryDate(options);
+        if (!isOptionActiveAtDay(opt, daysPassed, oldestEntry)) return sum;
+        if (isFuturesMissingSettings) return sum;
+
+        const currentDaysToExp = calculateDaysRemainingUTC(opt, 0, 30, oldestEntry);
+        const optDaysRemaining = calculateDaysRemainingUTC(opt, daysPassed, 30, oldestEntry);
+        const todaySimDaysForOpt = calculateDaysToExpirationFromToday(opt);
+
+        let optVolatility = getOptionVolatility(
+          opt,
+          currentDaysToExp,
+          optDaysRemaining,
+          ivSurface,
+          'simple',
+          null,
+          opt.manualIvOverride,
+          todaySimDaysForOpt
+        );
+
+        if (isAIEnabled && aiVolatilityMap && selectedTicker && targetPrice && !opt.manualIvOverride) {
+          const cacheKey = `${selectedTicker}_${opt.strike}_${opt.date}_${targetPrice.toFixed(2)}_${optDaysRemaining}`;
+          const aiVolatility = aiVolatilityMap[cacheKey];
+          if (aiVolatility) optVolatility = aiVolatility;
+        }
+
+        const effectivePremium = opt.isPremiumModified ? opt.customPremium : opt.premium;
+        const tempOpt = {
+          ...opt,
+          premium: effectivePremium,
+          ask: opt.isPremiumModified ? 0 : opt.ask,
+          bid: opt.isPremiumModified ? 0 : opt.bid
+        };
+
+        const rfrSum = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
+        const optAssetPrice = opt.assetPriceAtEntry || currentPrice;
+        let pl = calculatorMode === CALCULATOR_MODES.FUTURES
+          ? calculateFuturesOptionPLValue(tempOpt, targetPrice || currentPrice, optDaysRemaining, contractMultiplier, optVolatility)
+          : calculateStockOptionPLValue(tempOpt, targetPrice || currentPrice, optAssetPrice, optDaysRemaining, optVolatility, dividendYield, contractMultiplier, rfrSum);
+
+        if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
+          pl = adjustPLByStockGroup(pl, stockClassification);
+        }
+
+        if (opt.actualPL !== null && opt.actualPL !== undefined && opt.actualPLDate) {
+          const anchorDateObj = new Date(opt.actualPLDate + 'T00:00:00Z');
+          const oldestEntryDateObj = oldestEntry || new Date();
+          const anchorDaysPassed = Math.round((anchorDateObj - oldestEntryDateObj) / (1000 * 60 * 60 * 24));
+
+          if (daysPassed >= anchorDaysPassed) {
+            const anchorDaysToExp = calculateDaysRemainingUTC(opt, anchorDaysPassed, 30, oldestEntry);
+            const rfrAnchor = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
+            const anchorIV = opt.manualIvOverride !== null && opt.manualIvOverride !== undefined
+              ? opt.manualIvOverride
+              : optVolatility;
+            const anchorPrice = opt.actualPLPrice || currentPrice;
+
+            let plAtAnchor = calculatorMode === CALCULATOR_MODES.FUTURES
+              ? calculateFuturesOptionPLValue(tempOpt, anchorPrice, anchorDaysToExp, contractMultiplier, anchorIV)
+              : calculateStockOptionPLValue(tempOpt, anchorPrice, optAssetPrice, anchorDaysToExp, anchorIV, dividendYield, contractMultiplier, rfrAnchor);
+
+            if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
+              plAtAnchor = adjustPLByStockGroup(plAtAnchor, stockClassification);
+            }
+
+            const anchorQtySum = Number(opt.actualPLQuantity) > 0 ? Number(opt.actualPLQuantity) : (Number(opt.quantity) || 1);
+            const currentQtySum = Number(opt.quantity) || 0;
+            const anchorRatioSum = anchorQtySum > 0 ? (currentQtySum / anchorQtySum) : 1;
+            pl = opt.actualPL * anchorRatioSum + (pl - plAtAnchor);
+          }
+        }
+
+        return sum + pl;
+      }, 0);
+  }, [options, currentPrice, daysPassed, targetPrice, ivSurface, calculatorMode, contractMultiplier, dividendYield, isAIEnabled, aiVolatilityMap, selectedTicker, stockClassification, isFuturesMissingSettings]);
+
+  // Подъём ИТОГО опционов в родителя — для P&L TOTAL карточки «Базовый актив»
+  React.useEffect(() => {
+    if (typeof onOptionsTotalPLChange === 'function') {
+      onOptionsTotalPLChange(optionsTableTotalPL);
+    }
+  }, [optionsTableTotalPL, onOptionsTotalPLChange]);
 
   // Функция обработки клика по заголовку колонки
   const handleSort = (column) => {
@@ -1376,125 +1474,10 @@ function OptionsTableV3({
             <div></div>
             <div className="text-right">
               {(() => {
-                // Рассчитываем общий P/L (только для видимых опционов с данными)
-                const totalPL = options
-                  .filter(opt => {
-                    if (opt.visible === false || !opt.strike || !currentPrice) return false;
-                    // Проверяем наличие премии (из API или введённой вручную)
-                    const hasPremium = opt.isPremiumModified
-                      ? (opt.customPremium !== null && opt.customPremium !== undefined)
-                      : (opt.premium !== null && opt.premium !== undefined);
-                    return hasPremium;
-                  })
-                  .reduce((sum, opt) => {
-                    // Вычисляем индивидуальное количество дней до экспирации для этого опциона
-                    // ВАЖНО: Передаём oldestEntryDate для корректного расчёта actualDaysPassed
-                    const oldestEntry = getOldestEntryDate(options);
-
-                    // Проверяем, активен ли опцион на текущий день симуляции
-                    // ЗАЧЕМ: Если целевая дата раньше даты входа опциона, он ещё не куплен
-                    if (!isOptionActiveAtDay(opt, daysPassed, oldestEntry)) {
-                      return sum; // Пропускаем неактивные опционы
-                    }
-
-                    const currentDaysToExp = calculateDaysRemainingUTC(opt, 0, 30, oldestEntry);
-                    const optDaysRemaining = calculateDaysRemainingUTC(opt, daysPassed, 30, oldestEntry);
-
-                    // Определяем волатильность для этого опциона
-                    // ЗАЧЕМ: Используем единую функцию getOptionVolatility с IV Surface для точной интерполяции
-                    const todaySimDaysForOpt = calculateDaysToExpirationFromToday(opt);
-                    // Используем manualIvOverride из самого опциона
-                    let optVolatility = getOptionVolatility(
-                      opt,
-                      currentDaysToExp,
-                      optDaysRemaining,
-                      ivSurface,
-                      'simple',
-                      null,
-                      opt.manualIvOverride,
-                      todaySimDaysForOpt
-                    );
-
-                    // Проверяем наличие AI волатильности в кэше
-                    // ВАЖНО: manualIvOverride имеет приоритет — AI не перезаписывает ручную IV
-                    if (isAIEnabled && aiVolatilityMap && selectedTicker && targetPrice && !opt.manualIvOverride) {
-                      const cacheKey = `${selectedTicker}_${opt.strike}_${opt.date}_${targetPrice.toFixed(2)}_${optDaysRemaining}`;
-                      const aiVolatility = aiVolatilityMap[cacheKey];
-                      if (aiVolatility) {
-                        optVolatility = aiVolatility;
-                      }
-                    }
-
-                    // ВАЖНО: При ручной премии обнуляем ask/bid, чтобы getEntryPrice() использовал premium
-                    const effectivePremium = opt.isPremiumModified ? opt.customPremium : opt.premium;
-                    const tempOpt = {
-                      ...opt,
-                      premium: effectivePremium,
-                      ask: opt.isPremiumModified ? 0 : opt.ask,
-                      bid: opt.isPremiumModified ? 0 : opt.bid
-                    };
-                    // ПРОВЕРКА: Если отсутствуют настройки фьючерса — не считаем прибыль
-                    if (isFuturesMissingSettings) {
-                      return sum;
-                    }
-
-                    // Выбираем модель расчёта в зависимости от режима калькулятора
-                    // Для крипто (Binance) безрисковая ставка = 0, для акций — из FRED (null)
-                    const rfrSum = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
-                    const optAssetPrice = opt.assetPriceAtEntry || currentPrice;
-                    let pl = calculatorMode === CALCULATOR_MODES.FUTURES
-                      ? calculateFuturesOptionPLValue(tempOpt, targetPrice || currentPrice, optDaysRemaining, contractMultiplier, optVolatility)
-                      : calculateStockOptionPLValue(tempOpt, targetPrice || currentPrice, optAssetPrice, optDaysRemaining, optVolatility, dividendYield, contractMultiplier, rfrSum);
-
-                    // Применяем корректировку P&L по группе акции (только для режима stocks, не для крипто)
-                    if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
-                      pl = adjustPLByStockGroup(pl, stockClassification);
-                    }
-
-                    // Логика якорной P&L для итоговой строки
-                    // ЗАЧЕМ: Если пользователь ввел actualPL, используем её как якорь для этого опциона
-                    if (opt.actualPL !== null && opt.actualPL !== undefined && opt.actualPLDate) {
-                      // Вычисляем дни от входа до даты ввода actualPL
-                      const anchorDateObj = new Date(opt.actualPLDate + 'T00:00:00Z');
-                      const oldestEntryDateObj = oldestEntry || new Date();
-                      const anchorDaysPassed = Math.round((anchorDateObj - oldestEntryDateObj) / (1000 * 60 * 60 * 24));
-
-                      // Если текущий день >= дня ввода — используем якорную формулу
-                      if (daysPassed >= anchorDaysPassed) {
-                        // Вычисляем теоретическую цену на момент якоря
-                        const anchorDaysToExp = calculateDaysRemainingUTC(opt, anchorDaysPassed, 30, oldestEntry);
-                        const rfrAnchor = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
-
-                        // IV на момент якоря: используем manualIvOverride если задан, иначе marketIV
-                        // manualIvOverride хранится в процентах, конвертацию делают функции расчёта
-                        const anchorIV = opt.manualIvOverride !== null && opt.manualIvOverride !== undefined
-                          ? opt.manualIvOverride
-                          : optVolatility;
-
-                        // ВАЖНО: plAtAnchor считается при ЦЕНЕ АКТИВА НА МОМЕНТ ВВОДА якоря (actualPLPrice)
-                        // ЗАЧЕМ: Якорь фиксирует P&L при конкретной цене, дельта должна учитывать изменение цены
-                        const anchorPrice = opt.actualPLPrice || currentPrice;
-
-                        let plAtAnchor = calculatorMode === CALCULATOR_MODES.FUTURES
-                          ? calculateFuturesOptionPLValue(tempOpt, anchorPrice, anchorDaysToExp, contractMultiplier, anchorIV)
-                          : calculateStockOptionPLValue(tempOpt, anchorPrice, optAssetPrice, anchorDaysToExp, anchorIV, dividendYield, contractMultiplier, rfrAnchor);
-                        
-                        if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
-                          plAtAnchor = adjustPLByStockGroup(plAtAnchor, stockClassification);
-                        }
-
-                        // Итоговая P&L = actualPL × ratio + (текущая теор. P&L − теор. P&L на якоре)
-                        // Масштабируем якорь по соотношению текущего количества к количеству в момент ввода Fact P&L
-                        const anchorQtySum = Number(opt.actualPLQuantity) > 0 ? Number(opt.actualPLQuantity) : (Number(opt.quantity) || 1);
-                        const currentQtySum = Number(opt.quantity) || 0;
-                        const anchorRatioSum = anchorQtySum > 0 ? (currentQtySum / anchorQtySum) : 1;
-                        pl = opt.actualPL * anchorRatioSum + (pl - plAtAnchor);
-                      }
-                    }
-
-                    return sum + pl;
-                  }, 0);
-
+                // Единый источник истины: значение из useMemo (см. начало компонента).
+                // То же число поднимается наверх через onOptionsTotalPLChange и используется
+                // в P&L TOTAL карточки «Базовый актив». Никаких параллельных пересчётов.
+                const totalPL = optionsTableTotalPL;
                 const plColor = totalPL > 0 ? 'text-green-600' : totalPL < 0 ? 'text-red-600' : 'text-muted-foreground';
 
                 return (

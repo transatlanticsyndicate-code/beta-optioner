@@ -690,6 +690,11 @@ function UniversalOptionsCalculator() {
 
   const [options, setOptions] = useState([]);
 
+  // ИТОГО опционов из таблицы — единое число для P&L TOTAL карточки «Базовый актив».
+  // ЗАЧЕМ: P&L TOTAL = P&L актива + ИТОГО таблицы. Значение приходит снизу из OptionsTableV3
+  // через callback onOptionsTotalPLChange — никаких параллельных пересчётов.
+  const [optionsTableTotalPL, setOptionsTableTotalPL] = useState(0);
+
   // Миграция якорной P&L: для старых опционов, у которых заполнен actualPL, но не сохранён actualPLQuantity
   // (фикс масштабирования якоря по количеству был добавлен 2026-05-04, ранее это поле не сохранялось).
   // ЗАЧЕМ: Без actualPLQuantity формула якоря возвращается к старому (некорректному) поведению при смене количества.
@@ -3993,6 +3998,7 @@ function UniversalOptionsCalculator() {
                         contractMultiplier={contractMultiplier}
                         leverage={baseAssetLeverage}
                         stockClassification={null}
+                        optionsTotalPL={optionsTableTotalPL}
                       />
                     </>
                   )}
@@ -4192,6 +4198,7 @@ function UniversalOptionsCalculator() {
                         // Не загружаем детали опционов с внешних API
                       }}
                       stockClassification={null}
+                      onOptionsTotalPLChange={setOptionsTableTotalPL}
                     />
                   ) : (
                     <div className="w-full h-[80px] flex items-center justify-center text-muted-foreground text-sm">

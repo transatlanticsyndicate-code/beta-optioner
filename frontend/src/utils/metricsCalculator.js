@@ -617,120 +617,27 @@ export function calculatePortfolioPLAtPrice({
     }
   });
 
-  // P&L по опционам — повторяет точно ту же логику, что строка таблицы (OptionsTableV3.jsx).
-  // ЗАЧЕМ: Если расчёт расходится с табличной строкой, P&L TOTAL ≠ сумма P&L строк, что нарушает арифметику
-  // «P&L TOTAL = P&L актива + Σ P&L опционов» и приводит к ложным числам в карточке «Базовый актив».
-  // ВКЛЮЧАЕТ: Fact IV (manualIvOverride), индивидуальную assetPriceAtEntry, классификацию акции, якорь Fact P&L.
+  // P&L по опционам — единый источник истины через calculateOptionRowPL.
+  // ЗАЧЕМ: Та же функция вызывается из таблицы (столбец «P&L», ИТОГО) и отсюда.
+  // Структурно гарантирует, что P&L TOTAL = P&L актива + Σ P&L строк таблицы.
   let optionsPL = 0;
   if (visibleOptions.length > 0) {
-    const oldestEntryDate = getOldestEntryDate(options);
+    const ctx = {
+      options,
+      daysPassed,
+      currentPrice,
+      targetPrice: price,
+      ivSurface,
+      calculatorMode,
+      contractMultiplier,
+      dividendYield,
+      isAIEnabled,
+      aiVolatilityMap,
+      selectedTicker,
+      stockClassification
+    };
     visibleOptions.forEach((option) => {
-      // Опцион ещё не куплен на этот день симуляции — пропускаем
-      if (!isOptionActiveAtDay(option, daysPassed, oldestEntryDate)) return;
-
-      const optionDaysRemaining = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntryDate);
-      const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0, 30, oldestEntryDate);
-      const todaySimDays = calculateDaysToExpirationFromToday(option);
-
-      // Передаём manualIvOverride и todaySimDays — иначе при заполненном Fact IV
-      // P&L строки и P&L TOTAL посчитаются по разной волатильности и разойдутся.
-      let optionVolatility = getOptionVolatility(
-        option,
-        currentDaysToExpiration,
-        optionDaysRemaining,
-        ivSurface,
-        'simple',
-        null,
-        option.manualIvOverride,
-        todaySimDays
-      );
-
-      // AI-волатильность (если включена и закэширована для этой цены/дня)
-      if (isAIEnabled && aiVolatilityMap && selectedTicker && price) {
-        const cacheKey = `${selectedTicker}_${option.strike}_${option.date}_${Number(price).toFixed(2)}_${optionDaysRemaining}`;
-        const aiIV = aiVolatilityMap[cacheKey];
-        if (aiIV) optionVolatility = aiIV;
-      }
-
-      // Учитываем ручную правку премии/Bid/Ask — как в таблице
-      const tempOption = {
-        ...option,
-        premium: option.isPremiumModified ? option.customPremium : option.premium,
-        ask: option.isPremiumModified ? 0 : (option.isAskModified ? option.customAsk : option.ask),
-        bid: option.isPremiumModified ? 0 : (option.isBidModified ? option.customBid : option.bid),
-      };
-
-      // Цена актива на момент входа в опцион — для модели BSM (третий параметр calculateOptionPLValue).
-      // ВАЖНО: Таблица использует assetPriceAtEntry (если есть), а не currentPrice — иначе при добавлении
-      // опциона в момент когда актив был при другой цене, P&L посчитается неверно.
-      const optionAssetPrice = option.assetPriceAtEntry || currentPrice;
-
-      let pl = 0;
-      if (calculatorMode === CALCULATOR_MODES.FUTURES) {
-        pl = calculateFuturesOptionPLValue(tempOption, price, optionDaysRemaining, contractMultiplier, optionVolatility);
-      } else {
-        const rfr = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
-        pl = calculateOptionPLValue(tempOption, price, optionAssetPrice, optionDaysRemaining, optionVolatility, dividendYield, contractMultiplier, rfr);
-      }
-
-      // Корректировка P&L по группе акции — только для режима stocks
-      if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
-        pl = adjustPLByStockGroup(pl, stockClassification);
-      }
-
-      // [TEMP DEBUG] Сверка с таблицей — удалить после диагностики P&L TOTAL
-      try {
-        // eslint-disable-next-line no-console
-        console.log(`🔬 [P&L TOTAL debug] ${option.action} ${option.type} ${option.strike}:`, {
-          qty: option.quantity,
-          factIV: option.manualIvOverride,
-          marketIV: option.impliedVolatility,
-          usedVolatility: optionVolatility,
-          price,
-          optionAssetPrice,
-          optionDaysRemaining,
-          plBeforeAnchor: Math.round(pl),
-          actualPL: option.actualPL,
-          actualPLDate: option.actualPLDate,
-          actualPLQuantity: option.actualPLQuantity
-        });
-      } catch (e) { /* ignore */ }
-
-      // Якорная P&L (Fact P&L): если пользователь зафиксировал реальную P&L — сдвигаем теоретическую дельту от якоря.
-      // Полностью повторяет формулу из таблицы (OptionsTableV3.jsx) включая масштабирование по количеству.
-      if (option.actualPL !== null && option.actualPL !== undefined && option.actualPLDate) {
-        const anchorDateObj = new Date(option.actualPLDate + 'T00:00:00Z');
-        const oldestEntryObj = oldestEntryDate || new Date();
-        const anchorDaysPassed = Math.round((anchorDateObj - oldestEntryObj) / (1000 * 60 * 60 * 24));
-
-        if (daysPassed >= anchorDaysPassed) {
-          const anchorDaysToExp = calculateDaysRemainingUTC(option, anchorDaysPassed, 30, oldestEntryDate);
-          const anchorIV = option.manualIvOverride !== null && option.manualIvOverride !== undefined
-            ? option.manualIvOverride
-            : optionVolatility;
-          const anchorPrice = option.actualPLPrice || currentPrice;
-
-          let plAtAnchor = 0;
-          if (calculatorMode === CALCULATOR_MODES.FUTURES) {
-            plAtAnchor = calculateFuturesOptionPLValue(tempOption, anchorPrice, anchorDaysToExp, contractMultiplier, anchorIV);
-          } else {
-            const rfrAnchor = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
-            plAtAnchor = calculateOptionPLValue(tempOption, anchorPrice, optionAssetPrice, anchorDaysToExp, anchorIV, dividendYield, contractMultiplier, rfrAnchor);
-          }
-
-          if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
-            plAtAnchor = adjustPLByStockGroup(plAtAnchor, stockClassification);
-          }
-
-          // Масштабирование якоря по количеству — см. handoff fact-pl-anchor-quantity-scaling.md
-          const anchorQty = Number(option.actualPLQuantity) > 0 ? Number(option.actualPLQuantity) : (Number(option.quantity) || 1);
-          const currentQty = Number(option.quantity) || 0;
-          const anchorRatio = anchorQty > 0 ? (currentQty / anchorQty) : 1;
-          pl = option.actualPL * anchorRatio + (pl - plAtAnchor);
-        }
-      }
-
-      optionsPL += pl || 0;
+      optionsPL += calculateOptionRowPL(option, ctx) || 0;
     });
   }
 

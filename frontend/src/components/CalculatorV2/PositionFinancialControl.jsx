@@ -1,7 +1,6 @@
 import React, { useMemo } from 'react';
 import { calculateTotalPremium } from '../../utils/metricsCalculator';
 import { calculatePLMetrics } from '../../utils/metricsCalculator';
-import { calculatePortfolioPLAtPrice } from '../../utils/metricsCalculator';
 import { CALCULATOR_MODES } from '../../utils/universalPricing';
 
 /**
@@ -26,7 +25,8 @@ function PositionFinancialControl({
   dividendYield = 0,
   selectedTicker = '',
   leverage = 1,
-  stockClassification = null
+  stockClassification = null,
+  optionsTotalPL = null
 }) {
   // ЗАЧЕМ: плечо БА — маржинальное требование брокера, делит notional на N.
   // Если значение мусорное (NaN, < 1, undefined) — работаем без плеча.
@@ -118,30 +118,29 @@ function PositionFinancialControl({
   // Проверяем, есть ли хотя бы одно превышение
   const hasAnyExcess = instrumentLimitExceeded || maxLossLimitExceeded;
 
-  // P&L базового актива и P&L TOTAL в точке симуляции (цена + дни)
-  // ЗАЧЕМ: пользователь должен видеть числа без наведения на график; обязаны совпадать с тултипом графика
+  // P&L базового актива — линейная формула, не зависит от опционов.
+  // P&L TOTAL = P&L актива + ИТОГО таблицы опционов (готовое число от родителя через optionsTotalPL).
+  // ЗАЧЕМ: Единый источник истины — то же число, что отображается в строке «ИТОГО» таблицы.
+  // Никакого пересчёта по своей формуле — это исключает любые расхождения структурно.
   const { underlyingPL, totalPL } = useMemo(() => {
     if (!positions || positions.length === 0 || !currentPrice) {
       return { underlyingPL: 0, totalPL: 0 };
     }
     const simPrice = Number(targetPrice) > 0 ? Number(targetPrice) : Number(currentPrice);
-    const result = calculatePortfolioPLAtPrice({
-      price: simPrice,
-      daysPassed,
-      positions,
-      options,
-      currentPrice,
-      ivSurface,
-      calculatorMode,
-      contractMultiplier,
-      dividendYield,
-      isAIEnabled,
-      aiVolatilityMap,
-      selectedTicker,
-      stockClassification
+    let upl = 0;
+    positions.filter(p => p && p.visible !== false).forEach((position) => {
+      const qty = Number(position.quantity) || 0;
+      const entry = Number(position.price) || 0;
+      const mult = calculatorMode === CALCULATOR_MODES.FUTURES ? contractMultiplier : 1;
+      if (position.type === 'LONG') {
+        upl += (simPrice - entry) * qty * mult;
+      } else if (position.type === 'SHORT') {
+        upl += (entry - simPrice) * qty * mult;
+      }
     });
-    return { underlyingPL: result.underlyingPL, totalPL: result.totalPL };
-  }, [positions, options, currentPrice, daysPassed, targetPrice, ivSurface, calculatorMode, contractMultiplier, dividendYield, isAIEnabled, aiVolatilityMap, selectedTicker, stockClassification]);
+    const optionsSum = (optionsTotalPL === null || optionsTotalPL === undefined || isNaN(optionsTotalPL)) ? 0 : Number(optionsTotalPL);
+    return { underlyingPL: upl, totalPL: upl + optionsSum };
+  }, [positions, currentPrice, targetPrice, calculatorMode, contractMultiplier, optionsTotalPL]);
 
   // Форматирование чисел с разделителями
   const formatNumber = (num) => {
