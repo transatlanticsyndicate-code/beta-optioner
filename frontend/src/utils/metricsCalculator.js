@@ -561,89 +561,11 @@ export function getValueColor(value, inverse = false) {
 }
 
 /**
- * Расчёт суммарного P&L портфеля в одной точке (цена + дни симуляции)
- * ЗАЧЕМ: P&L TOTAL = P&L актива + Σ P&L опционов. Логика расчёта одного опциона ОБЯЗАНА совпадать
- * с расчётом строки таблицы (OptionsTableV3.jsx), иначе сумма не сходится с тем, что видит пользователь.
+ * УДАЛЕНО: calculatePortfolioPLAtPrice больше не используется.
  *
- * @param {Object} params
- * @param {number} params.price - симулируемая цена базового актива
- * @param {number} params.daysPassed - прошедшие дни от даты входа
- * @param {Array}  params.positions - позиции базового актива
- * @param {Array}  params.options - опционы
- * @param {number} params.currentPrice - текущая цена базового актива
- * @param {Object} params.ivSurface - IV-поверхность
- * @param {string} params.calculatorMode - 'stocks' | 'futures' | 'crypto'
- * @param {number} params.contractMultiplier - множитель контракта
- * @param {number} params.dividendYield - дивидендная доходность
- * @param {boolean} params.isAIEnabled - включён ли AI-подбор IV
- * @param {Object} params.aiVolatilityMap - кэш AI-волатильности
- * @param {string} params.selectedTicker - тикер
- * @param {string|null} params.stockClassification - классификация акции для adjustPLByStockGroup
- * @returns {{ underlyingPL: number, optionsPL: number, totalPL: number }}
+ * P&L TOTAL и P&L базового актива теперь считаются прямо в PositionFinancialControl:
+ * underlyingPL — линейная формула по позициям БА; optionsPL приходит готовым числом
+ * из OptionsTableV3 через onOptionsTotalPLChange (то же значение, что в строке «ИТОГО»).
+ * Это архитектурно гарантирует, что P&L TOTAL = P&L актива + ИТОГО таблицы — никаких
+ * параллельных пересчётов не существует.
  */
-export function calculatePortfolioPLAtPrice({
-  price,
-  daysPassed = 0,
-  positions = [],
-  options = [],
-  currentPrice = 0,
-  ivSurface = null,
-  calculatorMode = CALCULATOR_MODES.STOCKS,
-  contractMultiplier = 100,
-  dividendYield = 0,
-  isAIEnabled = false,
-  aiVolatilityMap = {},
-  selectedTicker = '',
-  stockClassification = null
-} = {}) {
-  if (!price || !currentPrice) {
-    return { underlyingPL: 0, optionsPL: 0, totalPL: 0 };
-  }
-
-  const visiblePositions = (positions || []).filter(p => p && p.visible !== false);
-  const visibleOptions = (options || []).filter(o => o && o.visible !== false);
-
-  // P&L по позициям базового актива (линейная зависимость, фьючерсы — с pointValue)
-  let underlyingPL = 0;
-  visiblePositions.forEach((position) => {
-    const { type, quantity, price: entryPrice } = position;
-    const qty = Number(quantity) || 0;
-    const entry = Number(entryPrice) || 0;
-    const multiplier = calculatorMode === CALCULATOR_MODES.FUTURES ? contractMultiplier : 1;
-    if (type === 'LONG') {
-      underlyingPL += (price - entry) * qty * multiplier;
-    } else if (type === 'SHORT') {
-      underlyingPL += (entry - price) * qty * multiplier;
-    }
-  });
-
-  // P&L по опционам — единый источник истины через calculateOptionRowPL.
-  // ЗАЧЕМ: Та же функция вызывается из таблицы (столбец «P&L», ИТОГО) и отсюда.
-  // Структурно гарантирует, что P&L TOTAL = P&L актива + Σ P&L строк таблицы.
-  let optionsPL = 0;
-  if (visibleOptions.length > 0) {
-    const ctx = {
-      options,
-      daysPassed,
-      currentPrice,
-      targetPrice: price,
-      ivSurface,
-      calculatorMode,
-      contractMultiplier,
-      dividendYield,
-      isAIEnabled,
-      aiVolatilityMap,
-      selectedTicker,
-      stockClassification
-    };
-    visibleOptions.forEach((option) => {
-      optionsPL += calculateOptionRowPL(option, ctx) || 0;
-    });
-  }
-
-  return {
-    underlyingPL,
-    optionsPL,
-    totalPL: underlyingPL + optionsPL
-  };
-}
