@@ -90,7 +90,7 @@ import { loadFuturesSettings, getPointValue, getFutureByTicker, isFuturesTicker,
 
 // Импорт хука для работы с данными от Chrome Extension TradingView Parser
 // ЗАЧЕМ: Получение опционов, тикера и цены из localStorage и URL параметров
-import { useExtensionData, useExtensionRefreshCommand, sendRefreshSpecificCommand } from '../hooks/useExtensionData';
+import { useExtensionData, useExtensionRefreshCommand, sendRefreshSpecificCommand, readExtensionResult } from '../hooks/useExtensionData';
 
 // УБРАНО: AI модель не используется в универсальном калькуляторе
 // const AI_SUPPORTED_TICKERS = [...];
@@ -159,6 +159,12 @@ function UniversalOptionsCalculator() {
   const refreshTimeoutRef = useRef(null);
   // Защита от повторного автозапуска обновления для одной и той же конфигурации.
   const pendingRefreshRunForRef = useRef(null);
+  // Polling-интервал для опроса tvc_refresh_result после команды refresh_specific.
+  // ЗАЧЕМ: По нему ловим сигналы started/in_progress/complete/error от расширения,
+  // чтобы не показывать «расширение недоступно» если оно просто дольше 5 сек обрабатывает.
+  const refreshPollIntervalRef = useRef(null);
+  // Timestamp последнего запроса к расширению — фильтруем «свои» ответы в результате.
+  const refreshRequestTsRef = useRef(0);
 
   // Установка заголовка страницы
   useEffect(() => {
@@ -1054,6 +1060,15 @@ function UniversalOptionsCalculator() {
     // Сбрасываем флаг "уже запустили обновление для этой конфигурации",
     // чтобы при следующем открытии pending-позиции автообновление сработало снова.
     pendingRefreshRunForRef.current = null;
+    // Останавливаем активные polling-интервалы / таймауты ожидания расширения.
+    if (refreshTimeoutRef.current) {
+      clearTimeout(refreshTimeoutRef.current);
+      refreshTimeoutRef.current = null;
+    }
+    if (refreshPollIntervalRef.current) {
+      clearInterval(refreshPollIntervalRef.current);
+      refreshPollIntervalRef.current = null;
+    }
     setIsEditMode(false); // Сбрасываем режим редактирования
     setHasChanges(false); // Сбрасываем флаг изменений
 
@@ -3503,10 +3518,25 @@ function UniversalOptionsCalculator() {
     }
   };
 
+  const stopRefreshWatchers = useCallback(() => {
+    if (refreshTimeoutRef.current) {
+      clearTimeout(refreshTimeoutRef.current);
+      refreshTimeoutRef.current = null;
+    }
+    if (refreshPollIntervalRef.current) {
+      clearInterval(refreshPollIntervalRef.current);
+      refreshPollIntervalRef.current = null;
+    }
+  }, []);
+
   // Запросить у расширения свежие котировки (BID/ASK/VOL/IV) и цену актива.
   // ЗАЧЕМ: При открытии позиции «В ожидании» нужно автоматически обновлять данные.
   // Также вызывается вручную из шапки кнопкой «Обновить через TradingView», если
   // расширение не ответило в первый раз.
+  //
+  // Слушаем localStorage.tvc_refresh_result — расширение пишет туда статус
+  // выполнения (started/in_progress/complete/error) с timestamp нашего запроса.
+  // Любая запись с нашим timestamp = «расширение услышало команду» → НЕ timeout.
   const requestExtensionRefreshForLoadedPosition = useCallback((opts) => {
     const optionsForRefresh = (opts || []).filter(o => o && o.date && o.strike);
     if (optionsForRefresh.length === 0) {
@@ -3515,44 +3545,74 @@ function UniversalOptionsCalculator() {
       return;
     }
 
-    // Очищаем предыдущий таймер (если запрос перезапускается)
-    if (refreshTimeoutRef.current) {
-      clearTimeout(refreshTimeoutRef.current);
-      refreshTimeoutRef.current = null;
-    }
-
+    stopRefreshWatchers();
     setExtensionRefreshState('pending');
-    const ts = sendRefreshSpecificCommand(optionsForRefresh, true);
-    console.log('🔄 [PendingRefresh] Команда отправлена, timestamp=', ts);
 
-    // Таймаут на 5 сек: если расширение не ответило — показываем предупреждение
+    const cmd = sendRefreshSpecificCommand(optionsForRefresh, true);
+    const requestTs = (cmd && cmd.timestamp) || Date.now();
+    refreshRequestTsRef.current = requestTs;
+    console.log('🔄 [PendingRefresh] Команда отправлена, timestamp=', requestTs);
+
+    // Polling tvc_refresh_result — расширение должно записать туда статус
+    // в течение 1-2 секунд, если оно живо.
+    refreshPollIntervalRef.current = setInterval(() => {
+      const result = readExtensionResult();
+      if (!result) return;
+      // Учитываем только результаты ≥ нашего timestamp (свежий ответ для нашей команды)
+      if ((result.timestamp || 0) < requestTs) return;
+
+      if (result.status === 'error') {
+        console.warn('⚠️ [PendingRefresh] Расширение вернуло ошибку:', result.message);
+        setExtensionRefreshState('error');
+        stopRefreshWatchers();
+      } else if (result.status === 'complete') {
+        console.log('✅ [PendingRefresh] Обновление завершено');
+        setExtensionRefreshState('success');
+        stopRefreshWatchers();
+      }
+      // 'started' / 'in_progress' — расширение работает, продолжаем ждать,
+      // но снимаем таймаут «недоступно», т.к. сигнал жизни получен.
+      else if (result.status === 'started' || result.status === 'in_progress') {
+        if (refreshTimeoutRef.current) {
+          clearTimeout(refreshTimeoutRef.current);
+          refreshTimeoutRef.current = null;
+        }
+      }
+    }, 500);
+
+    // Если за 5 секунд расширение НИКАК не отозвалось через tvc_refresh_result —
+    // считаем что оно недоступно. Если получили хотя бы 'started' — таймаут уже снят.
     refreshTimeoutRef.current = setTimeout(() => {
-      // Проверяем актуальное состояние через setState callback,
-      // чтобы не пересчитывать таймер, если уже пришёл успех
-      setExtensionRefreshState(prev => prev === 'pending' ? 'timeout' : prev);
+      setExtensionRefreshState(prev => {
+        if (prev === 'pending') {
+          console.warn('⚠️ [PendingRefresh] Расширение не отвечает 5 сек');
+          if (refreshPollIntervalRef.current) {
+            clearInterval(refreshPollIntervalRef.current);
+            refreshPollIntervalRef.current = null;
+          }
+          return 'timeout';
+        }
+        return prev;
+      });
     }, 5000);
-  }, []);
+  }, [stopRefreshWatchers]);
 
-  // Реакция на ответ расширения: pendingRefresh приходит из useExtensionRefreshCommand,
-  // когда расширение записало результат в localStorage. Считаем это «success».
+  // Если pendingRefresh пришёл (расширение применило новые IV для опциона) —
+  // это тоже валидный сигнал успеха.
   useEffect(() => {
     if (pendingRefresh && extensionRefreshState === 'pending') {
+      console.log('✅ [PendingRefresh] Применение IV от расширения — успех');
       setExtensionRefreshState('success');
-      if (refreshTimeoutRef.current) {
-        clearTimeout(refreshTimeoutRef.current);
-        refreshTimeoutRef.current = null;
-      }
+      stopRefreshWatchers();
     }
-  }, [pendingRefresh, extensionRefreshState]);
+  }, [pendingRefresh, extensionRefreshState, stopRefreshWatchers]);
 
-  // Очистка таймера при размонтировании, чтобы не было утечек.
+  // Очистка таймеров при размонтировании, чтобы не было утечек.
   useEffect(() => {
     return () => {
-      if (refreshTimeoutRef.current) {
-        clearTimeout(refreshTimeoutRef.current);
-      }
+      stopRefreshWatchers();
     };
-  }, []);
+  }, [stopRefreshWatchers]);
 
   // Автоматически запускаем обновление через расширение при открытии «В ожидании».
   // ЗАЧЕМ: Условие задачи — для pending-позиций BID/ASK/VOL/IV/Актив должны
@@ -4033,9 +4093,9 @@ function UniversalOptionsCalculator() {
                     {extensionRefreshState === 'success' && (
                       <span className="text-xs text-green-600 dark:text-green-400">✓ Обновлено</span>
                     )}
-                    {(extensionRefreshState === 'timeout' || extensionRefreshState === 'error') && (
+                    {extensionRefreshState === 'timeout' && (
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-red-600 dark:text-red-400" title="Расширение TradingView не отвечает">
+                        <span className="text-xs text-red-600 dark:text-red-400" title="Расширение TradingView не ответило">
                           ⚠ Расширение недоступно
                         </span>
                         <Button
@@ -4044,6 +4104,22 @@ function UniversalOptionsCalculator() {
                           className="h-7 text-xs border-yellow-500 text-yellow-700 hover:bg-yellow-50"
                           onClick={() => requestExtensionRefreshForLoadedPosition(options)}
                           title="Повторить запрос обновления через TradingView"
+                        >
+                          Обновить через TradingView
+                        </Button>
+                      </div>
+                    )}
+                    {extensionRefreshState === 'error' && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-red-600 dark:text-red-400" title="Расширение вернуло ошибку при обновлении">
+                          ⚠ Ошибка обновления
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs border-yellow-500 text-yellow-700 hover:bg-yellow-50"
+                          onClick={() => requestExtensionRefreshForLoadedPosition(options)}
+                          title="Повторить попытку"
                         >
                           Обновить через TradingView
                         </Button>
