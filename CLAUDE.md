@@ -64,6 +64,16 @@ Types: `feat`, `fix`, `refactor`, `hotfix`, `docs`, `test`, `chore`
 - Security check required in every VERIFY phase
 - **try-catch everywhere** — clear error messages for users
 
+## Branch & Deploy Workflow (обязательно для каждой сессии)
+Чтобы избежать повторения инцидента 2026-05-05, когда параллельные сессии затирали деплои друг друга — следующие шаги выполняются АВТОМАТИЧЕСКИ, без напоминания пользователя:
+
+1. **В начале сессии** — перед первой правкой кода: убедиться, что текущая ветка стартует со свежей `origin/main`. Если worktree устарел — `git fetch origin && git rebase origin/main`. Если есть конфликты при rebase — остановиться и спросить пользователя.
+2. **Перед деплоем** — повторить `git fetch origin && git rebase origin/main`. Если ничего не подтянулось, деплоить можно. Если в `main` появились новые коммиты от другой сессии — ребейзнуть свою ветку поверх и убедиться, что всё ещё работает локально, прежде чем выкатывать.
+3. **После успешного деплоя и подтверждения пользователем, что всё работает на проде** — fast-forward merge ветки в `main`, push `main` на origin, удалить локальную ветку (`git branch -d`), удалить ветку на origin (`git push origin --delete`), удалить свой worktree (`git worktree remove`).
+4. **Никогда не деплоить из ветки, которая отстала от `origin/main`** — сначала ребейз, потом деплой.
+
+Полная спецификация процесса с примерами фраз для пользователя: `docs/handoff/parallel-sessions-process.md`.
+
 ## Tests (to be organized)
 - Backend: `backend/tests/` — pytest
 - Frontend: `frontend/src/__tests__/` — React Testing Library
