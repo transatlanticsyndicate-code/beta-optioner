@@ -1388,6 +1388,7 @@ function UniversalOptionsCalculator() {
       }
       // Если конфигурация не найдена — очищаем localStorage и продолжаем обычную инициализацию
       localStorage.removeItem('universalCalc_loadedConfigId');
+      localStorage.removeItem('universalCalc_loadedConfigStatus');
     }
 
     // === ИНТЕГРАЦИЯ С CHROME EXTENSION ===
@@ -1694,6 +1695,7 @@ function UniversalOptionsCalculator() {
       userOptionOverridesRef.current = {};
       // Очищаем сохранённый loadedConfigId (если был)
       localStorage.removeItem('universalCalc_loadedConfigId');
+      localStorage.removeItem('universalCalc_loadedConfigStatus');
       // Очищаем pending refresh от расширения
       // ЗАЧЕМ: Расширение могло отправить sendPrIV_tocallc одновременно с добавлением опциона,
       // и без очистки IV попадёт в Fact IV вместо колонки IV
@@ -2699,7 +2701,20 @@ function UniversalOptionsCalculator() {
 
   // Метаданные загруженной из БД конфигурации для отображения в шапке калькулятора
   // ЗАЧЕМ: Лейбл статуса (жёлтый / голубой) рисуется рядом с названием позиции.
-  const [loadedConfigStatus, setLoadedConfigStatus] = useState(null); // 'pending' | 'standard' | null
+  // Статус зеркалится в localStorage.universalCalc_loadedConfigStatus, чтобы расширение
+  // TradingView могло отличить pending-позицию (нужен авто-рефреш котировок) от standard.
+  const [loadedConfigStatus, setLoadedConfigStatusRaw] = useState(() => {
+    const v = localStorage.getItem('universalCalc_loadedConfigStatus');
+    return v === 'pending' || v === 'standard' ? v : null;
+  });
+  const setLoadedConfigStatus = useCallback((value) => {
+    setLoadedConfigStatusRaw(value);
+    if (value === 'pending' || value === 'standard') {
+      localStorage.setItem('universalCalc_loadedConfigStatus', value);
+    } else {
+      localStorage.removeItem('universalCalc_loadedConfigStatus');
+    }
+  }, []);
   const [loadedConfigName, setLoadedConfigName] = useState(null);
 
   // State для сворачивания блока StrikeScale
