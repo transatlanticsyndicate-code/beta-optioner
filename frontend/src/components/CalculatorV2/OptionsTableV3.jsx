@@ -731,21 +731,16 @@ function OptionsTableV3({
                   gap: '6px'
                 }}
               >
-                {/* Иконка видимости: Lock для зафиксированных позиций, Eye/EyeOff для обычных */}
-                {/* ЗАЧЕМ: Проверяем isLockedPosition на уровне каждой позиции, а не глобальный isLocked */}
+                {/* Иконка видимости — всегда Eye/EyeOff, чтобы пользователь мог временно
+                    исключить опцион из расчёта в любом режиме (включая зафиксированные позиции).
+                    Замочек убран как избыточный визуал — статус «зафиксирована» виден в шапке. */}
                 <div className="w-[30px] flex items-center justify-center gap-0.5">
                   <button
-                    onClick={() => !option.isLockedPosition && toggleOptionVisibility(option.id)}
-                    className={`flex justify-center ${option.isLockedPosition
-                      ? 'text-red-500 cursor-default'
-                      : 'text-muted-foreground hover:text-foreground cursor-pointer'
-                      }`}
-                    title={option.isLockedPosition ? 'Позиция зафиксирована' : (option.visible ? 'Скрыть' : 'Показать')}
+                    onClick={() => toggleOptionVisibility(option.id)}
+                    className="flex justify-center text-muted-foreground hover:text-foreground cursor-pointer"
+                    title={option.visible ? 'Скрыть' : 'Показать'}
                   >
-                    {option.isLockedPosition
-                      ? <LockIcon size={16} />
-                      : (option.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />)
-                    }
+                    {option.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
                   </button>
                   {option.isSuperOption && (
                     <Gem

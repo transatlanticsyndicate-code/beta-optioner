@@ -8,6 +8,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Save, Trash2, ExternalLink, Filter, Calendar, Download, Upload, X, AlertCircle, CheckCircle, Edit2, TrendingUp, Bitcoin, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Button } from '../components/ui/button';
+import { Checkbox } from '../components/ui/checkbox';
 import { Input } from '../components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
 import {
@@ -62,6 +63,35 @@ function DatabaseSavedConfigurations() {
   const [showMigrationModal, setShowMigrationModal] = useState(false);
   const [migrationResult, setMigrationResult] = useState(null);
   const [migrationError, setMigrationError] = useState(null);
+
+  // Множественное выделение строк для пакетного удаления.
+  // ЗАЧЕМ: позволяет удалить несколько своих сохранений за раз без подтверждения каждой.
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+
+  // Имя текущего пользователя — для проверки права на удаление (только свои записи).
+  // null означает «не вошёл / не определили» — тогда пакетное удаление недоступно.
+  const [currentUserName, setCurrentUserName] = useState(null);
+  const [currentUserId, setCurrentUserId] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!supabase) return;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (cancelled) return;
+        if (session?.user) {
+          const meta = session.user.user_metadata || {};
+          const name = meta.first_name || meta.name || (session.user.email || '').split('@')[0];
+          setCurrentUserName(name || null);
+          setCurrentUserId(session.user.id || null);
+        }
+      } catch (e) {
+        console.warn('Не удалось определить текущего пользователя для пакетного удаления:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Установка заголовка страницы
   useEffect(() => {
@@ -125,6 +155,54 @@ function DatabaseSavedConfigurations() {
         console.error('Ошибка удаления:', err);
         alert(`Ошибка удаления: ${err.message}`);
       }
+    }
+  };
+
+  // Пакетное удаление выбранных конфигураций.
+  // Удаляем только записи, у которых author === currentUserName — чужие пропускаем
+  // и сообщаем об этом пользователю одним сводным сообщением. Удаление параллельное
+  // через Promise.allSettled, чтобы один сбой не блокировал остальные.
+  const handleDeleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+
+    if (!currentUserName) {
+      alert('Не удалось определить пользователя. Войдите в систему, чтобы удалять свои конфигурации.');
+      return;
+    }
+
+    const selectedConfigs = configurations.filter(c => selectedIds.has(c.id));
+    const own = selectedConfigs.filter(c => c.author === currentUserName);
+    const foreign = selectedConfigs.filter(c => c.author !== currentUserName);
+
+    if (own.length === 0) {
+      alert('Среди выбранных нет ваших конфигураций — удалять нечего. Удалять можно только записи, где автор — вы.');
+      return;
+    }
+
+    const message = foreign.length > 0
+      ? `Удалить ${own.length} ваших конфигураций? ${foreign.length} чужих будут пропущены.`
+      : `Удалить ${own.length} конфигураций?`;
+
+    if (!window.confirm(message)) return;
+
+    try {
+      setLoading(true);
+      const results = await Promise.allSettled(
+        own.map(c => deleteConfiguration(c.id, currentUserId))
+      );
+      const failed = results.filter(r => r.status === 'rejected').length;
+      const succeeded = own.length - failed;
+
+      if (failed > 0) {
+        alert(`Удалено: ${succeeded}. Не удалось удалить: ${failed}.`);
+      }
+      setSelectedIds(new Set());
+      await loadConfigurations();
+    } catch (err) {
+      console.error('Ошибка пакетного удаления:', err);
+      alert(`Ошибка пакетного удаления: ${err.message}`);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -393,10 +471,43 @@ function DatabaseSavedConfigurations() {
 
   const totalPages = Math.ceil(filteredConfigurations.length / itemsPerPage);
 
-  // Сброс на первую страницу при изменении фильтров
+  // Сброс на первую страницу при изменении фильтров.
+  // Также сбрасываем множественное выделение, иначе пользователь может «случайно»
+  // удалить записи, скрытые текущим фильтром, — это удивит и расстроит.
   useEffect(() => {
     setCurrentPage(1);
+    setSelectedIds(new Set());
   }, [filterDate, filterTicker, filterAuthor, filterInstrumentType, filterStatus]);
+
+  // Состояние master-чекбокса в шапке таблицы: «выбраны все на текущей странице».
+  // Учитываем только записи текущего пользователя — чужие игнорируются и в подсчёте,
+  // и при клике, чтобы поведение совпадало с правом удаления.
+  const pageOwnConfigs = useMemo(
+    () => paginatedConfigurations.filter(c => currentUserName && c.author === currentUserName),
+    [paginatedConfigurations, currentUserName]
+  );
+  const allOnPageSelected = pageOwnConfigs.length > 0 && pageOwnConfigs.every(c => selectedIds.has(c.id));
+  const someOnPageSelected = pageOwnConfigs.some(c => selectedIds.has(c.id));
+
+  const togglePageSelection = () => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (allOnPageSelected) {
+        pageOwnConfigs.forEach(c => next.delete(c.id));
+      } else {
+        pageOwnConfigs.forEach(c => next.add(c.id));
+      }
+      return next;
+    });
+  };
+
+  const toggleRowSelection = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   // Сброс всех фильтров
   const clearFilters = () => {
@@ -606,6 +717,27 @@ function DatabaseSavedConfigurations() {
               />
 
 
+              {/* Кнопка пакетного удаления выбранных конфигураций.
+                  ЗАЧЕМ: позволяет удалить N своих сохранений одним кликом
+                  без подтверждения каждой записи отдельно. */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleDeleteSelected}
+                    disabled={selectedIds.size === 0 || loading}
+                    className="text-xs text-red-600 hover:text-red-700"
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Удалить выбранные{selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Удалить только отмеченные галочкой конфигурации (можно удалять только свои)</p>
+                </TooltipContent>
+              </Tooltip>
+
               {/* Кнопка удаления всех конфигураций */}
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -664,6 +796,27 @@ function DatabaseSavedConfigurations() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  {/* Master-чекбокс: выбирает/снимает все СВОИ записи на текущей странице.
+                      Чужие записи в выделение не попадают — удалять можно только свои. */}
+                  <TableHead className="w-[40px]">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex">
+                            <Checkbox
+                              checked={allOnPageSelected ? true : (someOnPageSelected ? 'indeterminate' : false)}
+                              onCheckedChange={togglePageSelection}
+                              disabled={pageOwnConfigs.length === 0}
+                              aria-label="Выбрать все свои на этой странице"
+                            />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>{pageOwnConfigs.length === 0 ? 'На этой странице нет ваших конфигураций' : 'Выбрать все свои на этой странице'}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </TableHead>
                   <TableHead
                     className="cursor-pointer select-none hover:text-foreground"
                     onClick={() => handleSort('createdAt')}
@@ -712,8 +865,31 @@ function DatabaseSavedConfigurations() {
                   const isStocks = instrumentType === 'Акции';
                   const isCrypto = instrumentType === 'Крипто';
                   
+                  const isOwn = currentUserName && config.author === currentUserName;
                   return (
                     <TableRow key={config.id} className="hover:bg-gray-50">
+                      {/* Чекбокс выбора. У чужих записей он отключён — удалять можно только свои. */}
+                      <TableCell className="w-[40px]">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex">
+                                <Checkbox
+                                  checked={selectedIds.has(config.id)}
+                                  onCheckedChange={() => toggleRowSelection(config.id)}
+                                  disabled={!isOwn}
+                                  aria-label="Выбрать конфигурацию"
+                                />
+                              </span>
+                            </TooltipTrigger>
+                            {!isOwn && (
+                              <TooltipContent>
+                                <p>Удалять можно только свои конфигурации</p>
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
+                        </TooltipProvider>
+                      </TableCell>
                       <TableCell className="font-mono text-sm">
                         {formatDate(config.createdAt)}
                       </TableCell>

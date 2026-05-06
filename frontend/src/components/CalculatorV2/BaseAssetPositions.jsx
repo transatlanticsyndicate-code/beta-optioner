@@ -88,21 +88,15 @@ function BaseAssetPositions({
             }`}
             style={{ gap: 0 }}
           >
-            {/* Иконка видимости: Lock для зафиксированных позиций, Eye/EyeOff для обычных */}
-            {/* ЗАЧЕМ: Проверяем isLockedPosition на уровне каждой позиции */}
+            {/* Иконка видимости — всегда Eye/EyeOff, чтобы пользователь мог временно
+                исключить базовый актив из расчёта в любом режиме (включая зафиксированные).
+                Замочек убран как избыточный визуал — статус «зафиксирована» виден в шапке. */}
             <button
-              onClick={() => !position.isLockedPosition && togglePositionVisibility(position.id)}
-              className={`flex justify-center ${
-                position.isLockedPosition 
-                  ? 'text-red-500 cursor-default' 
-                  : 'text-muted-foreground hover:text-foreground cursor-pointer'
-              }`}
-              title={position.isLockedPosition ? 'Позиция зафиксирована' : (position.visible ? 'Скрыть' : 'Показать')}
+              onClick={() => togglePositionVisibility(position.id)}
+              className="flex justify-center text-muted-foreground hover:text-foreground cursor-pointer"
+              title={position.visible ? 'Скрыть' : 'Показать'}
             >
-              {position.isLockedPosition 
-                ? <LockIcon size={16} />
-                : (position.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />)
-              }
+              {position.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
             </button>
             <span className={`font-medium ml-2 ${position.type === "LONG" ? "text-green-600" : "text-red-600"}`}>
               {position.type}
