@@ -8,7 +8,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Save, Trash2, ExternalLink, Filter, Calendar, Download, Upload, X, AlertCircle, CheckCircle, Edit2, TrendingUp, Bitcoin, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Button } from '../components/ui/button';
-import { Checkbox } from '../components/ui/checkbox';
 import { Input } from '../components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
 import {
@@ -802,14 +801,15 @@ function DatabaseSavedConfigurations() {
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <span className="inline-flex">
-                            <Checkbox
-                              checked={allOnPageSelected ? true : (someOnPageSelected ? 'indeterminate' : false)}
-                              onCheckedChange={togglePageSelection}
-                              disabled={pageOwnConfigs.length === 0}
-                              aria-label="Выбрать все свои на этой странице"
-                            />
-                          </span>
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 cursor-pointer accent-cyan-500 disabled:cursor-not-allowed disabled:opacity-50"
+                            checked={allOnPageSelected}
+                            ref={el => { if (el) el.indeterminate = !allOnPageSelected && someOnPageSelected; }}
+                            onChange={togglePageSelection}
+                            disabled={pageOwnConfigs.length === 0}
+                            aria-label="Выбрать все свои на этой странице"
+                          />
                         </TooltipTrigger>
                         <TooltipContent>
                           <p>{pageOwnConfigs.length === 0 ? 'На этой странице нет ваших конфигураций' : 'Выбрать все свои на этой странице'}</p>
@@ -873,14 +873,14 @@ function DatabaseSavedConfigurations() {
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <span className="inline-flex">
-                                <Checkbox
-                                  checked={selectedIds.has(config.id)}
-                                  onCheckedChange={() => toggleRowSelection(config.id)}
-                                  disabled={!isOwn}
-                                  aria-label="Выбрать конфигурацию"
-                                />
-                              </span>
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 cursor-pointer accent-cyan-500 disabled:cursor-not-allowed disabled:opacity-50"
+                                checked={selectedIds.has(config.id)}
+                                onChange={() => toggleRowSelection(config.id)}
+                                disabled={!isOwn}
+                                aria-label="Выбрать конфигурацию"
+                              />
                             </TooltipTrigger>
                             {!isOwn && (
                               <TooltipContent>
