@@ -467,26 +467,28 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
 
     // Логика якорной P&L: если пользователь ввел actualPL, используем её как якорь
     // ЗАЧЕМ: Позволяет пользователю зафиксировать реальную P&L и проецировать от неё
-    if (option.actualPL !== null && option.actualPL !== undefined && option.actualPLDate) {
+    // ВАЖНО: на дату экспирации (simulatedDaysToExpiration <= 0) якорь НЕ применяется —
+    // P&L определяется чистой формулой intrinsic_value − entry_price без коррекций.
+    if (simulatedDaysToExpiration > 0 && option.actualPL !== null && option.actualPL !== undefined && option.actualPLDate) {
       // Вычисляем дни от входа до даты ввода actualPL
       const anchorDateObj = new Date(option.actualPLDate + 'T00:00:00Z');
       const oldestEntryDateObj = oldestEntryDate || new Date();
       const anchorDaysPassed = Math.round((anchorDateObj - oldestEntryDateObj) / (1000 * 60 * 60 * 24));
-      
+
       // Если текущий день >= дня ввода — используем якорную формулу
       if (daysPassed >= anchorDaysPassed) {
         // Вычисляем теоретическую цену на момент якоря
         const anchorDaysToExp = calculateDaysToExpirationForOption(option, anchorDaysPassed, oldestEntryDate);
-        
+
         // IV на момент якоря: используем manualIvOverride если задан, иначе marketIV
         const anchorIV = option.manualIvOverride !== null && option.manualIvOverride !== undefined
           ? (option.manualIvOverride / 100)
           : optionVolatility;
-        
+
         // ВАЖНО: plAtAnchor считается при ЦЕНЕ АКТИВА НА МОМЕНТ ВВОДА якоря (actualPLPrice)
         // ЗАЧЕМ: Якорь фиксирует P&L при конкретной цене, дельта должна учитывать изменение цены
         const anchorPrice = option.actualPLPrice || currentPrice;
-        
+
         let plAtAnchor = calculatorMode === CALCULATOR_MODES.FUTURES
           ? calculateFuturesOptionPLValue(tempOption, anchorPrice, anchorDaysToExp, contractMultiplier, anchorIV)
           : calculateStockOptionPLValue(tempOption, anchorPrice, currentPrice, anchorDaysToExp, anchorIV, dividendYield, contractMultiplier, rfrScenario2);
@@ -663,26 +665,28 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
 
     // Логика якорной P&L: если пользователь ввел actualPL, используем её как якорь
     // ЗАЧЕМ: Позволяет пользователю зафиксировать реальную P&L и проецировать от неё
-    if (option.actualPL !== null && option.actualPL !== undefined && option.actualPLDate) {
+    // ВАЖНО: на дату экспирации (simulatedDaysToExpiration <= 0) якорь НЕ применяется —
+    // P&L определяется чистой формулой intrinsic_value − entry_price без коррекций.
+    if (simulatedDaysToExpiration > 0 && option.actualPL !== null && option.actualPL !== undefined && option.actualPLDate) {
       // Вычисляем дни от входа до даты ввода actualPL
       const anchorDateObj = new Date(option.actualPLDate + 'T00:00:00Z');
       const oldestEntryDateObj = oldestEntryDate || new Date();
       const anchorDaysPassed = Math.round((anchorDateObj - oldestEntryDateObj) / (1000 * 60 * 60 * 24));
-      
+
       // Если текущий день >= дня ввода — используем якорную формулу
       if (daysPassed >= anchorDaysPassed) {
         // Вычисляем теоретическую цену на момент якоря
         const anchorDaysToExp = calculateDaysToExpirationForOption(option, anchorDaysPassed, oldestEntryDate);
-        
+
         // IV на момент якоря: используем manualIvOverride если задан, иначе marketIV
         const anchorIV = option.manualIvOverride !== null && option.manualIvOverride !== undefined
           ? (option.manualIvOverride / 100)
           : optionVolatility;
-        
+
         // ВАЖНО: plAtAnchor считается при ЦЕНЕ АКТИВА НА МОМЕНТ ВВОДА якоря (actualPLPrice)
         // ЗАЧЕМ: Якорь фиксирует P&L при конкретной цене, дельта должна учитывать изменение цены
         const anchorPrice = option.actualPLPrice || currentPrice;
-        
+
         let plAtAnchor = calculatorMode === CALCULATOR_MODES.FUTURES
           ? calculateFuturesOptionPLValue(tempOption, anchorPrice, anchorDaysToExp, contractMultiplier, anchorIV)
           : calculateStockOptionPLValue(tempOption, anchorPrice, currentPrice, anchorDaysToExp, anchorIV, dividendYield, contractMultiplier, rfrScenario3);

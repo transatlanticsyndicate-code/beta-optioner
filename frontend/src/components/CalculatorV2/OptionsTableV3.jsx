@@ -1216,7 +1216,10 @@ function OptionsTableV3({
 
                     // Логика якорной P&L: если пользователь ввел actualPL, используем её как якорь
                     // ЗАЧЕМ: Позволяет пользователю зафиксировать реальную P&L и проецировать от неё
-                    if (option.actualPL !== null && option.actualPL !== undefined && option.actualPLDate) {
+                    // ВАЖНО: на дату экспирации (optionDaysRemaining <= 0) якорь НЕ применяется —
+                    // там P&L определяется чистой формулой intrinsic_value − entry_price,
+                    // и любая корректировка через якорь искажает математически точное значение.
+                    if (optionDaysRemaining > 0 && option.actualPL !== null && option.actualPL !== undefined && option.actualPLDate) {
                       // Вычисляем дни от входа до даты ввода actualPL
                       const anchorDateObj = new Date(option.actualPLDate + 'T00:00:00Z');
                       const oldestEntryDateObj = oldestEntry || new Date();
@@ -1392,7 +1395,10 @@ function OptionsTableV3({
                     }
 
                     // Применяем логику якорной P&L
-                    if (option.actualPL !== null && option.actualPL !== undefined && option.actualPLDate) {
+                    // ВАЖНО: на дату экспирации (optionDaysRemaining <= 0) якорь НЕ применяется —
+                    // P&L и обратный расчёт цены закрытия должны опираться на чистую формулу
+                    // intrinsic_value − entry_price без коррекций.
+                    if (optionDaysRemaining > 0 && option.actualPL !== null && option.actualPL !== undefined && option.actualPLDate) {
                       const anchorDateObj = new Date(option.actualPLDate + 'T00:00:00Z');
                       const oldestEntryDateObj = oldestEntry || new Date();
                       const anchorDaysPassed = Math.round((anchorDateObj - oldestEntryDateObj) / (1000 * 60 * 60 * 24));

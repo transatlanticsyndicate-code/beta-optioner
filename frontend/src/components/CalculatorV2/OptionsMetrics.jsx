@@ -87,11 +87,22 @@ function OptionsMetrics({ options = [], currentPrice = 0, positions = [], daysPa
     {
       priority: 1,
       label: 'MAX убыток',
-      value: calculatedMetrics.hasCompleteOptions && calculatedMetrics.plMetrics.maxLoss < 0
+      // Показываем число всегда, когда есть полные опционы — даже если оно положительное.
+      // ЗАЧЕМ: бывают стратегии с гарантированной минимальной прибылью на экспирации
+      // (коллар, протективный пут и т.п.) — у них «худший P&L» >= 0, и пользователю
+      // важно видеть размер этого минимального профита, а не прочерк.
+      value: calculatedMetrics.hasCompleteOptions
         ? formatCurrency(calculatedMetrics.plMetrics.maxLoss)
         : '—',
-      color: 'red',
-      tooltip: 'Максимальный возможный убыток стратегии НА ДАТУ ЭКСПИРАЦИИ.\nВНИМАНИЕ: при графике стремящемся в бесконечность сумма убытка ограничивается движением цены базового актива на 100%.'
+      // Цвет зависит от знака: убыток — красный, гарантированная прибыль — зелёный, ноль — серый.
+      color: !calculatedMetrics.hasCompleteOptions
+        ? 'red'
+        : calculatedMetrics.plMetrics.maxLoss < 0
+          ? 'red'
+          : calculatedMetrics.plMetrics.maxLoss > 0
+            ? 'green'
+            : 'gray',
+      tooltip: 'Худший P&L стратегии НА ДАТУ ЭКСПИРАЦИИ. Отрицательное значение — максимальный убыток. Положительное значение — гарантированный минимальный профит (стратегия не может уйти в минус).\nВНИМАНИЕ: при графике стремящемся в бесконечность сумма ограничивается движением цены базового актива на 100%.'
     },
     {
       priority: 1,

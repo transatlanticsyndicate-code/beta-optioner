@@ -348,8 +348,12 @@ export function calculatePLMetrics(options, currentPrice, positions = [], daysPa
   // Передаём daysPassed = 999999 чтобы гарантированно обнулить daysRemaining для всех опционов.
   const { totalPLArray: expirationPLArray } = calculatePLDataForMetrics(options, currentPrice, positions, 999999, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap, targetPrice, selectedTicker, calculatorMode, contractMultiplier, 'simple');
 
-  const maxProfit = expirationPLArray.length > 0 ? Math.max(...expirationPLArray) : Math.max(...totalPLArray);
-  const maxLoss = expirationPLArray.length > 0 ? Math.min(...expirationPLArray) : Math.min(...totalPLArray);
+  // Защита от пустых массивов: Math.min/Math.max от пустого массива возвращают ±Infinity,
+  // что потом утекает в UI (видится как «—» или ломает форматирование). Если оба массива
+  // пустые — возвращаем 0/0, чтобы метрика выглядела предсказуемо.
+  const sourcePLArray = expirationPLArray.length > 0 ? expirationPLArray : totalPLArray;
+  const maxProfit = sourcePLArray.length > 0 ? Math.max(...sourcePLArray) : 0;
+  const maxLoss = sourcePLArray.length > 0 ? Math.min(...sourcePLArray) : 0;
 
   // Рассчитываем Break-even точки (где P&L пересекает 0)
   const breakevens = [];
