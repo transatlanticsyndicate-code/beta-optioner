@@ -72,23 +72,24 @@ function PositionFinancialControl({
   const instrumentLimitExceeded = instrumentLimit && usedCapital > instrumentLimit;
   const instrumentExcessAmount = instrumentLimitExceeded ? usedCapital - instrumentLimit : 0;
 
-  // Рассчитываем MAX убыток из метрик
+  // Рассчитываем MAX убыток из метрик — со знаком, как вернула формула
+  // (отрицательное — реальный убыток, положительное — гарантированный мин. профит, 0 — точка перехода)
   const maxLoss = useMemo(() => {
-    const completeOptions = options.filter(opt => 
-      opt.date && 
-      opt.strike && 
+    const completeOptions = options.filter(opt =>
+      opt.date &&
+      opt.strike &&
       opt.premium !== undefined &&
       opt.premium !== null &&
       opt.visible !== false
     );
-    
+
     if (completeOptions.length === 0) return 0;
-    
+
     const plMetrics = calculatePLMetrics(
-      completeOptions, 
-      currentPrice, 
-      positions, 
-      daysPassed, 
+      completeOptions,
+      currentPrice,
+      positions,
+      daysPassed,
       ivSurface,
       0, // dividendYield
       false, // isAIEnabled
@@ -98,7 +99,7 @@ function PositionFinancialControl({
       calculatorMode,
       contractMultiplier
     );
-    return Math.abs(plMetrics.maxLoss);
+    return plMetrics.maxLoss;
   }, [options, currentPrice, positions, daysPassed, ivSurface, calculatorMode, contractMultiplier]);
 
   // Рассчитываем лимит MAX убытка
@@ -111,9 +112,14 @@ function PositionFinancialControl({
     return Math.round((deposit / count) * (percent / 100));
   }, [financialControlEnabled, depositAmount, instrumentCount, maxLossPercent]);
 
+  // Экспозиция к убытку — абсолют величины, ТОЛЬКО когда maxLoss реально отрицателен.
+  // Если стратегия гарантирует мин. профит (maxLoss >= 0), фактической экспозиции к убытку нет
+  // и лимит «потерь» считается не превышённым.
+  const lossExposure = maxLoss < 0 ? Math.abs(maxLoss) : 0;
+
   // Проверяем превышение лимита MAX убытка
-  const maxLossLimitExceeded = maxLossLimit && maxLoss > maxLossLimit;
-  const maxLossExcessAmount = maxLossLimitExceeded ? maxLoss - maxLossLimit : 0;
+  const maxLossLimitExceeded = maxLossLimit && lossExposure > maxLossLimit;
+  const maxLossExcessAmount = maxLossLimitExceeded ? lossExposure - maxLossLimit : 0;
 
   // Проверяем, есть ли хотя бы одно превышение
   const hasAnyExcess = instrumentLimitExceeded || maxLossLimitExceeded;
@@ -225,11 +231,19 @@ function PositionFinancialControl({
         </div>
       )}
 
-      {/* Блок MAX убыток */}
+      {/* Блок MAX убыток — знак и цвет соответствуют реальному значению:
+          отрицательное (убыток) — красный с минусом, положительное (гарантированный
+          мин. профит) — зелёный с плюсом, ноль — серый. */}
       <div className="space-y-2 pt-2">
         <div className="flex justify-between text-sm font-semibold">
           <span>MAX убыток</span>
-          <span className="text-red-600">-$ {formatNumber(maxLoss)}</span>
+          <span className={
+            maxLoss < 0 ? 'text-red-600'
+              : maxLoss > 0 ? 'text-green-600'
+                : 'text-gray-500'
+          }>
+            {maxLoss < 0 ? '-' : maxLoss > 0 ? '+' : ''}$ {formatNumber(Math.abs(maxLoss))}
+          </span>
         </div>
       </div>
 
