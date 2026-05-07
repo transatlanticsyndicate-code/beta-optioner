@@ -3029,7 +3029,16 @@ function UniversalOptionsCalculator() {
           });
           
           setOptions(optionsToSet);
-          setPositions(config.state.positions || []);
+          // В режиме редактирования снимаем блокировку с позиций базового актива,
+          // чтобы пользователь мог менять количество акций и цену покупки.
+          let positionsToSet = config.state.positions || [];
+          if (editMode) {
+            positionsToSet = positionsToSet.map(pos => {
+              const { isLockedPosition, ...rest } = pos;
+              return rest;
+            });
+          }
+          setPositions(positionsToSet);
           setSelectedExpirationDate(config.state.selectedExpirationDate || '');
 
           // Устанавливаем daysPassed (вычисленный выше)
@@ -3434,7 +3443,16 @@ function UniversalOptionsCalculator() {
       }
 
       setOptions(optionsToSet);
-      setPositions(config.state.positions || []);
+      // В режиме редактирования снимаем блокировку с позиций базового актива,
+      // чтобы пользователь мог менять количество акций и цену покупки.
+      let positionsToSet = config.state.positions || [];
+      if (editMode) {
+        positionsToSet = positionsToSet.map(pos => {
+          const { isLockedPosition, ...rest } = pos;
+          return rest;
+        });
+      }
+      setPositions(positionsToSet);
       setSelectedExpirationDate(config.state.selectedExpirationDate || '');
       setDaysPassed(calculatedDaysPassed);
       setUserAdjustedDays(false);
