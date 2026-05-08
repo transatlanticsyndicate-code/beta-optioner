@@ -444,6 +444,68 @@ function injectCalculatorButton(container, symbol, expiry, strike, right, action
     container.appendChild(a);
 }
 
+// ─── 6.6 Scanner (Stock positions in calculator) ───
+//
+// Сканирует строки базового актива в BaseAssetPositions, помеченные [data-stock-row="1"].
+// Если в TWS есть STK-позиция по тикеру в той же стороне (LONG/SHORT) — инжектит серую
+// кнопку «−». Клик отправляет на bridge запрос /open?secType=STK без цены — backend сам
+// возьмёт live bid/ask из TWS и поставит staged LMT-ордер.
+function scanStockPositions() {
+    const rows = document.querySelectorAll('[data-stock-row="1"]');
+    rows.forEach(row => {
+        const ticker = (row.dataset.stockTicker || '').trim();
+        const quantity = parseInt(row.dataset.stockQuantity, 10);
+        const side = (row.dataset.stockSide || '').trim();
+        if (!ticker || !quantity || quantity <= 0 || !side) return;
+
+        const slot = row.querySelector('.ibkr-stock-close-slot');
+        if (!slot) return;
+
+        const match = findStockPosition(ticker, side);
+        const desiredMark = match ? `${ticker}|${side}|${quantity}` : '';
+        if (slot.dataset.rendered === desiredMark) return;
+
+        // Состояние изменилось — пересоздаём кнопку.
+        slot.innerHTML = '';
+        slot.dataset.rendered = desiredMark;
+
+        if (!match) return; // нет позиции в TWS — кнопку не показываем
+
+        const closeAction = side === 'LONG' ? 'SELL' : 'BUY';
+        const a = document.createElement('a');
+        a.className = 'ibkr-btn-link ibkr-btn-calc ibkr-btn-CLOSE ibkr-btn-CLOSE-STK ibkr-btn-close-rendered';
+        a.innerText = '−';
+        a.title = `Close ${side} ${ticker} (${quantity}) — staged LMT в TWS`;
+        a.dataset.closeQty = quantity;
+        a.href = '#';
+
+        a.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            // Перечитываем актуальные данные на момент клика — пользователь мог изменить
+            // количество в калькуляторе после рендера кнопки.
+            const liveQty = parseInt(row.dataset.stockQuantity, 10) || quantity;
+            const orderUrl = `${BRIDGE_URL}/open?symbol=${encodeURIComponent(ticker)}&action=${closeAction}&secType=STK&quantity=${liveQty}`;
+            console.log(`IBKR Bridge: STK close ${closeAction} ${liveQty} ${ticker}`);
+            showButtonFeedback(a, true);
+            fetch(orderUrl)
+                .then(async (resp) => {
+                    if (!resp.ok) {
+                        const text = await resp.text();
+                        console.error('IBKR Bridge: STK close failed:', text);
+                        showButtonFeedback(a, false);
+                    }
+                })
+                .catch((err) => {
+                    console.error('IBKR Bridge: STK close error:', err);
+                    showButtonFeedback(a, false);
+                });
+        };
+
+        slot.appendChild(a);
+    });
+}
+
 function startEngine() {
     const isTV = window.location.href.includes('/options/');
     const isCalc = window.location.href.includes('beta.optioner.online/tools/universal-calculator');
@@ -451,6 +513,7 @@ function startEngine() {
         setInterval(scan, CONFIG.SCAN_INTERVAL_TRADINGVIEW);
     } else if (isCalc) {
         setInterval(scanCalculator, CONFIG.SCAN_INTERVAL_CALCULATOR);
+        setInterval(scanStockPositions, CONFIG.SCAN_INTERVAL_CALCULATOR);
         fetchPositions();
         setInterval(fetchPositions, CONFIG.POSITIONS_POLL_INTERVAL);
     }

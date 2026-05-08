@@ -113,13 +113,74 @@ async def handle_open(request):
         except (ValueError, TypeError):
             limit_price = None
 
-    # Для калькуляторного пути (без conid) цена обязательна — фронт обязан валидировать заранее.
-    if not con_id and limit_price is None:
+    # Признак закрытия позиции по акции: secType=STK + symbol, без expiry/strike/right.
+    # Для этого пути цена в URL необязательна — backend сам возьмёт live bid/ask из TWS.
+    is_stock_close = (sec_type == 'STK' and symbol and not expiry and not strike and not right)
+
+    # Для калькуляторного пути (без conid) цена обязательна — кроме закрытия акций (там её добываем сами).
+    if not con_id and not is_stock_close and limit_price is None:
         print(f"!!! REJECTING: /open from calculator without valid price: price={price_raw!r}")
         return web.Response(text="Missing or invalid price for limit order", status=400)
 
-    print(f"\n[HTTP] /open parameters: conid={con_id}, symbol={symbol}, expiry={expiry}, strike={strike}, right={right}, action={action}, secType={sec_type}, quantity={quantity}, price={limit_price}")
-    
+    print(f"\n[HTTP] /open parameters: conid={con_id}, symbol={symbol}, expiry={expiry}, strike={strike}, right={right}, action={action}, secType={sec_type}, quantity={quantity}, price={limit_price}, stock_close={is_stock_close}")
+
+    # ─── Stock-close path: STK + symbol, без опционных полей ───
+    if is_stock_close:
+        try:
+            stock_contract = Stock(symbol, 'SMART', 'USD')
+            details = await ib.reqContractDetailsAsync(stock_contract)
+            if not details:
+                print(f"!!! FAIL: Stock contract not found: {symbol}")
+                return web.json_response({"status": "error", "error": f"Stock contract not found: {symbol}"}, status=404)
+            full_contract = details[0].contract
+            print(f"    SUCCESS qualified stock: {full_contract.symbol} on {full_contract.exchange}")
+
+            # Запрашиваем live bid/ask (snapshot). Таймаут — чтобы не висеть, если рынок закрыт/нет подписки.
+            print(f"    Requesting live bid/ask for {symbol}...")
+            try:
+                tickers = await asyncio.wait_for(ib.reqTickersAsync(full_contract), timeout=2.5)
+            except asyncio.TimeoutError:
+                print(f"!!! Market data timeout for {symbol}")
+                return web.json_response({"status": "error", "error": "Market data timeout — нет live-котировок (рынок закрыт или нет подписки)"}, status=503)
+
+            if not tickers:
+                return web.json_response({"status": "error", "error": "No market data received"}, status=503)
+
+            t = tickers[0]
+            bid = t.bid if (t.bid is not None and t.bid > 0) else None
+            ask = t.ask if (t.ask is not None and t.ask > 0) else None
+
+            # SELL → закрываем LONG → берём bid (цена, по которой можно продать).
+            # BUY  → закрываем SHORT → берём ask (цена, по которой можно выкупить).
+            live_price = bid if action == 'SELL' else ask
+            if live_price is None:
+                side_name = 'bid' if action == 'SELL' else 'ask'
+                print(f"!!! No live {side_name} for {symbol} (bid={bid}, ask={ask})")
+                return web.json_response({"status": "error", "error": f"Нет live-{side_name} для {symbol} — рынок закрыт или нет подписки"}, status=503)
+
+            order = Order(
+                action=action,
+                totalQuantity=quantity,
+                orderType='LMT',
+                lmtPrice=live_price,
+                tif='DAY',
+                transmit=False,
+            )
+            order_contract = Contract(conId=full_contract.conId, exchange=full_contract.exchange or 'SMART')
+            print(f"    Placing staged STK LMT {action} {quantity} {symbol} @ {live_price}...")
+            trade = ib.placeOrder(order_contract, order)
+            await asyncio.sleep(0.5)
+            return web.json_response({
+                "status": "success",
+                "symbol": full_contract.symbol,
+                "conId": full_contract.conId,
+                "orderStatus": trade.orderStatus.status,
+                "limitPrice": live_price,
+            })
+        except Exception as e:
+            print(f"!!! ERROR handling stock-close /open: {e}")
+            return web.json_response({"status": "error", "error": str(e)}, status=500)
+
     try:
         if con_id:
             print(f">>> RECEIVED {action} REQUEST for conId: {con_id}")
@@ -249,20 +310,22 @@ async def handle_positions(request):
         result = []
         for p in positions:
             c = p.contract
-            if c.secType not in ('OPT', 'FOP'):
+            if c.secType not in ('OPT', 'FOP', 'STK'):
                 continue
             qty = float(p.position)
             if qty == 0:
                 continue
-            result.append({
+            entry = {
                 'symbol': c.symbol,
                 'secType': c.secType,
-                'expiry': c.lastTradeDateOrContractMonth,
-                'strike': c.strike,
-                'right': c.right,
                 'quantity': abs(qty),
                 'side': 'LONG' if qty > 0 else 'SHORT',
-            })
+            }
+            if c.secType in ('OPT', 'FOP'):
+                entry['expiry'] = c.lastTradeDateOrContractMonth
+                entry['strike'] = c.strike
+                entry['right'] = c.right
+            result.append(entry)
         return web.json_response(result)
     except Exception as e:
         print(f"!!! ERROR /positions: {e}")

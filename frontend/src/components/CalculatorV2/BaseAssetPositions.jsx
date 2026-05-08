@@ -83,7 +83,11 @@ function BaseAssetPositions({
         {positions.map((position) => (
           <div
             key={position.id}
-            className={`grid grid-cols-[30px_50px_60px_72px_100px_30px] items-center text-sm border rounded-md p-2 ${
+            data-stock-row="1"
+            data-stock-ticker={position.ticker || ''}
+            data-stock-quantity={position.quantity}
+            data-stock-side={position.type}
+            className={`grid grid-cols-[30px_80px_60px_72px_100px_30px] items-center text-sm border rounded-md p-2 ${
               !position.visible ? "[&>*]:text-[#AAAAAA]" : ""
             }`}
             style={{ gap: 0 }}
@@ -98,9 +102,13 @@ function BaseAssetPositions({
             >
               {position.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
             </button>
-            <span className={`font-medium ml-2 ${position.type === "LONG" ? "text-green-600" : "text-red-600"}`}>
-              {position.type}
-            </span>
+            {/* В этот flex-контейнер расширение IBKR Bridge инжектит кнопку «−» (закрытие позиции в TWS). */}
+            <div className="flex items-center gap-1 ml-2">
+              <span className={`font-medium ${position.type === "LONG" ? "text-green-600" : "text-red-600"}`}>
+                {position.type}
+              </span>
+              <span className="ibkr-stock-close-slot" />
+            </div>
             <div className="ml-2">
               <Input
                 type="text"

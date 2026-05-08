@@ -65,3 +65,16 @@ function findMatchingPosition(symbol, secType, expiry, strike, right, action) {
     }
     return null;
 }
+
+// Поиск STK-позиции по тикеру и стороне (LONG/SHORT).
+// Используется для решения, активна ли кнопка закрытия акций в калькуляторе.
+function findStockPosition(symbol, side) {
+    if (!symbol || !side) return null;
+    const sym = normSym(symbol);
+    for (const p of openPositions) {
+        if (p.secType === 'STK' && normSym(p.symbol) === sym && p.side === side) {
+            return p;
+        }
+    }
+    return null;
+}
