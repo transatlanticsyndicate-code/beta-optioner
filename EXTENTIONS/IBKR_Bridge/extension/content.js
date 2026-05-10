@@ -459,6 +459,9 @@ function scanStockPositions() {
         const ticker = (row.dataset.stockTicker || '').trim();
         const quantity = parseInt(row.dataset.stockQuantity, 10);
         const side = (row.dataset.stockSide || '').trim();
+        const priceRaw = row.dataset.stockPrice;
+        const price = parseFloat(priceRaw);
+        const hasPrice = !isNaN(price) && price > 0;
         if (!ticker || !quantity || quantity <= 0 || !side) return;
 
         const slot = row.querySelector('.ibkr-stock-close-slot');
@@ -466,9 +469,8 @@ function scanStockPositions() {
 
         const match = findStockPosition(ticker, side);
         const mode = match ? 'close' : 'open';
-        // Метка включает режим — иначе при появлении/исчезновении позиции в TWS
-        // мы не пересоздадим кнопку и она «зависнет» в старом состоянии.
-        const desiredMark = `${ticker}|${side}|${quantity}|${mode}`;
+        // Метка включает режим, цену и hasPrice — чтобы пересоздать кнопку при их изменении.
+        const desiredMark = `${ticker}|${side}|${quantity}|${mode}|${priceRaw || ''}|${hasPrice ? '1' : '0'}`;
         if (slot.dataset.rendered === desiredMark) return;
 
         slot.innerHTML = '';
@@ -482,7 +484,7 @@ function scanStockPositions() {
             action = side === 'LONG' ? 'SELL' : 'BUY';
             label = '−';
             classes = 'ibkr-btn-link ibkr-btn-calc ibkr-btn-CLOSE ibkr-btn-CLOSE-STK ibkr-btn-close-rendered';
-            title = `Close ${side} ${ticker} (${quantity}) — staged LMT в TWS`;
+            title = `Close ${side} ${ticker} (${quantity}) @ ${price} — staged LMT в TWS`;
         } else {
             if (side === 'LONG') {
                 action = 'BUY';
@@ -493,7 +495,7 @@ function scanStockPositions() {
                 label = '−';
                 classes = 'ibkr-btn-link ibkr-btn-calc ibkr-btn-SELL ibkr-btn-OPEN-STK';
             }
-            title = `Open ${side} ${ticker} (${quantity}) — staged LMT в TWS`;
+            title = `Open ${side} ${ticker} (${quantity}) @ ${price} — staged LMT в TWS`;
         }
 
         const a = document.createElement('a');
@@ -503,27 +505,37 @@ function scanStockPositions() {
         a.dataset.qty = quantity;
         a.href = '#';
 
-        a.onclick = (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            // Перечитываем количество на момент клика — пользователь мог его поменять.
-            const liveQty = parseInt(row.dataset.stockQuantity, 10) || quantity;
-            const orderUrl = `${BRIDGE_URL}/open?symbol=${encodeURIComponent(ticker)}&action=${action}&secType=STK&quantity=${liveQty}`;
-            console.log(`IBKR Bridge: STK ${mode} ${action} ${liveQty} ${ticker}`);
-            showButtonFeedback(a, true);
-            fetch(orderUrl)
-                .then(async (resp) => {
-                    if (!resp.ok) {
-                        const text = await resp.text();
-                        console.error(`IBKR Bridge: STK ${mode} failed:`, text);
-                        showButtonFeedback(a, false);
-                    }
-                })
-                .catch((err) => {
-                    console.error(`IBKR Bridge: STK ${mode} error:`, err);
+        if (!hasPrice) {
+            // Без цены LIMIT-ордер собрать нельзя — гасим кнопку (клик не отправит запрос).
+            markButtonDisabled(a, 'Укажите цену в строке базового актива — без неё ордер не отправляется');
+        } else {
+            a.onclick = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                // Перечитываем количество и цену на момент клика — пользователь мог их поменять.
+                const liveQty = parseInt(row.dataset.stockQuantity, 10) || quantity;
+                const livePrice = parseFloat(row.dataset.stockPrice);
+                if (isNaN(livePrice) || livePrice <= 0) {
                     showButtonFeedback(a, false);
-                });
-        };
+                    return;
+                }
+                const orderUrl = `${BRIDGE_URL}/open?symbol=${encodeURIComponent(ticker)}&action=${action}&secType=STK&quantity=${liveQty}&price=${livePrice}`;
+                console.log(`IBKR Bridge: STK ${mode} ${action} ${liveQty} ${ticker} @ ${livePrice}`);
+                showButtonFeedback(a, true);
+                fetch(orderUrl)
+                    .then(async (resp) => {
+                        if (!resp.ok) {
+                            const text = await resp.text();
+                            console.error(`IBKR Bridge: STK ${mode} failed:`, text);
+                            showButtonFeedback(a, false);
+                        }
+                    })
+                    .catch((err) => {
+                        console.error(`IBKR Bridge: STK ${mode} error:`, err);
+                        showButtonFeedback(a, false);
+                    });
+            };
+        }
 
         slot.appendChild(a);
     });

@@ -87,6 +87,7 @@ function BaseAssetPositions({
             data-stock-ticker={position.ticker || ''}
             data-stock-quantity={position.quantity}
             data-stock-side={position.type}
+            data-stock-price={position.price === '' ? '' : position.price}
             className={`flex items-center gap-2 text-sm border rounded-md p-2 ${
               !position.visible ? "[&_*]:text-[#AAAAAA]" : ""
             }`}
