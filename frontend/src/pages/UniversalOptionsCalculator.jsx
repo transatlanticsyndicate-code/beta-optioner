@@ -435,6 +435,9 @@ function UniversalOptionsCalculator() {
 
   // State для синхронизированных настроек цены
   const [targetPrice, setTargetPrice] = useState(0);
+  // ЗАЧЕМ: Пока флаг false — ползунок/поле цены БА следуют за currentPrice (текущей ценой из шапки).
+  // Любое ручное изменение взводит флаг в true и отключает авто-синхронизацию до перезагрузки страницы.
+  const [userAdjustedTargetPrice, setUserAdjustedTargetPrice] = useState(false);
 
   // State для параметров подбора опционов (из AIOptionSelectorDialog)
   // ЗАЧЕМ: Хранит параметры для отображения компонента OptionSelectionResult
@@ -479,12 +482,15 @@ function UniversalOptionsCalculator() {
   const aiVolatilityMap = {};
   const setAiVolatilityMap = () => { }; // Заглушка
 
-  // Синхронизируем targetPrice с currentPrice при первой загрузке цены
+  // Синхронизируем targetPrice с currentPrice, пока пользователь сам не вмешался.
+  // ЗАЧЕМ: При открытии страницы (новый калькулятор / редактирование / просмотр) ползунок цены БА
+  // должен встать на текущую цену из шапки и продолжать следовать её обновлениям, пока пользователь
+  // не подвинет его вручную. После ручного изменения авто-синхронизация выключается до перезагрузки.
   useEffect(() => {
-    if (currentPrice > 0 && targetPrice === 0) {
+    if (currentPrice > 0 && !userAdjustedTargetPrice) {
       setTargetPrice(currentPrice);
     }
-  }, [currentPrice, targetPrice]);
+  }, [currentPrice, userAdjustedTargetPrice]);
 
   // Сохраняем dealInfo в localStorage при изменении
   // ЗАЧЕМ: Сделка не сбрасывается после перезагрузки страницы
@@ -1040,6 +1046,8 @@ function UniversalOptionsCalculator() {
     setDaysPassed(0);
     setChartDisplayMode('profit-loss-dollar');
     setUserAdjustedDays(false);
+    setTargetPrice(0);
+    setUserAdjustedTargetPrice(false);
     setIsDataCleared(false);
     setShowDemoData(false);
     setStrikesByDate({});
@@ -1174,9 +1182,12 @@ function UniversalOptionsCalculator() {
     setActiveCalculatorTab('deal'); // Переключаемся на таб "Сделка"
     
     // Устанавливаем целевую цену актива в блок симуляции
-    // ЗАЧЕМ: При нажатии кнопки "+ СДЕЛКА" targetPrice должен быть = currentPrice * 1.5 (50% по умолчанию)
+    // ЗАЧЕМ: При нажатии кнопки "+ СДЕЛКА" targetPrice должен быть = currentPrice * 1.5 (50% по умолчанию).
+    // Это явное пользовательское действие — взводим флаг ручной правки, чтобы авто-синхронизация
+    // не откатывала только что выставленное значение обратно к currentPrice.
     const defaultTargetAssetPrice = currentPrice * 1.5; // 50% от текущей цены
     setTargetPrice(defaultTargetAssetPrice);
+    setUserAdjustedTargetPrice(true);
     
     console.log('✅ [Deal] Сделка создана:', deal);
   }, [options, contractCode, selectedTicker, currentPrice, calculatorMode, setTargetPrice, setDealSettings]);
@@ -1616,7 +1627,11 @@ function UniversalOptionsCalculator() {
           setOptions(restoredOptions);
           setPositions(state.positions || []);
           setSelectedExpirationDate(state.selectedExpirationDate || null);
-          setDaysPassed(state.daysPassed || 0);
+          // ЗАЧЕМ: При перезагрузке страницы ползунок дней всегда стартует с «сегодня».
+          // Реальная позиция «сегодня» вычислится автоматически в эффекте, как только подгрузятся опционы.
+          setDaysPassed(0);
+          setUserAdjustedDays(false);
+          setUserAdjustedTargetPrice(false);
           setChartDisplayMode(state.chartDisplayMode || 'profit-loss-dollar');
           setStrikesByDate(state.strikesByDate || {});
           setExpirationDates(state.expirationDates || {});
@@ -1673,6 +1688,8 @@ function UniversalOptionsCalculator() {
       setSelectedExpirationDate(null);
       setDaysPassed(0);
       setUserAdjustedDays(false);
+      setTargetPrice(0);
+      setUserAdjustedTargetPrice(false);
       setIsDataCleared(false);
       setShowDemoData(false);
       setStrikesByDate({});
@@ -1802,9 +1819,10 @@ function UniversalOptionsCalculator() {
           return updatedPrevOptions; // Возвращаем обновлённые опционы с savedOverrides
         });
       }
-      // Обновляем цену от расширения даже при загруженной конфигурации
-      // ЗАЧЕМ: Актуальная цена нужна для корректного расчёта P&L
-      if (extensionPrice > 0 && !isLocked) {
+      // Обновляем цену от расширения даже при загруженной конфигурации,
+      // включая залоченные позиции — ползунок цены БА должен следовать за live-ценой из шапки.
+      // P&L рассчитывается по assetPriceAtEntry, сохранённому per-leg, поэтому исторический якорь не теряется.
+      if (extensionPrice > 0) {
         setCurrentPrice(extensionPrice);
       }
       return;
@@ -2015,13 +2033,11 @@ function UniversalOptionsCalculator() {
       });
     }
 
-    // Обновляем цену
+    // Обновляем цену из шапки.
+    // ЗАЧЕМ: targetPrice (ползунок) подхватывается отдельным эффектом sync-by-userAdjustedTargetPrice,
+    // здесь достаточно держать актуальное значение currentPrice.
     if (extensionPrice > 0) {
       setCurrentPrice(extensionPrice);
-      // Обновляем targetPrice только если она ещё не была изменена пользователем
-      if (targetPrice === 0 || targetPrice === currentPrice) {
-        setTargetPrice(extensionPrice);
-      }
     }
 
     // Обновляем тикер
@@ -2067,22 +2083,15 @@ function UniversalOptionsCalculator() {
   // УБРАНО: AI модель не используется в универсальном калькуляторе
   // useEffect для автоматического запроса AI прогнозов удалён
 
-  // Автоматически устанавливаем daysPassed при изменении опционов
-  // ЛОГИКА: Если пользователь установил ползунок — сохраняем его выбор (с коррекцией если нужно)
-  // Если пользователь не трогал ползунок — устанавливаем в максимум (день экспирации)
-  // ВАЖНО: Для зафиксированных позиций НЕ перезаписываем daysPassed
+  // Автоматически выставляем daysPassed на «сегодня» при изменении опционов и базовой даты.
+  // ЛОГИКА: Если пользователь не трогал ползунок — держим его на «сегодня» (для нового калькулятора это 0,
+  // для сохранённой позиции — разница между сегодня и датой входа/сохранения). Если пользователь уже
+  // двигал ползунок — оставляем его выбор; корректируем только если новый maxDays стал меньше.
+  // ВАЖНО: Правило применяется ко всем режимам, включая залоченный просмотр сохранённой позиции.
   useEffect(() => {
     if (options.length === 0) return;
 
-    // Для зафиксированных позиций — не перезаписываем daysPassed
-    // ЗАЧЕМ: daysPassed уже вычислен как разница между сегодня и датой сохранения
-    if (isLocked || savedConfigDate) {
-      console.log('📅 Зафиксированная позиция — daysPassed не перезаписывается (isLocked:', isLocked, ', savedConfigDate:', savedConfigDate, ')');
-      return;
-    }
-
-    // Вычисляем самую старую дату входа (entryDate) среди всех опционов
-    // ЗАЧЕМ: Ползунок должен начинать отсчет от даты входа в самую старую позицию
+    // Самая старая дата входа среди опционов — основа для расчётов.
     let oldestEntryDate = null;
     options.forEach(opt => {
       const entryDateStr = opt.entryDate || new Date().toISOString().split('T')[0];
@@ -2092,9 +2101,13 @@ function UniversalOptionsCalculator() {
       }
     });
 
-    // Вычисляем максимальное количество дней от самой старой даты входа до экспирации
-    // ВАЖНО: Считаем от oldestEntryDate, а не от сегодня
-    const baseDate = oldestEntryDate || new Date();
+    // Базовая дата: дата сохранения (для зафиксированных) или самая старая дата входа.
+    let baseDate = null;
+    if (savedConfigDate) {
+      const parsed = new Date(savedConfigDate);
+      if (!isNaN(parsed.getTime())) baseDate = parsed;
+    }
+    if (!baseDate) baseDate = oldestEntryDate || new Date();
     baseDate.setHours(0, 0, 0, 0);
 
     const maxDays = options.reduce((max, opt) => {
@@ -2106,20 +2119,23 @@ function UniversalOptionsCalculator() {
     }, 0);
 
     if (userAdjustedDays) {
-      // Пользователь установил ползунок — сохраняем его выбор
-      // ЗАЧЕМ: При изменении опциона ползунок должен остаться на том же дне
-      // Исключение: если новый maxDays меньше текущего daysPassed — корректируем
+      // Пользователь сам установил ползунок — оставляем его выбор, но не выше нового максимума.
       if (daysPassed > maxDays) {
-        console.log(`📅 Корректировка daysPassed: ${daysPassed} → ${maxDays} (новый максимум меньше)`);
         setDaysPassed(maxDays);
       }
-      // Флаг userAdjustedDays НЕ сбрасываем — пользователь по-прежнему контролирует ползунок
     } else {
-      // Пользователь не трогал бегунок — устанавливаем в максимум (крайнее правое положение)
-      console.log(`📅 Установка ползунка в максимум: ${maxDays} дней`);
-      setDaysPassed(maxDays);
+      // Пользователь ещё не двигал ползунок — держим «сегодня».
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const diffToToday = Math.floor((today.getTime() - baseDate.getTime()) / (1000 * 60 * 60 * 24));
+      const todayDays = Math.max(0, Math.min(diffToToday, maxDays));
+      if (todayDays !== daysPassed) {
+        setDaysPassed(todayDays);
+      }
     }
-  }, [options.length, options.map(o => o.date).join(','), options.map(o => o.entryDate).join(','), savedConfigDate, isLocked, userAdjustedDays]); // Добавили entryDate и isLocked в зависимости
+    // daysPassed намеренно вне зависимостей — иначе ручная установка тут же откатывалась бы.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [options.length, options.map(o => o.date).join(','), options.map(o => o.entryDate).join(','), savedConfigDate, userAdjustedDays]);
 
   const displayOptions = useMemo(() => {
     const result = showDemoData ? demoOptions : options;
@@ -2822,6 +2838,10 @@ function UniversalOptionsCalculator() {
     // от предыдущей БД-позиции исчезнет, если пользователь открыл localStorage-позицию.
     setLoadedConfigStatus(null);
     setLoadedConfigName(null);
+    // ЗАЧЕМ: Каждое открытие конфигурации сбрасывает «ручные» флаги ползунков, чтобы цена БА
+    // снова выставлялась на текущую цену из шапки, а ползунок дней — на «сегодня».
+    setUserAdjustedTargetPrice(false);
+    setUserAdjustedDays(false);
     const saved = localStorage.getItem('universalCalculatorConfigurations');
     if (saved) {
       try {
@@ -3088,52 +3108,26 @@ function UniversalOptionsCalculator() {
           }
 
           // Если в конфигурации есть информация о сделке — восстанавливаем её
-          // ЗАЧЕМ: При открытии сохраненной сделки восстанавливаем dealInfo в калькуляторе
+          // ЗАЧЕМ: При открытии сохраненной сделки восстанавливаем dealInfo в калькуляторе.
+          // ВАЖНО: Ползунки цены БА и дней до экспирации больше не подменяются на сохранённые
+          // значения — правило «открытие = текущая цена + сегодня» одинаково для всех режимов.
           if (config.dealInfo && config.dealInfo.ticker) {
             setDealInfo(config.dealInfo);
             // Активируем таб "Сделка" при загрузке конфигурации с dealInfo
             setActiveCalculatorTab('deal');
-            // Ползунок дней должен быть в крайнем правом положении (0 дней осталось)
-            // ЗАЧЕМ: При открытии сохраненной сделки показываем максимальный временной распад
-            // Вычисляем максимальное количество дней от даты входа до экспирации
-            const baseDate = configEntryDate ? new Date(configEntryDate) : new Date();
-            baseDate.setHours(0, 0, 0, 0);
-            
-            const maxDaysForDeal = optionsToSet.reduce((max, opt) => {
-              if (!opt.date) return max;
-              const expirationDate = new Date(opt.date + 'T00:00:00');
-              const diffTime = expirationDate.getTime() - baseDate.getTime();
-              const daysUntil = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-              return Math.max(max, daysUntil);
-            }, 0);
-            
-            // Устанавливаем daysPassed на максимум (ползунок в крайнее правое положение)
-            setDaysPassed(maxDaysForDeal);
-            setUserAdjustedDays(true); // Отмечаем что пользователь "настроил" ползунок
-            console.log(`💼 Сделка восстановлена: ${config.dealInfo.ticker}, ползунок установлен на ${maxDaysForDeal} дней`);
           } else {
             // Если в конфигурации НЕТ информации о сделке — сбрасываем dealInfo
             // ЗАЧЕМ: Старые сохранения без сделки должны открываться без сделки
             setDealInfo(null);
             setActiveCalculatorTab('calculator');
-            console.log('📋 Конфигурация без сделки — dealInfo сброшен');
           }
 
           // Если в конфигурации есть настройки таба Сделка — восстанавливаем их
-          // ЗАЧЕМ: При открытии сохраненной сделки восстанавливаем все настройки включая состояние отправки срезок
+          // ЗАЧЕМ: При открытии сохраненной сделки восстанавливаем все настройки таба (план выхода и т.п.).
+          // targetPrice (ползунок цены БА) при этом НЕ переопределяется — он подтягивается к live currentPrice
+          // через общий эффект синхронизации, согласно правилу «открытие = текущая цена».
           if (config.dealSettings) {
-            // Восстанавливаем полный объект dealSettings
             setDealSettings(config.dealSettings);
-            console.log('📊 Настройки таба Сделка восстановлены:', config.dealSettings);
-
-            // Восстанавливаем целевую цену актива в блоке симуляции
-            if (config.dealSettings.targetAssetPricePercent !== undefined) {
-              const calculatedTargetPrice = Math.round(
-                (config.state.currentPrice || 0) * (1 + config.dealSettings.targetAssetPricePercent / 100) * 100
-              ) / 100;
-              setTargetPrice(calculatedTargetPrice);
-              console.log(`📊 Целевая цена актива восстановлена: ${calculatedTargetPrice} (${config.dealSettings.targetAssetPricePercent}%)`);
-            }
           } else {
             // ЗАЧЕМ: Если у новой позиции нет dealSettings — явно зануляем,
             // иначе старые настройки (и план выхода) «переедут» в новую позицию
@@ -3358,6 +3352,10 @@ function UniversalOptionsCalculator() {
   const loadConfigurationFromDB = async (configId, editMode = false) => {
     try {
       console.log('🔔 [LOAD DB CONFIG]', { configId, editMode });
+      // ЗАЧЕМ: При каждом открытии конфигурации сбрасываем «ручные» флаги ползунков, чтобы
+      // цена БА снова шла за currentPrice, а ползунок дней — за «сегодня».
+      setUserAdjustedTargetPrice(false);
+      setUserAdjustedDays(false);
       
       // Загружаем конфигурацию с API
       const result = await getConfiguration(configId);
@@ -3493,14 +3491,11 @@ function UniversalOptionsCalculator() {
         setActiveCalculatorTab('calculator');
       }
 
+      // ЗАЧЕМ: targetPrice (ползунок цены БА) при открытии конфигурации не переопределяется
+      // на сохранённый процент — он подтягивается к live currentPrice через общий sync-эффект.
+      // Само значение dealSettings (включая targetAssetPricePercent) восстанавливается для таба «Сделка».
       if (config.dealSettings) {
         setDealSettings(config.dealSettings);
-        if (config.dealSettings.targetAssetPricePercent !== undefined) {
-          const calculatedTargetPrice = Math.round(
-            (config.state.currentPrice || 0) * (1 + config.dealSettings.targetAssetPricePercent / 100) * 100
-          ) / 100;
-          setTargetPrice(calculatedTargetPrice);
-        }
       } else {
         // ЗАЧЕМ: Если у новой позиции нет dealSettings — явно зануляем,
         // иначе старые настройки (и план выхода) «переедут» в новую позицию
@@ -4218,10 +4213,11 @@ function UniversalOptionsCalculator() {
                         targetPrice={targetPrice}
                         setTargetPrice={setTargetPrice}
                         daysPassed={daysPassed}
-                        setDaysPassed={(value) => {
-                          setDaysPassed(value);
-                          setUserAdjustedDays(true);
-                        }}
+                        setDaysPassed={setDaysPassed}
+                        userAdjustedDays={userAdjustedDays}
+                        setUserAdjustedDays={setUserAdjustedDays}
+                        userAdjustedTargetPrice={userAdjustedTargetPrice}
+                        setUserAdjustedTargetPrice={setUserAdjustedTargetPrice}
                         options={displayOptions}
                         minPrice={currentPrice * 0}
                         maxPrice={currentPrice * 2}

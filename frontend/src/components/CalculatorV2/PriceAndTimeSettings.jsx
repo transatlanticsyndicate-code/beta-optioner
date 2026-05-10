@@ -21,12 +21,16 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/
 import { isNonTradingDay } from '../../utils/marketHolidays';
 import { parseDateAtStartOfDay } from '../../utils/dateUtils';
 
-function PriceAndTimeSettings({ 
+function PriceAndTimeSettings({
   currentPrice = 0,
   targetPrice = 0,
   setTargetPrice,
   daysPassed = 0,         // Прошедшие дни (новая логика)
   setDaysPassed,          // Функция для изменения прошедших дней
+  userAdjustedDays = false,
+  setUserAdjustedDays,
+  userAdjustedTargetPrice = false,
+  setUserAdjustedTargetPrice,
   options = [],
   minPrice = 0,
   maxPrice = 0,
@@ -36,16 +40,10 @@ function PriceAndTimeSettings({
 }) {
   const [priceInput, setPriceInput] = React.useState(targetPrice.toFixed(2));
   const priceInputFocusedRef = React.useRef(false);
-  
-
-  // Синхронизация targetPrice с currentPrice
-  React.useEffect(() => {
-    if (targetPrice === 0 && currentPrice > 0) {
-      setTargetPrice(currentPrice);
-    }
-  }, [currentPrice, targetPrice, setTargetPrice]);
 
   // Синхронизация input с targetPrice
+  // ЗАЧЕМ: Авто-синхронизация цены БА с currentPrice живёт в родителе (UniversalOptionsCalculator),
+  // здесь поле просто отражает то, что лежит в targetPrice, пока пользователь не активен в инпуте.
   React.useEffect(() => {
     if (!priceInputFocusedRef.current) {
       setPriceInput(targetPrice.toFixed(2));
@@ -113,10 +111,12 @@ function PriceAndTimeSettings({
   const handlePriceInputChange = (e) => {
     const value = e.target.value;
     setPriceInput(value);
-    
+
     const numValue = parseFloat(value);
     if (!isNaN(numValue) && numValue >= calculatedMinPrice && numValue <= calculatedMaxPrice) {
       setTargetPrice(numValue);
+      // ЗАЧЕМ: Любой ручной ввод цены отключает авто-синхронизацию с currentPrice до перезагрузки страницы.
+      if (setUserAdjustedTargetPrice) setUserAdjustedTargetPrice(true);
     }
   };
 
@@ -126,25 +126,43 @@ function PriceAndTimeSettings({
     if (!priceInputFocusedRef.current) {
       setPriceInput(newPrice.toFixed(2));
     }
+    // ЗАЧЕМ: Любое движение ползунка цены — это ручное изменение, отключающее авто-синхронизацию.
+    if (setUserAdjustedTargetPrice) setUserAdjustedTargetPrice(true);
   };
 
   // Вычисляем количество дней от базовой даты до сегодня
   // ЗАЧЕМ: Кнопка "С" должна устанавливать ползунок на сегодняшнюю дату,
   // а не на daysPassed=0, так как для сохраненных позиций нулевой день может быть в прошлом
-  const getDaysPassedToToday = () => {
+  const getDaysPassedToToday = React.useCallback(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     // Базовая дата: дата сохранения (для зафиксированных) или самая старая дата входа
     const baseDate = savedConfigDate ? (parseDateAtStartOfDay(savedConfigDate) || new Date()) : (oldestEntryDate || new Date());
     baseDate.setHours(0, 0, 0, 0);
-    
+
     const diffTime = today.getTime() - baseDate.getTime();
     const daysToToday = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    
+
     // Ограничиваем диапазоном [0, maxDaysToExpiration]
     return Math.max(0, Math.min(daysToToday, maxDaysToExpiration));
-  };
+  }, [savedConfigDate, oldestEntryDate, maxDaysToExpiration]);
+
+  // Авто-привязка ползунка дней к «сегодня».
+  // ЗАЧЕМ: При открытии страницы (новый калькулятор / редактирование / просмотр сохранённой позиции)
+  // ползунок дней до экспирации всегда должен стоять на «сегодня». Эффект также реагирует на изменение
+  // базовой даты или максимума (например, при загрузке опционов из сохранённого конфига).
+  // Срабатывает, пока пользователь не сдвинул ползунок вручную.
+  React.useEffect(() => {
+    if (!userAdjustedDays && options.length > 0) {
+      const todayDays = getDaysPassedToToday();
+      if (todayDays !== daysPassed) {
+        setDaysPassed(todayDays);
+      }
+    }
+    // daysPassed намеренно не входит в зависимости — иначе любая ручная установка тут же откатывалась бы.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userAdjustedDays, options.length, savedConfigDate, oldestEntryDate, maxDaysToExpiration, getDaysPassedToToday, setDaysPassed]);
 
   return (
     <div className={`space-y-${compact ? '4' : '6'}`}>
@@ -176,11 +194,11 @@ function PriceAndTimeSettings({
           />
           <Button
             onClick={() => {
-              // ЗАЧЕМ: Для зафиксированных позиций сбрасываем на текущую рыночную цену (livePrice),
-              // а не на цену при сохранении (currentPrice)
+              // ЗАЧЕМ: Сброс возвращает ползунок к текущей цене из шапки и снова включает авто-синхронизацию.
               const resetPrice = livePrice !== null ? livePrice : currentPrice;
               setTargetPrice(resetPrice);
               setPriceInput(resetPrice.toFixed(2));
+              if (setUserAdjustedTargetPrice) setUserAdjustedTargetPrice(false);
             }}
             className={`${compact ? 'h-8 w-8' : 'h-9 w-9'} p-0 bg-gray-500 hover:bg-gray-600`}
             title="Сбросить на текущую цену"
@@ -210,7 +228,11 @@ function PriceAndTimeSettings({
         <div className="flex items-center text-sm mb-1">
           {/* Кнопка "С" для установки даты на сегодня */}
           <Button
-            onClick={() => setDaysPassed(getDaysPassedToToday())}
+            onClick={() => {
+              // ЗАЧЕМ: Возврат к «сегодня» снова включает авто-привязку дней — авто-эффект сам поддержит позицию.
+              setDaysPassed(getDaysPassedToToday());
+              if (setUserAdjustedDays) setUserAdjustedDays(false);
+            }}
             disabled={options.length === 0}
             className="h-6 w-6 p-0 mr-1 bg-gray-500 hover:bg-gray-600 text-white text-xs font-semibold"
             title="Установить на сегодня"
@@ -262,7 +284,11 @@ function PriceAndTimeSettings({
         {/* Слайдер: от 0 (сегодня) до maxDaysToExpiration (день экспирации самого длинного опциона) */}
         <Slider
           value={[daysPassed]}
-          onValueChange={(value) => setDaysPassed(value[0])}
+          onValueChange={(value) => {
+            setDaysPassed(value[0]);
+            // ЗАЧЕМ: Любое движение ползунка дней — это ручное изменение, выключающее авто-привязку к «сегодня».
+            if (setUserAdjustedDays) setUserAdjustedDays(true);
+          }}
           min={0}
           max={maxDaysToExpiration}
           step={1}
