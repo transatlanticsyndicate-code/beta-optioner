@@ -2857,45 +2857,38 @@ function UniversalOptionsCalculator() {
           }
           setIsLocked(configIsLocked);
 
-          // Сохраняем дату создания конфигурации для зафиксированных позиций
-          // ЗАЧЕМ: Ползунок дат должен начинаться с даты входа (entryDate)
-          // ВАЖНО: Вычисляем daysPassed сразу здесь, чтобы избежать race condition с useEffect
-          let calculatedDaysPassed = config.state.daysPassed || config.state.daysRemaining || 0;
-
-          // Используем entryDate для расчетов (дата входа в позицию)
-          // Fallback: createdAt или id (для старых конфигураций)
-          // ЗАЧЕМ: entryDate — это дата входа в позицию, а createdAt — время создания записи
+          // Сохранённое значение config.state.daysPassed намеренно игнорируется:
+          // правило — при любом открытии конфигурации ползунок дней встаёт на «сегодня».
           const configEntryDate = config.entryDate || config.createdAt || (config.id ? new Date(parseInt(config.id)).toISOString() : null);
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
 
-          console.log('🔍 Config debug:', {
-            configIsLocked,
-            entryDate: config.entryDate,
-            createdAt: config.createdAt,
-            id: config.id,
-            configEntryDate
-          });
-
-          if (configIsLocked) {
-            console.log('📅 configEntryDate:', configEntryDate);
-
-            if (configEntryDate) {
-              setSavedConfigDate(configEntryDate);
-              // Вычисляем daysPassed как разницу между сегодня и датой входа
-              const savedDate = new Date(configEntryDate);
-              const today = new Date();
+          let baseDate = null;
+          if (configIsLocked && configEntryDate) {
+            setSavedConfigDate(configEntryDate);
+            const savedDate = new Date(configEntryDate);
+            if (!isNaN(savedDate.getTime())) {
               savedDate.setHours(0, 0, 0, 0);
-              today.setHours(0, 0, 0, 0);
-              const diffTime = today.getTime() - savedDate.getTime();
-              calculatedDaysPassed = Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
-              console.log(`📅 Дней с момента входа: ${calculatedDaysPassed}, savedDate: ${savedDate}, today: ${today}`);
-            } else {
-              console.log('⚠️ configEntryDate is null');
-              setSavedConfigDate(null);
+              baseDate = savedDate;
             }
           } else {
-            console.log('⚠️ Config is NOT locked');
             setSavedConfigDate(null);
+            // Для pending / edit-режима: базовая дата — самая старая entryDate среди сохранённых опционов.
+            const savedOpts = config.state.options || [];
+            savedOpts.forEach(opt => {
+              const eds = opt.entryDate || new Date().toISOString().split('T')[0];
+              const ed = new Date(eds + 'T00:00:00');
+              if (!isNaN(ed.getTime()) && (!baseDate || ed < baseDate)) {
+                baseDate = ed;
+              }
+            });
           }
+          if (!baseDate) baseDate = today;
+
+          const calculatedDaysPassed = Math.max(
+            0,
+            Math.floor((today.getTime() - baseDate.getTime()) / (1000 * 60 * 60 * 24))
+          );
 
           // Восстанавливаем состояние калькулятора
           const ticker = config.state.selectedTicker || '';
@@ -3387,21 +3380,39 @@ function UniversalOptionsCalculator() {
       setLoadedConfigStatus(positionStatus);
       setLoadedConfigName(config.name || null);
 
-      // Вычисляем daysPassed
-      let calculatedDaysPassed = config.state.daysPassed || 0;
+      // Вычисляем daysPassed как «сегодня» по правилу: при любом открытии конфигурации
+      // (pending / standard, edit / view) ползунок дней встаёт на сегодняшний день.
+      // Сохранённое значение config.state.daysPassed намеренно игнорируется.
       const configEntryDate = config.entryDate || config.createdAt;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
 
+      let baseDate = null;
       if (configIsLocked && configEntryDate) {
         setSavedConfigDate(configEntryDate);
         const savedDate = new Date(configEntryDate);
-        const today = new Date();
-        savedDate.setHours(0, 0, 0, 0);
-        today.setHours(0, 0, 0, 0);
-        const diffTime = today.getTime() - savedDate.getTime();
-        calculatedDaysPassed = Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
+        if (!isNaN(savedDate.getTime())) {
+          savedDate.setHours(0, 0, 0, 0);
+          baseDate = savedDate;
+        }
       } else {
         setSavedConfigDate(null);
+        // Для pending / edit-режима: базовая дата — самая старая entryDate среди сохранённых опционов.
+        const savedOpts = config.state.options || [];
+        savedOpts.forEach(opt => {
+          const eds = opt.entryDate || new Date().toISOString().split('T')[0];
+          const ed = new Date(eds + 'T00:00:00');
+          if (!isNaN(ed.getTime()) && (!baseDate || ed < baseDate)) {
+            baseDate = ed;
+          }
+        });
       }
+      if (!baseDate) baseDate = today;
+
+      const calculatedDaysPassed = Math.max(
+        0,
+        Math.floor((today.getTime() - baseDate.getTime()) / (1000 * 60 * 60 * 24))
+      );
 
       // Восстанавливаем состояние калькулятора
       const ticker = config.state.selectedTicker || '';
