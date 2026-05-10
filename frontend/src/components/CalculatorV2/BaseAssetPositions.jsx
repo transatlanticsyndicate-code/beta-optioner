@@ -87,80 +87,73 @@ function BaseAssetPositions({
             data-stock-ticker={position.ticker || ''}
             data-stock-quantity={position.quantity}
             data-stock-side={position.type}
-            className={`grid grid-cols-[30px_80px_60px_72px_100px_30px] items-center text-sm border rounded-md p-2 ${
-              !position.visible ? "[&>*]:text-[#AAAAAA]" : ""
+            className={`flex items-center gap-2 text-sm border rounded-md p-2 ${
+              !position.visible ? "[&_*]:text-[#AAAAAA]" : ""
             }`}
-            style={{ gap: 0 }}
           >
             {/* Иконка видимости — всегда Eye/EyeOff, чтобы пользователь мог временно
                 исключить базовый актив из расчёта в любом режиме (включая зафиксированные).
                 Замочек убран как избыточный визуал — статус «зафиксирована» виден в шапке. */}
             <button
               onClick={() => togglePositionVisibility(position.id)}
-              className="flex justify-center text-muted-foreground hover:text-foreground cursor-pointer"
+              className="flex justify-center text-muted-foreground hover:text-foreground cursor-pointer flex-shrink-0"
               title={position.visible ? 'Скрыть' : 'Показать'}
             >
               {position.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
             </button>
-            {/* В этот flex-контейнер расширение IBKR Bridge инжектит кнопку «−» (закрытие позиции в TWS). */}
-            <div className="flex items-center gap-1 ml-2">
+            {/* В этот flex-контейнер расширение IBKR Bridge инжектит кнопку открытия/закрытия позиции в TWS. */}
+            <div className="flex items-center gap-1 flex-shrink-0">
               <span className={`font-medium ${position.type === "LONG" ? "text-green-600" : "text-red-600"}`}>
                 {position.type}
               </span>
               <span className="ibkr-stock-close-slot" />
             </div>
-            <div className="ml-2">
-              <Input
-                type="text"
-                value={String(position.quantity)}
-                onChange={(e) => {
-                  if (position.isLockedPosition) return; // Блокируем изменение для зафиксированных
-                  const filtered = handleNumericInput(e.target.value, false);
-                  updatePosition(position.id, 'quantity', parseInt(filtered) || 0);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.target.blur();
-                  }
-                }}
-                className="w-full h-6 text-xs text-right"
-                disabled={position.isLockedPosition}
-              />
-            </div>
-            <div className="relative w-[72px] overflow-hidden ml-2">
-              <span className="font-medium block">{position.ticker}</span>
-            </div>
-            <div className="ml-2">
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                value={position.price === '' ? '' : position.price}
-                onChange={(e) => {
-                  if (position.isLockedPosition) return; // Блокируем изменение для зафиксированных
-                  const value = e.target.value;
-                  updatePosition(position.id, 'price', value === '' ? '' : parseFloat(value) || 0);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.target.blur();
-                  }
-                }}
-                className="w-full h-6 text-xs text-right"
-                disabled={position.isLockedPosition}
-              />
-            </div>
-            {/* Кнопка удаления скрыта для зафиксированных позиций */}
-            {/* ЗАЧЕМ: Проверяем isLockedPosition на уровне каждой позиции */}
-            {!position.isLockedPosition && (
+            {/* Поля количества и цены: рамка прозрачная по умолчанию, появляется при фокусе.
+                Ширина — по контенту через inline style (ch — ширина символа «0»). */}
+            <Input
+              type="text"
+              value={String(position.quantity)}
+              onChange={(e) => {
+                if (position.isLockedPosition) return;
+                const filtered = handleNumericInput(e.target.value, false);
+                updatePosition(position.id, 'quantity', parseInt(filtered) || 0);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') e.target.blur();
+              }}
+              className="h-6 text-xs text-right border border-transparent shadow-none bg-transparent focus:border-input focus:bg-background px-1 py-0 min-w-0 flex-shrink-0"
+              style={{ width: `${Math.max(2, String(position.quantity).length) + 1.5}ch` }}
+              disabled={position.isLockedPosition}
+            />
+            <span className="font-medium flex-shrink-0">{position.ticker}</span>
+            <Input
+              type="number"
+              step="0.01"
+              min="0"
+              value={position.price === '' ? '' : position.price}
+              onChange={(e) => {
+                if (position.isLockedPosition) return;
+                const value = e.target.value;
+                updatePosition(position.id, 'price', value === '' ? '' : parseFloat(value) || 0);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') e.target.blur();
+              }}
+              className="h-6 text-xs text-right border border-transparent shadow-none bg-transparent focus:border-input focus:bg-background px-1 py-0 min-w-0 flex-shrink-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              style={{ width: `${Math.max(3, String(position.price).length) + 1.5}ch` }}
+              disabled={position.isLockedPosition}
+            />
+            {/* Кнопка удаления — прижата к правому краю через ml-auto. */}
+            {!position.isLockedPosition ? (
               <button
                 onClick={() => deletePosition(position.id)}
-                className="text-muted-foreground hover:text-destructive flex justify-center"
+                className="text-muted-foreground hover:text-destructive flex justify-center flex-shrink-0 ml-auto"
               >
                 <Trash2 className="h-4 w-4" />
               </button>
+            ) : (
+              <div className="ml-auto" />
             )}
-            {position.isLockedPosition && <div className="w-[30px]" />}
           </div>
         ))}
       </div>
