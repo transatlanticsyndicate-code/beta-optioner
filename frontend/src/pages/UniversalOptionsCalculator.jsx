@@ -76,7 +76,7 @@ import OptionSelectionResult from '../components/CalculatorV2/OptionSelectionRes
 import CalculatorDealTabs from '../components/CalculatorV2/CalculatorDealTabs';
 import VolatilityGauge from '../components/CalculatorV2/VolatilityGauge';
 import { fetchVolatilityMetrics } from '../services/barchartApi';
-import { getDaysUntilExpirationUTC, calculateDaysRemainingUTC } from '../utils/dateUtils';
+import { getDaysUntilExpirationUTC, calculateDaysRemainingUTC, parseDateAtStartOfDay } from '../utils/dateUtils';
 import { WhatsNewModal, shouldShowModal } from '../components/WhatsNewModal';
 import { buildIVSurface } from '../utils/volatilitySurface';
 import { calculateTotalGreeks, calculatePLMetrics } from '../utils/metricsCalculator';
@@ -2092,11 +2092,13 @@ function UniversalOptionsCalculator() {
     if (options.length === 0) return;
 
     // Самая старая дата входа среди опционов — основа для расчётов.
+    // ЗАЧЕМ: parseDateAtStartOfDay даёт LOCAL midnight нормализованной по UTC даты;
+    // важно использовать ту же функцию, что и кнопка «С» в PriceAndTimeSettings,
+    // чтобы расчёт «сегодня» совпадал и не отъезжал на день из-за timezone.
     let oldestEntryDate = null;
     options.forEach(opt => {
-      const entryDateStr = opt.entryDate || new Date().toISOString().split('T')[0];
-      const entryDate = new Date(entryDateStr + 'T00:00:00');
-      if (!oldestEntryDate || entryDate < oldestEntryDate) {
+      const entryDate = parseDateAtStartOfDay(opt.entryDate || new Date().toISOString().split('T')[0]);
+      if (entryDate && (!oldestEntryDate || entryDate < oldestEntryDate)) {
         oldestEntryDate = entryDate;
       }
     });
@@ -2104,15 +2106,15 @@ function UniversalOptionsCalculator() {
     // Базовая дата: дата сохранения (для зафиксированных) или самая старая дата входа.
     let baseDate = null;
     if (savedConfigDate) {
-      const parsed = new Date(savedConfigDate);
-      if (!isNaN(parsed.getTime())) baseDate = parsed;
+      baseDate = parseDateAtStartOfDay(savedConfigDate);
     }
     if (!baseDate) baseDate = oldestEntryDate || new Date();
     baseDate.setHours(0, 0, 0, 0);
 
     const maxDays = options.reduce((max, opt) => {
       if (!opt.date) return max;
-      const expirationDate = new Date(opt.date + 'T00:00:00');
+      const expirationDate = parseDateAtStartOfDay(opt.date);
+      if (!expirationDate) return max;
       const diffTime = expirationDate.getTime() - baseDate.getTime();
       const daysUntil = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       return Math.max(max, daysUntil);
@@ -2859,6 +2861,9 @@ function UniversalOptionsCalculator() {
 
           // Сохранённое значение config.state.daysPassed намеренно игнорируется:
           // правило — при любом открытии конфигурации ползунок дней встаёт на «сегодня».
+          // ВАЖНО: парсим даты через parseDateAtStartOfDay — те же правила, что в кнопке «С»
+          // в PriceAndTimeSettings, иначе из-за timezone у даты сохранённой UTC-меткой расчёт
+          // отъезжает на день и ползунок встаёт на «вчера».
           const configEntryDate = config.entryDate || config.createdAt || (config.id ? new Date(parseInt(config.id)).toISOString() : null);
           const today = new Date();
           today.setHours(0, 0, 0, 0);
@@ -2866,24 +2871,20 @@ function UniversalOptionsCalculator() {
           let baseDate = null;
           if (configIsLocked && configEntryDate) {
             setSavedConfigDate(configEntryDate);
-            const savedDate = new Date(configEntryDate);
-            if (!isNaN(savedDate.getTime())) {
-              savedDate.setHours(0, 0, 0, 0);
-              baseDate = savedDate;
-            }
+            baseDate = parseDateAtStartOfDay(configEntryDate);
           } else {
             setSavedConfigDate(null);
             // Для pending / edit-режима: базовая дата — самая старая entryDate среди сохранённых опционов.
             const savedOpts = config.state.options || [];
             savedOpts.forEach(opt => {
-              const eds = opt.entryDate || new Date().toISOString().split('T')[0];
-              const ed = new Date(eds + 'T00:00:00');
-              if (!isNaN(ed.getTime()) && (!baseDate || ed < baseDate)) {
+              const ed = parseDateAtStartOfDay(opt.entryDate || new Date().toISOString().split('T')[0]);
+              if (ed && (!baseDate || ed < baseDate)) {
                 baseDate = ed;
               }
             });
           }
           if (!baseDate) baseDate = today;
+          baseDate.setHours(0, 0, 0, 0);
 
           const calculatedDaysPassed = Math.max(
             0,
@@ -3383,6 +3384,9 @@ function UniversalOptionsCalculator() {
       // Вычисляем daysPassed как «сегодня» по правилу: при любом открытии конфигурации
       // (pending / standard, edit / view) ползунок дней встаёт на сегодняшний день.
       // Сохранённое значение config.state.daysPassed намеренно игнорируется.
+      // ВАЖНО: парсим даты через parseDateAtStartOfDay — те же правила, что в кнопке «С»
+      // в PriceAndTimeSettings, иначе из-за timezone у даты сохранённой UTC-меткой расчёт
+      // отъезжает на день и ползунок встаёт на «вчера».
       const configEntryDate = config.entryDate || config.createdAt;
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -3390,24 +3394,20 @@ function UniversalOptionsCalculator() {
       let baseDate = null;
       if (configIsLocked && configEntryDate) {
         setSavedConfigDate(configEntryDate);
-        const savedDate = new Date(configEntryDate);
-        if (!isNaN(savedDate.getTime())) {
-          savedDate.setHours(0, 0, 0, 0);
-          baseDate = savedDate;
-        }
+        baseDate = parseDateAtStartOfDay(configEntryDate);
       } else {
         setSavedConfigDate(null);
         // Для pending / edit-режима: базовая дата — самая старая entryDate среди сохранённых опционов.
         const savedOpts = config.state.options || [];
         savedOpts.forEach(opt => {
-          const eds = opt.entryDate || new Date().toISOString().split('T')[0];
-          const ed = new Date(eds + 'T00:00:00');
-          if (!isNaN(ed.getTime()) && (!baseDate || ed < baseDate)) {
+          const ed = parseDateAtStartOfDay(opt.entryDate || new Date().toISOString().split('T')[0]);
+          if (ed && (!baseDate || ed < baseDate)) {
             baseDate = ed;
           }
         });
       }
       if (!baseDate) baseDate = today;
+      baseDate.setHours(0, 0, 0, 0);
 
       const calculatedDaysPassed = Math.max(
         0,
