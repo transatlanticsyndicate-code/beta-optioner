@@ -1,0 +1,75 @@
+/**
+ * Стили для кнопок расширения Binance → Optioner Bridge
+ * ЗАЧЕМ: Визуальное оформление кнопок +C/-C/+P/-P в таблице Binance
+ */
+
+/* Кнопки добавления опционов */
+.bnb-add-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 2px 6px !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  border: none !important;
+  border-radius: 4px !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  line-height: 1 !important;
+  height: 20px !important;
+  min-width: 22px !important;
+  transition: opacity 0.15s !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  flex-shrink: 0 !important;
+  vertical-align: middle !important;
+}
+
+.bnb-add-btn:hover {
+  opacity: 0.8 !important;
+}
+
+.bnb-add-btn:active {
+  opacity: 0.6 !important;
+}
+
+/* Buy кнопки — зелёные */
+.bnb-btn-buy {
+  background: #16a34a !important;
+  color: #ffffff !important;
+}
+
+.bnb-btn-buy:hover {
+  background: #15803d !important;
+}
+
+/* Sell кнопки — красные */
+.bnb-btn-sell {
+  background: #dc2626 !important;
+  color: #ffffff !important;
+}
+
+.bnb-btn-sell:hover {
+  background: #b91c1c !important;
+}
+
+/* Состояние "добавлено" — серая галочка */
+.bnb-add-btn[data-added="true"] {
+  background: #6b7280 !important;
+  color: #ffffff !important;
+}
+
+/* Контейнер кнопок в ячейке страйка */
+.bnb-strike-cell {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 2px !important;
+  flex-wrap: nowrap !important;
+}
+
+/* Разделители между группами кнопок */
+.bnb-btn-separator {
+  display: inline-block !important;
+  width: 6px !important;
+  flex-shrink: 0 !important;
+}

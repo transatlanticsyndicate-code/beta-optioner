@@ -1,0 +1,70 @@
+{
+  "manifest_version": 3,
+  "name": "Binance → Optioner Bridge",
+  "version": "2.1.0",
+  "description": "Парсинг опционов с Binance eoptions + отправка в калькулятор Optioner + автообновление сохранённых сделок",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "tabs",
+    "scripting",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://*.binance.com/*",
+    "https://eapi.binance.com/*",
+    "https://beta.optioner.online/*",
+    "https://db.optioner.online/*",
+    "http://localhost:*/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.binance.com/*"
+      ],
+      "js": [
+        "src/config.js",
+        "src/utils.js",
+        "src/storage.js",
+        "src/parser.js",
+        "src/buttons.js",
+        "src/main.js"
+      ],
+      "css": ["binance.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://beta.optioner.online/*",
+        "http://localhost:3000/*"
+      ],
+      "js": ["src/calcStorageGuard.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://beta.optioner.online/*",
+        "http://localhost:3000/*"
+      ],
+      "js": ["src/config.js", "optioner.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Binance → Optioner Bridge",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png"
+    }
+  }
+}

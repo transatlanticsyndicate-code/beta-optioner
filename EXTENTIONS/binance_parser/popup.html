@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Binance → Optioner Bridge</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 320px;
+      min-height: 200px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0b0e11;
+      color: #eaecef;
+      font-size: 13px;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #f0b90b, #f8d12f);
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .header-logo {
+      width: 28px;
+      height: 28px;
+      background: #0b0e11;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+
+    .header-title {
+      font-weight: 700;
+      font-size: 14px;
+      color: #0b0e11;
+    }
+
+    .header-subtitle {
+      font-size: 11px;
+      color: #0b0e11;
+      opacity: 0.7;
+    }
+
+    .section {
+      padding: 14px 16px;
+      border-bottom: 1px solid #1e2329;
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: #848e9c;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 10px;
+    }
+
+    .env-toggle {
+      display: flex;
+      gap: 6px;
+    }
+
+    .env-btn {
+      flex: 1;
+      padding: 7px 10px;
+      border: 1px solid #2b3139;
+      border-radius: 6px;
+      background: #1e2329;
+      color: #848e9c;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+
+    .env-btn.active {
+      background: #f0b90b;
+      color: #0b0e11;
+      border-color: #f0b90b;
+      font-weight: 700;
+    }
+
+    .env-btn:hover:not(.active) {
+      border-color: #f0b90b;
+      color: #f0b90b;
+    }
+
+    .positions-summary {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .position-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 10px;
+      background: #1e2329;
+      border-radius: 6px;
+    }
+
+    .position-ticker {
+      font-weight: 600;
+      color: #f0b90b;
+      font-size: 12px;
+    }
+
+    .position-count {
+      font-size: 11px;
+      color: #848e9c;
+    }
+
+    .btn-clear {
+      padding: 3px 8px;
+      background: transparent;
+      border: 1px solid #dc2626;
+      border-radius: 4px;
+      color: #dc2626;
+      cursor: pointer;
+      font-size: 11px;
+      transition: all 0.15s;
+    }
+
+    .btn-clear:hover {
+      background: #dc2626;
+      color: #fff;
+    }
+
+    .no-positions {
+      color: #848e9c;
+      font-size: 12px;
+      text-align: center;
+      padding: 8px 0;
+    }
+
+    .btn-open-calc {
+      width: 100%;
+      padding: 10px;
+      background: #f0b90b;
+      color: #0b0e11;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .btn-open-calc:hover {
+      background: #f8d12f;
+    }
+
+    .btn-open-calc:disabled {
+      background: #2b3139;
+      color: #848e9c;
+      cursor: not-allowed;
+    }
+
+    .status-bar {
+      padding: 8px 16px;
+      font-size: 11px;
+      color: #848e9c;
+      text-align: center;
+    }
+
+    .status-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #16a34a;
+      margin-right: 5px;
+      vertical-align: middle;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-logo">₿</div>
+    <div>
+      <div class="header-title">Binance → Optioner</div>
+      <div class="header-subtitle">Options Bridge v2.0.0</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Окружение</div>
+    <div class="env-toggle">
+      <button class="env-btn" id="btn-production">Production</button>
+      <button class="env-btn" id="btn-localhost">Localhost</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Позиции</div>
+    <div class="positions-summary" id="positions-list">
+      <div class="no-positions">Нет добавленных позиций</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <button class="btn-open-calc" id="btn-open-calc">
+      Открыть калькулятор
+    </button>
+  </div>
+
+  <div class="status-bar">
+    <span class="status-dot"></span>
+    <span id="status-text">Готово</span>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
