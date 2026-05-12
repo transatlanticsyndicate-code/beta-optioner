@@ -1098,30 +1098,16 @@ function UniversalOptionsCalculator() {
       return `https://www.binance.com/en/eoptions/${ticker}`;
     }
 
-    let exchange = exchangeFromExtension || null;
-
-    // Если расширение не передало exchange — определяем биржу только для фьючерсов
-    // (для них TV требует явный префикс: ESH2026 без CME_MINI → 404).
-    if (!exchange) {
-      // Фьючерсы CBOT (зерновые: ZL, ZC, ZS, ZW, ZM и т.д.)
-      if (/^Z[LCSW]|^ZM/.test(ticker)) {
-        exchange = 'CBOT';
-      }
-      // Фьючерсы NYMEX (энергия, металлы: CL, NG, GC, SI и т.д.)
-      else if (/^(CL|NG|GC|SI|HG|RB|HO)/.test(ticker)) {
-        exchange = 'NYMEX';
-      }
-      // Фьючерсы CME (индексы, валюты: ES, NQ, YM, 6E и т.д.)
-      else if (/^(ES|NQ|YM|RTY|6[AEBCJSN])/.test(ticker)) {
-        exchange = 'CME';
-      }
-      // Для акций/ETF (AAPL, TSLA, ABT, SPY, GME, …) НЕ подставляем биржу —
-      // TV сам резолвит символ через ?symbol=TICKER (проверено: ABT → NYSE:ABT,
-      // SPY → AMEX:SPY, GME → NYSE:GME). Раньше дефолт NASDAQ ломал ссылки
-      // на NYSE-листинги (ABT, GME, JPM и т.п.).
-    }
-
-    const symbol = exchange ? `${exchange}:${ticker}` : ticker;
+    // Если расширение явно передало биржу — уважаем её (расширение спарсило
+    // символ прямо со страницы TradingView и знает точный префикс).
+    // Иначе оставляем голый тикер — TV сам резолвит:
+    //   акции:     ABT → NYSE:ABT, AAPL → NASDAQ:AAPL, SPY → AMEX:SPY
+    //   фьючерсы:  ESU2026 → CME_MINI, ZCN2026 → CBOT, YMM2026 → CBOT_MINI,
+    //              6EH2026 → CME, CLF2026 → NYMEX, GCG2026 → COMEX
+    // Раньше тут была ручная карта (ES → CME, GC → NYMEX, YM → CME) с
+    // ошибочными биржами, которая ломала половину фьючерсных сохранений
+    // (ESU2026: CME → 404, а правильно CME_MINI).
+    const symbol = exchangeFromExtension ? `${exchangeFromExtension}:${ticker}` : ticker;
     const encodedSymbol = encodeURIComponent(symbol);
     return `https://www.tradingview.com/options/chain/?symbol=${encodedSymbol}`;
   }, []);
