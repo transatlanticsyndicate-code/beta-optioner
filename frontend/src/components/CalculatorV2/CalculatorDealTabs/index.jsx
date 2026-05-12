@@ -683,9 +683,13 @@ function CalculatorDealTabs({
           )}
 
           {/* Волатильность (30%) + График P&L (70%) */}
-          <div className="grid grid-cols-1 lg:grid-cols-[30%_70%] gap-4">
+          {/* ЗАЧЕМ: Barchart-данные есть только по акциям; для фьючерсов и крипты
+              скрываем левую колонку и растягиваем график на всю ширину */}
+          <div className={(calculatorMode === CALCULATOR_MODES.STOCKS && selectedTicker)
+            ? 'grid grid-cols-1 lg:grid-cols-[30%_70%] gap-4'
+            : 'grid grid-cols-1 gap-4'}>
             {/* Левая колонка: волатильность */}
-            {selectedTicker && (
+            {calculatorMode === CALCULATOR_MODES.STOCKS && selectedTicker && (
               <Card className="relative" style={{ borderColor: '#b8b8b8' }}>
                 <VolatilityGauge
                   data={volatilityData}
@@ -697,7 +701,7 @@ function CalculatorDealTabs({
             )}
 
             {/* Правая колонка: график P&L */}
-            <Card className={`relative ${!selectedTicker ? 'lg:col-span-2' : ''}`} style={{ borderColor: '#b8b8b8' }}>
+            <Card className="relative" style={{ borderColor: '#b8b8b8' }}>
               <CardContent className="pt-1 pb-1 px-2">
                 <PLChart
                   options={options}
