@@ -1098,16 +1098,16 @@ function UniversalOptionsCalculator() {
       return `https://www.binance.com/en/eoptions/${ticker}`;
     }
 
-    let exchange = exchangeFromExtension || 'NASDAQ'; // Приоритет: расширение > паттерны > NASDAQ
+    let exchange = exchangeFromExtension || null;
 
-    // Если расширение не передало exchange — определяем биржу на основе паттернов тикера
-    // ЗАЧЕМ: Fallback для старых версий расширения, которые не передают exchange
-    if (!exchangeFromExtension) {
+    // Если расширение не передало exchange — определяем биржу только для фьючерсов
+    // (для них TV требует явный префикс: ESH2026 без CME_MINI → 404).
+    if (!exchange) {
       // Фьючерсы CBOT (зерновые: ZL, ZC, ZS, ZW, ZM и т.д.)
       if (/^Z[LCSW]|^ZM/.test(ticker)) {
         exchange = 'CBOT';
       }
-      // Фьючерсы CME (энергия, металлы: CL, NG, GC, SI и т.д.)
+      // Фьючерсы NYMEX (энергия, металлы: CL, NG, GC, SI и т.д.)
       else if (/^(CL|NG|GC|SI|HG|RB|HO)/.test(ticker)) {
         exchange = 'NYMEX';
       }
@@ -1115,10 +1115,14 @@ function UniversalOptionsCalculator() {
       else if (/^(ES|NQ|YM|RTY|6[AEBCJSN])/.test(ticker)) {
         exchange = 'CME';
       }
-      // Остальные считаем NASDAQ (по умолчанию)
+      // Для акций/ETF (AAPL, TSLA, ABT, SPY, GME, …) НЕ подставляем биржу —
+      // TV сам резолвит символ через ?symbol=TICKER (проверено: ABT → NYSE:ABT,
+      // SPY → AMEX:SPY, GME → NYSE:GME). Раньше дефолт NASDAQ ломал ссылки
+      // на NYSE-листинги (ABT, GME, JPM и т.п.).
     }
 
-    const encodedSymbol = encodeURIComponent(`${exchange}:${ticker}`);
+    const symbol = exchange ? `${exchange}:${ticker}` : ticker;
+    const encodedSymbol = encodeURIComponent(symbol);
     return `https://www.tradingview.com/options/chain/?symbol=${encodedSymbol}`;
   }, []);
 
