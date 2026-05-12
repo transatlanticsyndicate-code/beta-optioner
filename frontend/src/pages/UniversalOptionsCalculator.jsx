@@ -1090,6 +1090,14 @@ function UniversalOptionsCalculator() {
   const getTradingViewLink = useCallback((ticker, exchangeFromExtension) => {
     if (!ticker) return null;
 
+    // ЗАЧЕМ: крипто-USDT-пары (BTCUSDT, ETHUSDT, …) живут на Binance Options,
+    // на TradingView их нет — клик по тикеру ведёт на Binance eoptions.
+    // Расширение Binance → Optioner Bridge обновляет такие сделки автоматически.
+    const cryptoMatch = /^([A-Z]+)USDT$/.exec(ticker);
+    if (cryptoMatch) {
+      return `https://www.binance.com/en/eoptions/${ticker}`;
+    }
+
     let exchange = exchangeFromExtension || 'NASDAQ'; // Приоритет: расширение > паттерны > NASDAQ
 
     // Если расширение не передало exchange — определяем биржу на основе паттернов тикера

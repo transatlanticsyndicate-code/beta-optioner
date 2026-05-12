@@ -100,6 +100,7 @@ async function executeDbConfigRefresh(calcTabId, configData) {
 
     await writeStatusToCalculator(calcTabId, 'collecting', 5,
       `Запрос данных Binance (${underlying})...`);
+    showBinanceToast(calcTabId, 'loading', `Обновление с Binance (${underlying})...`);
 
     const [markArr, tickerArr, indexPrice] = await Promise.all([
       fetchBinanceMark(underlying),
@@ -110,6 +111,8 @@ async function executeDbConfigRefresh(calcTabId, configData) {
     if (!markArr.length) {
       await writeStatusToCalculator(calcTabId, 'error', 0,
         'Не удалось получить котировки с Binance');
+      showBinanceToast(calcTabId, 'error',
+        'Не удалось получить котировки с Binance', { autoDismissMs: 5000 });
       return;
     }
 
@@ -177,8 +180,11 @@ async function executeDbConfigRefresh(calcTabId, configData) {
       dbConfigId
     });
 
+    const priceText = indexPrice != null ? ` · цена БА $${indexPrice.toFixed(2)}` : '';
     await writeStatusToCalculator(calcTabId, 'complete', 100,
       `Обновлено: ${found} из ${total} опц.`);
+    showBinanceToast(calcTabId, 'success',
+      `Обновлено ${found} из ${total} опц.${priceText}`, { autoDismissMs: 4000 });
 
     console.log(`[Binance DbConfig] Завершено: ${found}/${total} опц., цена=${indexPrice}`);
 
@@ -186,6 +192,8 @@ async function executeDbConfigRefresh(calcTabId, configData) {
     console.error('[Binance DbConfig] Ошибка обновления:', e);
     try {
       await writeStatusToCalculator(calcTabId, 'error', 0, e.message);
+      showBinanceToast(calcTabId, 'error',
+        'Ошибка обновления с Binance: ' + (e.message || ''), { autoDismissMs: 5000 });
     } catch (_) {}
   } finally {
     executeDbConfigRefresh._inProgress = false;

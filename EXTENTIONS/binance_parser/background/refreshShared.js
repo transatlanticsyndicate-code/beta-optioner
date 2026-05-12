@@ -433,4 +433,90 @@ async function showDbConfigOverlay(calcTabId, ticker, optionsCount, dbConfigId, 
   });
 }
 
+/**
+ * Тост-уведомление в правом нижнем углу страницы калькулятора.
+ * ЗАЧЕМ: В отличие от TV-флоу (где пользователь видит «было/стало» на вкладке
+ * TradingView), Binance работает через API и без открытия вкладок. Без видимой
+ * обратной связи пользователь не понимает, что обновление прошло.
+ *
+ * Одна и та же DOM-нода переиспользуется — последующие вызовы перерисовывают
+ * содержимое. Состояния: loading / success / warning / error.
+ *
+ * @param {number} calcTabId
+ * @param {'loading'|'success'|'warning'|'error'} state
+ * @param {string} text
+ * @param {object} [options]
+ * @param {number} [options.autoDismissMs] — через сколько мс сама пропадёт (0 = висит до следующего вызова)
+ */
+async function showBinanceToast(calcTabId, state, text, options = {}) {
+  const autoDismissMs = options.autoDismissMs || 0;
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: calcTabId },
+      func: (state, text, autoDismissMs) => {
+        let toast = document.getElementById('bnb-status-toast');
+        if (!toast) {
+          toast = document.createElement('div');
+          toast.id = 'bnb-status-toast';
+          document.body.appendChild(toast);
+        }
+        if (toast._dismissTimer) {
+          clearTimeout(toast._dismissTimer);
+          toast._dismissTimer = null;
+        }
+        const colors = {
+          loading: { bg: '#FFF9E6', border: '#F0B90B', fg: '#5D4404' },
+          success: { bg: '#E8F5E8', border: '#4CAF50', fg: '#1B5E20' },
+          warning: { bg: '#FFF3CD', border: '#F0B90B', fg: '#5D4404' },
+          error:   { bg: '#FDEDED', border: '#E53935', fg: '#5D1E1B' }
+        };
+        const c = colors[state] || colors.loading;
+        const icon = state === 'success' ? '✓'
+                   : state === 'error'   ? '✕'
+                   : state === 'warning' ? '⚠'
+                   : '⟳';
+        toast.style.cssText = [
+          'position: fixed',
+          'bottom: 20px',
+          'right: 20px',
+          'z-index: 999999',
+          'background: ' + c.bg,
+          'border: 1px solid ' + c.border,
+          'border-radius: 10px',
+          'padding: 10px 14px',
+          'color: ' + c.fg,
+          "font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+          'font-size: 13px',
+          'font-weight: 500',
+          'box-shadow: 0 4px 16px rgba(0,0,0,0.12)',
+          'max-width: 360px',
+          'display: flex',
+          'align-items: center',
+          'gap: 8px',
+          'opacity: 1',
+          'transition: opacity 0.35s ease'
+        ].join(';');
+        // Без шаблонных строк — текст пользовательский, всё через textContent
+        toast.innerHTML = '';
+        const iconEl = document.createElement('span');
+        iconEl.textContent = icon;
+        iconEl.style.cssText = 'font-size: 16px; line-height: 1';
+        const textEl = document.createElement('span');
+        textEl.textContent = text;
+        toast.appendChild(iconEl);
+        toast.appendChild(textEl);
+        if (autoDismissMs > 0) {
+          toast._dismissTimer = setTimeout(() => {
+            toast.style.opacity = '0';
+            setTimeout(() => { if (toast.parentNode) toast.remove(); }, 400);
+          }, autoDismissMs);
+        }
+      },
+      args: [state, text, autoDismissMs]
+    });
+  } catch (e) {
+    // Тост — вспомогательный канал. Если страница недоступна — игнор.
+  }
+}
+
 console.log('[Binance Bridge] refreshShared.js загружен');

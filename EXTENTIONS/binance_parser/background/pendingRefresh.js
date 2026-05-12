@@ -116,6 +116,7 @@ async function executePendingRefresh(calcTabId, configData, dbConfigId) {
 
     await writeStatusToCalculator(calcTabId, 'collecting', 5,
       `Запрос данных Binance (${underlying})...`);
+    showBinanceToast(calcTabId, 'loading', `Обновление с Binance (${underlying})...`);
 
     // Тянем три API параллельно — это в разы быстрее, чем последовательно
     const [markArr, tickerArr, indexPrice] = await Promise.all([
@@ -127,6 +128,8 @@ async function executePendingRefresh(calcTabId, configData, dbConfigId) {
     if (!markArr.length) {
       await writeStatusToCalculator(calcTabId, 'error', 0,
         'Не удалось получить котировки с Binance');
+      showBinanceToast(calcTabId, 'error',
+        'Не удалось получить котировки с Binance', { autoDismissMs: 5000 });
       return;
     }
 
@@ -154,6 +157,8 @@ async function executePendingRefresh(calcTabId, configData, dbConfigId) {
     if (found === 0) {
       await writeStatusToCalculator(calcTabId, 'error', 0,
         'Опционы не найдены в данных Binance (проверьте дату экспирации и страйк)');
+      showBinanceToast(calcTabId, 'error',
+        'Опционы не найдены в данных Binance', { autoDismissMs: 5000 });
       return;
     }
 
@@ -168,11 +173,16 @@ async function executePendingRefresh(calcTabId, configData, dbConfigId) {
       dbConfigId
     });
 
+    const priceText = indexPrice != null ? ` · цена БА $${indexPrice.toFixed(2)}` : '';
     if (found < total) {
       await writeStatusToCalculator(calcTabId, 'warning', 100,
         `Обновлено ${found} из ${total} — для остальных нет данных в API Binance`);
+      showBinanceToast(calcTabId, 'warning',
+        `Обновлено ${found} из ${total} опц.${priceText}`, { autoDismissMs: 5000 });
     } else {
       await writeStatusToCalculator(calcTabId, 'complete', 100, '');
+      showBinanceToast(calcTabId, 'success',
+        `Обновлено ${found} опц.${priceText}`, { autoDismissMs: 4000 });
     }
 
     console.log(`[Binance Pending] Завершено: ${found}/${total} опц., цена=${indexPrice}`);
@@ -182,6 +192,8 @@ async function executePendingRefresh(calcTabId, configData, dbConfigId) {
     try {
       await writeStatusToCalculator(calcTabId, 'error', 0,
         'Ошибка обновления котировок с Binance: ' + (e.message || ''));
+      showBinanceToast(calcTabId, 'error',
+        'Ошибка обновления с Binance: ' + (e.message || ''), { autoDismissMs: 5000 });
     } catch (_) {}
   } finally {
     _pendingInProgress.delete(calcTabId);
