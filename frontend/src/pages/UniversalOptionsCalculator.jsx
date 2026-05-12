@@ -4011,7 +4011,7 @@ function UniversalOptionsCalculator() {
                 {/* Кнопка перевода pending → standard
                     ЗАЧЕМ: По задаче — смена статуса возможна через редактирование.
                     Кнопка доступна только для pending-позиций из БД. */}
-                {loadedConfigStatus === 'pending' && !isEditMode && configSource === 'db' && (
+                {loadedConfigStatus === 'pending' && configSource === 'db' && (
                   <Button
                     size="sm"
                     className="h-7 text-xs bg-cyan-500 hover:bg-cyan-600 text-white"
