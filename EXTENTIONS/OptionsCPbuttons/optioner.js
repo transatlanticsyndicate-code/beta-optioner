@@ -297,10 +297,19 @@ function showConnectionLostNotification() {
     
     try {
       const command = JSON.parse(commandJson);
-      
+
       // Проверяем что команда не обработана
       if (command.processed) return;
-      
+
+      // ВАЖНО: sendPrIV_tocallc — команда от расширения В калькулятор (доставка свежих
+      // котировок для сохранённой сделки). Её обрабатывает React-код калькулятора:
+      // в хуке useExtensionRefreshCommand он сам читает tvc_refresh_command по polling,
+      // применяет к state и помечает processed=true (см. UniversalOptionsCalculator.jsx).
+      // Если бы мы пометили processed здесь — React увидел бы команду уже обработанной
+      // и пропустил бы её → автообновление сделок «провисает».
+      // Поэтому для sendPrIV_tocallc выходим ДО пометки processed и НЕ шлём её в background.
+      if (command.type === 'sendPrIV_tocallc') return;
+
       // Помечаем как обработанную
       command.processed = true;
       localStorage.setItem('tvc_refresh_command', JSON.stringify(command));

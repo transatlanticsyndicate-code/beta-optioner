@@ -90,7 +90,7 @@ import { loadFuturesSettings, getPointValue, getFutureByTicker, isFuturesTicker,
 
 // Импорт хука для работы с данными от Chrome Extension TradingView Parser
 // ЗАЧЕМ: Получение опционов, тикера и цены из localStorage и URL параметров
-import { useExtensionData, useExtensionRefreshCommand } from '../hooks/useExtensionData';
+import { useExtensionData, useExtensionRefreshCommand, writeRefreshResult } from '../hooks/useExtensionData';
 
 // УБРАНО: AI модель не используется в универсальном калькуляторе
 // const AI_SUPPORTED_TICKERS = [...];
@@ -879,17 +879,39 @@ function UniversalOptionsCalculator() {
     });
   }, [selectedTicker, currentPrice, priceChange, options, positions, selectedExpirationDate, daysPassed, chartDisplayMode, showOptionLines, showProbabilityZones, strikesByDate, expirationDates]);
 
-  // === ПРИЁМ ОБНОВЛЁННЫХ IV И ЦЕНЫ ОТ РАСШИРЕНИЯ (sendPrIV_tocallc) ===
+  // === ПРИЁМ ОБНОВЛЁННЫХ ДАННЫХ ОТ РАСШИРЕНИЯ (sendPrIV_tocallc) ===
+  // Поведение зависит от статуса загруженной сделки (universalCalc_loadedConfigStatus):
+  //   pending  → обновляем IV, bid, ask, volume каждого опциона + currentPrice в шапке;
+  //              цена базового актива в строке опциона (assetPriceAtEntry) приравнивается
+  //              к новой currentPrice; ручные правки bid/ask перетираются (сделка ещё не зафиксирована).
+  //   standard → обновляем только IV каждого опциона и currentPrice в шапке;
+  //              bid / ask / volume / assetPriceAtEntry опционов НЕ трогаем (это снимок входа в сделку).
+  // Греки delta/gamma/theta/vega из команды игнорируются — калькулятор пересчитывает их сам из IV.
   const { pendingRefresh, markProcessed } = useExtensionRefreshCommand();
 
   useEffect(() => {
     if (!pendingRefresh) return;
     if (options.length === 0) return;
 
-    // ВАЖНО: Игнорируем refresh-команды, отправленные одновременно с начальной загрузкой
-    // ЗАЧЕМ: При добавлении опциона расширение шлёт И calculatorState (IV → impliedVolatility),
-    // И tvc_refresh_command (IV → manualIvOverride). Если обработать оба — IV попадёт в Fact IV
-    // вместо колонки IV. Порог 3 секунды покрывает задержку между записью расширением и обработкой.
+    // Гейт №1: сделка не загружена — обновлять нечего, реагировать тоже не нужно.
+    // ЗАЧЕМ: команды sendPrIV_tocallc адресованы конкретной сохранённой позиции.
+    // Если в калькуляторе сделки нет — это команда для другой вкладки или мусор из localStorage.
+    const currentLoadedConfigId = localStorage.getItem('universalCalc_loadedConfigId') || null;
+    if (!currentLoadedConfigId) return;
+
+    // Гейт №2: команда адресована другой вкладке — НЕ помечаем processed и НЕ пишем
+    // в tvc_refresh_result, чтобы не затереть статус «правильной» вкладки.
+    if (pendingRefresh.dbConfigId && pendingRefresh.dbConfigId !== currentLoadedConfigId) {
+      console.log('⏭️ [ExtRefresh] Пропуск — dbConfigId не совпадает:', {
+        cmd: pendingRefresh.dbConfigId, current: currentLoadedConfigId
+      });
+      return;
+    }
+
+    // Гейт №3: 3-секундная защита от дребезга при инициализации калькулятора.
+    // ЗАЧЕМ: при добавлении опциона расширение шлёт И calculatorState (IV → impliedVolatility),
+    // И tvc_refresh_command (IV → manualIvOverride). Если обработать оба сразу — IV попадёт
+    // в Fact IV вместо колонки IV.
     if (pendingRefresh.timestamp && initCompletedAtRef.current &&
         pendingRefresh.timestamp <= initCompletedAtRef.current + 3000) {
       console.log('⏭️ [ExtRefresh] Пропуск — команда пришла одновременно с инициализацией');
@@ -897,66 +919,126 @@ function UniversalOptionsCalculator() {
       return;
     }
 
-    // ВАЖНО: Применяем данные только если тикер совпадает с текущим калькулятором
-    // ЗАЧЕМ: В tvc_refresh_command может лежать устаревшая запись от другого тикера,
-    // и без проверки она перезапишет цену базового актива на чужую
+    // Гейт №4: тикер не совпадает с текущим. dbConfigId-проверка выше уже отсеивает чужие вкладки;
+    // этот фильтр — страховка от устаревшей записи в localStorage от другого тикера.
     if (pendingRefresh.ticker && selectedTicker &&
         pendingRefresh.ticker.toUpperCase() !== selectedTicker.toUpperCase()) {
       console.log('⚠️ [ExtRefresh] Пропуск — тикер не совпадает:', {
-        refresh: pendingRefresh.ticker,
-        current: selectedTicker
+        refresh: pendingRefresh.ticker, current: selectedTicker
       });
       markProcessed();
       return;
     }
 
-    const { currentPrice: newPrice, options: refreshedOptions } = pendingRefresh;
+    try {
+      writeRefreshResult({ status: 'collecting', progress: 50, message: 'Применяем обновление…' });
 
-    if (newPrice && newPrice > 0) {
-      setCurrentPrice(newPrice);
-    }
+      const { currentPrice: newPrice, options: refreshedOptions } = pendingRefresh;
+      const hasNewPrice = typeof newPrice === 'number' && newPrice > 0;
 
-    if (refreshedOptions && refreshedOptions.length > 0) {
-      const now = new Date();
-      const todayISO = now.toISOString().split('T')[0];
-      const todayDisplay = now.toLocaleDateString('ru-RU') + ' ' + now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+      if (hasNewPrice) {
+        setCurrentPrice(newPrice);
+      }
+
+      // Читаем статус прямо из localStorage — он всегда актуален и не зависит от React state-cycle.
+      const currentStatus = localStorage.getItem('universalCalc_loadedConfigStatus');
+      const isPending = currentStatus === 'pending';
 
       let updatedCount = 0;
-      const updatedOptions = options.map(opt => {
-        const match = refreshedOptions.find(ref => {
-          const typeMatch = (ref.type || '').toUpperCase() === (opt.type || '').toUpperCase();
-          const strikeMatch = Math.abs(parseFloat(ref.strike) - parseFloat(opt.strike)) < 0.5;
-          let dateMatch = false;
-          try {
-            const d1 = (opt.date || '').toString().split('T')[0];
-            const d2 = (ref.date || '').toString().split('T')[0];
-            dateMatch = d1 === d2;
-          } catch { dateMatch = false; }
-          return typeMatch && strikeMatch && dateMatch;
+
+      if (refreshedOptions && refreshedOptions.length > 0) {
+        const now = new Date();
+        const todayISO = now.toISOString().split('T')[0];
+        const todayDisplay = now.toLocaleDateString('ru-RU') + ' ' +
+          now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+
+        const updatedOptions = options.map(opt => {
+          const match = refreshedOptions.find(ref => {
+            const typeMatch = (ref.type || '').toUpperCase() === (opt.type || '').toUpperCase();
+            const strikeMatch = Math.abs(parseFloat(ref.strike) - parseFloat(opt.strike)) < 0.5;
+            let dateMatch = false;
+            try {
+              const d1 = (opt.date || '').toString().split('T')[0];
+              const d2 = (ref.date || '').toString().split('T')[0];
+              dateMatch = d1 === d2;
+            } catch { dateMatch = false; }
+            return typeMatch && strikeMatch && dateMatch;
+          });
+
+          if (!match) return opt;
+
+          let next = opt;
+          let touched = false;
+
+          // IV — обновляем в обоих режимах (pending и standard).
+          if (match.newIV != null && !isNaN(match.newIV)) {
+            next = {
+              ...next,
+              manualIvOverride: match.newIV,
+              manualIvOverrideDate: todayISO,
+              manualIvOverrideDisplayDate: todayDisplay,
+              ivUpdatedFromExtension: true
+            };
+            touched = true;
+          }
+
+          // bid/ask/volume/assetPriceAtEntry — только в режиме pending.
+          // В standard эти поля — снимок входа в позицию, расширение их не должно перетирать.
+          if (isPending) {
+            const patch = {};
+            if (match.bid != null) {
+              patch.bid = match.bid;
+              patch.customBid = null;
+              patch.isBidModified = false;
+            }
+            if (match.ask != null) {
+              patch.ask = match.ask;
+              patch.customAsk = null;
+              patch.isAskModified = false;
+            }
+            if (match.volume != null) {
+              patch.volume = match.volume;
+            }
+            // Цена базового актива в строке опциона приравнивается к новой цене в шапке.
+            if (hasNewPrice) {
+              patch.assetPriceAtEntry = newPrice;
+              patch.isAssetPriceModified = false;
+            }
+            if (Object.keys(patch).length > 0) {
+              next = { ...next, ...patch };
+              touched = true;
+            }
+          }
+
+          if (touched) updatedCount++;
+          return next;
         });
 
-        if (match && match.newIV != null && !isNaN(match.newIV)) {
-          updatedCount++;
-          return {
-            ...opt,
-            manualIvOverride: match.newIV,
-            manualIvOverrideDate: todayISO,
-            manualIvOverrideDisplayDate: todayDisplay,
-            ivUpdatedFromExtension: true
-          };
+        if (updatedCount > 0) {
+          setOptions(updatedOptions);
         }
-        return opt;
+      }
+
+      writeRefreshResult({
+        status: 'complete',
+        progress: 100,
+        message: updatedCount > 0
+          ? `Обновлено опционов: ${updatedCount}${hasNewPrice ? ' + цена БА' : ''}`
+          : (hasNewPrice ? 'Обновлена цена базового актива' : 'Команда обработана, изменений нет')
       });
 
-      if (updatedCount > 0) {
-        setOptions(updatedOptions);
+      if (currentLoadedConfigId) {
+        needExtRefreshSaveRef.current = true;
       }
-    }
-
-    markProcessed();
-
-    if (loadedConfigId) {
-      needExtRefreshSaveRef.current = true;
+    } catch (e) {
+      console.error('❌ [ExtRefresh] Ошибка применения команды:', e);
+      writeRefreshResult({
+        status: 'error',
+        progress: 0,
+        message: e?.message || 'Ошибка применения обновления'
+      });
+    } finally {
+      markProcessed();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingRefresh, options.length, selectedTicker]);

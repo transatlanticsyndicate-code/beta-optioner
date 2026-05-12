@@ -2,7 +2,17 @@
  * ext2 Background — Service Worker (message router)
  */
 
-importScripts('calculator.js', 'sync.js');
+// Базовые модули + автообновление сохранённых сделок (перенесено из twparser коллег).
+// Порядок важен: refreshHelpers / pendingParser → dbConfigRefresh → pendingRefresh → calcTabRouter.
+importScripts(
+  'calculator.js',
+  'sync.js',
+  'refreshHelpers.js',
+  'pendingParser.js',
+  'dbConfigRefresh.js',
+  'pendingRefresh.js',
+  'calcTabRouter.js'
+);
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const { action } = message;

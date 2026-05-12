@@ -361,15 +361,27 @@ export function useExtensionRefreshCommand(pollInterval = 1500) {
           optionsCount: command.options?.length || 0
         });
 
+        const toNumOrNull = (v) =>
+          v != null && v !== '' && !isNaN(Number(v)) ? Number(v) : null;
+
         setPendingRefresh({
           ticker: command.ticker || '',
           currentPrice: command.currentPrice || null,
+          // ЗАЧЕМ: dbConfigId — привязка команды к конкретной вкладке калькулятора.
+          // Расширение шлёт его, обработчик проверяет совпадение с текущим loadedConfigId.
+          dbConfigId: command.dbConfigId || null,
           timestamp: command.timestamp,
           options: (command.options || []).map(o => ({
             type: o.type === 'C' ? 'CALL' : (o.type === 'P' ? 'PUT' : o.type),
             strike: o.strike,
             date: o.date,
-            newIV: o.newIV
+            newIV: o.newIV,
+            // bid/ask/volume применяем только в режиме pending (см. обработчик).
+            // Греки delta/gamma/theta/vega намеренно НЕ копируем: калькулятор
+            // пересчитывает их сам из IV по своей модели Black-Scholes/Black-76.
+            bid: toNumOrNull(o.bid),
+            ask: toNumOrNull(o.ask),
+            volume: toNumOrNull(o.volume)
           }))
         });
       } catch (error) {
@@ -579,4 +591,28 @@ export function readExtensionResult() {
 export function clearExtensionResult() {
   localStorage.removeItem(RESULT_KEY);
   console.log('🗑️ [Extension Result] Очищен');
+}
+
+/**
+ * Запись статуса обработки команды sendPrIV_tocallc в tvc_refresh_result.
+ * ЗАЧЕМ: Расширение TradingView ждёт ответа калькулятора — если не пишем статус,
+ * расширение считает, что команда «провисла», и перестаёт слать новые автообновления.
+ *
+ * @param {Object} payload
+ * @param {'collecting'|'complete'|'warning'|'error'} payload.status
+ * @param {number} [payload.progress] 0..100
+ * @param {string} [payload.message]
+ */
+export function writeRefreshResult({ status, progress, message }) {
+  try {
+    const data = {
+      status,
+      progress: typeof progress === 'number' ? progress : 0,
+      message: message || '',
+      timestamp: Date.now()
+    };
+    localStorage.setItem(RESULT_KEY, JSON.stringify(data));
+  } catch (e) {
+    console.error('❌ [writeRefreshResult] Ошибка записи:', e);
+  }
 }

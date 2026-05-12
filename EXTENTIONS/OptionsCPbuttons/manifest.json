@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
   "name": "Options CP Buttons",
-  "version": "1.5.1",
-  "description": "Кнопки +C +P -C -P для доски опционов TradingView → Optioner Calculator",
+  "version": "1.6.0",
+  "description": "Кнопки +C +P -C -P для доски опционов TradingView → Optioner Calculator + автообновление сохранённых сделок",
 
-  "permissions": ["storage", "activeTab", "tabs", "scripting"],
+  "permissions": ["storage", "activeTab", "tabs", "scripting", "alarms"],
 
   "host_permissions": [
     "https://*.tradingview.com/*",
@@ -48,6 +48,15 @@
       ],
       "css": ["ext2.css"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://beta.optioner.online/*",
+        "http://localhost:3000/*"
+      ],
+      "js": ["src/calcStorageGuard.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
     },
     {
       "matches": [
