@@ -48,4 +48,22 @@ async function ensureContentScriptLoaded(_tabId) {
   return true;
 }
 
+/**
+ * Является ли тикер крипто-USDT-парой (BTCUSDT, ETHUSDT, …).
+ * ЗАЧЕМ: На TradingView нет опционных досок для крипто-USDT-пар, и за такие
+ * сделки в калькуляторе отвечает Binance-расширение. Если этой проверки нет,
+ * TV-фон попытается открыть `tradingview.com/options/chain/?symbol=BTCUSDT`
+ * → 404 → плашка «изменилась вёрстка», и пользователь видит чужой оверлей.
+ *
+ * Шаблон намеренно широкий: суффикс `USDT` после возможного префикса биржи
+ * (`BINANCE:ETHUSDT`). Это покрывает и будущие underlying'ы Binance Options
+ * без необходимости синхронизировать списки между расширениями.
+ */
+function _isCryptoUsdtTicker(ticker) {
+  if (!ticker || typeof ticker !== 'string') return false;
+  let t = ticker.trim().toUpperCase();
+  if (t.includes(':')) t = t.split(':').pop();
+  return /USDT$/.test(t);
+}
+
 console.log('[Background] refreshHelpers.js загружен');

@@ -612,6 +612,14 @@ async function _autoRefreshDbConfigInner(calcTabId, url, dbConfigId, tabKey, att
       return;
     }
 
+    // ЗАЧЕМ: Крипто-USDT-пары (BTCUSDT, ETHUSDT, …) обрабатывает Binance-расширение.
+    // Без этой проверки TV покажет свой оверлей на BTCUSDT и при подтверждении
+    // откроет TradingView с 404. _processedTabs НЕ помечаем — иначе при следующем
+    // alarm-цикле состояние залипнет, если конфиг внезапно сменится на TV-тикер.
+    if (_isCryptoUsdtTicker(configData.ticker)) {
+      return;
+    }
+
     console.log('[TVC DbConfig] Данные загружены:', configData.ticker, configData.options.length, 'опционов');
 
     // Помечаем вкладку ДО показа оверлея — чтобы повторный alarm не создал дубль,

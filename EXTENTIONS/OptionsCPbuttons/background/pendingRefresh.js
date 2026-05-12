@@ -294,6 +294,13 @@ async function checkPendingRefreshCommands(calcTabId) {
       return;
     }
 
+    // ЗАЧЕМ: Крипто-USDT-пары (BTCUSDT, ETHUSDT, …) обрабатывает Binance-расширение.
+    // На TV таких опционных досок нет — без этой проверки откроется 404.
+    if (_isCryptoUsdtTicker(configData.ticker)) {
+      _processedPendingIds.delete(configId);
+      return;
+    }
+
     // не await — мьютекс внутри защитит от параллельного запуска
     executePendingRefresh(calcTabId, configData, configId);
 
