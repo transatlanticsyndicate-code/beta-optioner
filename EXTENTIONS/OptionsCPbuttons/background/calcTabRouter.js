@@ -56,17 +56,22 @@ async function _readLoadedConfigStatus(calcTabId) {
  *
  * @param {number} calcTabId
  * @param {string} calcUrl
+ * @param {'onUpdated'|'alarm'} source — откуда пришёл вызов. Pending-обновление
+ *   запускается ТОЛЬКО на 'onUpdated' (загрузка вкладки или F5), но НЕ на alarm —
+ *   иначе сделка в статусе "в ожидании" обновлялась бы каждые 30 секунд.
  */
-async function _routeForCalcTab(calcTabId, calcUrl) {
+async function _routeForCalcTab(calcTabId, calcUrl, source) {
   if (!calcUrl || !calcUrl.includes('dbConfig=')) return;
 
   const status = await _readLoadedConfigStatus(calcTabId);
-  console.log('[CalcTabRouter] tab', calcTabId, 'status =', status, 'url =', calcUrl);
+  console.log('[CalcTabRouter] tab', calcTabId, 'status =', status, 'url =', calcUrl, 'source =', source);
 
   if (status === 'pending') {
-    // Поток pending — автообновление без подтверждения, один раз.
-    // Защита от повторных вызовов реализована внутри pendingRefresh.js (TTL и мьютекс).
-    checkPendingRefreshCommands(calcTabId);
+    // Pending-обновление — один раз при загрузке/F5 вкладки. Из алярма не
+    // перезапускаем: пользователь явно сказал, что повторение не нужно.
+    if (source === 'onUpdated') {
+      checkPendingRefreshCommands(calcTabId);
+    }
   } else {
     // Поток standard — оверлей подтверждения «Обновить? Да/Нет».
     // Защита от повторного показа — внутри dbConfigRefresh.js (_processedTabs).
@@ -76,9 +81,9 @@ async function _routeForCalcTab(calcTabId, calcUrl) {
 
 /**
  * Алярм каждые 30 сек — обходит все открытые вкладки калькулятора и для тех,
- * что с dbConfig= в URL, дёргает _routeForCalcTab. Для pending guard внутри
- * pendingRefresh.js уже посчитал тик «уже обрабатывали»; для standard — оверлей
- * не показывается повторно благодаря _processedTabs в dbConfigRefresh.js.
+ * что с dbConfig= в URL, дёргает _routeForCalcTab. Из алярма мы запускаем
+ * только standard-поток (показ оверлея) и подбор отложенных команд оверлея;
+ * pending-поток в _routeForCalcTab пропускается по source='alarm'.
  */
 chrome.alarms.create(CALC_ALARM_NAME, { periodInMinutes: 0.5 });
 
@@ -89,7 +94,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     const tabs = await chrome.tabs.query({ url: CALC_TAB_URL_MATCHES });
     for (const tab of tabs) {
       if (tab.id == null) continue;
-      _routeForCalcTab(tab.id, tab.url || '');
+      _routeForCalcTab(tab.id, tab.url || '', 'alarm');
       // Fallback для оверлея: при недоступности chrome.runtime.sendMessage в момент
       // клика «Да» showDbConfigOverlay пишет ключ tvc_dbconfig_refresh_<id> в localStorage.
       // Эта функция (из dbConfigRefresh.js) подхватывает такие записи и запускает refresh.
@@ -117,7 +122,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   _lastTriggerByTab.set(tabId, now);
 
   setTimeout(() => {
-    _routeForCalcTab(tabId, tab.url);
+    _routeForCalcTab(tabId, tab.url, 'onUpdated');
   }, 4000);
 });
 

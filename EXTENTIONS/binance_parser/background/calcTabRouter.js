@@ -44,23 +44,30 @@ async function _readLoadedConfigStatus(calcTabId) {
 /**
  * Главный диспетчер для одной вкладки калькулятора с открытой сделкой.
  * Используется и из alarm, и из tabs.onUpdated.
+ *
+ * @param {'onUpdated'|'alarm'} source — pending-обновление запускается только
+ *   на 'onUpdated' (загрузка вкладки или F5), но не на 'alarm', чтобы сделка
+ *   "в ожидании" не обновлялась каждые 30 секунд.
  */
-async function _routeForCalcTab(calcTabId, calcUrl) {
+async function _routeForCalcTab(calcTabId, calcUrl, source) {
   if (!calcUrl || !calcUrl.includes('dbConfig=')) return;
 
   const status = await _readLoadedConfigStatus(calcTabId);
 
   if (status === 'pending') {
-    // Pending — без подтверждения. Защита от повторов внутри pendingRefresh.
-    checkPendingRefreshCommands(calcTabId);
+    // Pending — один раз при загрузке/F5 вкладки. Из алярма не перезапускаем.
+    if (source === 'onUpdated') {
+      checkPendingRefreshCommands(calcTabId);
+    }
   } else {
     // Standard — оверлей. Защита от повторного показа — _processedTabs внутри dbConfigRefresh.
     autoRefreshDbConfig(calcTabId, calcUrl);
   }
 }
 
-// Алярм каждые 30 секунд — fallback на случай, если tabs.onUpdated не сработал
-// (например, расширение перезапустилось после загрузки вкладки).
+// Алярм каждые 30 секунд — нужен для standard-потока (подбор отложенных
+// команд оверлея). Для pending алярм ничего не делает — обновление
+// выполняется ровно один раз через tabs.onUpdated.
 chrome.alarms.create(CALC_ALARM_NAME, { periodInMinutes: 0.5 });
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
@@ -69,7 +76,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     const tabs = await chrome.tabs.query({ url: CALC_TAB_URL_MATCHES });
     for (const tab of tabs) {
       if (tab.id == null) continue;
-      _routeForCalcTab(tab.id, tab.url || '');
+      _routeForCalcTab(tab.id, tab.url || '', 'alarm');
       // Параллельно тянем накопленные ответы оверлеев (fallback-канал через localStorage).
       checkDbConfigOverlayCommands(tab.id);
     }
@@ -91,7 +98,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (now - last < TAB_TRIGGER_DEBOUNCE_MS) return;
   _lastTriggerByTab.set(tabId, now);
 
-  setTimeout(() => _routeForCalcTab(tabId, tab.url), 4000);
+  setTimeout(() => _routeForCalcTab(tabId, tab.url, 'onUpdated'), 4000);
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
