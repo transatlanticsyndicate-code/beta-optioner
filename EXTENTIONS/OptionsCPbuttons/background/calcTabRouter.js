@@ -121,14 +121,24 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (now - last < TAB_TRIGGER_DEBOUNCE_MS) return;
   _lastTriggerByTab.set(tabId, now);
 
+  // Сбрасываем дедуп оверлея для этой вкладки. ЗАЧЕМ: tabId при F5 не меняется,
+  // и без сброса повторный показ «Обновить?» блокируется бессрочно сохранёнными
+  // записями в _processedTabs (см. dbConfigRefresh.js).
+  if (typeof clearDbConfigOverlayDedupe === 'function') {
+    clearDbConfigOverlayDedupe(tabId);
+  }
+
   setTimeout(() => {
     _routeForCalcTab(tabId, tab.url, 'onUpdated');
   }, 4000);
 });
 
-// Очистка debounce-Map, если вкладку закрыли
+// Очистка debounce-Map и дедупа оверлея при закрытии вкладки
 chrome.tabs.onRemoved.addListener((tabId) => {
   _lastTriggerByTab.delete(tabId);
+  if (typeof clearDbConfigOverlayDedupe === 'function') {
+    clearDbConfigOverlayDedupe(tabId);
+  }
 });
 
 /**

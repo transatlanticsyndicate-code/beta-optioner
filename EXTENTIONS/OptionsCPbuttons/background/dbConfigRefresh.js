@@ -18,9 +18,25 @@
 
 // ЗАЧЕМ: Map вместо Set — хранит timestamp, чтобы разрешить повторный refresh
 // после reload страницы (при reload tabId не меняется, но пользователь ожидает новый цикл).
-// Запись «протухает» через 30 сек — этого достаточно для защиты от дублей,
-// но позволяет повторить вручную через reload.
+// Очистка записей этой мапы происходит в calcTabRouter.js на tabs.onUpdated —
+// без неё F5 страницы не показывает оверлей повторно.
 const _processedTabs = new Map();
+
+/**
+ * Сбросить дедуп оверлея для конкретной вкладки.
+ * ЗАЧЕМ: При F5 / навигации на калькуляторе пользователь ждёт, что вопрос
+ * «Обновить?» появится снова. tabId при F5 не меняется, поэтому без явного
+ * сброса ключ `${tabId}_${dbConfigId}` остаётся в мапе и оверлей пропускается.
+ * Вызывается из calcTabRouter.js при tabs.onUpdated (status='complete').
+ */
+function clearDbConfigOverlayDedupe(calcTabId) {
+  const prefix = calcTabId + '_';
+  for (const key of _processedTabs.keys()) {
+    if (key.startsWith(prefix)) {
+      _processedTabs.delete(key);
+    }
+  }
+}
 
 // Маппинг тикеров на exchanges (дублирует panel.js для background контекста)
 // ЗАЧЕМ: panel.js — content script, недоступен в background. При добавлении

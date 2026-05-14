@@ -13,8 +13,25 @@
  */
 
 // Map<tabKey, ts> — один оверлей на один dbConfig, повторно не показываем.
-// Запись «протухает» через 30 сек — это позволяет повторить вручную через reload.
+// Очистка записей этой мапы происходит в calcTabRouter.js на tabs.onUpdated —
+// без неё F5 страницы не показывает оверлей повторно.
 const _processedTabs = new Map();
+
+/**
+ * Сбросить дедуп оверлея для конкретной вкладки.
+ * ЗАЧЕМ: При F5 / навигации на калькуляторе пользователь ждёт, что вопрос
+ * «Обновить?» появится снова. tabId при F5 не меняется, поэтому без явного
+ * сброса ключ `${tabId}_${dbConfigId}` остаётся в мапе и оверлей пропускается.
+ * Вызывается из calcTabRouter.js при tabs.onUpdated (status='complete').
+ */
+function clearDbConfigOverlayDedupe(calcTabId) {
+  const prefix = calcTabId + '_';
+  for (const key of _processedTabs.keys()) {
+    if (key.startsWith(prefix)) {
+      _processedTabs.delete(key);
+    }
+  }
+}
 
 async function autoRefreshDbConfig(calcTabId, url, attempt = 1) {
   // Сначала проверяем команды от ранее показанных оверлеев — каждый alarm

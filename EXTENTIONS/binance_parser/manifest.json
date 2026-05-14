@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Binance → Optioner Bridge",
-  "version": "2.1.2",
+  "version": "2.1.3",
   "description": "Парсинг опционов с Binance eoptions + отправка в калькулятор Optioner + автообновление сохранённых сделок (с тостом-уведомлением)",
   "permissions": [
     "storage",
