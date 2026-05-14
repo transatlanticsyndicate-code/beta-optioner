@@ -43,6 +43,30 @@
 
   // 7. Слушатель сообщений от background/popup
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    // ЗАЧЕМ: Фон (pendingRefresh.js / dbConfigRefresh.js) во время автообновления
+    // спрашивает у content-script текущую цену базового актива. Здесь мы возвращаем
+    // её через ext2GetUnderlyingPriceWithConfidence (healthCheck.js) с валидацией
+    // по диапазону страйков чейна и явным отсечением правого сайдбара (watchlist /
+    // priceWrapper- / detailsWidget). Без этого обработчика фон отваливается на свой
+    // куцый inline-fallback, который путает цену с цифрой из сайдбара.
+    if (message.action === 'getUnderlyingPrice') {
+      let price = null;
+      let confidence = 'none';
+      try {
+        if (typeof ext2GetUnderlyingPriceWithConfidence === 'function') {
+          const r = ext2GetUnderlyingPriceWithConfidence();
+          price = r?.price || null;
+          confidence = r?.confidence || 'none';
+        } else if (typeof getUnderlyingPrice === 'function') {
+          price = getUnderlyingPrice();
+          confidence = price ? 'low' : 'none';
+        }
+      } catch (e) {
+        // оставляем price=null, фон уйдёт в inline-fallback
+      }
+      sendResponse({ price, confidence });
+      return; // синхронный ответ
+    }
     if (message.action === 'refreshPanel') {
       loadPositions().then(() => {
         if (Object.keys(tvc_positions).length > 0) {

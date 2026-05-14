@@ -82,12 +82,26 @@ async function _readUnderlyingPrice(tvTabId) {
       const pr = await chrome.tabs.sendMessage(tvTabId, { action: 'getUnderlyingPrice' }).catch(() => null);
       if (pr?.price) { price = pr.price; break; }
     } catch (_) {}
+    // Inline-fallback: селектор и скип-лист зеркалят src/utils.js →
+    // getUnderlyingPrice / TV_SIDEBAR_SKIP_SELECTOR, чтобы не подхватить
+    // цену чужого тикера из правого сайдбара (priceWrapper-* / watchlist /
+    // detailsWidget — TV использует их на новой вёрстке).
     const fb = await chrome.scripting.executeScript({
       target: { tabId: tvTabId },
       func: () => {
-        const wraps = document.querySelectorAll('[class*="priceWrap"]');
+        const SKIP = [
+          '[class*="widgetbar-widget"]',
+          '[class*="widgetbar-page"]',
+          '[class*="watchlist"]',
+          '[class*="watch-list"]',
+          '[class*="detailsWidget"]',
+          '[data-name="right-toolbar"]',
+          '[data-name="watchlist"]'
+        ].join(',');
+        // priceWrap- (с дефисом) — чейн страницы; priceWrapper- (без дефиса) — сайдбар, отсекаем сразу.
+        const wraps = document.querySelectorAll('[class*="priceWrap-"]');
         for (const el of wraps) {
-          if (el.closest('[class*="widgetbar"]')) continue;
+          if (el.closest(SKIP)) continue;
           const p = parseFloat(el.textContent.replace(/[^0-9.]/g, ''));
           if (p > 0) return p;
         }

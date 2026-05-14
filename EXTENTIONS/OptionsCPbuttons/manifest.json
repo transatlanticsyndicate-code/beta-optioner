@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Options CP Buttons",
-  "version": "1.6.3",
+  "version": "1.6.4",
   "description": "Кнопки +C +P -C -P для доски опционов TradingView → Optioner Calculator + автообновление сохранённых сделок",
 
   "permissions": ["storage", "activeTab", "tabs", "scripting", "alarms"],
