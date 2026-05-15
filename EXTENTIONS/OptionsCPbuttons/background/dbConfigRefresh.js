@@ -118,8 +118,12 @@ async function waitForTvOptionsTable(tabId, timeoutMs = 30000) {
         target: { tabId },
         func: () => {
           // Ищем маркеры загруженной таблицы опционов TV
+          // ВАЖНО: priceWrap- (с дефисом) — это цена в чейне страницы; priceWrapper- (с -er)
+          // — цена в правом виджет-баре (watchlist), которая отрисовывается раньше чейна.
+          // Если использовать широкий селектор [class*="priceWrap"], waitForTvOptionsTable
+          // отдаёт «готово» когда чейновой цены ещё нет — и парсер уходит с null.
           const hasTable = document.querySelectorAll('td[class*="td-"]').length > 5;
-          const hasPriceWrap = !!document.querySelector('[class*="priceWrap"]');
+          const hasPriceWrap = !!document.querySelector('[class*="priceWrap-"]');
           const hasExpiration = !!document.querySelector('[class*="expiration"], [class*="Expiration"]');
           return hasTable || (hasPriceWrap && hasExpiration);
         }
@@ -762,9 +766,14 @@ async function executeDbConfigRefresh(calcTabId, configData) {
     // Без этого sendMessage упадёт — цена и IV будут null.
     await ensureContentScriptLoaded(tvTabId);
 
-    // Получаем underlying price до парсинга — priceWrap видим пока скролл не сместился
+    // Получаем underlying price до парсинга — priceWrap видим пока скролл не сместился.
+    // ЗАЧЕМ: 10 попыток × 1с (вместо 5) — на свежезагруженной TradingView
+    // элемент priceWrap- (чейновая цена в шапке) может отрисоваться позже таблицы;
+    // если за всё окно цена так и не появилась — лучше остановиться с явной ошибкой,
+    // чем отправить в калькулятор команду с currentPrice: null (раньше это выглядело
+    // как «обновление прошло, но цена БА не изменилась»).
     let underlyingPrice = null;
-    for (let pa = 0; pa < 5 && !underlyingPrice; pa++) {
+    for (let pa = 0; pa < 10 && !underlyingPrice; pa++) {
       if (pa > 0) await delay(1000);
       const priceResult = await chrome.tabs.sendMessage(tvTabId, { action: 'getUnderlyingPrice' }).catch(() => null);
       underlyingPrice = priceResult?.price;
@@ -800,6 +809,15 @@ async function executeDbConfigRefresh(calcTabId, configData) {
       }
     }
     console.log('[TVC DbConfig] Underlying price:', underlyingPrice);
+
+    // ЗАЩИТА: если цена БА так и не получена — не отправляем команду молча с null,
+    // а сообщаем пользователю об ошибке. Иначе калькулятор обновил бы только IV/опционы,
+    // оставив старую цену БА, и пользователь решил бы, что «обновление не сработало».
+    if (!underlyingPrice) {
+      await writeStatusToCalculator(calcTabId, 'error', 0,
+        'Не удалось снять цену базового актива с TradingView — попробуйте ещё раз через пару секунд');
+      return;
+    }
 
     // ЗАЧЕМ: Прямой парсинг через executeScript — надёжнее чем scrollAndParse,
     // т.к. не зависит от виртуализации и тайминга content script.

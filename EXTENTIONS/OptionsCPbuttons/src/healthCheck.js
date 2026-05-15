@@ -139,7 +139,13 @@ function ext2GetUnderlyingPriceWithConfidence() {
   const ticker = typeof getTickerFromUrl === 'function' ? getTickerFromUrl() : null;
 
   // Собираем всех кандидатов priceWrap
-  const priceWraps = [...document.querySelectorAll('[class*="priceWrap"]')];
+  // ЗАЧЕМ: Используем селектор с дефисом (priceWrap-) — он отсекает priceWrapper-XXXX
+  // из правого виджет-бара (watchlist / detailsWidget). Без этого первая цена из watchlist
+  // (часто Apple) могла перебить настоящую цену чейна на свежезагруженной странице TV.
+  // Дополнительно явно отрезаем элементы правой панели через isInTvSidebar (utils.js).
+  const _skipSidebar = typeof isInTvSidebar === 'function' ? isInTvSidebar : () => false;
+  const priceWraps = [...document.querySelectorAll('[class*="priceWrap-"]')]
+    .filter(el => !_skipSidebar(el));
   const _parseNum = typeof parseNumber === 'function'
     ? parseNumber
     : (t) => {
@@ -154,7 +160,7 @@ function ext2GetUnderlyingPriceWithConfidence() {
   if (candidates.length === 0) {
     issues.push({
       level: 'critical',
-      msg: 'На странице не найдено ни одного элемента с классом priceWrap — селектор цены базового актива сломан'
+      msg: 'На странице не найдено ни одного элемента с классом priceWrap- вне правого сайдбара — селектор цены базового актива сломан или цена ещё не отрисована'
     });
     return { price: null, confidence: 'none', issues };
   }
