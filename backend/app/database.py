@@ -86,6 +86,7 @@ def init_db():
     from app.models import user  # Import user models
     from app.models import crypto_rating  # Import crypto rating models
     from app.models import saved_configuration  # Import saved configurations
+    from app.models import futures_setting  # Import shared futures settings
     Base.metadata.create_all(bind=engine)
 
     # ЗАЧЕМ: Принудительный checkpoint при старте — сливаем все данные из WAL в основной .db файл

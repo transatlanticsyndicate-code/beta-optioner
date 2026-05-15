@@ -12,24 +12,69 @@ import {
   TableRow,
 } from '../../components/ui/table';
 
-// ЗАЧЕМ: Полный список фьючерсов и его загрузка из localStorage берутся из
-// единого источника правды (frontend/src/utils/futuresSettings.js). loadFuturesSettings
-// делает миграцию: для записей пользователя без новых полей (например, без
-// marginPerContract в первой версии этой колонки) подмерживает значение из
-// DEFAULT_FUTURES. Раньше эта страница читала localStorage напрямую и
-// игнорировала миграцию — в браузерах со старыми записями колонка «Маржин
-// на 1 контракт» показывала «не задан», хотя в коде значение уже было.
-import { DEFAULT_FUTURES, loadFuturesSettings } from '../../utils/futuresSettings';
+// ЗАЧЕМ: Полный список фьючерсов и его загрузка/сохранение берутся из единого
+// источника правды (frontend/src/utils/futuresSettings.js).
+// - loadFuturesSettings — миграция старых записей (если в localStorage нет
+//   новых полей, подмерживает из дефолтов).
+// - syncFuturesSettingsFromServer — подтягивает свежие значения с сервера
+//   (источник правды — backend). Вызывается на старте страницы, чтобы
+//   увидеть правки, которые внёс другой пользователь.
+// - pushFuturesSettingsToServer — пушит изменения на сервер после каждой
+//   правки таблицы, чтобы все остальные пользователи получили актуальные
+//   значения на следующей загрузке.
+import {
+  DEFAULT_FUTURES,
+  loadFuturesSettings,
+  syncFuturesSettingsFromServer,
+  pushFuturesSettingsToServer,
+} from '../../utils/futuresSettings';
 
 function SettingsFutures() {
   const [futures, setFutures] = useState(() => loadFuturesSettings());
   const [editingId, setEditingId] = useState(null);
   const [editData, setEditData] = useState({});
+  const [serverStatus, setServerStatus] = useState('idle'); // 'idle' | 'syncing' | 'saved' | 'error'
 
-  // Сохраняем в localStorage при изменении futures
+  // На входе на страницу — синхронизируемся с сервером, чтобы увидеть свежие
+  // значения от других пользователей. App.js делает это же при загрузке
+  // приложения, но повторный вызов недорогой и страхует от перехода с
+  // вкладки на вкладку через час бездействия.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setServerStatus('syncing');
+      const fresh = await syncFuturesSettingsFromServer();
+      if (cancelled) return;
+      if (fresh) {
+        setFutures(fresh);
+        setServerStatus('saved');
+      } else {
+        // Сервер недоступен — продолжаем с локальным состоянием
+        setServerStatus('error');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Любое изменение futures → синхронизируем оба хранилища:
+  //   1. localStorage — для синхронных getPointValue/getMarginPerContract
+  //   2. сервер — чтобы остальные пользователи увидели правку
+  // Сначала на каждый setFutures обновляем только localStorage; push на
+  // сервер делается ЯВНО в handleSave / handleDelete / handleAddFuture —
+  // только при пользовательских действиях, не при первоначальной
+  // подгрузке из localStorage или с сервера (иначе создаётся гонка).
   useEffect(() => {
     localStorage.setItem('futuresSettings', JSON.stringify(futures));
   }, [futures]);
+
+  // Хелпер: применить новый массив futures и тут же запушить его на сервер.
+  // Возвращает promise — необязательно ждать, фоновый push не блокирует UI.
+  const applyAndPush = async (newFutures) => {
+    setFutures(newFutures);
+    setServerStatus('syncing');
+    const pushed = await pushFuturesSettingsToServer(newFutures);
+    setServerStatus(pushed ? 'saved' : 'error');
+  };
 
   const handleEdit = (item) => {
     setEditingId(item.id);
@@ -37,10 +82,11 @@ function SettingsFutures() {
   };
 
   const handleSave = () => {
-    setFutures(futures.map(item => 
+    const newFutures = futures.map(item =>
       item.id === editingId ? editData : item
-    ));
+    );
     setEditingId(null);
+    applyAndPush(newFutures);
   };
 
   const handleCancel = () => {
@@ -49,7 +95,8 @@ function SettingsFutures() {
   };
 
   const handleDelete = (id) => {
-    setFutures(futures.filter(item => item.id !== id));
+    const newFutures = futures.filter(item => item.id !== id);
+    applyAndPush(newFutures);
   };
 
   const handleInputChange = (field, value) => {
@@ -92,10 +139,19 @@ function SettingsFutures() {
           <div>
             <CardTitle>Список фьючерсов</CardTitle>
             <CardDescription>
-              Управляйте параметрами фьючерсов: редактируйте или удаляйте строки
+              Общая таблица для всех пользователей. Правки автоматически сохраняются на сервере.
+              {serverStatus === 'syncing' && (
+                <span className="ml-2 text-xs text-muted-foreground">⟳ синхронизация…</span>
+              )}
+              {serverStatus === 'saved' && (
+                <span className="ml-2 text-xs text-green-600">✓ сохранено</span>
+              )}
+              {serverStatus === 'error' && (
+                <span className="ml-2 text-xs text-red-600">⚠ сервер недоступен — правка пока только локально</span>
+              )}
             </CardDescription>
           </div>
-          <Button 
+          <Button
             onClick={handleAddFuture}
             className="bg-cyan-500 hover:bg-cyan-600 text-white"
           >

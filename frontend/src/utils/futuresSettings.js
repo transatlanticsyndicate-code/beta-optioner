@@ -359,5 +359,89 @@ export const resetFuturesSettings = () => {
   return DEFAULT_FUTURES;
 };
 
+// =====================================================
+// Серверная синхронизация (источник правды — backend)
+// =====================================================
+// ЗАЧЕМ: До этого таблица жила только в localStorage каждого пользователя —
+// разъезжалась между браузерами и устройствами. Теперь сервер хранит
+// единый список, фронт держит локальный кэш для синхронных вызовов
+// (getPointValue, getMarginPerContract) и обновляет его при загрузке
+// приложения + после каждого сохранения.
+//
+// На сервер ходим через относительный путь /api/... — он проксируется
+// nginx'ом к FastAPI, так что URL одинаков и на проде, и на localhost.
+
+const SERVER_ENDPOINT = '/api/futures-settings/';
+
+/**
+ * Подтянуть актуальные настройки с сервера и положить в localStorage.
+ * Если на сервере пусто (таблица свежесозданная), пушим туда содержимое
+ * текущего localStorage — это «первичный посев» от первого пользователя
+ * после деплоя.
+ * @returns {Promise<Array|null>} массив фьючерсов или null если сервер
+ *   недоступен (в этом случае фронт продолжает работать с localStorage).
+ */
+export const syncFuturesSettingsFromServer = async () => {
+  try {
+    const resp = await fetch(SERVER_ENDPOINT, { method: 'GET' });
+    if (!resp.ok) return null;
+    const json = await resp.json();
+    const serverData = Array.isArray(json?.data) ? json.data : [];
+
+    if (serverData.length === 0) {
+      // Сервер пуст — посеем своим текущим состоянием. Это сделает только
+      // первый пользователь, попавший на страницу после деплоя; остальные
+      // увидят непустой ответ и пойдут по верхней ветке.
+      const local = loadFuturesSettings();
+      const pushed = await pushFuturesSettingsToServer(local);
+      return pushed || local;
+    }
+
+    // Сервер вернул данные — они выигрывают. Записываем в localStorage
+    // как кэш для синхронных getPointValue / getMarginPerContract.
+    saveFuturesSettings(serverData);
+    return serverData;
+  } catch (e) {
+    // Сеть недоступна / backend упал — продолжаем жить с локальным кэшем.
+    console.warn('⚠️ syncFuturesSettingsFromServer: сервер недоступен,', e.message);
+    return null;
+  }
+};
+
+/**
+ * Залить актуальный массив на сервер (PUT, полная замена).
+ * Возвращает массив, который сервер прислал в ответ (уже с присвоенными
+ * id и updated_at). При успехе записывает его в localStorage.
+ * @param {Array} futures
+ * @returns {Promise<Array|null>}
+ */
+export const pushFuturesSettingsToServer = async (futures) => {
+  try {
+    const resp = await fetch(SERVER_ENDPOINT, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ futures: (futures || []).map(f => ({
+        ticker: f.ticker,
+        name: f.name,
+        pointValue: f.pointValue,
+        marginPerContract: (typeof f.marginPerContract === 'number' && f.marginPerContract > 0)
+          ? f.marginPerContract
+          : null,
+      })) }),
+    });
+    if (!resp.ok) {
+      console.warn('⚠️ pushFuturesSettingsToServer: сервер ответил', resp.status);
+      return null;
+    }
+    const json = await resp.json();
+    const serverData = Array.isArray(json?.data) ? json.data : null;
+    if (serverData) saveFuturesSettings(serverData);
+    return serverData;
+  } catch (e) {
+    console.warn('⚠️ pushFuturesSettingsToServer: сервер недоступен,', e.message);
+    return null;
+  }
+};
+
 // Экспорт констант для использования в других модулях
 export { DEFAULT_FUTURES, STORAGE_KEY };

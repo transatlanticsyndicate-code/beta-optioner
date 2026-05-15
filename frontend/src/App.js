@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { syncFuturesSettingsFromServer } from './utils/futuresSettings';
 import LayoutWithSidebar from './components/Layout/LayoutWithSidebar';
 import ProtectedRoute from './components/ProtectedRoute';
 import OptionsAnalyzer from './pages/OptionsAnalyzer';
@@ -17,6 +18,14 @@ import DealsArchive from './pages/DealsArchive';
 import CryptoRating from './pages/CryptoRating';
 
 function App() {
+  // На старте подтягиваем общую таблицу настроек фьючерсов с сервера.
+  // ЗАЧЕМ: до этой ручки таблица жила только в localStorage и расходилась
+  // между пользователями. Теперь сервер хранит единый список; кэш в
+  // localStorage остаётся для синхронных вызовов из калькулятора.
+  useEffect(() => {
+    syncFuturesSettingsFromServer();
+  }, []);
+
   return (
     <Routes>
       {/* Аутентификация отключена: старый /login ведёт на главную */}
