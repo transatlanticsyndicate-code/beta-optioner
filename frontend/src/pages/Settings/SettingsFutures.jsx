@@ -12,17 +12,17 @@ import {
   TableRow,
 } from '../../components/ui/table';
 
-// ЗАЧЕМ: Полный список фьючерсов берётся из единого источника правды
-// (frontend/src/utils/futuresSettings.js). Дублировать список с разными
-// значениями небезопасно — при изменении дефолтов в одном месте второй
-// разъезжается.
-import { DEFAULT_FUTURES } from '../../utils/futuresSettings';
+// ЗАЧЕМ: Полный список фьючерсов и его загрузка из localStorage берутся из
+// единого источника правды (frontend/src/utils/futuresSettings.js). loadFuturesSettings
+// делает миграцию: для записей пользователя без новых полей (например, без
+// marginPerContract в первой версии этой колонки) подмерживает значение из
+// DEFAULT_FUTURES. Раньше эта страница читала localStorage напрямую и
+// игнорировала миграцию — в браузерах со старыми записями колонка «Маржин
+// на 1 контракт» показывала «не задан», хотя в коде значение уже было.
+import { DEFAULT_FUTURES, loadFuturesSettings } from '../../utils/futuresSettings';
 
 function SettingsFutures() {
-  const [futures, setFutures] = useState(() => {
-    const saved = localStorage.getItem('futuresSettings');
-    return saved ? JSON.parse(saved) : DEFAULT_FUTURES;
-  });
+  const [futures, setFutures] = useState(() => loadFuturesSettings());
   const [editingId, setEditingId] = useState(null);
   const [editData, setEditData] = useState({});
 
