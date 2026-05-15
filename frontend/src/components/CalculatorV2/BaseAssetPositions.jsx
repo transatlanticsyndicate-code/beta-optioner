@@ -1,11 +1,20 @@
 import React from 'react';
-import { Eye, EyeOff, ChevronDown, Trash2 } from 'lucide-react';
+import { Eye, EyeOff, ChevronDown, Trash2, AlertTriangle } from 'lucide-react';
 import { Button } from '../ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { Input } from '../ui/input';
 import LockIcon from './LockIcon';
 
 import { CALCULATOR_MODES } from '../../utils/universalPricing';
+import { getMarginPerContract } from '../../utils/futuresSettings';
+
+// ЗАЧЕМ: В фьючерсном режиме в строке позиции БА отображаем не цену актива
+// (как в акциях), а маржин на 1 контракт из настроек. Цена в state сохраняется
+// для расчёта P&L базового актива — её просто не показываем.
+const formatMarginCompact = (n) => {
+  if (n == null || isNaN(n)) return null;
+  return '$ ' + Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+};
 
 function BaseAssetPositions({ 
   positions, 
@@ -127,23 +136,50 @@ function BaseAssetPositions({
               disabled={position.isLockedPosition}
             />
             <span className="font-medium flex-shrink-0">{position.ticker}</span>
-            <Input
-              type="number"
-              step="0.01"
-              min="0"
-              value={position.price === '' ? '' : position.price}
-              onChange={(e) => {
-                if (position.isLockedPosition) return;
-                const value = e.target.value;
-                updatePosition(position.id, 'price', value === '' ? '' : parseFloat(value) || 0);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') e.target.blur();
-              }}
-              className="h-6 text-xs text-right border border-transparent shadow-none bg-transparent focus:border-input focus:bg-background px-1 py-0 min-w-0 flex-shrink-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              style={{ width: `${Math.max(3, String(position.price).length) + 1.5}ch` }}
-              disabled={position.isLockedPosition}
-            />
+            {calculatorMode === CALCULATOR_MODES.FUTURES ? (
+              // Фьючерсный режим: вместо цены входа показываем маржин на 1 контракт
+              // из настроек. Если не задан — предупреждающая иконка с тултипом.
+              (() => {
+                const margin = getMarginPerContract(position.ticker);
+                if (margin != null) {
+                  return (
+                    <span
+                      className="text-xs text-right font-medium tabular-nums flex-shrink-0 px-1"
+                      title={`Маржин на 1 контракт — задаётся на странице /settings?section=futures`}
+                    >
+                      {formatMarginCompact(margin)}
+                    </span>
+                  );
+                }
+                return (
+                  <span
+                    className="text-xs flex items-center gap-1 text-amber-600 flex-shrink-0 px-1"
+                    title={`Маржин на 1 контракт для ${position.ticker} не задан в настройках. Откройте /settings?section=futures, найдите соответствующий тикер и заполните колонку «Маржин на 1 контракт».`}
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    маржин не задан
+                  </span>
+                );
+              })()
+            ) : (
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                value={position.price === '' ? '' : position.price}
+                onChange={(e) => {
+                  if (position.isLockedPosition) return;
+                  const value = e.target.value;
+                  updatePosition(position.id, 'price', value === '' ? '' : parseFloat(value) || 0);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') e.target.blur();
+                }}
+                className="h-6 text-xs text-right border border-transparent shadow-none bg-transparent focus:border-input focus:bg-background px-1 py-0 min-w-0 flex-shrink-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                style={{ width: `${Math.max(3, String(position.price).length) + 1.5}ch` }}
+                disabled={position.isLockedPosition}
+              />
+            )}
             {/* Кнопка удаления — прижата к правому краю через ml-auto. */}
             {!position.isLockedPosition ? (
               <button

@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { calculateTotalPremium } from '../../utils/metricsCalculator';
 import { calculatePLMetrics } from '../../utils/metricsCalculator';
 import { CALCULATOR_MODES } from '../../utils/universalPricing';
+import { getMarginPerContract } from '../../utils/futuresSettings';
 
 /**
  * Компонент финансового контроля позиций
@@ -32,16 +33,31 @@ function PositionFinancialControl({
   // Если значение мусорное (NaN, < 1, undefined) — работаем без плеча.
   const effectiveLeverage = (typeof leverage === 'number' && Number.isFinite(leverage) && leverage >= 1) ? leverage : 1;
 
-  // Стоимость позиций БА со знаком: LONG → затраты (−), SHORT → получили (+).
-  // С учётом плеча: notional делится на effectiveLeverage (LONG и SHORT симметрично).
+  // Стоимость / маржин позиций БА со знаком: LONG → затраты (−), SHORT → получили (+).
+  // С учётом плеча: значение делится на effectiveLeverage (LONG и SHORT симметрично).
+  //
+  // - Акции/крипто: основа = quantity × price (цена входа), это полная стоимость позиции.
+  // - Фьючерсы: основа = quantity × marginPerContract из настроек /settings?section=futures.
+  //   ЗАЧЕМ: Для фьючерсов «стоимость» бессмысленна — резервируется маржин у брокера.
+  //   Если для тикера в настройках нет маржина, его вклад в сумму = 0
+  //   (пользователь увидит предупреждение в строке позиции БА).
+  const isFutures = calculatorMode === CALCULATOR_MODES.FUTURES;
   const positionsCost = useMemo(() => {
     const raw = positions.reduce((total, pos) => {
       if (!pos.visible) return total;
       const sign = pos.type === 'SHORT' ? 1 : -1;
-      return total + sign * Math.abs(pos.quantity * pos.price);
+      let perUnit;
+      if (isFutures) {
+        const margin = getMarginPerContract(pos.ticker);
+        if (margin == null) return total;
+        perUnit = margin;
+      } else {
+        perUnit = pos.price;
+      }
+      return total + sign * Math.abs(pos.quantity * perUnit);
     }, 0);
     return raw / effectiveLeverage;
-  }, [positions, effectiveLeverage]);
+  }, [positions, effectiveLeverage, isFutures]);
 
   // Премия опционов со знаком: Buy → −, Sell → + (calculateTotalPremium уже даёт со знаком)
   const optionsCost = useMemo(() => {
@@ -160,9 +176,12 @@ function PositionFinancialControl({
     return `${sign}$ ${formatNumber(Math.abs(value))}`;
   };
 
+  // ЗАЧЕМ: В фьючерсном режиме «стоимость» некорректна (резервируется маржин),
+  // поэтому переименовываем лейбл в «Маржин позиций».
+  const positionsCostBaseLabel = isFutures ? 'Маржин позиций' : 'Стоимость позиций';
   const positionsCostLabel = effectiveLeverage > 1
-    ? `Стоимость позиций (плечо ${effectiveLeverage})`
-    : 'Стоимость позиций';
+    ? `${positionsCostBaseLabel} (плечо ${effectiveLeverage})`
+    : positionsCostBaseLabel;
 
   // Если нет позиций и опционов - не показываем блок
   if (positions.length === 0 && options.length === 0) {
@@ -197,7 +216,13 @@ function PositionFinancialControl({
       {/* Блок стоимости позиций — со знаками: LONG/Buy → −, SHORT/Sell → + */}
       <div className="space-y-2">
         <div className="flex justify-between text-xs text-gray-500">
-          <span title={effectiveLeverage > 1 ? 'Делится на плечо. Маржинальное требование, не полная стоимость акций.' : undefined}>
+          <span title={
+            effectiveLeverage > 1
+              ? (isFutures
+                  ? 'Маржин на 1 контракт × количество контрактов, делится на плечо.'
+                  : 'Делится на плечо. Маржинальное требование, не полная стоимость акций.')
+              : undefined
+          }>
             {positionsCostLabel}
           </span>
           <span>{formatSignedAmount(positionsCost)}</span>

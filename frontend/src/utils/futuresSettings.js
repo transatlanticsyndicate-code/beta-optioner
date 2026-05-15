@@ -6,51 +6,57 @@
 
 // Предустановленные фьючерсы по умолчанию
 // ЗАЧЕМ: Используются если пользователь не настроил свои параметры
+//
+// marginPerContract — IBKR intraday initial margin (USD) на 1 контракт.
+// Это ориентировочные значения 2025 года, IBKR пересматривает их периодически
+// и они зависят от account-tier и волатильности рынка. Пользователь правит под
+// своего брокера на странице /settings?section=futures. Если поле = null/0,
+// калькулятор покажет предупреждение в позиции БА.
 const DEFAULT_FUTURES = [
-  { id: 1, ticker: 'ES', name: 'E-mini S&P 500', pointValue: 50 },
-  { id: 2, ticker: 'NQ', name: 'E-mini Nasdaq-100', pointValue: 20 },
-  { id: 3, ticker: 'YM', name: 'E-mini Dow Jones', pointValue: 5 },
-  { id: 4, ticker: 'GC', name: 'Gold Futures', pointValue: 100 },
-  { id: 5, ticker: 'CL', name: 'Crude Oil Futures', pointValue: 1000 },
-  { id: 6, ticker: 'ZC', name: 'Corn Futures', pointValue: 50 },
-  { id: 7, ticker: 'ZS', name: 'Soybean Futures', pointValue: 50 },
-  { id: 8, ticker: 'ZW', name: 'Wheat Futures', pointValue: 50 },
-  { id: 9, ticker: 'ZO', name: 'Oat Futures', pointValue: 50 },
-  { id: 10, ticker: 'ZR', name: 'Rough Rice Futures', pointValue: 100 },
-  { id: 11, ticker: 'ZL', name: 'Soybean Oil Futures', pointValue: 100 },
-  { id: 12, ticker: 'ZM', name: 'Soybean Meal Futures', pointValue: 100 },
-  { id: 13, ticker: 'LE', name: 'Live Cattle Futures', pointValue: 400 },
-  { id: 14, ticker: 'GF', name: 'Feeder Cattle Futures', pointValue: 500 },
-  { id: 15, ticker: 'LH', name: 'Lean Hog Futures', pointValue: 400 },
+  { id: 1, ticker: 'ES', name: 'E-mini S&P 500', pointValue: 50, marginPerContract: 2500 },
+  { id: 2, ticker: 'NQ', name: 'E-mini Nasdaq-100', pointValue: 20, marginPerContract: 4000 },
+  { id: 3, ticker: 'YM', name: 'E-mini Dow Jones', pointValue: 5, marginPerContract: 2000 },
+  { id: 4, ticker: 'GC', name: 'Gold Futures', pointValue: 100, marginPerContract: 4000 },
+  { id: 5, ticker: 'CL', name: 'Crude Oil Futures', pointValue: 1000, marginPerContract: 2000 },
+  { id: 6, ticker: 'ZC', name: 'Corn Futures', pointValue: 50, marginPerContract: 500 },
+  { id: 7, ticker: 'ZS', name: 'Soybean Futures', pointValue: 50, marginPerContract: 1000 },
+  { id: 8, ticker: 'ZW', name: 'Wheat Futures', pointValue: 50, marginPerContract: 750 },
+  { id: 9, ticker: 'ZO', name: 'Oat Futures', pointValue: 50, marginPerContract: 500 },
+  { id: 10, ticker: 'ZR', name: 'Rough Rice Futures', pointValue: 100, marginPerContract: 500 },
+  { id: 11, ticker: 'ZL', name: 'Soybean Oil Futures', pointValue: 100, marginPerContract: 500 },
+  { id: 12, ticker: 'ZM', name: 'Soybean Meal Futures', pointValue: 100, marginPerContract: 750 },
+  { id: 13, ticker: 'LE', name: 'Live Cattle Futures', pointValue: 400, marginPerContract: 500 },
+  { id: 14, ticker: 'GF', name: 'Feeder Cattle Futures', pointValue: 500, marginPerContract: 750 },
+  { id: 15, ticker: 'LH', name: 'Lean Hog Futures', pointValue: 400, marginPerContract: 500 },
   // Energy
-  { id: 16, ticker: 'NG', name: 'Natural Gas (Henry Hub)', pointValue: 10000 },
-  { id: 17, ticker: 'RB', name: 'RBOB Gasoline', pointValue: 42000 },
-  { id: 18, ticker: 'HO', name: 'Heating Oil', pointValue: 42000 },
+  { id: 16, ticker: 'NG', name: 'Natural Gas (Henry Hub)', pointValue: 10000, marginPerContract: 1000 },
+  { id: 17, ticker: 'RB', name: 'RBOB Gasoline', pointValue: 42000, marginPerContract: 2500 },
+  { id: 18, ticker: 'HO', name: 'Heating Oil', pointValue: 42000, marginPerContract: 2500 },
   // Metals
-  { id: 19, ticker: 'HG', name: 'Copper', pointValue: 25000 },
-  { id: 20, ticker: 'SI', name: 'Silver', pointValue: 5000 },
-  { id: 21, ticker: 'PL', name: 'Platinum', pointValue: 50 },
-  { id: 22, ticker: 'PA', name: 'Palladium', pointValue: 100 },
+  { id: 19, ticker: 'HG', name: 'Copper', pointValue: 25000, marginPerContract: 2500 },
+  { id: 20, ticker: 'SI', name: 'Silver', pointValue: 5000, marginPerContract: 5000 },
+  { id: 21, ticker: 'PL', name: 'Platinum', pointValue: 50, marginPerContract: 2000 },
+  { id: 22, ticker: 'PA', name: 'Palladium', pointValue: 100, marginPerContract: 5000 },
   // Currencies
-  { id: 23, ticker: '6E', name: 'Euro FX', pointValue: 125000 },
-  { id: 24, ticker: '6B', name: 'British Pound', pointValue: 62500 },
-  { id: 25, ticker: '6A', name: 'Australian Dollar', pointValue: 100000 },
-  { id: 26, ticker: '6C', name: 'Canadian Dollar', pointValue: 100000 },
-  { id: 27, ticker: '6J', name: 'Japanese Yen', pointValue: 125000 },
-  { id: 28, ticker: '6S', name: 'Swiss Franc', pointValue: 125000 },
+  { id: 23, ticker: '6E', name: 'Euro FX', pointValue: 125000, marginPerContract: 1000 },
+  { id: 24, ticker: '6B', name: 'British Pound', pointValue: 62500, marginPerContract: 750 },
+  { id: 25, ticker: '6A', name: 'Australian Dollar', pointValue: 100000, marginPerContract: 500 },
+  { id: 26, ticker: '6C', name: 'Canadian Dollar', pointValue: 100000, marginPerContract: 500 },
+  { id: 27, ticker: '6J', name: 'Japanese Yen', pointValue: 125000, marginPerContract: 1000 },
+  { id: 28, ticker: '6S', name: 'Swiss Franc', pointValue: 125000, marginPerContract: 1500 },
   // Crypto
-  { id: 29, ticker: 'BTC', name: 'Bitcoin', pointValue: 5 },
-  { id: 30, ticker: 'ETH', name: 'Ether', pointValue: 50 },
-  { id: 31, ticker: 'MBT', name: 'Micro Bitcoin', pointValue: 0.1 },
-  { id: 32, ticker: 'MET', name: 'Micro Ether', pointValue: 0.50 },
+  { id: 29, ticker: 'BTC', name: 'Bitcoin', pointValue: 5, marginPerContract: 30000 },
+  { id: 30, ticker: 'ETH', name: 'Ether', pointValue: 50, marginPerContract: 5000 },
+  { id: 31, ticker: 'MBT', name: 'Micro Bitcoin', pointValue: 0.1, marginPerContract: 1500 },
+  { id: 32, ticker: 'MET', name: 'Micro Ether', pointValue: 0.50, marginPerContract: 500 },
   // Micros
-  { id: 33, ticker: 'MES', name: 'Micro E-mini S&P 500', pointValue: 5 },
-  { id: 34, ticker: 'MNQ', name: 'Micro E-mini Nasdaq-100', pointValue: 2 },
-  { id: 35, ticker: 'MYM', name: 'Micro E-mini Dow', pointValue: 0.5 },
-  { id: 36, ticker: 'M2K', name: 'Micro E-mini Russell 2000', pointValue: 5 },
-  { id: 37, ticker: 'MGC', name: 'Micro Gold', pointValue: 10 },
-  { id: 38, ticker: 'SIL', name: 'Micro Silver', pointValue: 1000 },
-  { id: 39, ticker: 'MCL', name: 'Micro Crude Oil', pointValue: 100 },
+  { id: 33, ticker: 'MES', name: 'Micro E-mini S&P 500', pointValue: 5, marginPerContract: 250 },
+  { id: 34, ticker: 'MNQ', name: 'Micro E-mini Nasdaq-100', pointValue: 2, marginPerContract: 400 },
+  { id: 35, ticker: 'MYM', name: 'Micro E-mini Dow', pointValue: 0.5, marginPerContract: 200 },
+  { id: 36, ticker: 'M2K', name: 'Micro E-mini Russell 2000', pointValue: 5, marginPerContract: 150 },
+  { id: 37, ticker: 'MGC', name: 'Micro Gold', pointValue: 10, marginPerContract: 400 },
+  { id: 38, ticker: 'SIL', name: 'Micro Silver', pointValue: 1000, marginPerContract: 2500 },
+  { id: 39, ticker: 'MCL', name: 'Micro Crude Oil', pointValue: 100, marginPerContract: 200 },
 ];
 
 const STORAGE_KEY = 'futuresSettings';
@@ -71,19 +77,34 @@ export const loadFuturesSettings = () => {
         // Если в дефолтных появились новые тикеры (например NG, HG), добавляем их
         const existingTickers = new Set(parsed.map(f => f.ticker));
         const missingFutures = DEFAULT_FUTURES.filter(def => !existingTickers.has(def.ticker));
-        
+
+        // Подмердживаем поле marginPerContract в существующие записи у тех,
+        // у кого его ещё нет (миграция при появлении новой колонки в настройках).
+        // ЗАЧЕМ: Старые версии не сохраняли marginPerContract, и без миграции
+        // калькулятор бесконечно показывал бы предупреждение «маржин не задан».
+        const defaultsByTicker = new Map(DEFAULT_FUTURES.map(d => [d.ticker.toUpperCase(), d]));
+        const migrated = parsed.map(f => {
+          if (f.marginPerContract == null) {
+            const def = defaultsByTicker.get((f.ticker || '').toUpperCase());
+            if (def && def.marginPerContract != null) {
+              return { ...f, marginPerContract: def.marginPerContract };
+            }
+          }
+          return f;
+        });
+
         if (missingFutures.length > 0) {
           console.log('🔄 Добавлены новые фьючерсы в настройки:', missingFutures.map(f => f.ticker));
-          return [...parsed, ...missingFutures];
+          return [...migrated, ...missingFutures];
         }
-        
-        return parsed;
+
+        return migrated;
       }
     }
   } catch (error) {
     console.error('❌ Ошибка загрузки настроек фьючерсов:', error);
   }
-  
+
   // Возвращаем дефолтные значения если нет сохранённых
   return DEFAULT_FUTURES;
 };
@@ -139,6 +160,27 @@ export const getPointValue = (ticker) => {
   // Если фьючерс не найден, возвращаем 1 (нейтральный множитель)
   console.warn(`⚠️ Фьючерс ${ticker} не найден в настройках, используется pointValue = 1`);
   return 1;
+};
+
+/**
+ * Получает initial margin (IBKR intraday) для конкретного тикера фьючерса.
+ * ЗАЧЕМ: Калькулятор использует это значение в фьючерсном режиме как «маржин
+ * на 1 контракт» — заменяет цену актива в позиции БА и используется в расчёте
+ * блока «Маржин позиций».
+ * @param {string} ticker - Тикер фьючерса (может быть полным: ESH26 или базовым: ES)
+ * @returns {number|null} Маржин на 1 контракт в USD, либо null если не задан в настройках
+ */
+export const getMarginPerContract = (ticker) => {
+  if (!ticker) return null;
+
+  const baseTicker = extractBaseTicker(ticker);
+  const futures = loadFuturesSettings();
+  const future = futures.find(f => f.ticker.toUpperCase() === baseTicker);
+
+  if (future && typeof future.marginPerContract === 'number' && future.marginPerContract > 0) {
+    return future.marginPerContract;
+  }
+  return null;
 };
 
 /**
