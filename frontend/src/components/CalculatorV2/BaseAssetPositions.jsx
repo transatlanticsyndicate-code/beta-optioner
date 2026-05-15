@@ -131,7 +131,7 @@ function BaseAssetPositions({
               onKeyDown={(e) => {
                 if (e.key === 'Enter') e.target.blur();
               }}
-              className="h-6 text-xs text-right border border-transparent shadow-none bg-transparent focus:border-input focus:bg-background px-1 py-0 min-w-0 flex-shrink-0"
+              className="h-6 text-xs text-right border border-transparent shadow-none bg-transparent focus:border-input focus:bg-background px-1 py-0 min-w-0 flex-shrink-0 relative z-10"
               style={{ width: `${Math.max(2, String(position.quantity).length) + 1.5}ch` }}
               disabled={position.isLockedPosition}
             />
@@ -155,15 +155,21 @@ function BaseAssetPositions({
                   // ЗАЧЕМ: Делаем ссылкой, чтобы пользователь сразу попадал на нужную
                   // страницу настроек и не искал её в меню. target="_blank" — чтобы
                   // не терять текущую сделку в калькуляторе.
+                  //
+                  // Текст сокращён до «задать маржин», а сама ссылка получила
+                  // min-w-0 + truncate. Без этого «маржин не задан» отъедало
+                  // ~127px в узкой карточке и наезжало по верстке на кнопку
+                  // удаления справа — особенно когда позиция в строке одна и
+                  // IBKR-Bridge ещё не успел вставить свою иконку в ibkr-slot.
                   <a
                     href="/settings?section=futures"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs flex items-center gap-1 text-amber-600 hover:text-amber-700 hover:underline flex-shrink-0 px-1"
-                    title={`Маржин на 1 контракт для ${position.ticker} не задан в настройках. Кликните, чтобы открыть страницу настроек фьючерсов и заполнить значение.`}
+                    className="text-xs flex items-center gap-1 text-amber-600 hover:text-amber-700 hover:underline min-w-0 truncate px-1"
+                    title={`Маржин на 1 контракт для ${position.ticker} не задан. Кликните, чтобы открыть страницу настроек фьючерсов и заполнить значение.`}
                   >
-                    <AlertTriangle className="h-3.5 w-3.5" />
-                    маржин не задан
+                    <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+                    задать маржин
                   </a>
                 );
               })()
@@ -186,11 +192,14 @@ function BaseAssetPositions({
                 disabled={position.isLockedPosition}
               />
             )}
-            {/* Кнопка удаления — прижата к правому краю через ml-auto. */}
+            {/* Кнопка удаления — прижата к правому краю через ml-auto.
+                relative + z-10 страхует от перекрытия соседними элементами
+                (IBKR-Bridge инжектит свою кнопку в ibkr-slot, плюс ссылка
+                «задать маржин» рядом — на узком вьюпорте они могли наезжать). */}
             {!position.isLockedPosition ? (
               <button
                 onClick={() => deletePosition(position.id)}
-                className="text-muted-foreground hover:text-destructive flex justify-center flex-shrink-0 ml-auto"
+                className="text-muted-foreground hover:text-destructive flex justify-center flex-shrink-0 ml-auto relative z-10"
               >
                 <Trash2 className="h-4 w-4" />
               </button>
