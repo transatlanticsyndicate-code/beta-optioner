@@ -152,13 +152,19 @@ function BaseAssetPositions({
                   );
                 }
                 return (
-                  <span
-                    className="text-xs flex items-center gap-1 text-amber-600 flex-shrink-0 px-1"
-                    title={`Маржин на 1 контракт для ${position.ticker} не задан в настройках. Откройте /settings?section=futures, найдите соответствующий тикер и заполните колонку «Маржин на 1 контракт».`}
+                  // ЗАЧЕМ: Делаем ссылкой, чтобы пользователь сразу попадал на нужную
+                  // страницу настроек и не искал её в меню. target="_blank" — чтобы
+                  // не терять текущую сделку в калькуляторе.
+                  <a
+                    href="/settings?section=futures"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs flex items-center gap-1 text-amber-600 hover:text-amber-700 hover:underline flex-shrink-0 px-1"
+                    title={`Маржин на 1 контракт для ${position.ticker} не задан в настройках. Кликните, чтобы открыть страницу настроек фьючерсов и заполнить значение.`}
                   >
                     <AlertTriangle className="h-3.5 w-3.5" />
                     маржин не задан
-                  </span>
+                  </a>
                 );
               })()
             ) : (
