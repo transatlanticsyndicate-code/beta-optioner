@@ -117,15 +117,15 @@ async function waitForTvOptionsTable(tabId, timeoutMs = 30000) {
       const results = await chrome.scripting.executeScript({
         target: { tabId },
         func: () => {
-          // Ищем маркеры загруженной таблицы опционов TV
+          // Ищем маркеры загруженной таблицы опционов TV.
           // ВАЖНО: priceWrap- (с дефисом) — это цена в чейне страницы; priceWrapper- (с -er)
           // — цена в правом виджет-баре (watchlist), которая отрисовывается раньше чейна.
-          // Если использовать широкий селектор [class*="priceWrap"], waitForTvOptionsTable
-          // отдаёт «готово» когда чейновой цены ещё нет — и парсер уходит с null.
+          // Требуем И таблицу опционов, И чейновую цену: без второго условия SPA отдаёт «готово»
+          // когда страйки уже есть, а шапка ещё пустая, и парсер уходит с null. Из-за этого
+          // первый клик «Да, обновить» после свежего открытия TV не доносил цену до калькулятора.
           const hasTable = document.querySelectorAll('td[class*="td-"]').length > 5;
           const hasPriceWrap = !!document.querySelector('[class*="priceWrap-"]');
-          const hasExpiration = !!document.querySelector('[class*="expiration"], [class*="Expiration"]');
-          return hasTable || (hasPriceWrap && hasExpiration);
+          return hasTable && hasPriceWrap;
         }
       });
       if (results?.[0]?.result) {
