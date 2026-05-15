@@ -1834,6 +1834,19 @@ function UniversalOptionsCalculator() {
     // ЗАЧЕМ: Позволяет добавлять опционы из TradingView к зафиксированной конфигурации
     // без потери существующих опционов
     if (loadedConfigId) {
+      // Гейт: тикер расширения не совпадает с тикером загруженной сделки.
+      // ЗАЧЕМ: Без этого опционы и цена из открытой TradingView-вкладки с ДРУГОЙ
+      // акцией попадают в текущую сохранённую сделку при любой пересборке эффекта —
+      // в частности, при нажатии «Зафиксировать» меняется isLocked → useEffect
+      // перезапускается и затягивает чужие опционы в позицию.
+      if (extensionTicker && selectedTicker &&
+          extensionTicker.toUpperCase() !== selectedTicker.toUpperCase()) {
+        console.log('⏭️ [Sync] Пропуск — тикер расширения не совпадает с сохранённой сделкой:', {
+          extension: extensionTicker, loaded: selectedTicker
+        });
+        return;
+      }
+
       if (extensionOptions && extensionOptions.length > 0) {
         setOptions(prevOptions => {
           // Применяем savedOverrides к существующим опционам
