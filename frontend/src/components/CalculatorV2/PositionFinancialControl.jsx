@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { calculateTotalPremium } from '../../utils/metricsCalculator';
 import { calculatePLMetrics } from '../../utils/metricsCalculator';
 import { CALCULATOR_MODES } from '../../utils/universalPricing';
@@ -58,6 +59,15 @@ function PositionFinancialControl({
     }, 0);
     return raw / effectiveLeverage;
   }, [positions, effectiveLeverage, isFutures]);
+
+  // Признак: для какой-нибудь видимой фьючерсной позиции маржин не задан.
+  // ЗАЧЕМ: При null marginPerContract вклад позиции в positionsCost считается = 0,
+  // и пользователь видит заниженную сумму, не понимая почему. Рядом с лейблом
+  // ставим иконку-ссылку на /settings?section=futures, чтобы он сразу мог заполнить.
+  const hasMissingMargin = useMemo(() => {
+    if (!isFutures) return false;
+    return positions.some(pos => pos.visible && getMarginPerContract(pos.ticker) == null);
+  }, [positions, isFutures]);
 
   // Премия опционов со знаком: Buy → −, Sell → + (calculateTotalPremium уже даёт со знаком)
   const optionsCost = useMemo(() => {
@@ -216,7 +226,7 @@ function PositionFinancialControl({
       {/* Блок стоимости позиций — со знаками: LONG/Buy → −, SHORT/Sell → + */}
       <div className="space-y-2">
         <div className="flex justify-between text-xs text-gray-500">
-          <span title={
+          <span className="flex items-center gap-1.5" title={
             effectiveLeverage > 1
               ? (isFutures
                   ? 'Маржин на 1 контракт × количество контрактов, делится на плечо.'
@@ -224,6 +234,21 @@ function PositionFinancialControl({
               : undefined
           }>
             {positionsCostLabel}
+            {hasMissingMargin && (
+              // ЗАЧЕМ: При null marginPerContract позиция игнорируется в сумме →
+              // блок показывает заниженное значение. Ссылкой на настройки даём
+              // пользователю быстрый путь до правки. target=_blank, чтобы не
+              // терять открытую сделку в калькуляторе.
+              <a
+                href="/settings?section=futures"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center text-amber-600 hover:text-amber-700"
+                title="Для одной или нескольких позиций не задан маржин на 1 контракт. Кликните, чтобы открыть настройки фьючерсов."
+              >
+                <AlertTriangle className="h-3.5 w-3.5" />
+              </a>
+            )}
           </span>
           <span>{formatSignedAmount(positionsCost)}</span>
         </div>
