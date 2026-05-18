@@ -61,6 +61,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  // Состояние калькулятора обновилось — диффим с bnb_positions и удаляем
+  // из расширения те опционы, которых больше нет в калькуляторе.
+  // ЗАЧЕМ: калькулятор — главный источник истины. Без этого удалённые
+  // в калькуляторе опционы возвращаются обратно при следующем инжекте.
+  if (message.action === 'calculatorStateUpdated') {
+    handleCalculatorStateUpdated(message);
+    return false;
+  }
+
   // Получить позиции из storage
   if (message.type === 'GET_POSITIONS') {
     chrome.storage.local.get(['bnb_positions'], (result) => {
@@ -159,6 +168,62 @@ function updateIconForTab(tabId, url) {
 
   // Можно добавить разные иконки для разных состояний
   // Пока используем одну иконку
+}
+
+/**
+ * Обработка обновления calculatorState из вкладки калькулятора.
+ * Сравниваем текущие options калькулятора с bnb_positions[underlying]
+ * и удаляем из расширения те, чего больше нет в калькуляторе.
+ */
+function handleCalculatorStateUpdated(message) {
+  const state = message && message.state ? message.state : null;
+  if (!state) return;
+
+  const underlying = state.selectedTicker;
+  if (!underlying) return;
+
+  const options = Array.isArray(state.options) ? state.options : null;
+  if (!options) return;
+
+  const keyOf = (t, s, d) => {
+    const date = (d || '').toString().slice(0, 10);
+    return `${(t || '').toUpperCase()}|${parseFloat(s)}|${date}`;
+  };
+
+  const calcKeys = new Set(options.map(o => keyOf(o.type, o.strike, o.date)));
+
+  chrome.storage.local.get(['bnb_positions'], (res) => {
+    const all = res && res.bnb_positions ? res.bnb_positions : {};
+    const arr = all[underlying];
+    if (!Array.isArray(arr) || arr.length === 0) return;
+
+    const filtered = arr.filter(p => {
+      const dateField = p.expirationISO || p.expiration;
+      return calcKeys.has(keyOf(p.type, p.strike, dateField));
+    });
+
+    if (filtered.length === arr.length) return; // ничего не удалили
+
+    if (filtered.length === 0) {
+      delete all[underlying];
+    } else {
+      all[underlying] = filtered;
+    }
+
+    chrome.storage.local.set({ bnb_positions: all }, () => {
+      console.log('[Background] bnb_positions[' + underlying + '] синхронизирован из калькулятора: было', arr.length, ', стало', filtered.length);
+      // Триггер перерисовки кнопок +/− на вкладках Binance.
+      chrome.tabs.query({ url: 'https://www.binance.com/*/eoptions*' }, (tabs) => {
+        if (!tabs || tabs.length === 0) return;
+        for (const t of tabs) {
+          chrome.tabs.sendMessage(t.id, { action: 'refreshButtons' }, () => {
+            // намеренно игнорируем lastError — вкладка могла закрыться
+            void chrome.runtime.lastError;
+          });
+        }
+      });
+    });
+  });
 }
 
 console.log('[Background] messageHandler.js загружен');

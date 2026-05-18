@@ -2321,9 +2321,31 @@ function UniversalOptionsCalculator() {
       const updated = prevOptions.filter((opt) => opt.id !== id);
       // Очищаем название стратегии при удалении опциона
       setSelectedStrategyName('');
+
+      // Сигнал крипто-расширению (binance_parser): убери этот опцион из bnb_positions.
+      // ЗАЧЕМ: автосохранение в calculatorState пропускается при loadedConfigId,
+      // поэтому расширение не узнаёт об удалении в режиме редактирования сохранённой сделки.
+      // Пишем минимальный снапшот options текущего тикера прямо в localStorage —
+      // optioner.js content-script перехватит setItem и пробросит в background,
+      // где обработчик calculatorStateUpdated диффит и удаляет из bnb_positions.
+      try {
+        if (selectedTicker) {
+          const raw = localStorage.getItem('calculatorState');
+          const cs = raw ? JSON.parse(raw) : {};
+          // Защита от чужой вкладки: пишем только если в storage наш тикер или пусто.
+          if (!cs.selectedTicker || cs.selectedTicker === selectedTicker) {
+            cs.selectedTicker = selectedTicker;
+            cs.options = updated.map(o => ({ type: o.type, strike: o.strike, date: o.date }));
+            localStorage.setItem('calculatorState', JSON.stringify(cs));
+          }
+        }
+      } catch (e) {
+        // Не падаем на ошибках JSON/storage — основное удаление в React state уже произошло.
+      }
+
       return updated;
     });
-  }, []);
+  }, [selectedTicker]);
 
   const updateOption = useCallback((id, field, value) => {
     console.log('🔄 [Universal] updateOption вызван:', { id, field, value });

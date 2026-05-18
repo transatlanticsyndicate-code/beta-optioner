@@ -173,6 +173,24 @@ function setupStorageListener() {
 }
 
 /**
+ * Слушатель сообщений от background
+ * ЗАЧЕМ: background просит перерисовать кнопки сразу после того, как калькулятор
+ * удалил опцион и bnb_positions синхронизировался (без ожидания polling-тика 30с).
+ */
+function setupRuntimeMessageListener() {
+  if (!chrome.runtime?.onMessage) return;
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message && message.action === 'refreshButtons') {
+      loadPositions().then(() => {
+        refreshAllButtonStates();
+        sendResponse({ success: true });
+      });
+      return true; // ответ асинхронный
+    }
+  });
+}
+
+/**
  * Инициализация расширения
  */
 async function init() {
@@ -189,6 +207,7 @@ async function init() {
 
   establishPersistentConnection();
   setupStorageListener();
+  setupRuntimeMessageListener();
 
   const underlying = getCurrentUnderlying();
   console.log('[Binance] Underlying из URL:', underlying);

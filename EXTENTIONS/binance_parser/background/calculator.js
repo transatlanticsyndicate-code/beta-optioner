@@ -49,12 +49,14 @@ function waitForCalculatorReady(tabId, callback, attempt) {
 
 /**
  * Инжект данных позиций в localStorage калькулятора
+ * @param {boolean} [allowReload=false] — разрешить fallback-reload (только для свежесозданной вкладки).
+ *   ЗАЧЕМ: в существующей вкладке reload сбросил бы URL `?dbConfig=...&edit=true` и убил режим редактирования.
  */
-function injectDataIntoCalculator(tabId, positionsData, tickerName, price) {
+function injectDataIntoCalculator(tabId, positionsData, tickerName, price, allowReload) {
   waitForCalculatorReady(tabId, () => {
     chrome.scripting.executeScript({
       target: { tabId: tabId },
-      func: (positions, ticker, underlyingPrice) => {
+      func: (positions, ticker, underlyingPrice, doReloadFallback) => {
         function convertToCalculatorFormat(position, tickerName) {
           return {
             id: String(Date.now() + Math.random() * 1000),
@@ -85,6 +87,12 @@ function injectDataIntoCalculator(tabId, positionsData, tickerName, price) {
           };
         }
 
+        // Ключ дедупликации, устойчивый к ISO/таймзонам.
+        function keyOf(t, s, d) {
+          const date = (d || '').toString().slice(0, 10);
+          return `${(t || '').toUpperCase()}|${parseFloat(s)}|${date}`;
+        }
+
         let calcState = localStorage.getItem('calculatorState');
         if (calcState) {
           calcState = JSON.parse(calcState);
@@ -97,12 +105,20 @@ function injectDataIntoCalculator(tabId, positionsData, tickerName, price) {
           };
         }
 
-        const newOptions = positions.map(pos => convertToCalculatorFormat(pos, ticker));
-        calcState.options = newOptions;
+        const incoming = positions.map(pos => convertToCalculatorFormat(pos, ticker));
+        const existingOptions = Array.isArray(calcState.options) ? calcState.options : [];
+        const existingKeys = new Set(existingOptions.map(o => keyOf(o.type, o.strike, o.date)));
+        const toAdd = incoming.filter(o => !existingKeys.has(keyOf(o.type, o.strike, o.date)));
+
+        // ЗАЧЕМ: калькулятор — главный. Не перезаписываем существующие записи,
+        // у которых пользователь мог поменять quantity/customPremium/греки/entryDate.
+        // Просто добавляем новые опционы из расширения.
+        calcState.options = [...existingOptions, ...toAdd];
         calcState.selectedTicker = ticker;
 
-        if (newOptions.length > 0 && newOptions[0].date) {
-          calcState.selectedExpirationDate = newOptions[0].date;
+        // Дата экспирации — если в текущем state её нет, берём из первого нового опциона.
+        if (!calcState.selectedExpirationDate && toAdd.length > 0 && toAdd[0].date) {
+          calcState.selectedExpirationDate = toAdd[0].date;
         }
 
         if (underlyingPrice) {
@@ -115,21 +131,24 @@ function injectDataIntoCalculator(tabId, positionsData, tickerName, price) {
         }
 
         localStorage.setItem('calculatorState', JSON.stringify(calcState));
-        console.log('[Binance Bridge] ✅ Инжектировано опционов:', newOptions.length, 'цена:', underlyingPrice);
+        console.log('[Binance Bridge] ✅ Инжектировано опционов:', toAdd.length, 'добавлено к', existingOptions.length, 'уже существующим, цена:', underlyingPrice);
 
-        // Уведомляем React через StorageEvent вместо reload()
+        // Уведомляем React через StorageEvent
         window.dispatchEvent(new StorageEvent('storage', {
           key: 'calculatorState',
           newValue: JSON.stringify(calcState),
           storageArea: localStorage
         }));
 
-        // Fallback: если React не среагировал на StorageEvent — перезагружаем через 1.5с
-        setTimeout(() => {
-          window.location.reload();
-        }, 1500);
+        // Fallback-reload разрешён только для свежесозданной вкладки.
+        // В существующей вкладке reload сбросил бы ?dbConfig=...&edit=true.
+        if (doReloadFallback) {
+          setTimeout(() => {
+            window.location.reload();
+          }, 1500);
+        }
       },
-      args: [positionsData, tickerName, price]
+      args: [positionsData, tickerName, price, !!allowReload]
     });
   });
 }
@@ -161,16 +180,12 @@ function handleOpenOptionerTab(message, sendResponse) {
     }, (tabs) => {
       if (tabs.length > 0) {
         const existingTabId = tabs[0].id;
-        chrome.tabs.update(existingTabId, { url: calculatorUrl, active: true }, () => {
+        // ЗАЧЕМ: НЕ обновляем URL у существующей вкладки — иначе теряются параметры
+        // ?dbConfig=...&edit=true и режим редактирования сохранённой сделки сбрасывается.
+        // Просто активируем вкладку и инжектим опционы поверх текущего состояния (merge).
+        chrome.tabs.update(existingTabId, { active: true }, () => {
           if (chrome.runtime.lastError) return;
-
-          chrome.tabs.onUpdated.addListener(function listener(updatedTabId, changeInfo) {
-            if (updatedTabId === existingTabId && changeInfo.status === 'complete') {
-              chrome.tabs.onUpdated.removeListener(listener);
-              if (chrome.runtime.lastError) return;
-              injectDataIntoCalculator(existingTabId, positions, ticker, underlyingPrice);
-            }
-          });
+          injectDataIntoCalculator(existingTabId, positions, ticker, underlyingPrice, false);
         });
       } else {
         chrome.tabs.create({ url: calculatorUrl, active: true }, (tab) => {
@@ -181,7 +196,7 @@ function handleOpenOptionerTab(message, sendResponse) {
             if (tabId === createdTabId && changeInfo.status === 'complete') {
               chrome.tabs.onUpdated.removeListener(listener);
               if (chrome.runtime.lastError) return;
-              injectDataIntoCalculator(createdTabId, positions, ticker, underlyingPrice);
+              injectDataIntoCalculator(createdTabId, positions, ticker, underlyingPrice, true);
             }
           });
         });
