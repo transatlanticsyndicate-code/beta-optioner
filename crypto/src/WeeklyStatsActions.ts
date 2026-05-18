@@ -18,6 +18,20 @@ export class WeeklyStatsActions {
                 break;
             }
 
+            case WeeklyStatsActionType.UPDATE_TRANSACTION: {
+                const updated = payload as WeeklyStatsEntry;
+                const idx = weeklyStats.transactions.findIndex(t => t.id === updated.id);
+                if (idx >= 0) {
+                    weeklyStats.transactions = [
+                        ...weeklyStats.transactions.slice(0, idx),
+                        updated,
+                        ...weeklyStats.transactions.slice(idx + 1)
+                    ];
+                    hasChanges = true;
+                }
+                break;
+            }
+
             case WeeklyStatsActionType.DELETE_TRANSACTION: {
                 const id = payload as string;
                 weeklyStats.transactions = weeklyStats.transactions.filter(t => t.id !== id);

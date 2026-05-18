@@ -467,7 +467,10 @@ select.asset-scenario:hover {
 
 button.delete-btn,
 button.delete-scenario-btn,
-button.delete-fin-cat-btn {
+button.delete-fin-cat-btn,
+button.edit-btn,
+button.save-btn,
+button.cancel-btn {
     background: transparent;
     border: 1px solid transparent;
     color: var(--text-secondary);
@@ -479,6 +482,7 @@ button.delete-fin-cat-btn {
     cursor: pointer;
     transition: all 0.2s;
     border-radius: 4px;
+    padding: 0;
 }
 
 button.delete-btn:hover,
@@ -486,6 +490,51 @@ button.delete-scenario-btn:hover {
     color: var(--danger-color);
     background: var(--highlight-bg);
     border-color: var(--border-color);
+}
+
+button.edit-btn:hover {
+    color: var(--accent-color);
+    background: var(--highlight-bg);
+    border-color: var(--border-color);
+}
+
+button.save-btn:hover {
+    color: var(--success-color, #22c55e);
+    background: var(--highlight-bg);
+    border-color: var(--border-color);
+}
+
+button.cancel-btn:hover {
+    color: var(--text-secondary);
+    background: var(--highlight-bg);
+    border-color: var(--border-color);
+}
+
+/* Инпуты внутри строки в режиме редактирования */
+tr.weekly-row-editing td {
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+input.weekly-edit-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 4px 6px;
+    font-size: 0.9em;
+    background: var(--input-bg, var(--btn-bg));
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    text-align: right;
+}
+
+input.weekly-edit-input[type="date"] {
+    text-align: left;
+}
+
+input.weekly-edit-input:focus {
+    outline: none;
+    border-color: var(--accent-color);
 }
 
 .v-marker {

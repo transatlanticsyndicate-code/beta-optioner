@@ -10,6 +10,7 @@ import { WeeklyStatsSettingsRenderer } from './WeeklyStatsSettingsRenderer';
 export class WeeklyStatsRenderer {
     private state: State;
     private onAction: (type: string, payload?: unknown) => void;
+    private editingId: string | null = null;
 
     private tableRenderer: WeeklyStatsTableRenderer;
     private settingsRenderer: WeeklyStatsSettingsRenderer;
@@ -34,12 +35,39 @@ export class WeeklyStatsRenderer {
 
     private initEventListeners() {
         // Table actions delegation
-        // Table actions delegation
         const tbody = document.getElementById('weekly-entry-list');
         if (tbody) {
             tbody.addEventListener('click', (e) => {
                 const target = e.target as HTMLElement;
-                // Handle Delete Button
+
+                // Edit (pencil) — войти в режим редактирования
+                const editBtn = target.closest('.edit-btn') as HTMLElement;
+                if (editBtn) {
+                    const id = editBtn.dataset.id;
+                    if (id) {
+                        this.editingId = id;
+                        this.renderTable();
+                    }
+                    return;
+                }
+
+                // Save (галочка) — сохранить отредактированную запись
+                const saveBtn = target.closest('.save-btn') as HTMLElement;
+                if (saveBtn) {
+                    const id = saveBtn.dataset.id;
+                    if (id) this.saveEditing(id);
+                    return;
+                }
+
+                // Cancel (крестик в режиме edit) — выйти без сохранения
+                const cancelBtn = target.closest('.cancel-btn') as HTMLElement;
+                if (cancelBtn) {
+                    this.editingId = null;
+                    this.renderTable();
+                    return;
+                }
+
+                // Delete (корзина) — обычное удаление
                 const delBtn = target.closest('.delete-btn') as HTMLElement;
                 if (delBtn) {
                     const id = delBtn.dataset.id;
@@ -49,6 +77,14 @@ export class WeeklyStatsRenderer {
                 }
             });
         }
+
+        // ESC — отмена редактирования
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && this.editingId !== null) {
+                this.editingId = null;
+                this.renderTable();
+            }
+        });
 
         // --- Manual Entry Logic ---
         const addBtn = document.getElementById('weekly-add-entry-btn') as HTMLButtonElement;
@@ -163,11 +199,16 @@ export class WeeklyStatsRenderer {
 
         const filteredTransactions = WeeklyStatsService.getFilteredTransactions(this.state.weeklyStats);
 
+        // Если редактируемой записи больше нет в данных (например, удалена другим путём), сбросить editingId
+        if (this.editingId !== null && !filteredTransactions.some(t => t.id === this.editingId)) {
+            this.editingId = null;
+        }
+
         // Disable Stats Calculation for now as the logic was removed/deprecated
         // const stats = WeeklyStatsService.calculateStats(this.state.weeklyStats.transactions, filteredTransactions);
         // this.analyticsRenderer.renderStats(stats);
 
-        this.tableRenderer.render(filteredTransactions, this.state.weeklyStats);
+        this.tableRenderer.render(filteredTransactions, this.state.weeklyStats, this.editingId);
 
         // Render Period Profit Widget
         const periodProfit = WeeklyStatsService.calculatePeriodProfit(filteredTransactions);
@@ -223,5 +264,56 @@ export class WeeklyStatsRenderer {
 
         // this.settingsRenderer.renderTypeEditor();
         // this.settingsRenderer.renderCategoryEditor();
+    }
+
+    // Перерисовка только таблицы — для смены режима редактирования без перерасчёта виджетов
+    private renderTable() {
+        const filteredTransactions = WeeklyStatsService.getFilteredTransactions(this.state.weeklyStats);
+        this.tableRenderer.render(filteredTransactions, this.state.weeklyStats, this.editingId);
+    }
+
+    private saveEditing(id: string) {
+        const row = document.querySelector(`tr[data-editing-id="${id}"]`) as HTMLTableRowElement | null;
+        if (!row) return;
+
+        const getVal = (field: string): string => {
+            const input = row.querySelector(`input[data-field="${field}"]`) as HTMLInputElement | null;
+            return input ? input.value : '';
+        };
+
+        const dateVal = getVal('date');
+        const profitVal = getVal('weeklyProfit');
+        const lossVal = getVal('portfolioLoss');
+        const posVal = getVal('positionsAmount');
+        const usdtVal = getVal('readyUSDT');
+        const eurVal = getVal('readyEUR');
+
+        // Те же правила валидации, что и при создании
+        const isValid = dateVal &&
+            profitVal !== '' &&
+            lossVal !== '' &&
+            posVal !== '' &&
+            usdtVal !== '' &&
+            eurVal !== '';
+
+        if (!isValid) {
+            alert('Заполните все поля перед сохранением.');
+            return;
+        }
+
+        const created = WeeklyStatsService.createEntry({
+            date: dateVal,
+            weeklyProfit: profitVal,
+            portfolioLoss: lossVal,
+            positionsAmount: posVal,
+            readyUSDT: usdtVal,
+            readyEUR: eurVal
+        });
+
+        // Сохраняем оригинальный id, чтобы запись осталась той же
+        const updated = { ...created, id };
+
+        this.editingId = null;
+        this.onAction(WeeklyStatsActionType.UPDATE_TRANSACTION, updated);
     }
 }
