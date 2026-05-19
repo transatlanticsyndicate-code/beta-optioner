@@ -136,7 +136,7 @@ function ParamsForm({
   };
 
   return (
-    <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
+    <div className="space-y-3 max-h-[70vh] overflow-y-auto p-1.5">
       <div className="text-xs text-muted-foreground">
         Точка входа в БА: <strong>${(entryPrice || currentPrice || 0).toFixed(2)}</strong>
       </div>

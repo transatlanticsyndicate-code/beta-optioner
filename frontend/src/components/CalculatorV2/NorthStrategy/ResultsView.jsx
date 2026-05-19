@@ -61,7 +61,7 @@ function ResultsView({ combinations, initialWeights, onPick, onBack, onCancel })
   }
 
   return (
-    <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
+    <div className="space-y-4 max-h-[75vh] overflow-y-auto p-1.5">
       <div className="border rounded-md p-3 bg-muted/30 space-y-3">
         <div className="text-xs font-semibold text-gray-700 dark:text-gray-300">
           Веса критериев (порядок карточек обновляется на лету)

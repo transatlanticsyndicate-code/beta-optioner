@@ -2666,15 +2666,33 @@ function UniversalOptionsCalculator() {
     Number(currentPrice) > 0
   ), [calculatorMode, longPositionsEntry, options, currentPrice]);
 
-  // Список доступных экспираций из цепочки расширения
+  // Список доступных экспираций. Берём из всех источников, что знает калькулятор:
+  // strikesByDate (метаданные расширения), expirationDates (карта от расширения)
+  // и собственно опционы из цепочки. Чем шире — тем лучше: дефолт +60 дней должен
+  // подобрать ближайшую известную дату даже если активная цепочка пока не парсилась.
   const northAvailableExpirations = useMemo(() => {
-    if (!Array.isArray(extensionOptions)) return [];
     const set = new Set();
-    for (const opt of extensionOptions) {
-      if (opt && opt.date) set.add(opt.date);
+    if (strikesByDate && typeof strikesByDate === 'object') {
+      for (const date of Object.keys(strikesByDate)) {
+        if (date) set.add(date);
+      }
+    }
+    if (expirationDates && typeof expirationDates === 'object') {
+      for (const arr of Object.values(expirationDates)) {
+        if (Array.isArray(arr)) {
+          for (const item of arr) {
+            if (item && item.date) set.add(item.date);
+          }
+        }
+      }
+    }
+    if (Array.isArray(extensionOptions)) {
+      for (const opt of extensionOptions) {
+        if (opt && opt.date) set.add(opt.date);
+      }
     }
     return Array.from(set).sort();
-  }, [extensionOptions]);
+  }, [strikesByDate, expirationDates, extensionOptions]);
 
   const handleOpenNorthStrategy = useCallback(() => {
     setNorthDialogStep('params');
