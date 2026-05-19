@@ -85,6 +85,12 @@ function injectButtons() {
 
   if (injectedCount > 0) {
   }
+
+  // Дамп полной видимой цепочки в chrome.storage — для фичи "Стратегия СЕВЕР"
+  // в калькуляторе. bridge optioner.js синкает её в localStorage tvc_full_chain.
+  if (typeof dumpFullChain === 'function') {
+    dumpFullChain();
+  }
 }
 
 // Обновить вид кнопки

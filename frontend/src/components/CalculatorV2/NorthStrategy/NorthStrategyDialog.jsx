@@ -19,32 +19,25 @@ import ParamsForm from './ParamsForm';
 import ResultsView from './ResultsView';
 import { analyzeNorthStrategy, findClosestExpiration } from '../../../utils/northStrategy/analyzer';
 import { DEFAULT_WEIGHTS } from '../../../utils/northStrategy/scoring';
-import {
-  sendRefreshRangeCommand,
-  readExtensionResult,
-  clearExtensionResult,
-} from '../../../hooks/useExtensionData';
+// Цепочка опционов лежит в localStorage tvc_full_chain — расширение TradingView
+// дампит её туда каждый раз, когда инжектит кнопки в таблицу опционов (то есть
+// при появлении/обновлении строк). Bridge на странице калькулятора каждые ~2 сек
+// синкает её из chrome.storage в localStorage. См. EXTENTIONS/OptionsCPbuttons/src/parser.js
+// (функция dumpFullChain) и EXTENTIONS/OptionsCPbuttons/optioner.js (syncFullChain).
+const FULL_CHAIN_KEY = 'tvc_full_chain';
+const FULL_CHAIN_MAX_AGE_MS = 5 * 60 * 1000;
+const POLL_INTERVAL_MS = 800;
+const WAIT_TIMEOUT_MS = 15_000;
 
-// Параметры запроса к расширению — сколько дней и % страйков парсить.
-// Берём с запасом, чтобы пользователь мог менять цели/диапазон без повторных запросов.
-const FETCH_DAYS_FROM = 20;
-const FETCH_DAYS_TO = 120;
-const FETCH_STRIKE_FROM_PCT = -30;
-const FETCH_STRIKE_TO_PCT = 30;
-const FETCH_TIMEOUT_MS = 60_000;
-
-/**
- * Читает rangeOptions из localStorage расширения.
- */
-const readRangeChain = () => {
+const readFullChain = () => {
   try {
-    const raw = localStorage.getItem('calculatorState');
-    if (!raw) return [];
-    const state = JSON.parse(raw);
-    const list = state.rangeOptions || [];
-    return Array.isArray(list) ? list : [];
+    const raw = localStorage.getItem(FULL_CHAIN_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.options) || parsed.options.length === 0) return null;
+    return parsed;
   } catch (e) {
-    return [];
+    return null;
   }
 };
 
@@ -69,14 +62,14 @@ function NorthStrategyDialog({
   const [weights, setWeights] = useState(initialState?.weights || DEFAULT_WEIGHTS);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  // Цепочка опционов, полученная от расширения (refresh_range)
+  // Цепочка опционов читается из localStorage 'tvc_full_chain', куда её дампит
+  // расширение TradingView. Мы не отправляем никаких команд — просто читаем
+  // готовую цепочку и при необходимости коротко ждём, пока расширение её обновит.
   const [fetchedChain, setFetchedChain] = useState([]);
   const [fetchStatus, setFetchStatus] = useState('idle'); // idle | loading | done | error
-  const [fetchProgress, setFetchProgress] = useState(0);
   const [fetchMessage, setFetchMessage] = useState('');
   const fetchStartedAt = useRef(0);
 
-  // Сброс при открытии: запрашиваем свежую цепочку у расширения
   useEffect(() => {
     if (!isOpen) return undefined;
 
@@ -85,49 +78,48 @@ function NorthStrategyDialog({
     if (initialState?.combinations) setCombinations(initialState.combinations);
     if (initialState?.weights) setWeights(initialState.weights);
 
-    // Если у нас уже есть закэшированные результаты и пользователь открывает
-    // экран результатов — цепочку запрашивать не надо.
+    // Если открывают экран результатов с готовым кэшем — цепочка не нужна.
     if (initialStep === 'results' && initialState?.combinations?.length) {
       setFetchStatus('done');
       return undefined;
     }
 
-    // Триггерим парсинг расширением: TradingView получает команду через
-    // localStorage 'tvc_refresh_command', extension парсит выбранные экспирации
-    // и пишет результат в calculatorState.rangeOptions + tvc_refresh_result.
+    const tryConsume = () => {
+      const data = readFullChain();
+      if (!data) return false;
+      const age = Date.now() - (data.timestamp || 0);
+      if (age > FULL_CHAIN_MAX_AGE_MS) {
+        // Слишком старая — ждём свежий дамп
+        return false;
+      }
+      setFetchedChain(data.options);
+      setFetchStatus('done');
+      setFetchMessage('');
+      return true;
+    };
+
+    // Шанс 1: уже есть свежий дамп — берём сразу
+    if (tryConsume()) return undefined;
+
+    // Шанс 2: ждём, пока bridge (раз в 2 сек) подтянет данные из chrome.storage
     setFetchStatus('loading');
-    setFetchProgress(0);
-    setFetchMessage('Запрашиваем цепочку у TradingView...');
+    setFetchMessage('Ожидаем цепочку опционов от TradingView...');
     setFetchedChain([]);
-    clearExtensionResult();
     fetchStartedAt.current = Date.now();
-    sendRefreshRangeCommand(FETCH_DAYS_FROM, FETCH_DAYS_TO, FETCH_STRIKE_FROM_PCT, FETCH_STRIKE_TO_PCT);
 
     const interval = setInterval(() => {
-      const result = readExtensionResult();
-      if (result) {
-        if (result.status === 'collecting') {
-          setFetchProgress(result.progress || 0);
-          setFetchMessage(result.message || `Сбор данных... ${result.progress || 0}%`);
-        } else if (result.status === 'complete') {
-          clearInterval(interval);
-          const chain = readRangeChain();
-          setFetchedChain(chain);
-          setFetchStatus('done');
-          setFetchMessage('');
-        } else if (result.status === 'error' || result.status === 'warning') {
-          clearInterval(interval);
-          setFetchStatus('error');
-          setFetchMessage(result.message || 'Не удалось получить данные от расширения');
-        }
+      if (tryConsume()) {
+        clearInterval(interval);
+        return;
       }
-      // Таймаут — на случай, если расширение не отвечает (TV закрыт, нет связи)
-      if (Date.now() - fetchStartedAt.current > FETCH_TIMEOUT_MS && fetchStatus !== 'done') {
+      if (Date.now() - fetchStartedAt.current > WAIT_TIMEOUT_MS) {
         clearInterval(interval);
         setFetchStatus('error');
-        setFetchMessage('Таймаут ожидания ответа от расширения TradingView. Проверь, что страница с опционами открыта.');
+        setFetchMessage(
+          'Цепочка опционов не пришла из TradingView. Открой в браузере страницу с таблицей опционов нужного тикера (ссылка есть на тикере в шапке калькулятора) и убедись, что расширение Options CP Buttons включено и обновлено до версии 1.6.7+.',
+        );
       }
-    }, 500);
+    }, POLL_INTERVAL_MS);
 
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -184,12 +176,36 @@ function NorthStrategyDialog({
 
   const handleRetryFetch = () => {
     setFetchStatus('loading');
-    setFetchProgress(0);
-    setFetchMessage('Повторно запрашиваем цепочку...');
+    setFetchMessage('Перечитываем цепочку...');
     setFetchedChain([]);
-    clearExtensionResult();
     fetchStartedAt.current = Date.now();
-    sendRefreshRangeCommand(FETCH_DAYS_FROM, FETCH_DAYS_TO, FETCH_STRIKE_FROM_PCT, FETCH_STRIKE_TO_PCT);
+
+    const data = readFullChain();
+    if (data && Date.now() - (data.timestamp || 0) <= FULL_CHAIN_MAX_AGE_MS) {
+      setFetchedChain(data.options);
+      setFetchStatus('done');
+      setFetchMessage('');
+      return;
+    }
+
+    // Те же 15 секунд ожидания, что и при первом открытии
+    const interval = setInterval(() => {
+      const d = readFullChain();
+      if (d && Date.now() - (d.timestamp || 0) <= FULL_CHAIN_MAX_AGE_MS) {
+        clearInterval(interval);
+        setFetchedChain(d.options);
+        setFetchStatus('done');
+        setFetchMessage('');
+        return;
+      }
+      if (Date.now() - fetchStartedAt.current > WAIT_TIMEOUT_MS) {
+        clearInterval(interval);
+        setFetchStatus('error');
+        setFetchMessage(
+          'Цепочка опционов не пришла из TradingView. Открой страницу с таблицей опционов и обнови расширение Options CP Buttons до версии 1.6.7+.',
+        );
+      }
+    }, POLL_INTERVAL_MS);
   };
 
   const handleBack = () => setStep('params');
@@ -226,12 +242,7 @@ function NorthStrategyDialog({
             {isAnalyzing ? (
               <span>Подбираем комбинации…</span>
             ) : (
-              <>
-                <span>{fetchMessage || 'Запрашиваем цепочку у TradingView...'}</span>
-                {fetchProgress > 0 && (
-                  <span className="text-xs">Прогресс: {fetchProgress}%</span>
-                )}
-              </>
+              <span>{fetchMessage || 'Ожидаем цепочку опционов от TradingView...'}</span>
             )}
           </div>
         )}

@@ -115,3 +115,101 @@ function parseOptionRow(row, columnMap) {
   return { strike, expiration, callData, putData };
 }
 
+/**
+ * Парсинг всей видимой таблицы опционов и запись в chrome.storage.local.tvc_full_chain.
+ * ЗАЧЕМ: Калькулятор может читать готовую цепочку (одна выбранная экспирация со всеми
+ * страйками, bid/ask/IV/греки) через bridge optioner.js, который синкает tvc_full_chain
+ * из chrome.storage в localStorage. Используется фичей "Стратегия СЕВЕР".
+ *
+ * Вызывается после каждого injectButtons() — то есть при появлении/обновлении строк.
+ * Дебаунс не требуется: chrome.storage сам по себе быстр, а перезаписывать одну запись
+ * с тем же содержимым безвредно.
+ */
+function dumpFullChain() {
+  try {
+    if (!chrome?.runtime?.id) return;
+
+    const columnMap = buildColumnMap();
+    if (!columnMap) return;
+
+    const rows = document.querySelectorAll('tr[data-strike]');
+    if (rows.length === 0) return;
+
+    const ticker = typeof getTickerFromUrl === 'function' ? (getTickerFromUrl() || '') : '';
+    const chain = [];
+
+    for (const row of rows) {
+      const parsed = parseOptionRow(row, columnMap);
+      if (!parsed.strike || !parsed.expiration) continue;
+
+      const baseEntry = {
+        ticker,
+        strike: parsed.strike,
+        expirationISO: parsed.expiration,
+        date: parsed.expiration,
+      };
+
+      const callData = parsed.callData || {};
+      const putData = parsed.putData || {};
+
+      // CALL — берём только если есть ASK (иначе для расчётов всё равно непригоден)
+      if (callData.ask > 0) {
+        chain.push({
+          ...baseEntry,
+          type: 'CALL',
+          bid: callData.bid || 0,
+          ask: callData.ask || 0,
+          last: callData.last || 0,
+          price: callData.price || callData.last || ((callData.bid + callData.ask) / 2) || 0,
+          volume: callData.volume || 0,
+          iv: callData.iv || 0,
+          impliedVolatility: callData.iv || 0,
+          askIV: callData.askIV || 0,
+          bidIV: callData.bidIV || 0,
+          delta: callData.delta || 0,
+          gamma: callData.gamma || 0,
+          theta: callData.theta || 0,
+          vega: callData.vega || 0,
+          rho: callData.rho || 0,
+        });
+      }
+
+      // PUT — аналогично
+      if (putData.ask > 0) {
+        chain.push({
+          ...baseEntry,
+          type: 'PUT',
+          bid: putData.bid || 0,
+          ask: putData.ask || 0,
+          last: putData.last || 0,
+          price: putData.price || putData.last || ((putData.bid + putData.ask) / 2) || 0,
+          volume: putData.volume || 0,
+          iv: putData.iv || 0,
+          impliedVolatility: putData.iv || 0,
+          askIV: putData.askIV || 0,
+          bidIV: putData.bidIV || 0,
+          delta: putData.delta || 0,
+          gamma: putData.gamma || 0,
+          theta: putData.theta || 0,
+          vega: putData.vega || 0,
+          rho: putData.rho || 0,
+        });
+      }
+    }
+
+    if (chain.length === 0) return;
+
+    chrome.storage.local.set({
+      tvc_full_chain: {
+        ticker,
+        options: chain,
+        timestamp: Date.now(),
+      },
+    });
+  } catch (e) {
+    if (typeof console !== 'undefined') {
+      console.warn('[ext2] dumpFullChain error:', e.message);
+    }
+  }
+}
+
