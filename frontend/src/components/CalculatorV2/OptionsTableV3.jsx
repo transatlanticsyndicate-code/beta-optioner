@@ -5,6 +5,8 @@ import { invalidateOptionsForTicker } from '../../services/OptionsDataService';
 import { sendRefreshSpecificCommand } from '../../hooks/useExtensionData';
 
 import { SuperButton, SuperSelectionModal } from './SuperSelection';
+import NorthButton from './NorthStrategy/NorthButton';
+import NorthBadge from './NorthStrategy/NorthBadge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -91,7 +93,13 @@ function OptionsTableV3({
   contractMultiplier = 100, // Множитель контракта: 100 для акций, pointValue для фьючерсов
   isFuturesMissingSettings = false, // Флаг: отсутствуют настройки фьючерса (блокирует расчёты)
   stockClassification = null, // Классификация акции для корректировки P&L (только для режима stocks)
-  onOptionsTotalPLChange = null // Callback для подъёма «ИТОГО» опционов в родителя (используется в P&L TOTAL карточки «Базовый актив»)
+  onOptionsTotalPLChange = null, // Callback для подъёма «ИТОГО» опционов в родителя (используется в P&L TOTAL карточки «Базовый актив»)
+  // Стратегия СЕВЕР: автоподбор пары Buy Call + Buy Put для лонг-позиции
+  onOpenNorthStrategy = null, // Открыть поп-ап подбора
+  canShowNorthButton = false, // Показывать ли кнопку (есть лонг по БА, нет опционов)
+  northActive = false, // Показывать ли бейдж "Подобрано стратегией СЕВЕР"
+  onReopenNorthResults = null, // Вернуться к экрану результатов (без перезапуска анализа)
+  onCancelNorthSelection = null // Отменить подбор: удалить опционы стратегии
 }) {
   // DEBUG: Логирование параметров для отладки сохранения конфигурации из БД
   React.useEffect(() => {
@@ -537,13 +545,25 @@ function OptionsTableV3({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-medium">
-          Опционы
-          {selectedStrategyName && (
-            <span className="text-cyan-500 ml-2">/ {selectedStrategyName}</span>
-          )}
-        </h3>
         <div className="flex items-center gap-2">
+          <h3 className="text-sm font-medium">
+            Опционы
+            {selectedStrategyName && (
+              <span className="text-cyan-500 ml-2">/ {selectedStrategyName}</span>
+            )}
+          </h3>
+          {northActive && (
+            <NorthBadge
+              onReopenResults={onReopenNorthResults}
+              onCancel={onCancelNorthSelection}
+            />
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {/* Кнопка "Стратегия СЕВЕР" — слева от Save */}
+          {canShowNorthButton && onOpenNorthStrategy && (
+            <NorthButton onClick={onOpenNorthStrategy} />
+          )}
 
           {/* Супер кнопка для расширенного подбора опционов */}
           <SuperButton onClick={() => setSuperModalOpen(true)} />

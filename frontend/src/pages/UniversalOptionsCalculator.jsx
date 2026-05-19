@@ -69,6 +69,7 @@ import {
   PriceAndTimeSettings
 } from '../components/CalculatorV2';
 import OptionsTableV3 from '../components/CalculatorV2/OptionsTableV3';
+import NorthStrategyDialog from '../components/CalculatorV2/NorthStrategy/NorthStrategyDialog';
 import FinancialControl from '../components/CalculatorV2/FinancialControl';
 import ExitCalculator from '../components/CalculatorV2/ExitCalculator';
 import { ScenarioCard, LiquidityWarning, GreeksWarning } from '../components/CalculatorV2/ExitCalculator/components';
@@ -2639,6 +2640,76 @@ function UniversalOptionsCalculator() {
   const [strategyName, setStrategyName] = useState("");
   const [strategyComment, setStrategyComment] = useState("");
 
+  // === Стратегия СЕВЕР: state и обработчики ===
+  // ЗАЧЕМ: Подбор пары Buy Call + Buy Put для лонг-позиции. Кэшируем параметры
+  // и результаты, чтобы возврат к выбору не запускал анализ заново.
+  const [northDialogOpen, setNorthDialogOpen] = useState(false);
+  const [northDialogStep, setNorthDialogStep] = useState('params');
+  const [northState, setNorthState] = useState(null); // { params, combinations, weights }
+
+  // Точка входа в БА — средневзвешенная по лонг-позициям
+  const longPositionsEntry = useMemo(() => {
+    const longs = (positions || []).filter(p => p.type === 'LONG' && p.visible !== false && Number(p.quantity) > 0);
+    if (longs.length === 0) return null;
+    const totalQty = longs.reduce((s, p) => s + Number(p.quantity), 0);
+    const totalNotional = longs.reduce((s, p) => s + Number(p.price) * Number(p.quantity), 0);
+    return totalQty > 0 ? { price: totalNotional / totalQty, quantity: totalQty } : null;
+  }, [positions]);
+
+  const northActive = useMemo(() => options.some(o => o.fromNorthStrategy), [options]);
+
+  // Кнопка СЕВЕР: режим Акции, есть лонг по БА, нет ни одного видимого опциона, цена БА известна
+  const canShowNorthButton = useMemo(() => (
+    calculatorMode === CALCULATOR_MODES.STOCKS &&
+    !!longPositionsEntry &&
+    options.filter(o => o.visible !== false).length === 0 &&
+    Number(currentPrice) > 0
+  ), [calculatorMode, longPositionsEntry, options, currentPrice]);
+
+  // Список доступных экспираций из цепочки расширения
+  const northAvailableExpirations = useMemo(() => {
+    if (!Array.isArray(extensionOptions)) return [];
+    const set = new Set();
+    for (const opt of extensionOptions) {
+      if (opt && opt.date) set.add(opt.date);
+    }
+    return Array.from(set).sort();
+  }, [extensionOptions]);
+
+  const handleOpenNorthStrategy = useCallback(() => {
+    setNorthDialogStep('params');
+    setNorthDialogOpen(true);
+  }, []);
+
+  const handleReopenNorthResults = useCallback(() => {
+    if (!northState || !northState.combinations || northState.combinations.length === 0) {
+      setNorthDialogStep('params');
+    } else {
+      setNorthDialogStep('results');
+    }
+    setNorthDialogOpen(true);
+  }, [northState]);
+
+  const handleNorthStateChange = useCallback((next) => {
+    setNorthState(next);
+  }, []);
+
+  const handleApplyNorthCombination = useCallback(({ combination, params, combinations, weights }) => {
+    if (!combination || !Array.isArray(combination.positions)) return;
+    const stamped = combination.positions.map(opt => ({
+      ...opt,
+      id: `north-${opt.type}-${opt.strike}-${opt.date}-${opt.quantity}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      fromNorthStrategy: true,
+    }));
+    setOptions(prev => [...prev.filter(o => !o.fromNorthStrategy), ...stamped]);
+    setNorthState({ params, combinations, weights });
+    setNorthDialogOpen(false);
+  }, []);
+
+  const handleCancelNorthSelection = useCallback(() => {
+    setOptions(prev => prev.filter(o => !o.fromNorthStrategy));
+  }, []);
+
   const handleSaveStrategy = () => {
     if (strategyName.trim() && strategyComment.trim()) {
       try {
@@ -4504,6 +4575,11 @@ function UniversalOptionsCalculator() {
                       }}
                       stockClassification={null}
                       onOptionsTotalPLChange={setOptionsTableTotalPL}
+                      onOpenNorthStrategy={handleOpenNorthStrategy}
+                      canShowNorthButton={canShowNorthButton}
+                      northActive={northActive}
+                      onReopenNorthResults={handleReopenNorthResults}
+                      onCancelNorthSelection={handleCancelNorthSelection}
                     />
                   ) : (
                     <div className="w-full h-[80px] flex items-center justify-center text-muted-foreground text-sm">
@@ -4646,6 +4722,25 @@ function UniversalOptionsCalculator() {
             selectStrategy={selectStrategy}
           />
         )}
+
+        {/* Поп-ап "Стратегия СЕВЕР" — подбор пары Buy Call + Buy Put */}
+        <NorthStrategyDialog
+          isOpen={northDialogOpen}
+          initialStep={northDialogStep}
+          currentPrice={currentPrice}
+          entryPrice={longPositionsEntry?.price || currentPrice}
+          assetQuantity={longPositionsEntry?.quantity || 0}
+          availableExpirations={northAvailableExpirations}
+          chain={extensionOptions}
+          ivSurface={ivSurface}
+          calculatorMode={calculatorMode}
+          dividendYield={useDividends ? dividendYield : 0}
+          stockClassification={null}
+          initialState={northState}
+          onClose={() => setNorthDialogOpen(false)}
+          onApply={handleApplyNorthCombination}
+          onStateChange={handleNorthStateChange}
+        />
 
         {/* Диалог сохранения в БД (единственный режим сохранения)
             ЗАЧЕМ: Внутри диалога — выбор статуса позиции «В ожидании» / «Зафиксирована».
