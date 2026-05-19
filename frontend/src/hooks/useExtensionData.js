@@ -568,6 +568,24 @@ export function sendClearSlicesCommand(chartUrl = null) {
 }
 
 /**
+ * Команда расширению — развернуть указанную экспирацию в таблице опционов
+ * TradingView и сдампить полную цепочку в localStorage.tvc_full_chain.
+ * ЗАЧЕМ: Используется фичей "Стратегия СЕВЕР" в калькуляторе.
+ *
+ * @param {string} expirationDate - ISO дата (YYYY-MM-DD)
+ */
+export function sendNorthExpandExpirationCommand(expirationDate) {
+  const command = {
+    type: 'north_expand_expiration',
+    date: expirationDate,
+    timestamp: Date.now(),
+    processed: false,
+  };
+  localStorage.setItem(COMMAND_KEY, JSON.stringify(command));
+  return command;
+}
+
+/**
  * Чтение результата выполнения команды
  * ЗАЧЕМ: Получение прогресса и статуса от расширения
  * 

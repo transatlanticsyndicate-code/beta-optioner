@@ -67,6 +67,21 @@
       sendResponse({ price, confidence });
       return; // синхронный ответ
     }
+    // Стратегия СЕВЕР в калькуляторе: развернуть указанную экспирацию и сдампить
+    // полную цепочку в chrome.storage.local. См. src/northSupport.js.
+    if (message.action === 'northExpandAndDump') {
+      try {
+        if (window.ext2North && typeof window.ext2North.handleNorthExpandAndDump === 'function') {
+          window.ext2North.handleNorthExpandAndDump(message.date, sendResponse);
+        } else {
+          sendResponse({ ok: false, reason: 'ext2North not loaded' });
+        }
+      } catch (e) {
+        sendResponse({ ok: false, reason: e.message });
+      }
+      return true; // async response
+    }
+
     if (message.action === 'refreshPanel') {
       loadPositions().then(() => {
         if (Object.keys(tvc_positions).length > 0) {

@@ -367,6 +367,14 @@ function showConnectionLostNotification() {
           action: 'clearSlicesFromChart',
           chartUrl: command.chartUrl
         };
+      } else if (command.type === 'north_expand_expiration') {
+        // Стратегия СЕВЕР: развернуть указанную экспирацию в таблице опционов
+        // TradingView и сдампить полную цепочку. Результат — в chrome.storage →
+        // bridge сам синкает в localStorage tvc_full_chain.
+        action = {
+          action: 'northExpandAndDump',
+          date: command.date,
+        };
       } else {
         return;
       }
@@ -575,21 +583,44 @@ function showConnectionLostNotification() {
   // Синхронизировать tvc_full_chain из расширения в localStorage калькулятора
   function syncFullChain() {
     if (!chrome.runtime?.id) return;
-    
+
     chrome.storage.local.get(['tvc_full_chain'], (result) => {
       const fullChain = result.tvc_full_chain;
       if (!fullChain) return;
-      
+
       // Сохраняем в localStorage калькулятора
       const currentData = localStorage.getItem('tvc_full_chain');
       const newData = JSON.stringify(fullChain);
-      
+
       if (currentData !== newData) {
         localStorage.setItem('tvc_full_chain', newData);
         // Триггерим событие для React
         window.dispatchEvent(new StorageEvent('storage', {
           key: 'tvc_full_chain',
           newValue: newData
+        }));
+      }
+    });
+  }
+
+  // Синхронизировать tvc_expirations_list (список экспираций по DTE-бейджам)
+  // из расширения в localStorage калькулятора. Используется поп-апом СЕВЕР для
+  // показа доступных дат сразу при открытии, без парсинга строк.
+  function syncExpirationsList() {
+    if (!chrome.runtime?.id) return;
+
+    chrome.storage.local.get(['tvc_expirations_list'], (result) => {
+      const list = result.tvc_expirations_list;
+      if (!list) return;
+
+      const currentData = localStorage.getItem('tvc_expirations_list');
+      const newData = JSON.stringify(list);
+
+      if (currentData !== newData) {
+        localStorage.setItem('tvc_expirations_list', newData);
+        window.dispatchEvent(new StorageEvent('storage', {
+          key: 'tvc_expirations_list',
+          newValue: newData,
         }));
       }
     });
@@ -654,6 +685,7 @@ function showConnectionLostNotification() {
     syncToExtension();
     syncUnderlyingPrice();
     syncFullChain();
+    syncExpirationsList();
     checkAndHandleRefreshCommand();
   }, 2000);
   

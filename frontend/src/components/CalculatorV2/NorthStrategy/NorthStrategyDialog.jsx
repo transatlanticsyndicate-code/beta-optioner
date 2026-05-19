@@ -19,15 +19,32 @@ import ParamsForm from './ParamsForm';
 import ResultsView from './ResultsView';
 import { analyzeNorthStrategy, findClosestExpiration } from '../../../utils/northStrategy/analyzer';
 import { DEFAULT_WEIGHTS } from '../../../utils/northStrategy/scoring';
-// Цепочка опционов лежит в localStorage tvc_full_chain — расширение TradingView
-// дампит её туда каждый раз, когда инжектит кнопки в таблицу опционов (то есть
-// при появлении/обновлении строк). Bridge на странице калькулятора каждые ~2 сек
-// синкает её из chrome.storage в localStorage. См. EXTENTIONS/OptionsCPbuttons/src/parser.js
-// (функция dumpFullChain) и EXTENTIONS/OptionsCPbuttons/optioner.js (syncFullChain).
+import { sendNorthExpandExpirationCommand } from '../../../hooks/useExtensionData';
+
+// Двухстадийный диалог с TradingView:
+//  - Стадия 1 (открытие): читаем СПИСОК экспираций из localStorage tvc_expirations_list,
+//    куда расширение пишет даты по DTE-бейджам без парсинга строк.
+//  - Стадия 2 ("Подобрать"): шлём команду north_expand_expiration — расширение
+//    раскрывает нужную группу в таблице TV и дампит полную цепочку строк в
+//    tvc_full_chain. Здесь ждём, пока в нём появятся строки выбранной экспирации.
+const EXPIRATIONS_KEY = 'tvc_expirations_list';
 const FULL_CHAIN_KEY = 'tvc_full_chain';
-const FULL_CHAIN_MAX_AGE_MS = 5 * 60 * 1000;
-const POLL_INTERVAL_MS = 800;
-const WAIT_TIMEOUT_MS = 15_000;
+const EXPIRATIONS_MAX_AGE_MS = 10 * 60 * 1000;
+const POLL_INTERVAL_MS = 600;
+const EXPIRATIONS_TIMEOUT_MS = 10_000;
+const CHAIN_TIMEOUT_MS = 15_000;
+
+const readExpirationsList = () => {
+  try {
+    const raw = localStorage.getItem(EXPIRATIONS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.expirations) || parsed.expirations.length === 0) return null;
+    return parsed;
+  } catch (e) {
+    return null;
+  }
+};
 
 const readFullChain = () => {
   try {
@@ -39,6 +56,14 @@ const readFullChain = () => {
   } catch (e) {
     return null;
   }
+};
+
+const chainHasDate = (chain, isoDate) => {
+  if (!chain || !Array.isArray(chain.options)) return false;
+  for (const opt of chain.options) {
+    if (opt && opt.date === isoDate) return true;
+  }
+  return false;
 };
 
 function NorthStrategyDialog({
@@ -60,16 +85,18 @@ function NorthStrategyDialog({
   const [params, setParams] = useState(initialState?.params || null);
   const [combinations, setCombinations] = useState(initialState?.combinations || []);
   const [weights, setWeights] = useState(initialState?.weights || DEFAULT_WEIGHTS);
+
+  // Стадия 1: список экспираций (быстро, без парсинга строк)
+  const [availableExpirations, setAvailableExpirations] = useState([]);
+  const [expirationsStatus, setExpirationsStatus] = useState('idle'); // idle | loading | done | error
+  const [expirationsMessage, setExpirationsMessage] = useState('');
+
+  // Стадия 2: полная цепочка для выбранной экспирации (после "Подобрать")
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analyzeMessage, setAnalyzeMessage] = useState('');
+  const expirationsStartedAt = useRef(0);
 
-  // Цепочка опционов читается из localStorage 'tvc_full_chain', куда её дампит
-  // расширение TradingView. Мы не отправляем никаких команд — просто читаем
-  // готовую цепочку и при необходимости коротко ждём, пока расширение её обновит.
-  const [fetchedChain, setFetchedChain] = useState([]);
-  const [fetchStatus, setFetchStatus] = useState('idle'); // idle | loading | done | error
-  const [fetchMessage, setFetchMessage] = useState('');
-  const fetchStartedAt = useRef(0);
-
+  // --- Стадия 1: подгружаем список экспираций при открытии ---
   useEffect(() => {
     if (!isOpen) return undefined;
 
@@ -78,45 +105,39 @@ function NorthStrategyDialog({
     if (initialState?.combinations) setCombinations(initialState.combinations);
     if (initialState?.weights) setWeights(initialState.weights);
 
-    // Если открывают экран результатов с готовым кэшем — цепочка не нужна.
+    // Если открывают экран результатов с готовым кэшем — стадия 1 не нужна.
     if (initialStep === 'results' && initialState?.combinations?.length) {
-      setFetchStatus('done');
+      setExpirationsStatus('done');
       return undefined;
     }
 
     const tryConsume = () => {
-      const data = readFullChain();
+      const data = readExpirationsList();
       if (!data) return false;
       const age = Date.now() - (data.timestamp || 0);
-      if (age > FULL_CHAIN_MAX_AGE_MS) {
-        // Слишком старая — ждём свежий дамп
-        return false;
-      }
-      setFetchedChain(data.options);
-      setFetchStatus('done');
-      setFetchMessage('');
+      if (age > EXPIRATIONS_MAX_AGE_MS) return false;
+      setAvailableExpirations((data.expirations || []).map(e => e.date));
+      setExpirationsStatus('done');
+      setExpirationsMessage('');
       return true;
     };
 
-    // Шанс 1: уже есть свежий дамп — берём сразу
     if (tryConsume()) return undefined;
 
-    // Шанс 2: ждём, пока bridge (раз в 2 сек) подтянет данные из chrome.storage
-    setFetchStatus('loading');
-    setFetchMessage('Ожидаем цепочку опционов от TradingView...');
-    setFetchedChain([]);
-    fetchStartedAt.current = Date.now();
+    setExpirationsStatus('loading');
+    setExpirationsMessage('Считываем список экспираций из TradingView...');
+    expirationsStartedAt.current = Date.now();
 
     const interval = setInterval(() => {
       if (tryConsume()) {
         clearInterval(interval);
         return;
       }
-      if (Date.now() - fetchStartedAt.current > WAIT_TIMEOUT_MS) {
+      if (Date.now() - expirationsStartedAt.current > EXPIRATIONS_TIMEOUT_MS) {
         clearInterval(interval);
-        setFetchStatus('error');
-        setFetchMessage(
-          'Цепочка опционов не пришла из TradingView. Открой в браузере страницу с таблицей опционов нужного тикера (ссылка есть на тикере в шапке калькулятора) и убедись, что расширение Options CP Buttons включено и обновлено до версии 1.6.7+.',
+        setExpirationsStatus('error');
+        setExpirationsMessage(
+          'Не получили список экспираций. Открой в TradingView страницу опционов нужного тикера (с фильтром «Next 90 days») и убедись, что расширение Options CP Buttons обновлено до версии 1.6.8+.',
         );
       }
     }, POLL_INTERVAL_MS);
@@ -125,84 +146,97 @@ function NorthStrategyDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
-  // Список доступных экспираций — строго из того, что расширение прислало
-  const availableExpirations = useMemo(() => {
-    const set = new Set();
-    for (const opt of fetchedChain) {
-      if (opt && opt.date) set.add(opt.date);
-    }
-    return Array.from(set).sort();
-  }, [fetchedChain]);
-
+  // --- Стадия 2: по "Подобрать" разворачиваем экспирацию и ждём цепочку ---
   const handleAnalyze = (formParams) => {
-    setIsAnalyzing(true);
     setParams(formParams);
-    setTimeout(() => {
-      try {
-        const expiration = findClosestExpiration(fetchedChain, formParams.expirationDate) || formParams.expirationDate;
-        const result = analyzeNorthStrategy({
-          entry: entryPrice,
-          assetQuantity,
-          currentPrice,
-          topPrice: formParams.topPrice,
-          bottomPrice: formParams.bottomPrice,
-          midAPrice: formParams.midAPrice,
-          midBPrice: formParams.midBPrice,
-          expirationDate: expiration,
-          calcDate: formParams.calcDate,
-          strikeRangeMin: formParams.strikeRangeMin,
-          strikeRangeMax: formParams.strikeRangeMax,
-          qty: formParams.qty,
-          chain: fetchedChain,
-          ivSurface,
-          calculatorMode,
-          dividendYield,
-          stockClassification,
-        });
-        setCombinations(result);
-        setStep('results');
-        if (onStateChange) {
-          onStateChange({ params: formParams, combinations: result, weights });
+    setIsAnalyzing(true);
+    setAnalyzeMessage('Разворачиваем экспирацию в TradingView и читаем цепочку...');
+
+    const targetIso = formParams.expirationDate;
+    sendNorthExpandExpirationCommand(targetIso);
+
+    const startedAt = Date.now();
+    const interval = setInterval(() => {
+      const chain = readFullChain();
+      if (chain && chainHasDate(chain, targetIso)) {
+        clearInterval(interval);
+
+        try {
+          const result = analyzeNorthStrategy({
+            entry: entryPrice,
+            assetQuantity,
+            currentPrice,
+            topPrice: formParams.topPrice,
+            bottomPrice: formParams.bottomPrice,
+            midAPrice: formParams.midAPrice,
+            midBPrice: formParams.midBPrice,
+            expirationDate: targetIso,
+            calcDate: formParams.calcDate,
+            strikeRangeMin: formParams.strikeRangeMin,
+            strikeRangeMax: formParams.strikeRangeMax,
+            qty: formParams.qty,
+            chain: chain.options,
+            ivSurface,
+            calculatorMode,
+            dividendYield,
+            stockClassification,
+          });
+          setCombinations(result);
+          setStep('results');
+          if (onStateChange) {
+            onStateChange({ params: formParams, combinations: result, weights });
+          }
+        } catch (err) {
+          console.error('[NorthStrategy] Ошибка анализа:', err);
+          setCombinations([]);
+          setStep('results');
+        } finally {
+          setIsAnalyzing(false);
+          setAnalyzeMessage('');
         }
-      } catch (err) {
-        console.error('[NorthStrategy] Ошибка анализа:', err);
-        setCombinations([]);
-        setStep('results');
-      } finally {
-        setIsAnalyzing(false);
+        return;
       }
-    }, 50);
+
+      if (Date.now() - startedAt > CHAIN_TIMEOUT_MS) {
+        clearInterval(interval);
+        setIsAnalyzing(false);
+        setAnalyzeMessage('');
+        setExpirationsStatus('error');
+        setExpirationsMessage(
+          `Не удалось получить опционы для экспирации ${targetIso}. Проверь, что в TradingView открыта таблица опционов нужного тикера, расширение Options CP Buttons обновлено до 1.6.8+, и попробуй ещё раз.`,
+        );
+      }
+    }, POLL_INTERVAL_MS);
   };
 
   const handleRetryFetch = () => {
-    setFetchStatus('loading');
-    setFetchMessage('Перечитываем цепочку...');
-    setFetchedChain([]);
-    fetchStartedAt.current = Date.now();
+    setExpirationsStatus('loading');
+    setExpirationsMessage('Перечитываем список экспираций...');
+    expirationsStartedAt.current = Date.now();
 
-    const data = readFullChain();
-    if (data && Date.now() - (data.timestamp || 0) <= FULL_CHAIN_MAX_AGE_MS) {
-      setFetchedChain(data.options);
-      setFetchStatus('done');
-      setFetchMessage('');
-      return;
-    }
+    const tryConsume = () => {
+      const data = readExpirationsList();
+      if (!data) return false;
+      const age = Date.now() - (data.timestamp || 0);
+      if (age > EXPIRATIONS_MAX_AGE_MS) return false;
+      setAvailableExpirations((data.expirations || []).map(e => e.date));
+      setExpirationsStatus('done');
+      setExpirationsMessage('');
+      return true;
+    };
 
-    // Те же 15 секунд ожидания, что и при первом открытии
+    if (tryConsume()) return;
+
     const interval = setInterval(() => {
-      const d = readFullChain();
-      if (d && Date.now() - (d.timestamp || 0) <= FULL_CHAIN_MAX_AGE_MS) {
+      if (tryConsume()) {
         clearInterval(interval);
-        setFetchedChain(d.options);
-        setFetchStatus('done');
-        setFetchMessage('');
         return;
       }
-      if (Date.now() - fetchStartedAt.current > WAIT_TIMEOUT_MS) {
+      if (Date.now() - expirationsStartedAt.current > EXPIRATIONS_TIMEOUT_MS) {
         clearInterval(interval);
-        setFetchStatus('error');
-        setFetchMessage(
-          'Цепочка опционов не пришла из TradingView. Открой страницу с таблицей опционов и обнови расширение Options CP Buttons до версии 1.6.7+.',
+        setExpirationsStatus('error');
+        setExpirationsMessage(
+          'Список экспираций так и не пришёл. Открой в TradingView таблицу опционов нужного тикера (фильтр Next 90 days) и обнови расширение до 1.6.8+.',
         );
       }
     }, POLL_INTERVAL_MS);
@@ -214,11 +248,10 @@ function NorthStrategyDialog({
     onApply({ combination, params, combinations, weights });
   };
 
-  // Когда экран — params, требуется загруженная цепочка. На экране результатов
-  // (повторное открытие) она уже есть в кэше комбинаций — fetch не блокирует.
-  const needsChain = step === 'params';
-  const showLoader = isAnalyzing || (needsChain && fetchStatus === 'loading');
-  const showFetchError = needsChain && fetchStatus === 'error';
+  // Стадия 1 нужна только на экране параметров. На экране результатов из кэша — не нужна.
+  const needsExpirations = step === 'params';
+  const showLoader = isAnalyzing || (needsExpirations && expirationsStatus === 'loading');
+  const showFetchError = needsExpirations && expirationsStatus === 'error';
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -240,9 +273,9 @@ function NorthStrategyDialog({
           <div className="flex flex-col items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
             <Loader2 className="h-5 w-5 animate-spin" />
             {isAnalyzing ? (
-              <span>Подбираем комбинации…</span>
+              <span>{analyzeMessage || 'Подбираем комбинации…'}</span>
             ) : (
-              <span>{fetchMessage || 'Ожидаем цепочку опционов от TradingView...'}</span>
+              <span>{expirationsMessage || 'Ожидаем список экспираций от TradingView...'}</span>
             )}
           </div>
         )}
@@ -253,9 +286,9 @@ function NorthStrategyDialog({
               <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
               <div>
                 <div className="font-medium">Не удалось получить данные из TradingView</div>
-                <div className="text-xs mt-1">{fetchMessage}</div>
+                <div className="text-xs mt-1">{expirationsMessage}</div>
                 <div className="text-xs mt-2 text-red-700">
-                  Проверь, что: расширение установлено и подключено, вкладка с опционами тикера открыта в TradingView, и попробуй ещё раз.
+                  Проверь, что: расширение установлено и обновлено до 1.6.8+, вкладка опционов нужного тикера открыта в TradingView с фильтром «Next 90 days».
                 </div>
               </div>
             </div>

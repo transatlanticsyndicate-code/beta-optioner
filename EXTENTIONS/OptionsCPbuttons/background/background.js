@@ -72,10 +72,41 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
       return true;
 
+    case 'northExpandAndDump':
+      // Команда от bridge на странице калькулятора: найти TV-таб с опционами,
+      // развернуть указанную экспирацию и дампить полную цепочку.
+      handleNorthExpandAndDump(message, sendResponse);
+      return true;
+
     default:
       return false;
   }
 });
+
+/**
+ * Найти таб TradingView со страницей опционов и попросить content script
+ * развернуть указанную дату экспирации.
+ */
+function handleNorthExpandAndDump(message, sendResponse) {
+  chrome.tabs.query({ url: 'https://*.tradingview.com/options/*' }, (tabs) => {
+    if (!tabs || tabs.length === 0) {
+      sendResponse({ ok: false, reason: 'no-tv-options-tab' });
+      return;
+    }
+    // Берём первый подходящий таб
+    const tab = tabs[0];
+    chrome.tabs.sendMessage(tab.id, {
+      action: 'northExpandAndDump',
+      date: message.date,
+    }, (response) => {
+      if (chrome.runtime.lastError) {
+        sendResponse({ ok: false, reason: chrome.runtime.lastError.message });
+        return;
+      }
+      sendResponse(response || { ok: false, reason: 'no-response-from-tv' });
+    });
+  });
+}
 
 // Keep-alive: предотвращаем засыпание SW
 setInterval(() => {}, 25000);

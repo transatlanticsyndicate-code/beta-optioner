@@ -91,6 +91,10 @@ function injectButtons() {
   if (typeof dumpFullChain === 'function') {
     dumpFullChain();
   }
+  // Список доступных экспираций (по DTE-бейджам) — для дропдауна в поп-апе СЕВЕР
+  if (window.ext2North && typeof window.ext2North.dumpExpirationsList === 'function') {
+    window.ext2North.dumpExpirationsList();
+  }
 }
 
 // Обновить вид кнопки
