@@ -4719,8 +4719,10 @@ function UniversalOptionsCalculator() {
         )}
 
         {/* Поп-ап "Стратегия СЕВЕР" — подбор пары Buy Call + Buy Put.
-            Цепочка опционов и список экспираций запрашиваются у расширения
-            TradingView через refresh_range прямо внутри диалога. */}
+            Список экспираций мгновенно читается из tvc_expirations_list (расширение
+            пишет по DTE-бейджам), полная цепочка опционов — после выбора экспирации
+            (расширение раскрывает группу в TV и дампит в tvc_full_chain). Если
+            таба TV нет — расширение открывает по tradingViewUrl. */}
         <NorthStrategyDialog
           isOpen={northDialogOpen}
           initialStep={northDialogStep}
@@ -4731,6 +4733,8 @@ function UniversalOptionsCalculator() {
           calculatorMode={calculatorMode}
           dividendYield={useDividends ? dividendYield : 0}
           stockClassification={null}
+          ticker={selectedTicker}
+          tradingViewUrl={selectedTicker ? getTradingViewLink(selectedTicker, extensionTicker ? extensionExchange : null) : null}
           initialState={northState}
           onClose={() => setNorthDialogOpen(false)}
           onApply={handleApplyNorthCombination}

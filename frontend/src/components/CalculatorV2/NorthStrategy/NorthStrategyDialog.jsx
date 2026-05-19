@@ -19,7 +19,7 @@ import ParamsForm from './ParamsForm';
 import ResultsView from './ResultsView';
 import { analyzeNorthStrategy, findClosestExpiration } from '../../../utils/northStrategy/analyzer';
 import { DEFAULT_WEIGHTS } from '../../../utils/northStrategy/scoring';
-import { sendNorthExpandExpirationCommand } from '../../../hooks/useExtensionData';
+import { sendNorthExpandExpirationCommand, sendNorthInitCommand } from '../../../hooks/useExtensionData';
 
 // Двухстадийный диалог с TradingView:
 //  - Стадия 1 (открытие): читаем СПИСОК экспираций из localStorage tvc_expirations_list,
@@ -76,6 +76,8 @@ function NorthStrategyDialog({
   calculatorMode,
   dividendYield,
   stockClassification,
+  ticker,
+  tradingViewUrl,
   initialState,
   onClose,
   onApply,
@@ -125,8 +127,12 @@ function NorthStrategyDialog({
     if (tryConsume()) return undefined;
 
     setExpirationsStatus('loading');
-    setExpirationsMessage('Считываем список экспираций из TradingView...');
+    setExpirationsMessage('Открываем TradingView и считываем список экспираций...');
     expirationsStartedAt.current = Date.now();
+
+    // Команда расширению: открыть таб TV (если нет), поставить Next 90 days +
+    // All strikes, обновить список экспираций.
+    sendNorthInitCommand({ ticker, tradingViewUrl });
 
     const interval = setInterval(() => {
       if (tryConsume()) {
@@ -137,7 +143,7 @@ function NorthStrategyDialog({
         clearInterval(interval);
         setExpirationsStatus('error');
         setExpirationsMessage(
-          'Не получили список экспираций. Открой в TradingView страницу опционов нужного тикера (с фильтром «Next 90 days») и убедись, что расширение Options CP Buttons обновлено до версии 1.6.8+.',
+          'Не получили список экспираций от TradingView. Проверь, что расширение Options CP Buttons обновлено до версии 1.6.9+ и не блокируется браузером.',
         );
       }
     }, POLL_INTERVAL_MS);
@@ -153,7 +159,11 @@ function NorthStrategyDialog({
     setAnalyzeMessage('Разворачиваем экспирацию в TradingView и читаем цепочку...');
 
     const targetIso = formParams.expirationDate;
-    sendNorthExpandExpirationCommand(targetIso);
+    sendNorthExpandExpirationCommand({
+      expirationDate: targetIso,
+      ticker,
+      tradingViewUrl,
+    });
 
     const startedAt = Date.now();
     const interval = setInterval(() => {
@@ -213,6 +223,7 @@ function NorthStrategyDialog({
     setExpirationsStatus('loading');
     setExpirationsMessage('Перечитываем список экспираций...');
     expirationsStartedAt.current = Date.now();
+    sendNorthInitCommand({ ticker, tradingViewUrl });
 
     const tryConsume = () => {
       const data = readExpirationsList();

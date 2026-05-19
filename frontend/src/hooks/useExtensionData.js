@@ -568,16 +568,40 @@ export function sendClearSlicesCommand(chartUrl = null) {
 }
 
 /**
+ * Команда расширению — открыть/найти таб TradingView для тикера, выставить
+ * фильтры "Next 90 days" + "All strikes" и записать список экспираций в
+ * tvc_expirations_list. Без раскрытия групп — это быстро и подходит для
+ * первого открытия поп-апа СЕВЕР.
+ */
+export function sendNorthInitCommand({ ticker, tradingViewUrl }) {
+  const command = {
+    type: 'north_init',
+    ticker: ticker || null,
+    tradingViewUrl: tradingViewUrl || null,
+    timestamp: Date.now(),
+    processed: false,
+  };
+  localStorage.setItem(COMMAND_KEY, JSON.stringify(command));
+  return command;
+}
+
+/**
  * Команда расширению — развернуть указанную экспирацию в таблице опционов
  * TradingView и сдампить полную цепочку в localStorage.tvc_full_chain.
- * ЗАЧЕМ: Используется фичей "Стратегия СЕВЕР" в калькуляторе.
+ * Если подходящего таба TV нет — расширение откроет его само по tradingViewUrl,
+ * выставит "Next 90 days" + "All strikes" и потом раскроет нужную группу.
  *
- * @param {string} expirationDate - ISO дата (YYYY-MM-DD)
+ * @param {Object} args
+ * @param {string} args.expirationDate - ISO дата (YYYY-MM-DD)
+ * @param {string} [args.ticker] - короткий тикер для поиска уже открытого таба
+ * @param {string} [args.tradingViewUrl] - URL опционной страницы TV для создания таба
  */
-export function sendNorthExpandExpirationCommand(expirationDate) {
+export function sendNorthExpandExpirationCommand({ expirationDate, ticker, tradingViewUrl }) {
   const command = {
     type: 'north_expand_expiration',
     date: expirationDate,
+    ticker: ticker || null,
+    tradingViewUrl: tradingViewUrl || null,
     timestamp: Date.now(),
     processed: false,
   };

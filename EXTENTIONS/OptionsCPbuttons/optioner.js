@@ -369,11 +369,21 @@ function showConnectionLostNotification() {
         };
       } else if (command.type === 'north_expand_expiration') {
         // Стратегия СЕВЕР: развернуть указанную экспирацию в таблице опционов
-        // TradingView и сдампить полную цепочку. Результат — в chrome.storage →
-        // bridge сам синкает в localStorage tvc_full_chain.
+        // TradingView и сдампить полную цепочку. Если подходящего таба нет —
+        // background сам откроет по tradingViewUrl, выставит фильтры и раскроет.
         action = {
           action: 'northExpandAndDump',
           date: command.date,
+          ticker: command.ticker || null,
+          tradingViewUrl: command.tradingViewUrl || null,
+        };
+      } else if (command.type === 'north_init') {
+        // Стратегия СЕВЕР, инициализация: открыть TV-таб (если нет), поставить
+        // фильтры и обновить список экспираций. Без раскрытия групп.
+        action = {
+          action: 'northInit',
+          ticker: command.ticker || null,
+          tradingViewUrl: command.tradingViewUrl || null,
         };
       } else {
         return;

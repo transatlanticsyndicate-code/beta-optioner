@@ -82,6 +82,21 @@
       return true; // async response
     }
 
+    // Установка фильтров "Next 90 days" + "All strikes" и обновление списка экспираций.
+    // Используется при открытии нового таба TV из калькулятора.
+    if (message.action === 'northEnsureFilters') {
+      try {
+        if (window.ext2North && typeof window.ext2North.handleNorthEnsureFilters === 'function') {
+          window.ext2North.handleNorthEnsureFilters(sendResponse);
+        } else {
+          sendResponse({ ok: false, reason: 'ext2North not loaded' });
+        }
+      } catch (e) {
+        sendResponse({ ok: false, reason: e.message });
+      }
+      return true; // async
+    }
+
     if (message.action === 'refreshPanel') {
       loadPositions().then(() => {
         if (Object.keys(tvc_positions).length > 0) {
