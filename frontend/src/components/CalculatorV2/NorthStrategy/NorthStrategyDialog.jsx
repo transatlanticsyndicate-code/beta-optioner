@@ -58,6 +58,17 @@ const readFullChain = () => {
   }
 };
 
+/** Возвращает распарсенный tvc_full_chain как есть (с пустым options если такое). */
+const readFullChainRaw = () => {
+  try {
+    const raw = localStorage.getItem(FULL_CHAIN_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (e) {
+    return null;
+  }
+};
+
 const chainHasDate = (chain, isoDate) => {
   if (!chain || !Array.isArray(chain.options)) return false;
   for (const opt of chain.options) {
@@ -174,6 +185,25 @@ function NorthStrategyDialog({
 
     const startedAt = Date.now();
     const interval = setInterval(() => {
+      // Распознаём премаркет: свежий дамп пришёл (timestamp > startedAt),
+      // но в нём нет нашей даты — значит TV видела строки, но Bid/Ask у них
+      // нулевые, и парсер их отфильтровал. Ждём ещё 2 секунды на случай
+      // следующего дампа, потом показываем ошибку.
+      const raw = readFullChainRaw();
+      if (raw && raw.timestamp && raw.timestamp > startedAt) {
+        const has = Array.isArray(raw.options) && raw.options.some(o => o && o.date === targetIso);
+        if (!has && Date.now() - raw.timestamp > 2000) {
+          clearInterval(interval);
+          setIsAnalyzing(false);
+          setAnalyzeMessage('');
+          setExpirationsStatus('error');
+          setExpirationsMessage(
+            'TradingView сейчас не показывает котировки Bid/Ask по опционам — скорее всего биржа ещё закрыта (премаркет / выходной). Попробуйте после открытия торгов.',
+          );
+          return;
+        }
+      }
+
       const chain = readFullChain();
       if (chain && chainHasDate(chain, targetIso)) {
         clearInterval(interval);
