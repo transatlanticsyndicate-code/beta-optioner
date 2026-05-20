@@ -83,6 +83,25 @@ function ParamsForm({
     setExpirationDate(best);
   }, [availableExpirations, expirationDate]);
 
+  // Дропдаун показываем сфокусированно: 3 даты до выбранной + сама + 3 после.
+  // Если границ списка не хватает с одной стороны — добираем с другой.
+  const dropdownExpirations = useMemo(() => {
+    const all = Array.isArray(availableExpirations) ? availableExpirations.slice().sort() : [];
+    if (all.length === 0) return [];
+    const NEIGHBORS = 3;
+    const idx = all.indexOf(expirationDate);
+    if (idx === -1) {
+      // Если экспирация ещё не выбрана — отдадим весь список (autoselect его подхватит)
+      return all;
+    }
+    let start = Math.max(0, idx - NEIGHBORS);
+    let end = Math.min(all.length, idx + NEIGHBORS + 1);
+    // Добираем с противоположной стороны, если упёрлись в границу
+    if (idx - start < NEIGHBORS) end = Math.min(all.length, end + (NEIGHBORS - (idx - start)));
+    if (end - 1 - idx < NEIGHBORS) start = Math.max(0, start - (NEIGHBORS - (end - 1 - idx)));
+    return all.slice(start, end);
+  }, [availableExpirations, expirationDate]);
+
   // Авто-обновление промежуточных уровней при изменении верха/низа, если их не правил вручную
   useEffect(() => {
     if (!midAManual) {
@@ -176,7 +195,7 @@ function ParamsForm({
             onChange={(e) => setExpirationDate(e.target.value)}
           >
             <option value="">— выбрать —</option>
-            {(availableExpirations || []).map((d) => (
+            {dropdownExpirations.map((d) => (
               <option key={d} value={d}>{d}</option>
             ))}
           </select>
