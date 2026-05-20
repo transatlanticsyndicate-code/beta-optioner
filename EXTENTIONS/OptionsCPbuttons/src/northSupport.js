@@ -273,13 +273,59 @@
   }
 
   /**
-   * Развернуть группу указанной экспирации (если свёрнута).
-   * Если её нет в DOM, перед попыткой выставит фильтры и пересканирует.
-   * Если всё равно нет — возвращает ошибку с списком известных дат, чтобы
-   * вызывающий код мог выбрать ближайшую.
+   * Собрать кандидаты для клика в заголовке группы:
+   *  - сам бейдж DTE,
+   *  - его родители вверх по DOM (до 8 уровней),
+   *  - стрелки/иконки внутри заголовка,
+   *  - элементы с cursor:pointer.
+   * Выкидываем дубликаты и контейнеры размером во весь экран.
    */
-  function expandExpirationByDate(targetIso, timeoutMs = 9000) {
-    return new Promise((resolve) => {
+  function collectClickCandidates(badge) {
+    const candidates = [];
+    const seen = new Set();
+    const push = (el, why) => {
+      if (!el || seen.has(el)) return;
+      try {
+        const r = el.getBoundingClientRect();
+        if (r.width < 6 || r.height < 6) return;
+        if (r.width > window.innerWidth * 0.95 && r.height > 200) return; // целые блоки страницы пропускаем
+      } catch (e) {}
+      seen.add(el);
+      candidates.push({ el, why });
+    };
+
+    push(badge, 'badge');
+    // Родители вверх по DOM
+    let cur = badge;
+    for (let i = 0; i < 8; i++) {
+      if (!cur.parentElement) break;
+      cur = cur.parentElement;
+      push(cur, `parent-${i + 1}`);
+      // На каждом уровне — дети с cursor:pointer и икон-подобные ноды
+      try {
+        const kids = cur.children;
+        for (const kid of kids) {
+          try {
+            const cs = window.getComputedStyle(kid);
+            if (cs && cs.cursor === 'pointer') push(kid, `pointer-sibling`);
+          } catch (e) {}
+          // SVG-стрелки и иконки внутри строки заголовка
+          if (kid.tagName === 'SVG' || kid.tagName === 'svg' || /icon|chevron|arrow|toggle/i.test(kid.className || '')) {
+            push(kid, 'icon');
+          }
+        }
+      } catch (e) {}
+    }
+    return candidates;
+  }
+
+  /**
+   * Развернуть группу указанной экспирации (если свёрнута). Перебираем
+   * кандидаты для клика и после каждого ждём появления строк — кто первым
+   * сработал, того и оставили.
+   */
+  function expandExpirationByDate(targetIso, timeoutMs = 12000) {
+    return new Promise(async (resolve) => {
       const ymd = targetIso.replace(/-/g, '').slice(2);
       const rowsSelector = `td[data-cell-id*="${ymd}C"], td[data-cell-id*="${ymd}P"]`;
 
@@ -288,48 +334,61 @@
         return;
       }
 
-      ensureFilters().then(() => {
-        // Даём TV дорисовать после фильтров
-        setTimeout(() => {
-          const headers = findExpirationHeaders();
-          LOG('Найдено заголовков экспираций:', headers.length, headers.map(h => h.date));
-          const target = headers.find(h => h.date === targetIso);
+      await ensureFilters();
+      await sleep(400);
 
-          if (!target) {
-            resolve({
-              ok: false,
-              reason: 'header-not-found',
-              date: targetIso,
-              knownDates: headers.map(h => h.date),
-            });
-            return;
-          }
+      const headers = findExpirationHeaders();
+      LOG('Найдено заголовков:', headers.length, headers.map(h => `${h.date}(${h.isExpanded === true ? '▼' : h.isExpanded === false ? '▶' : '?'})`));
+      const target = headers.find(h => h.date === targetIso);
 
-          if (target.isExpanded !== true) {
-            LOG('Раскрываю группу:', targetIso);
-            reactClick(target.header);
-            if (target.badge && target.badge !== target.header) {
-              setTimeout(() => reactClick(target.badge), 200);
-            }
-          } else {
-            LOG('Группа уже развёрнута:', targetIso);
-          }
+      if (!target) {
+        resolve({
+          ok: false,
+          reason: 'header-not-found',
+          date: targetIso,
+          knownDates: headers.map(h => h.date),
+        });
+        return;
+      }
 
-          const start = Date.now();
-          const check = () => {
-            if (document.querySelector(rowsSelector)) {
-              resolve({ ok: true, expanded: true, date: targetIso });
-              return;
-            }
-            if (Date.now() - start > timeoutMs) {
-              resolve({ ok: false, reason: 'timeout-waiting-rows', date: targetIso });
-              return;
-            }
-            setTimeout(check, 200);
-          };
-          check();
-        }, 400);
-      });
+      if (target.isExpanded === true && document.querySelector(rowsSelector)) {
+        LOG('Группа уже развёрнута:', targetIso);
+        resolve({ ok: true, expanded: false, date: targetIso });
+        return;
+      }
+
+      // Собираем кандидаты и кликаем по очереди, проверяя появление строк
+      const candidates = collectClickCandidates(target.badge);
+      LOG(`Кандидаты для клика по ${targetIso}:`, candidates.length, candidates.map(c => `${c.why}<${c.el.tagName}>`).join(', '));
+
+      const waitForRows = async (ms) => {
+        const start = Date.now();
+        while (Date.now() - start < ms) {
+          if (document.querySelector(rowsSelector)) return true;
+          await sleep(150);
+        }
+        return false;
+      };
+
+      // Первая попытка: badge → каждый parent → иконки. До 4 кандидатов.
+      for (let i = 0; i < Math.min(candidates.length, 6); i++) {
+        const { el, why } = candidates[i];
+        LOG(`Кликаю кандидат [${why}] для ${targetIso}`);
+        reactClick(el);
+        if (await waitForRows(1500)) {
+          LOG(`✓ Раскрылось после клика [${why}]`);
+          resolve({ ok: true, expanded: true, date: targetIso, via: why });
+          return;
+        }
+      }
+
+      // Финальное ожидание — на случай если последний клик сработал асинхронно
+      if (await waitForRows(timeoutMs - 6 * 1500)) {
+        resolve({ ok: true, expanded: true, date: targetIso, via: 'late' });
+        return;
+      }
+
+      resolve({ ok: false, reason: 'timeout-waiting-rows', date: targetIso });
     });
   }
 
