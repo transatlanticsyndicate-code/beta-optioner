@@ -148,18 +148,25 @@ function handleNorthExpandAndDump(message, sendResponse) {
  * Проверяет, есть ли в URL правильные фильтры (series_period=next-90-days +
  * strikes_filter_condition=all).
  */
-// Допустимые series_period — фильтры, которые TV использует для широкого
-// набора дат. Мы предпочитаем next-6-months (даёт больше серий вокруг +60 дней),
-// но next-90-days тоже принимаем как валидный, чтобы не перетягивать таб лишний раз.
+/**
+ * Проверяет, что у таба URL содержит нужные параметры для СЕВЕР:
+ * либо series_period (в список допустимых), либо явное окно
+ * series_date_from + series_date_to (что мы и пишем по умолчанию),
+ * плюс strikes_filter_condition=all.
+ */
 const ACCEPTABLE_SERIES_PERIODS = new Set(['next-6-months', 'next-90-days', 'next-1-year']);
 
 function urlHasNorthFilters(url) {
   if (!url) return false;
   try {
     const u = new URL(url);
-    const period = u.searchParams.get('series_period');
     const strikes = u.searchParams.get('strikes_filter_condition');
-    return ACCEPTABLE_SERIES_PERIODS.has(period) && strikes === 'all';
+    if (strikes !== 'all') return false;
+    const period = u.searchParams.get('series_period');
+    if (period && ACCEPTABLE_SERIES_PERIODS.has(period)) return true;
+    const from = u.searchParams.get('series_date_from');
+    const to = u.searchParams.get('series_date_to');
+    return !!(from && to);
   } catch (e) {
     return false;
   }
@@ -269,7 +276,16 @@ function buildUrlWithSeries(currentUrl, targetIso) {
     if (!list.includes(ymd)) list.push(ymd);
     u.searchParams.set('series', list.join(','));
     // Гарантируем, что фильтры остаются на месте
-    if (!u.searchParams.get('series_period')) u.searchParams.set('series_period', 'next-6-months');
+    // Если у URL не задано ни series_period, ни series_date_from/to —
+    // ставим окно сегодня→+150 дней. Это страховка: основной URL уже идёт
+    // из калькулятора с правильными датами.
+    if (!u.searchParams.get('series_period') && !u.searchParams.get('series_date_from')) {
+      const fmt = (d) => `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}${String(d.getUTCDate()).padStart(2, '0')}`;
+      const today = new Date();
+      const to = new Date(today.getTime() + 150 * 24 * 60 * 60 * 1000);
+      u.searchParams.set('series_date_from', fmt(today));
+      u.searchParams.set('series_date_to', fmt(to));
+    }
     if (!u.searchParams.get('strikes_filter_condition')) u.searchParams.set('strikes_filter_condition', 'all');
     return u.toString();
   } catch (e) {
