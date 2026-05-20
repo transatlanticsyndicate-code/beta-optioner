@@ -219,9 +219,21 @@ function NorthStrategyDialog({
         setIsAnalyzing(false);
         setAnalyzeMessage('');
         setExpirationsStatus('error');
-        setExpirationsMessage(
-          `Не удалось получить опционы для экспирации ${targetIso}. Проверь, что в TradingView открыта таблица опционов нужного тикера, расширение Options CP Buttons обновлено до 1.6.8+, и попробуй ещё раз.`,
-        );
+        // Распознаём премаркет: список экспираций есть, но в цепочке ни одного
+        // опциона с валидным ASK — биржа просто не показывает котировки.
+        const list = readExpirationsList();
+        const chainData = readFullChain();
+        const hasExpList = !!list && Array.isArray(list.expirations) && list.expirations.length > 0;
+        const hasChain = !!chainData && Array.isArray(chainData.options) && chainData.options.length > 0;
+        if (hasExpList && !hasChain) {
+          setExpirationsMessage(
+            'TradingView сейчас не показывает котировки Bid/Ask по опционам — скорее всего биржа ещё закрыта (премаркет / выходной). Попробуйте после открытия торгов.',
+          );
+        } else {
+          setExpirationsMessage(
+            `Не удалось получить опционы для экспирации ${targetIso}.`,
+          );
+        }
       }
     }, POLL_INTERVAL_MS);
   };
@@ -307,7 +319,10 @@ function NorthStrategyDialog({
               <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
               <div>
                 <div className="font-medium">Не удалось получить данные из TradingView</div>
-                <div className="text-xs mt-1">
+                {expirationsMessage && (
+                  <div className="text-xs mt-1">{expirationsMessage}</div>
+                )}
+                <div className="text-xs mt-2 text-red-700">
                   Проверьте, что расширение установлено, включено и обновлено до последней версии в <code className="text-[11px] bg-red-100 px-1 rounded">chrome://extensions</code>. Если рядом стоят блокировщики рекламы (uBlock, AdGuard) или используется режим инкогнито — временно отключите их и попробуйте снова.
                 </div>
               </div>
