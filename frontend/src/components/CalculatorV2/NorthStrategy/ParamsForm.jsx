@@ -85,14 +85,23 @@ function ParamsForm({
 
   // Дропдаун показываем сфокусированно: 3 даты до выбранной + сама + 3 после.
   // Если границ списка не хватает с одной стороны — добираем с другой.
+  // v2 — добавлен fallback на ближайшую дату, если сохранённая не в списке.
   const dropdownExpirations = useMemo(() => {
     const all = Array.isArray(availableExpirations) ? availableExpirations.slice().sort() : [];
     if (all.length === 0) return [];
     const NEIGHBORS = 3;
-    const idx = all.indexOf(expirationDate);
+    let idx = all.indexOf(expirationDate);
     if (idx === -1) {
-      // Если экспирация ещё не выбрана — отдадим весь список (autoselect его подхватит)
-      return all;
+      // Экспирация ещё не выбрана или сохранённая отсутствует в новом списке —
+      // центрируемся на ближайшей к +60 дней (autoselect её и подхватит).
+      const target = new Date(isoFromOffsetDays(60)).getTime();
+      let bestIdx = 0;
+      let bestDiff = Math.abs(new Date(`${all[0]}T00:00:00Z`).getTime() - target);
+      for (let i = 1; i < all.length; i++) {
+        const diff = Math.abs(new Date(`${all[i]}T00:00:00Z`).getTime() - target);
+        if (diff < bestDiff) { bestIdx = i; bestDiff = diff; }
+      }
+      idx = bestIdx;
     }
     let start = Math.max(0, idx - NEIGHBORS);
     let end = Math.min(all.length, idx + NEIGHBORS + 1);
