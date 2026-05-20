@@ -91,16 +91,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 /**
  * Найти таб TradingView со страницей опционов и попросить content script
- * развернуть указанную дату экспирации. Если подходящего таба нет — открыть
- * его по URL, переданному калькулятором, дождаться загрузки контент-скрипта,
- * выставить фильтры и только потом раскрыть группу.
+ * развернуть указанную дату экспирации. Если у таба URL без правильных
+ * фильтров — навигируем его на URL с series_period=next-90-days +
+ * strikes_filter_condition=all. Если таба нет — создаём.
  */
 function handleNorthExpandAndDump(message, sendResponse) {
   const desiredTicker = (message.ticker || '').toUpperCase();
+  const targetUrl = message.tradingViewUrl;
 
-  // Шаг 1: ищем подходящий таб
   chrome.tabs.query({ url: 'https://*.tradingview.com/options/*' }, (tabs) => {
-    // Берём таб с подходящим тикером, если есть. Иначе любой первый, иначе создаём.
     let tab = null;
     if (tabs && tabs.length > 0) {
       if (desiredTicker) {
@@ -111,52 +110,86 @@ function handleNorthExpandAndDump(message, sendResponse) {
     }
 
     if (tab) {
+      const needNav = !urlHasNorthFilters(tab.url) && !!targetUrl;
+      if (needNav) {
+        chrome.tabs.update(tab.id, { url: targetUrl, active: true }, () => {
+          waitForTabReady(
+            tab.id,
+            () => runNorthOnTab(tab.id, message, sendResponse, /*needsFilters=*/false),
+            () => sendResponse({ ok: false, reason: 'tv-tab-reload-timeout' }),
+          );
+        });
+        return;
+      }
       try { chrome.tabs.update(tab.id, { active: true }); } catch (e) {}
-      // Всегда пробуем выставить фильтры перед раскрытием — на случай, если
-      // ранее они не успели/не сработали.
-      runNorthOnTab(tab.id, message, sendResponse, /*needsFilters=*/true);
+      runNorthOnTab(tab.id, message, sendResponse, /*needsFilters=*/false);
       return;
     }
 
-    // Шаг 2: подходящего таба нет — создаём, ждём загрузки, ставим фильтры, потом раскрываем
-    const url = message.tradingViewUrl;
-    if (!url) {
+    if (!targetUrl) {
       sendResponse({ ok: false, reason: 'no-tv-tab-and-no-url' });
       return;
     }
-    chrome.tabs.create({ url, active: false }, (newTab) => {
+    chrome.tabs.create({ url: targetUrl, active: false }, (newTab) => {
       if (!newTab || !newTab.id) {
         sendResponse({ ok: false, reason: 'tab-create-failed' });
         return;
       }
-      // Ждём пока контент-скрипт загрузится: пингуем 'getUnderlyingPrice' (там
-      // уже есть синхронный sendResponse). Лимит — 20 секунд.
-      const deadline = Date.now() + 20_000;
-      const ping = () => {
-        chrome.tabs.sendMessage(newTab.id, { action: 'getUnderlyingPrice' }, (resp) => {
-          if (chrome.runtime.lastError || !resp) {
-            if (Date.now() > deadline) {
-              sendResponse({ ok: false, reason: 'tv-tab-load-timeout' });
-              return;
-            }
-            setTimeout(ping, 600);
-            return;
-          }
-          // Контент-скрипт жив — теперь фильтры и раскрытие
-          runNorthOnTab(newTab.id, message, sendResponse, /*needsFilters=*/true);
-        });
-      };
-      // Даём странице секунду на начальную отрисовку перед первым пингом
-      setTimeout(ping, 1500);
+      waitForTabReady(
+        newTab.id,
+        () => runNorthOnTab(newTab.id, message, sendResponse, /*needsFilters=*/false),
+        () => sendResponse({ ok: false, reason: 'tv-tab-load-timeout' }),
+      );
     });
   });
 }
 
 /**
- * Открыть/найти TV-таб и выставить фильтры + обновить список экспираций.
+ * Проверяет, есть ли в URL правильные фильтры (series_period=next-90-days +
+ * strikes_filter_condition=all).
+ */
+function urlHasNorthFilters(url) {
+  if (!url) return false;
+  try {
+    const u = new URL(url);
+    const period = u.searchParams.get('series_period');
+    const strikes = u.searchParams.get('strikes_filter_condition');
+    return period === 'next-90-days' && strikes === 'all';
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * Подождать загрузки страницы в табе (status=complete) + 1500мс на финальную
+ * отрисовку TV. Затем дёрнуть getUnderlyingPrice как пинг — это гарантирует,
+ * что контент-скрипт ожил.
+ */
+function waitForTabReady(tabId, onReady, onTimeout) {
+  const deadline = Date.now() + 25_000;
+  const tryPing = () => {
+    chrome.tabs.sendMessage(tabId, { action: 'getUnderlyingPrice' }, (resp) => {
+      if (chrome.runtime.lastError || !resp) {
+        if (Date.now() > deadline) { onTimeout(); return; }
+        setTimeout(tryPing, 600);
+        return;
+      }
+      // Контент-скрипт жив. Дополнительная пауза на отрисовку.
+      setTimeout(onReady, 1500);
+    });
+  };
+  setTimeout(tryPing, 1500);
+}
+
+/**
+ * Открыть/найти TV-таб и выставить фильтры через URL-параметры
+ * (series_period=next-90-days + strikes_filter_condition=all). Если у уже
+ * открытого таба этих параметров нет — навигируем его на правильный URL.
  */
 function handleNorthInit(message, sendResponse) {
   const desiredTicker = (message.ticker || '').toUpperCase();
+  const targetUrl = message.tradingViewUrl;
+
   chrome.tabs.query({ url: 'https://*.tradingview.com/options/*' }, (tabs) => {
     let tab = null;
     if (tabs && tabs.length > 0) {
@@ -166,45 +199,53 @@ function handleNorthInit(message, sendResponse) {
         tab = tabs[0];
       }
     }
+
+    // Случай 1: подходящий таб уже есть
     if (tab) {
-      // Активируем таб чтобы TV точно рендерил всё (иногда фоновые табы тормозят рендер)
+      const needNav = !urlHasNorthFilters(tab.url) && !!targetUrl;
+      if (needNav) {
+        // URL без фильтров — навигируем таб на URL с правильными параметрами.
+        // После навигации TV сам применит фильтры — никаких DOM-кликов не нужно.
+        chrome.tabs.update(tab.id, { url: targetUrl, active: true }, () => {
+          waitForTabReady(
+            tab.id,
+            () => {
+              chrome.tabs.sendMessage(tab.id, { action: 'northEnsureFilters' }, (response) => {
+                sendResponse(response || { ok: true });
+              });
+            },
+            () => sendResponse({ ok: false, reason: 'tv-tab-reload-timeout' }),
+          );
+        });
+        return;
+      }
+      // URL уже правильный — просто активируем и просим content script дампить
       try { chrome.tabs.update(tab.id, { active: true }); } catch (e) {}
       chrome.tabs.sendMessage(tab.id, { action: 'northEnsureFilters' }, (response) => {
         sendResponse(response || { ok: true });
       });
       return;
     }
-    const url = message.tradingViewUrl;
-    if (!url) {
+
+    // Случай 2: таба нет — создаём по URL с фильтрами
+    if (!targetUrl) {
       sendResponse({ ok: false, reason: 'no-tv-tab-and-no-url' });
       return;
     }
-    chrome.tabs.create({ url, active: false }, (newTab) => {
+    chrome.tabs.create({ url: targetUrl, active: false }, (newTab) => {
       if (!newTab || !newTab.id) {
         sendResponse({ ok: false, reason: 'tab-create-failed' });
         return;
       }
-      const deadline = Date.now() + 25_000;
-      const ping = () => {
-        chrome.tabs.sendMessage(newTab.id, { action: 'getUnderlyingPrice' }, (resp) => {
-          if (chrome.runtime.lastError || !resp) {
-            if (Date.now() > deadline) {
-              sendResponse({ ok: false, reason: 'tv-tab-load-timeout' });
-              return;
-            }
-            setTimeout(ping, 600);
-            return;
-          }
-          // Контент-скрипт жив, но TV сама ещё может довёрсывать чипы.
-          // Даём 2.5 секунды на стабилизацию, потом запускаем фильтры.
-          setTimeout(() => {
-            chrome.tabs.sendMessage(newTab.id, { action: 'northEnsureFilters' }, (response) => {
-              sendResponse(response || { ok: true });
-            });
-          }, 2500);
-        });
-      };
-      setTimeout(ping, 1500);
+      waitForTabReady(
+        newTab.id,
+        () => {
+          chrome.tabs.sendMessage(newTab.id, { action: 'northEnsureFilters' }, (response) => {
+            sendResponse(response || { ok: true });
+          });
+        },
+        () => sendResponse({ ok: false, reason: 'tv-tab-load-timeout' }),
+      );
     });
   });
 }
