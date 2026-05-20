@@ -111,7 +111,10 @@ function handleNorthExpandAndDump(message, sendResponse) {
     }
 
     if (tab) {
-      runNorthOnTab(tab.id, message, sendResponse, /*needsFilters=*/false);
+      try { chrome.tabs.update(tab.id, { active: true }); } catch (e) {}
+      // Всегда пробуем выставить фильтры перед раскрытием — на случай, если
+      // ранее они не успели/не сработали.
+      runNorthOnTab(tab.id, message, sendResponse, /*needsFilters=*/true);
       return;
     }
 
@@ -164,6 +167,8 @@ function handleNorthInit(message, sendResponse) {
       }
     }
     if (tab) {
+      // Активируем таб чтобы TV точно рендерил всё (иногда фоновые табы тормозят рендер)
+      try { chrome.tabs.update(tab.id, { active: true }); } catch (e) {}
       chrome.tabs.sendMessage(tab.id, { action: 'northEnsureFilters' }, (response) => {
         sendResponse(response || { ok: true });
       });
@@ -179,7 +184,7 @@ function handleNorthInit(message, sendResponse) {
         sendResponse({ ok: false, reason: 'tab-create-failed' });
         return;
       }
-      const deadline = Date.now() + 20_000;
+      const deadline = Date.now() + 25_000;
       const ping = () => {
         chrome.tabs.sendMessage(newTab.id, { action: 'getUnderlyingPrice' }, (resp) => {
           if (chrome.runtime.lastError || !resp) {
@@ -190,9 +195,13 @@ function handleNorthInit(message, sendResponse) {
             setTimeout(ping, 600);
             return;
           }
-          chrome.tabs.sendMessage(newTab.id, { action: 'northEnsureFilters' }, (response) => {
-            sendResponse(response || { ok: true });
-          });
+          // Контент-скрипт жив, но TV сама ещё может довёрсывать чипы.
+          // Даём 2.5 секунды на стабилизацию, потом запускаем фильтры.
+          setTimeout(() => {
+            chrome.tabs.sendMessage(newTab.id, { action: 'northEnsureFilters' }, (response) => {
+              sendResponse(response || { ok: true });
+            });
+          }, 2500);
         });
       };
       setTimeout(ping, 1500);

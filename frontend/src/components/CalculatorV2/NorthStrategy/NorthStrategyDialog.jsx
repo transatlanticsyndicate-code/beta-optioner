@@ -31,8 +31,8 @@ const EXPIRATIONS_KEY = 'tvc_expirations_list';
 const FULL_CHAIN_KEY = 'tvc_full_chain';
 const EXPIRATIONS_MAX_AGE_MS = 10 * 60 * 1000;
 const POLL_INTERVAL_MS = 600;
-const EXPIRATIONS_TIMEOUT_MS = 10_000;
-const CHAIN_TIMEOUT_MS = 15_000;
+const EXPIRATIONS_TIMEOUT_MS = 35_000; // открытие таба + ensureFilters + дамп
+const CHAIN_TIMEOUT_MS = 25_000;       // ensureFilters + expand + дамп
 
 const readExpirationsList = () => {
   try {
@@ -113,25 +113,32 @@ function NorthStrategyDialog({
       return undefined;
     }
 
+    // ВАЖНО: даже если в localStorage уже лежит tvc_expirations_list — он мог
+    // быть от ДРУГОГО тикера или с другими фильтрами. Считаем валидным только
+    // если: (а) ticker совпадает с нашим, (б) timestamp свежее момента открытия
+    // диалога (то есть пришёл по нашему свежему north_init).
+    const openedAt = Date.now();
+    expirationsStartedAt.current = openedAt;
+    setAvailableExpirations([]);
+    setExpirationsStatus('loading');
+    setExpirationsMessage('Открываем TradingView и считываем список экспираций...');
+
+    const normalizedTicker = (ticker || '').toUpperCase();
     const tryConsume = () => {
       const data = readExpirationsList();
       if (!data) return false;
-      const age = Date.now() - (data.timestamp || 0);
-      if (age > EXPIRATIONS_MAX_AGE_MS) return false;
+      if (!data.timestamp || data.timestamp < openedAt) return false;
+      if (normalizedTicker && (data.ticker || '').toUpperCase() && (data.ticker || '').toUpperCase() !== normalizedTicker) {
+        return false;
+      }
       setAvailableExpirations((data.expirations || []).map(e => e.date));
       setExpirationsStatus('done');
       setExpirationsMessage('');
       return true;
     };
 
-    if (tryConsume()) return undefined;
-
-    setExpirationsStatus('loading');
-    setExpirationsMessage('Открываем TradingView и считываем список экспираций...');
-    expirationsStartedAt.current = Date.now();
-
-    // Команда расширению: открыть таб TV (если нет), поставить Next 90 days +
-    // All strikes, обновить список экспираций.
+    // Шлём команду расширению: открыть таб TV (если нет), поставить Next 90 days
+    // + All strikes, обновить список экспираций.
     sendNorthInitCommand({ ticker, tradingViewUrl });
 
     const interval = setInterval(() => {
@@ -143,7 +150,7 @@ function NorthStrategyDialog({
         clearInterval(interval);
         setExpirationsStatus('error');
         setExpirationsMessage(
-          'Не получили список экспираций от TradingView. Проверь, что расширение Options CP Buttons обновлено до версии 1.6.9+ и не блокируется браузером.',
+          'Не получили список экспираций от TradingView. Проверь, что расширение Options CP Buttons обновлено до версии 1.6.10+ и не блокируется браузером.',
         );
       }
     }, POLL_INTERVAL_MS);
@@ -220,23 +227,26 @@ function NorthStrategyDialog({
   };
 
   const handleRetryFetch = () => {
+    const openedAt = Date.now();
+    expirationsStartedAt.current = openedAt;
+    setAvailableExpirations([]);
     setExpirationsStatus('loading');
     setExpirationsMessage('Перечитываем список экспираций...');
-    expirationsStartedAt.current = Date.now();
     sendNorthInitCommand({ ticker, tradingViewUrl });
 
+    const normalizedTicker = (ticker || '').toUpperCase();
     const tryConsume = () => {
       const data = readExpirationsList();
       if (!data) return false;
-      const age = Date.now() - (data.timestamp || 0);
-      if (age > EXPIRATIONS_MAX_AGE_MS) return false;
+      if (!data.timestamp || data.timestamp < openedAt) return false;
+      if (normalizedTicker && (data.ticker || '').toUpperCase() && (data.ticker || '').toUpperCase() !== normalizedTicker) {
+        return false;
+      }
       setAvailableExpirations((data.expirations || []).map(e => e.date));
       setExpirationsStatus('done');
       setExpirationsMessage('');
       return true;
     };
-
-    if (tryConsume()) return;
 
     const interval = setInterval(() => {
       if (tryConsume()) {
@@ -247,7 +257,7 @@ function NorthStrategyDialog({
         clearInterval(interval);
         setExpirationsStatus('error');
         setExpirationsMessage(
-          'Список экспираций так и не пришёл. Открой в TradingView таблицу опционов нужного тикера (фильтр Next 90 days) и обнови расширение до 1.6.8+.',
+          'Список экспираций так и не пришёл. Открой в TradingView таблицу опционов нужного тикера и обнови расширение до 1.6.10+.',
         );
       }
     }, POLL_INTERVAL_MS);
