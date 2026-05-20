@@ -122,18 +122,72 @@
     return candidates[0].el;
   }
 
-  /** Поиск пункта меню по точному (или почти точному) тексту */
+  /**
+   * Поиск пункта меню по тексту. Сначала пробуем "семантические" роли
+   * (option/menuitem/li/button), потом — ЛЮБЫЕ элементы с подходящим
+   * текстом и кликабельным предком. TV рендерит выпадающее меню в портале
+   * под document.body, обычно поверх всего и без role.
+   */
   function findMenuItem(textPattern) {
     const regex = textPattern instanceof RegExp ? textPattern : new RegExp(`^${textPattern}\\s*$`, 'i');
-    const all = document.querySelectorAll('[role="option"], [role="menuitem"], li, button, [tabindex]');
-    for (const el of all) {
+
+    // 1. Семантические роли
+    const semantic = document.querySelectorAll('[role="option"], [role="menuitem"], [role="menuitemradio"], li, button');
+    for (const el of semantic) {
       const text = (el.textContent || '').trim();
       if (!text || text.length > 60) continue;
       if (regex.test(text)) {
-        LOG('findMenuItem:', textPattern, '→', text);
+        LOG('findMenuItem(semantic):', textPattern, '→', text);
         return el;
       }
     }
+
+    // 2. Любые видимые элементы с подходящим текстом — выбираем самый "нижний"
+    //    (с наименьшим количеством детей), чтобы попасть в конкретный пункт меню.
+    const all = document.querySelectorAll('div, span, a');
+    const matches = [];
+    for (const el of all) {
+      // Только листовые/почти-листовые ноды
+      if (el.children.length > 3) continue;
+      const text = (el.textContent || '').trim();
+      if (!text || text.length > 60) continue;
+      if (!regex.test(text)) continue;
+      // Проверим, что элемент видим
+      try {
+        const r = el.getBoundingClientRect();
+        if (r.width < 4 || r.height < 4) continue;
+        if (r.top < 0 && r.bottom < 0) continue;
+        if (r.left < 0 && r.right < 0) continue;
+      } catch (e) {}
+      matches.push({ el, depth: 0 });
+    }
+    if (matches.length > 0) {
+      // Сначала — листовые элементы
+      matches.sort((a, b) => a.el.children.length - b.el.children.length);
+      const winner = matches[0].el;
+      // Если winner — это текст внутри обёртки, поднимаемся до ближайшего
+      // кликабельного предка (cursor:pointer / role / button)
+      let clickable = winner;
+      for (let i = 0; i < 6; i++) {
+        const role = clickable.getAttribute && clickable.getAttribute('role');
+        if (role === 'option' || role === 'menuitem' || role === 'menuitemradio' || clickable.tagName === 'BUTTON') break;
+        try {
+          const cs = window.getComputedStyle(clickable);
+          if (cs && cs.cursor === 'pointer') break;
+        } catch (e) {}
+        if (!clickable.parentElement) break;
+        clickable = clickable.parentElement;
+      }
+      LOG('findMenuItem(fallback):', textPattern, '→', winner.textContent.trim(), '(click через', clickable.tagName, ')');
+      return clickable;
+    }
+
+    // 3. Если ничего не нашли — логируем все короткие тексты с ключевыми словами для диагностики
+    const debugAll = Array.from(document.querySelectorAll('*'))
+      .map(el => (el.textContent || '').trim())
+      .filter(t => t && t.length < 40 && (/\bdays\b/i.test(t) || /\bstrikes?\b/i.test(t) || /^all\b/i.test(t)))
+      .slice(0, 20);
+    LOG('findMenuItem: ничего не нашёл. Видимые тексты с keywords:', debugAll);
     return null;
   }
 
@@ -157,10 +211,15 @@
       }
       LOG(`setOneFilter[${chipKeywords.join('/')}] открываю меню, текущий чип: "${chipText}"`);
       reactClick(chip);
-      await sleep(600);
+      // Ждём появления меню. TV рендерит выпадашку асинхронно (портал, анимация).
+      // Несколько раундов поиска с возрастающим ожиданием.
       let opt = null;
-      for (const matcher of menuMatchers) {
-        opt = findMenuItem(matcher);
+      for (const delay of [400, 600, 800, 1000]) {
+        await sleep(delay);
+        for (const matcher of menuMatchers) {
+          opt = findMenuItem(matcher);
+          if (opt) break;
+        }
         if (opt) break;
       }
       if (opt) {
