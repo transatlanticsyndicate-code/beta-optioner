@@ -8,15 +8,17 @@ import { Button } from '../../ui/button';
 import { formatCurrency, getPLColor } from '../ExitCalculator/utils/formatters';
 
 function CriterionRow({ label, hint, value, idealZero }) {
-  // Для критериев-нулей подсвечиваем близость к 0
-  const isGood = idealZero ? Math.abs(value) < 100 : value > 0;
+  // Для критериев "идеал ≈ 0" сам знак значения не несёт смысла — что +295,
+  // что −295 одинаково плохие. Поэтому показываем нейтральным цветом.
+  // Для бонусных критериев A/B знак важен: плюс — зелёным, минус — красным.
+  const colorClass = idealZero ? 'text-gray-700 dark:text-gray-300' : getPLColor(value);
   return (
     <div className="flex justify-between items-baseline text-xs py-1">
       <div className="flex-1 pr-2">
         <div className="font-medium text-gray-700 dark:text-gray-300">{label}</div>
         {hint && <div className="text-muted-foreground text-[10px]">{hint}</div>}
       </div>
-      <span className={`font-semibold whitespace-nowrap ${idealZero ? (isGood ? 'text-emerald-600' : 'text-gray-700 dark:text-gray-300') : getPLColor(value)}`}>
+      <span className={`font-semibold whitespace-nowrap ${colorClass}`}>
         {formatCurrency(value)}
       </span>
     </div>
