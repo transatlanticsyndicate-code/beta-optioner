@@ -148,13 +148,18 @@ function handleNorthExpandAndDump(message, sendResponse) {
  * Проверяет, есть ли в URL правильные фильтры (series_period=next-90-days +
  * strikes_filter_condition=all).
  */
+// Допустимые series_period — фильтры, которые TV использует для широкого
+// набора дат. Мы предпочитаем next-6-months (даёт больше серий вокруг +60 дней),
+// но next-90-days тоже принимаем как валидный, чтобы не перетягивать таб лишний раз.
+const ACCEPTABLE_SERIES_PERIODS = new Set(['next-6-months', 'next-90-days', 'next-1-year']);
+
 function urlHasNorthFilters(url) {
   if (!url) return false;
   try {
     const u = new URL(url);
     const period = u.searchParams.get('series_period');
     const strikes = u.searchParams.get('strikes_filter_condition');
-    return period === 'next-90-days' && strikes === 'all';
+    return ACCEPTABLE_SERIES_PERIODS.has(period) && strikes === 'all';
   } catch (e) {
     return false;
   }
@@ -264,7 +269,7 @@ function buildUrlWithSeries(currentUrl, targetIso) {
     if (!list.includes(ymd)) list.push(ymd);
     u.searchParams.set('series', list.join(','));
     // Гарантируем, что фильтры остаются на месте
-    if (!u.searchParams.get('series_period')) u.searchParams.set('series_period', 'next-90-days');
+    if (!u.searchParams.get('series_period')) u.searchParams.set('series_period', 'next-6-months');
     if (!u.searchParams.get('strikes_filter_condition')) u.searchParams.set('strikes_filter_condition', 'all');
     return u.toString();
   } catch (e) {

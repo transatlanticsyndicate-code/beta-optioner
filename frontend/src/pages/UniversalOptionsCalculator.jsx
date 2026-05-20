@@ -4734,7 +4734,7 @@ function UniversalOptionsCalculator() {
           dividendYield={useDividends ? dividendYield : 0}
           stockClassification={null}
           ticker={selectedTicker}
-          tradingViewUrl={selectedTicker ? `${getTradingViewLink(selectedTicker, extensionTicker ? extensionExchange : null)}&series_period=next-90-days&strikes_filter_condition=all` : null}
+          tradingViewUrl={selectedTicker ? `${getTradingViewLink(selectedTicker, extensionTicker ? extensionExchange : null)}&series_period=next-6-months&strikes_filter_condition=all` : null}
           initialState={northState}
           onClose={() => setNorthDialogOpen(false)}
           onApply={handleApplyNorthCombination}
