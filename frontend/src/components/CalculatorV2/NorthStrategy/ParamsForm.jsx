@@ -30,9 +30,10 @@ function ParamsForm({
   onCancel,
 }) {
   const defaults = useMemo(() => {
-    const top = initialValues?.topPrice ?? Number((currentPrice * 1.15).toFixed(2));
-    const bottom = initialValues?.bottomPrice ?? Number((currentPrice * 0.85).toFixed(2));
     const entry = entryPrice || currentPrice;
+    // Дефолты целей от точки входа: верх +30%, низ −15%.
+    const top = initialValues?.topPrice ?? Number((entry * 1.30).toFixed(2));
+    const bottom = initialValues?.bottomPrice ?? Number((entry * 0.85).toFixed(2));
     return {
       topPrice: top,
       bottomPrice: bottom,

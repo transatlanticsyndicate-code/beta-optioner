@@ -23,8 +23,9 @@ function CriterionRow({ label, hint, value, idealZero }) {
   );
 }
 
-function ResultCard({ rank, combination, onPick, headerBg = '#0ea5e9' }) {
+function ResultCard({ rank, combination, levels, onPick, headerBg = '#0ea5e9' }) {
   const { call, put, qtyCall, qtyPut, criteria, score } = combination;
+  const fmtLevel = (v) => (Number.isFinite(v) ? `$${Number(v).toFixed(2)}` : null);
   return (
     <div className="border rounded-lg overflow-hidden bg-white dark:bg-gray-900 shadow-sm">
       <div style={{ background: headerBg }} className="px-3 py-2 flex items-center justify-between">
@@ -50,10 +51,28 @@ function ResultCard({ rank, combination, onPick, headerBg = '#0ea5e9' }) {
       </div>
 
       <div className="px-3 py-2 divide-y divide-gray-100 dark:divide-gray-800">
-        <CriterionRow label="Низ — вся позиция" hint="идеал ≈ 0" value={criteria.bottomTotal} idealZero />
-        <CriterionRow label="Верх — только опционы" hint="идеал ≈ 0" value={criteria.topOptions} idealZero />
-        <CriterionRow label="Уровень A — вся позиция" hint="чем больше, тем лучше" value={criteria.midATotal} />
-        <CriterionRow label="Уровень B — вся позиция" hint="чем больше, тем лучше" value={criteria.midBTotal} />
+        <CriterionRow
+          label={`Низ${fmtLevel(levels?.bottom) ? ` (${fmtLevel(levels?.bottom)})` : ''} — вся позиция`}
+          hint="идеал ≈ 0"
+          value={criteria.bottomTotal}
+          idealZero
+        />
+        <CriterionRow
+          label={`Верх${fmtLevel(levels?.top) ? ` (${fmtLevel(levels?.top)})` : ''} — только опционы`}
+          hint="идеал ≈ 0"
+          value={criteria.topOptions}
+          idealZero
+        />
+        <CriterionRow
+          label={`Уровень A${fmtLevel(levels?.midA) ? ` (${fmtLevel(levels?.midA)})` : ''} — вся позиция`}
+          hint="чем больше, тем лучше"
+          value={criteria.midATotal}
+        />
+        <CriterionRow
+          label={`Уровень B${fmtLevel(levels?.midB) ? ` (${fmtLevel(levels?.midB)})` : ''} — вся позиция`}
+          hint="чем больше, тем лучше"
+          value={criteria.midBTotal}
+        />
       </div>
 
       <div className="px-3 py-2 border-t bg-white dark:bg-gray-900">

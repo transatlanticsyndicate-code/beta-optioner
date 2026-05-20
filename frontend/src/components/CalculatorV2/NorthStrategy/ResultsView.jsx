@@ -29,7 +29,7 @@ function WeightSlider({ label, value, onChange, hint }) {
   );
 }
 
-function ResultsView({ combinations, initialWeights, onPick, onBack, onCancel }) {
+function ResultsView({ combinations, initialWeights, params, onPick, onBack, onCancel }) {
   const [weights, setWeights] = useState({
     bottomZero: initialWeights?.bottomZero ?? DEFAULT_WEIGHTS.bottomZero,
     topZero: initialWeights?.topZero ?? DEFAULT_WEIGHTS.topZero,
@@ -94,8 +94,13 @@ function ResultsView({ combinations, initialWeights, onPick, onBack, onCancel })
         </div>
       </div>
 
-      <div className="text-xs text-muted-foreground">
-        Всего проанализировано: <strong>{combinations.length}</strong> комбинаций. Показано топ-3.
+      <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span>
+          Экспирация: <strong className="text-gray-700 dark:text-gray-300">{params?.expirationDate || '—'}</strong>
+        </span>
+        <span>
+          Проанализировано: <strong>{combinations.length}</strong> комбинаций. Показано топ-3.
+        </span>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -104,6 +109,12 @@ function ResultsView({ combinations, initialWeights, onPick, onBack, onCancel })
             key={c.id}
             rank={i + 1}
             combination={c}
+            levels={params ? {
+              top: params.topPrice,
+              bottom: params.bottomPrice,
+              midA: params.midAPrice,
+              midB: params.midBPrice,
+            } : null}
             onPick={() => onPick(c)}
           />
         ))}

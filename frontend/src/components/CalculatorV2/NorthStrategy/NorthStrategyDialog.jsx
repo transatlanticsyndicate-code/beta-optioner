@@ -307,9 +307,8 @@ function NorthStrategyDialog({
               <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
               <div>
                 <div className="font-medium">Не удалось получить данные из TradingView</div>
-                <div className="text-xs mt-1">{expirationsMessage}</div>
-                <div className="text-xs mt-2 text-red-700">
-                  Проверь, что: расширение установлено и обновлено до 1.6.8+, вкладка опционов нужного тикера открыта в TradingView с фильтром «Next 90 days».
+                <div className="text-xs mt-1">
+                  Проверь, что расширение Options CP Buttons обновлено до последней версии и не блокируется браузером.
                 </div>
               </div>
             </div>
@@ -342,6 +341,7 @@ function NorthStrategyDialog({
           <ResultsView
             combinations={combinations}
             initialWeights={weights}
+            params={params}
             onPick={handlePick}
             onBack={handleBack}
             onCancel={onClose}
