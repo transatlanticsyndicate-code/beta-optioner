@@ -308,7 +308,7 @@ function NorthStrategyDialog({
               <div>
                 <div className="font-medium">Не удалось получить данные из TradingView</div>
                 <div className="text-xs mt-1">
-                  Проверь, что расширение Options CP Buttons обновлено до последней версии и не блокируется браузером.
+                  Проверьте, что расширение установлено, включено и обновлено до последней версии в <code className="text-[11px] bg-red-100 px-1 rounded">chrome://extensions</code>. Если рядом стоят блокировщики рекламы (uBlock, AdGuard) или используется режим инкогнито — временно отключите их и попробуйте снова.
                 </div>
               </div>
             </div>
