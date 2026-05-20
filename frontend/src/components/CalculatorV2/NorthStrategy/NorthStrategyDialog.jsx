@@ -31,8 +31,8 @@ const EXPIRATIONS_KEY = 'tvc_expirations_list';
 const FULL_CHAIN_KEY = 'tvc_full_chain';
 const EXPIRATIONS_MAX_AGE_MS = 10 * 60 * 1000;
 const POLL_INTERVAL_MS = 600;
-const EXPIRATIONS_TIMEOUT_MS = 35_000; // открытие таба + ensureFilters + дамп
-const CHAIN_TIMEOUT_MS = 25_000;       // ensureFilters + expand + дамп
+const EXPIRATIONS_TIMEOUT_MS = 35_000; // открытие таба + дамп
+const CHAIN_TIMEOUT_MS = 35_000;       // URL-навигация на series=YYYYMMDD + перезагрузка + дамп
 
 const readExpirationsList = () => {
   try {

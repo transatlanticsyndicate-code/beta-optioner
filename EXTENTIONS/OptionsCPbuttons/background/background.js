@@ -251,11 +251,33 @@ function handleNorthInit(message, sendResponse) {
 }
 
 /**
- * Выполнить northExpandAndDump на конкретном табе. Если needsFilters=true,
- * предварительно запускает northEnsureFilters.
+ * Построить URL с добавленной экспирацией в параметр series.
+ * 2026-07-17 → 20260717. Если уже есть другие series — сохраняем, добавляем новую.
+ */
+function buildUrlWithSeries(currentUrl, targetIso) {
+  if (!currentUrl || !targetIso) return null;
+  const ymd = targetIso.replace(/-/g, '');
+  try {
+    const u = new URL(currentUrl);
+    const existing = u.searchParams.get('series');
+    const list = existing ? existing.split(',').filter(Boolean) : [];
+    if (!list.includes(ymd)) list.push(ymd);
+    u.searchParams.set('series', list.join(','));
+    // Гарантируем, что фильтры остаются на месте
+    if (!u.searchParams.get('series_period')) u.searchParams.set('series_period', 'next-90-days');
+    if (!u.searchParams.get('strikes_filter_condition')) u.searchParams.set('strikes_filter_condition', 'all');
+    return u.toString();
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Выполнить northExpandAndDump на конкретном табе. Раскрытие группы делается
+ * через URL-навигацию (series=YYYYMMDD) — TradingView сам отрисует строки.
  */
 function runNorthOnTab(tabId, message, sendResponse, needsFilters) {
-  const expandAndDump = () => {
+  const askDump = () => {
     chrome.tabs.sendMessage(tabId, {
       action: 'northExpandAndDump',
       date: message.date,
@@ -268,15 +290,35 @@ function runNorthOnTab(tabId, message, sendResponse, needsFilters) {
     });
   };
 
-  if (!needsFilters) {
-    expandAndDump();
-    return;
-  }
-
-  chrome.tabs.sendMessage(tabId, { action: 'northEnsureFilters' }, () => {
-    // Игнорируем lastError — если фильтры не нашли, расширение всё равно
-    // попробует найти заголовок DTE дальше.
-    expandAndDump();
+  // Получаем текущий URL таба и добавляем нужную series
+  chrome.tabs.get(tabId, (tab) => {
+    if (chrome.runtime.lastError || !tab) {
+      sendResponse({ ok: false, reason: 'tab-get-failed' });
+      return;
+    }
+    const newUrl = buildUrlWithSeries(tab.url, message.date);
+    if (!newUrl) {
+      // Не смогли построить URL — fallback на DOM-клики
+      if (needsFilters) {
+        chrome.tabs.sendMessage(tabId, { action: 'northEnsureFilters' }, () => askDump());
+      } else {
+        askDump();
+      }
+      return;
+    }
+    if (newUrl === tab.url) {
+      // URL уже с этой series — строки должны быть в DOM, просто дампим
+      askDump();
+      return;
+    }
+    // Навигируем таб на URL с нужной series — TV отрисует строки нативно
+    chrome.tabs.update(tabId, { url: newUrl }, () => {
+      waitForTabReady(
+        tabId,
+        () => askDump(),
+        () => sendResponse({ ok: false, reason: 'tv-tab-reload-timeout' }),
+      );
+    });
   });
 }
 
