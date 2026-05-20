@@ -263,33 +263,43 @@ function handleNorthInit(message, sendResponse) {
 }
 
 /**
- * Построить URL с добавленной экспирацией в параметр series.
- * 2026-07-17 → 20260717. Если уже есть другие series — сохраняем, добавляем новую.
+ * Построить URL для раскрытия ОДНОЙ конкретной экспирации.
+ * Сбрасываем series_period / series_date_from / series_date_to и оставляем
+ * только series=YYYYMMDD — TV отрисует таблицу опционов только для этой даты,
+ * без растягивания на весь диапазон. Это в разы быстрее.
  */
 function buildUrlWithSeries(currentUrl, targetIso) {
   if (!currentUrl || !targetIso) return null;
   const ymd = targetIso.replace(/-/g, '');
   try {
     const u = new URL(currentUrl);
-    const existing = u.searchParams.get('series');
-    const list = existing ? existing.split(',').filter(Boolean) : [];
-    if (!list.includes(ymd)) list.push(ymd);
-    u.searchParams.set('series', list.join(','));
-    // Гарантируем, что фильтры остаются на месте
-    // Если у URL не задано ни series_period, ни series_date_from/to —
-    // ставим окно сегодня→+150 дней. Это страховка: основной URL уже идёт
-    // из калькулятора с правильными датами.
-    if (!u.searchParams.get('series_period') && !u.searchParams.get('series_date_from')) {
-      const fmt = (d) => `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}${String(d.getUTCDate()).padStart(2, '0')}`;
-      const today = new Date();
-      const to = new Date(today.getTime() + 150 * 24 * 60 * 60 * 1000);
-      u.searchParams.set('series_date_from', fmt(today));
-      u.searchParams.set('series_date_to', fmt(to));
+    u.searchParams.delete('series_period');
+    u.searchParams.delete('series_date_from');
+    u.searchParams.delete('series_date_to');
+    u.searchParams.set('series', ymd);
+    if (!u.searchParams.get('strikes_filter_condition')) {
+      u.searchParams.set('strikes_filter_condition', 'all');
     }
-    if (!u.searchParams.get('strikes_filter_condition')) u.searchParams.set('strikes_filter_condition', 'all');
     return u.toString();
   } catch (e) {
     return null;
+  }
+}
+
+/**
+ * Проверка, что URL уже сфокусирован на нужной экспирации (series=YYYYMMDD
+ * совпадает) и не загружает лишний диапазон.
+ */
+function urlHasTargetSeries(url, targetIso) {
+  if (!url || !targetIso) return false;
+  try {
+    const u = new URL(url);
+    const series = u.searchParams.get('series');
+    if (!series) return false;
+    const ymd = targetIso.replace(/-/g, '');
+    return series.split(',').includes(ymd);
+  } catch (e) {
+    return false;
   }
 }
 
@@ -311,15 +321,18 @@ function runNorthOnTab(tabId, message, sendResponse, needsFilters) {
     });
   };
 
-  // Получаем текущий URL таба и добавляем нужную series
+  // Если таб уже сфокусирован на нужной экспирации — просто дампим.
   chrome.tabs.get(tabId, (tab) => {
     if (chrome.runtime.lastError || !tab) {
       sendResponse({ ok: false, reason: 'tab-get-failed' });
       return;
     }
+    if (urlHasTargetSeries(tab.url, message.date)) {
+      askDump();
+      return;
+    }
     const newUrl = buildUrlWithSeries(tab.url, message.date);
     if (!newUrl) {
-      // Не смогли построить URL — fallback на DOM-клики
       if (needsFilters) {
         chrome.tabs.sendMessage(tabId, { action: 'northEnsureFilters' }, () => askDump());
       } else {
@@ -327,12 +340,8 @@ function runNorthOnTab(tabId, message, sendResponse, needsFilters) {
       }
       return;
     }
-    if (newUrl === tab.url) {
-      // URL уже с этой series — строки должны быть в DOM, просто дампим
-      askDump();
-      return;
-    }
-    // Навигируем таб на URL с нужной series — TV отрисует строки нативно
+    // Навигируем таб строго на одну экспирацию — TV не будет тянуть весь
+    // 150-дневный диапазон, и анализ запустится быстро.
     chrome.tabs.update(tabId, { url: newUrl }, () => {
       waitForTabReady(
         tabId,
