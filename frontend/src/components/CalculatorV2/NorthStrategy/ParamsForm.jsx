@@ -170,57 +170,56 @@ function ParamsForm({
         Точка входа в БА: <strong>${(entryPrice || currentPrice || 0).toFixed(2)}</strong>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <Label className="text-xs">Цель по верху ($)</Label>
-          <Input type="number" step="0.01" value={top} onChange={(e) => setTop(e.target.value)} />
+      <div className="grid grid-cols-[1fr_1px_1fr] gap-4">
+        <div className="space-y-3">
+          <div>
+            <Label className="text-xs">Цель по верху ($)</Label>
+            <Input type="number" step="0.01" value={top} onChange={(e) => setTop(e.target.value)} />
+          </div>
+          <div>
+            <Label className="text-xs">Промежуточный A ($)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              value={midA}
+              onChange={(e) => { setMidA(e.target.value); setMidAManual(true); }}
+            />
+          </div>
+          <div>
+            <Label className="text-xs">Промежуточный B ($)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              value={midB}
+              onChange={(e) => { setMidB(e.target.value); setMidBManual(true); }}
+            />
+          </div>
+          <div>
+            <Label className="text-xs">Закрытие по низу ($)</Label>
+            <Input type="number" step="0.01" value={bottom} onChange={(e) => setBottom(e.target.value)} />
+          </div>
         </div>
-        <div>
-          <Label className="text-xs">Закрытие по низу ($)</Label>
-          <Input type="number" step="0.01" value={bottom} onChange={(e) => setBottom(e.target.value)} />
-        </div>
-        <div>
-          <Label className="text-xs">Промежуточный A ($)</Label>
-          <Input
-            type="number"
-            step="0.01"
-            value={midA}
-            onChange={(e) => { setMidA(e.target.value); setMidAManual(true); }}
-          />
-        </div>
-        <div>
-          <Label className="text-xs">Промежуточный B ($)</Label>
-          <Input
-            type="number"
-            step="0.01"
-            value={midB}
-            onChange={(e) => { setMidB(e.target.value); setMidBManual(true); }}
-          />
-        </div>
-        <div>
-          <Label className="text-xs">Дата экспирации</Label>
-          <select
-            className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
-            value={expirationDate}
-            onChange={(e) => setExpirationDate(e.target.value)}
-          >
-            <option value="">— выбрать —</option>
-            {dropdownExpirations.map((d) => (
-              <option key={d} value={d}>{d}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <Label className="text-xs">Дата расчёта</Label>
-          <Input type="date" value={calcDate} onChange={(e) => setCalcDate(e.target.value)} />
-        </div>
-        <div>
-          <Label className="text-xs">Страйк от ($)</Label>
-          <Input type="number" step="0.01" value={strikeMin} onChange={(e) => setStrikeMin(e.target.value)} />
-        </div>
-        <div>
-          <Label className="text-xs">Страйк до ($)</Label>
-          <Input type="number" step="0.01" value={strikeMax} onChange={(e) => setStrikeMax(e.target.value)} />
+
+        <div className="bg-border w-px h-full" aria-hidden="true" />
+
+        <div className="space-y-3">
+          <div>
+            <Label className="text-xs">Дата экспирации</Label>
+            <select
+              className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
+              value={expirationDate}
+              onChange={(e) => setExpirationDate(e.target.value)}
+            >
+              <option value="">— выбрать —</option>
+              {dropdownExpirations.map((d) => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <Label className="text-xs">Дата расчёта</Label>
+            <Input type="date" value={calcDate} onChange={(e) => setCalcDate(e.target.value)} />
+          </div>
         </div>
       </div>
 

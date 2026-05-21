@@ -62,38 +62,6 @@ function ResultsView({ combinations, initialWeights, params, onPick, onBack, onC
 
   return (
     <div className="space-y-4 max-h-[75vh] overflow-y-auto p-1.5">
-      <div className="border rounded-md p-3 bg-muted/30 space-y-3">
-        <div className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-          Веса критериев (порядок карточек обновляется на лету)
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <WeightSlider
-            label="Низ → 0"
-            hint="P&L всей позиции на низу ≈ 0"
-            value={weights.bottomZero}
-            onChange={(v) => setWeights((w) => ({ ...w, bottomZero: v }))}
-          />
-          <WeightSlider
-            label="Верх → 0"
-            hint="P&L опционов на верху ≈ 0"
-            value={weights.topZero}
-            onChange={(v) => setWeights((w) => ({ ...w, topZero: v }))}
-          />
-          <WeightSlider
-            label="Уровень A: максимум"
-            hint="Максимум P&L всей позиции на A"
-            value={weights.midAMax}
-            onChange={(v) => setWeights((w) => ({ ...w, midAMax: v }))}
-          />
-          <WeightSlider
-            label="Уровень B: максимум"
-            hint="Максимум P&L всей позиции на B"
-            value={weights.midBMax}
-            onChange={(v) => setWeights((w) => ({ ...w, midBMax: v }))}
-          />
-        </div>
-      </div>
-
       <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1">
         <span>
           Экспирация: <strong className="text-gray-700 dark:text-gray-300">{params?.expirationDate || '—'}</strong>
@@ -103,7 +71,37 @@ function ResultsView({ combinations, initialWeights, params, onPick, onBack, onC
         </span>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-start">
+        <div className="border rounded-md p-3 bg-muted/30 space-y-3">
+          <div className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+            Веса критериев
+          </div>
+          <WeightSlider
+            label="Цель по верху"
+            hint="P&L опционов на верху ≈ 0"
+            value={weights.topZero}
+            onChange={(v) => setWeights((w) => ({ ...w, topZero: v }))}
+          />
+          <WeightSlider
+            label="Уровень A"
+            hint="Максимум P&L всей позиции на A"
+            value={weights.midAMax}
+            onChange={(v) => setWeights((w) => ({ ...w, midAMax: v }))}
+          />
+          <WeightSlider
+            label="Уровень B"
+            hint="Максимум P&L всей позиции на B"
+            value={weights.midBMax}
+            onChange={(v) => setWeights((w) => ({ ...w, midBMax: v }))}
+          />
+          <WeightSlider
+            label="Закрытие по низу"
+            hint="P&L всей позиции на низу ≈ 0"
+            value={weights.bottomZero}
+            onChange={(v) => setWeights((w) => ({ ...w, bottomZero: v }))}
+          />
+        </div>
+
         {top3.map((c, i) => (
           <ResultCard
             key={c.id}

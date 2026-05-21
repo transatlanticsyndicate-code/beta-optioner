@@ -318,7 +318,7 @@ function NorthStrategyDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-3xl">
+      <DialogContent className={step === 'results' ? 'sm:max-w-6xl' : 'sm:max-w-3xl'}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Snowflake className="h-5 w-5 text-sky-500" />

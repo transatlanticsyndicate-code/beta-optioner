@@ -2699,6 +2699,24 @@ function UniversalOptionsCalculator() {
     setOptions(prev => [...prev.filter(o => !o.fromNorthStrategy), ...stamped]);
     setNorthState({ params, combinations, weights });
     setNorthDialogOpen(false);
+
+    // Двигаем ползунок «дней до экспирации» на дату расчёта из параметров стратегии.
+    // ЗАЧЕМ: пользователь подбирал комбинации именно под этот день — в калькуляторе
+    // он должен сразу увидеть P&L на ту же дату, без ручной подстройки бегунка.
+    if (params?.calcDate) {
+      const calcDateParsed = parseDateAtStartOfDay(params.calcDate);
+      let baseDate = null;
+      stamped.forEach(opt => {
+        const ed = parseDateAtStartOfDay(opt.entryDate || new Date().toISOString().split('T')[0]);
+        if (ed && (!baseDate || ed < baseDate)) baseDate = ed;
+      });
+      if (calcDateParsed && baseDate) {
+        const diff = Math.round((calcDateParsed.getTime() - baseDate.getTime()) / (1000 * 60 * 60 * 24));
+        const clamped = Math.max(0, diff);
+        setDaysPassed(clamped);
+        setUserAdjustedDays(true);
+      }
+    }
   }, []);
 
   const handleCancelNorthSelection = useCallback(() => {

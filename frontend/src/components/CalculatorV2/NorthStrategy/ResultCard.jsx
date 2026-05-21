@@ -54,13 +54,7 @@ function ResultCard({ rank, combination, levels, onPick, headerBg = '#0ea5e9' })
 
       <div className="px-3 py-2 divide-y divide-gray-100 dark:divide-gray-800">
         <CriterionRow
-          label={`Низ${fmtLevel(levels?.bottom) ? ` (${fmtLevel(levels?.bottom)})` : ''} — вся позиция`}
-          hint="идеал ≈ 0"
-          value={criteria.bottomTotal}
-          idealZero
-        />
-        <CriterionRow
-          label={`Верх${fmtLevel(levels?.top) ? ` (${fmtLevel(levels?.top)})` : ''} — только опционы`}
+          label={`Цель по верху${fmtLevel(levels?.top) ? ` (${fmtLevel(levels?.top)})` : ''} — только опционы`}
           hint="идеал ≈ 0"
           value={criteria.topOptions}
           idealZero
@@ -74,6 +68,12 @@ function ResultCard({ rank, combination, levels, onPick, headerBg = '#0ea5e9' })
           label={`Уровень B${fmtLevel(levels?.midB) ? ` (${fmtLevel(levels?.midB)})` : ''} — вся позиция`}
           hint="чем больше, тем лучше"
           value={criteria.midBTotal}
+        />
+        <CriterionRow
+          label={`Закрытие по низу${fmtLevel(levels?.bottom) ? ` (${fmtLevel(levels?.bottom)})` : ''} — вся позиция`}
+          hint="идеал ≈ 0"
+          value={criteria.bottomTotal}
+          idealZero
         />
       </div>
 
