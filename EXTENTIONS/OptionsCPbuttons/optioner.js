@@ -371,6 +371,7 @@ function showConnectionLostNotification() {
         // Стратегия СЕВЕР: развернуть указанную экспирацию в таблице опционов
         // TradingView и сдампить полную цепочку. Если подходящего таба нет —
         // background сам откроет по tradingViewUrl, выставит фильтры и раскроет.
+        console.log('[Optioner Bridge/north] north_expand_expiration:', command.date, 'ticker:', command.ticker, 'url:', command.tradingViewUrl);
         action = {
           action: 'northExpandAndDump',
           date: command.date,
@@ -380,6 +381,7 @@ function showConnectionLostNotification() {
       } else if (command.type === 'north_init') {
         // Стратегия СЕВЕР, инициализация: открыть TV-таб (если нет), поставить
         // фильтры и обновить список экспираций. Без раскрытия групп.
+        console.log('[Optioner Bridge/north] north_init: ticker:', command.ticker, 'url:', command.tradingViewUrl);
         action = {
           action: 'northInit',
           ticker: command.ticker || null,
@@ -400,7 +402,13 @@ function showConnectionLostNotification() {
       // Отправляем команду в background.js
       // ВАЖНО: Для долгих операций (refresh_range) background сам запишет результат
       // через executeScript в localStorage калькулятора
+      if (action.action === 'northInit' || action.action === 'northExpandAndDump') {
+        console.log('[Optioner Bridge/north] отправляю в background:', action.action);
+      }
       chrome.runtime.sendMessage(action, (response) => {
+        if (action.action === 'northInit' || action.action === 'northExpandAndDump') {
+          console.log('[Optioner Bridge/north] ответ background:', response, 'lastError:', chrome.runtime.lastError?.message);
+        }
         // Проверяем lastError
         if (chrome.runtime.lastError) {
           console.error('[Optioner Bridge] Ошибка отправки:', chrome.runtime.lastError.message);

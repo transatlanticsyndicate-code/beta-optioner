@@ -75,12 +75,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case 'northExpandAndDump':
       // Команда от bridge на странице калькулятора: найти TV-таб с опционами,
       // развернуть указанную экспирацию и дампить полную цепочку.
+      console.log('[ext2/north/bg] northExpandAndDump:', message.date, 'ticker:', message.ticker, 'url:', message.tradingViewUrl);
       handleNorthExpandAndDump(message, sendResponse);
       return true;
 
     case 'northInit':
       // Открыть/найти TV-таб для тикера, выставить фильтры, обновить список
       // экспираций. Без раскрытия групп.
+      console.log('[ext2/north/bg] northInit: ticker:', message.ticker, 'url:', message.tradingViewUrl);
       handleNorthInit(message, sendResponse);
       return true;
 
@@ -100,6 +102,7 @@ function handleNorthExpandAndDump(message, sendResponse) {
   const targetUrl = message.tradingViewUrl;
 
   chrome.tabs.query({ url: 'https://*.tradingview.com/options/*' }, (tabs) => {
+    console.log('[ext2/north/bg] expand → tabs.query: найдено', tabs?.length || 0, tabs?.map(t => ({ id: t.id, url: t.url })));
     let tab = null;
     if (tabs && tabs.length > 0) {
       if (desiredTicker) {
@@ -111,12 +114,14 @@ function handleNorthExpandAndDump(message, sendResponse) {
 
     if (tab) {
       const needNav = !urlHasNorthFilters(tab.url) && !!targetUrl;
+      console.log('[ext2/north/bg] expand → existing tab', tab.id, 'needNav:', needNav);
       if (needNav) {
         chrome.tabs.update(tab.id, { url: targetUrl, active: true }, () => {
+          if (chrome.runtime.lastError) console.warn('[ext2/north/bg] expand → tabs.update error:', chrome.runtime.lastError.message);
           waitForTabReady(
             tab.id,
             () => runNorthOnTab(tab.id, message, sendResponse, /*needsFilters=*/false),
-            () => sendResponse({ ok: false, reason: 'tv-tab-reload-timeout' }),
+            () => { console.warn('[ext2/north/bg] expand → reload-timeout'); sendResponse({ ok: false, reason: 'tv-tab-reload-timeout' }); },
           );
         });
         return;
@@ -127,18 +132,22 @@ function handleNorthExpandAndDump(message, sendResponse) {
     }
 
     if (!targetUrl) {
+      console.warn('[ext2/north/bg] expand → нет таба и нет URL');
       sendResponse({ ok: false, reason: 'no-tv-tab-and-no-url' });
       return;
     }
+    console.log('[ext2/north/bg] expand → создаю новый таб:', targetUrl);
     chrome.tabs.create({ url: targetUrl, active: false }, (newTab) => {
+      if (chrome.runtime.lastError) console.warn('[ext2/north/bg] expand → tabs.create error:', chrome.runtime.lastError.message);
       if (!newTab || !newTab.id) {
         sendResponse({ ok: false, reason: 'tab-create-failed' });
         return;
       }
+      console.log('[ext2/north/bg] expand → новый таб id:', newTab.id);
       waitForTabReady(
         newTab.id,
         () => runNorthOnTab(newTab.id, message, sendResponse, /*needsFilters=*/false),
-        () => sendResponse({ ok: false, reason: 'tv-tab-load-timeout' }),
+        () => { console.warn('[ext2/north/bg] expand → load-timeout'); sendResponse({ ok: false, reason: 'tv-tab-load-timeout' }); },
       );
     });
   });
@@ -179,13 +188,20 @@ function urlHasNorthFilters(url) {
  */
 function waitForTabReady(tabId, onReady, onTimeout) {
   const deadline = Date.now() + 25_000;
+  let attempt = 0;
   const tryPing = () => {
+    attempt++;
     chrome.tabs.sendMessage(tabId, { action: 'getUnderlyingPrice' }, (resp) => {
       if (chrome.runtime.lastError || !resp) {
-        if (Date.now() > deadline) { onTimeout(); return; }
+        if (Date.now() > deadline) {
+          console.warn('[ext2/north/bg] waitForTabReady timeout, tabId:', tabId, 'после', attempt, 'попыток. Последняя ошибка:', chrome.runtime.lastError?.message);
+          onTimeout();
+          return;
+        }
         setTimeout(tryPing, 600);
         return;
       }
+      console.log('[ext2/north/bg] контент-скрипт ожил на табе', tabId, 'после', attempt, 'попыток');
       // Контент-скрипт жив. Дополнительная пауза на отрисовку.
       setTimeout(onReady, 1500);
     });
@@ -203,6 +219,7 @@ function handleNorthInit(message, sendResponse) {
   const targetUrl = message.tradingViewUrl;
 
   chrome.tabs.query({ url: 'https://*.tradingview.com/options/*' }, (tabs) => {
+    console.log('[ext2/north/bg] init → tabs.query: найдено', tabs?.length || 0, tabs?.map(t => ({ id: t.id, url: t.url })));
     let tab = null;
     if (tabs && tabs.length > 0) {
       if (desiredTicker) {
@@ -215,10 +232,12 @@ function handleNorthInit(message, sendResponse) {
     // Случай 1: подходящий таб уже есть
     if (tab) {
       const needNav = !urlHasNorthFilters(tab.url) && !!targetUrl;
+      console.log('[ext2/north/bg] init → existing tab', tab.id, 'needNav:', needNav, 'currentUrl:', tab.url);
       if (needNav) {
         // URL без фильтров — навигируем таб на URL с правильными параметрами.
         // После навигации TV сам применит фильтры — никаких DOM-кликов не нужно.
         chrome.tabs.update(tab.id, { url: targetUrl, active: true }, () => {
+          if (chrome.runtime.lastError) console.warn('[ext2/north/bg] init → tabs.update error:', chrome.runtime.lastError.message);
           waitForTabReady(
             tab.id,
             () => {
@@ -226,7 +245,7 @@ function handleNorthInit(message, sendResponse) {
                 sendResponse(response || { ok: true });
               });
             },
-            () => sendResponse({ ok: false, reason: 'tv-tab-reload-timeout' }),
+            () => { console.warn('[ext2/north/bg] init → reload-timeout'); sendResponse({ ok: false, reason: 'tv-tab-reload-timeout' }); },
           );
         });
         return;
@@ -234,6 +253,7 @@ function handleNorthInit(message, sendResponse) {
       // URL уже правильный — просто активируем и просим content script дампить
       try { chrome.tabs.update(tab.id, { active: true }); } catch (e) {}
       chrome.tabs.sendMessage(tab.id, { action: 'northEnsureFilters' }, (response) => {
+        console.log('[ext2/north/bg] init → northEnsureFilters response:', response);
         sendResponse(response || { ok: true });
       });
       return;
@@ -241,18 +261,24 @@ function handleNorthInit(message, sendResponse) {
 
     // Случай 2: таба нет — создаём по URL с фильтрами
     if (!targetUrl) {
+      console.warn('[ext2/north/bg] init → нет таба и нет URL');
       sendResponse({ ok: false, reason: 'no-tv-tab-and-no-url' });
       return;
     }
+    console.log('[ext2/north/bg] init → создаю новый таб:', targetUrl);
     chrome.tabs.create({ url: targetUrl, active: false }, (newTab) => {
+      if (chrome.runtime.lastError) console.warn('[ext2/north/bg] init → tabs.create error:', chrome.runtime.lastError.message);
       if (!newTab || !newTab.id) {
+        console.warn('[ext2/north/bg] init → tabs.create вернул пустоту');
         sendResponse({ ok: false, reason: 'tab-create-failed' });
         return;
       }
+      console.log('[ext2/north/bg] init → новый таб id:', newTab.id);
       waitForTabReady(
         newTab.id,
         () => {
           chrome.tabs.sendMessage(newTab.id, { action: 'northEnsureFilters' }, (response) => {
+            console.log('[ext2/north/bg] init → northEnsureFilters response (new tab):', response);
             sendResponse(response || { ok: true });
           });
         },
