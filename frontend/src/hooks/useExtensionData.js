@@ -425,6 +425,15 @@ export function useExtensionRefreshCommand(pollInterval = 1500) {
 const COMMAND_KEY = 'tvc_refresh_command';
 
 /**
+ * Приватный ключ для команд стратегии СЕВЕР.
+ * ЗАЧЕМ: Стороннее расширение twparser слушает тот же tvc_refresh_command,
+ * успевает помечать команду processed=true и сжирать её, ничего не делая
+ * (наши типы north_init / north_expand_expiration ему незнакомы). Чтобы не
+ * драться за общий ключ, используем отдельный — про него знает только наш мост.
+ */
+const NORTH_COMMAND_KEY = 'tvc_north_command';
+
+/**
  * Ключ в localStorage для результатов расширение → калькулятор
  * ЗАЧЕМ: Расширение записывает прогресс и результат сюда
  */
@@ -581,7 +590,7 @@ export function sendNorthInitCommand({ ticker, tradingViewUrl }) {
     timestamp: Date.now(),
     processed: false,
   };
-  localStorage.setItem(COMMAND_KEY, JSON.stringify(command));
+  localStorage.setItem(NORTH_COMMAND_KEY, JSON.stringify(command));
   return command;
 }
 
@@ -605,7 +614,7 @@ export function sendNorthExpandExpirationCommand({ expirationDate, ticker, tradi
     timestamp: Date.now(),
     processed: false,
   };
-  localStorage.setItem(COMMAND_KEY, JSON.stringify(command));
+  localStorage.setItem(NORTH_COMMAND_KEY, JSON.stringify(command));
   return command;
 }
 

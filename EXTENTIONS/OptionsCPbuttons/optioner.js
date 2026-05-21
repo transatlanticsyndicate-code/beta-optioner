@@ -264,8 +264,9 @@ function showConnectionLostNotification() {
     if (e.key === 'calculatorState') syncToExtension();
     if (e.key === 'tvc_command' && e.newValue) handleCommand(e.newValue);
     if (e.key === 'tvc_refresh_command' && e.newValue) handleRefreshCommand(e.newValue);
+    if (e.key === 'tvc_north_command' && e.newValue) handleNorthCommand(e.newValue);
   });
-  
+
   // Слушаем кастомное событие от setItem hook
   window.addEventListener('tvc_refresh_command', (e) => handleRefreshCommand(e.detail));
   
@@ -286,6 +287,66 @@ function showConnectionLostNotification() {
     }
   }
   
+  /**
+   * Обработка команд стратегии СЕВЕР через приватный ключ tvc_north_command.
+   * ЗАЧЕМ: Стороннее расширение twparser слушает tvc_refresh_command, помечает
+   * команды processed=true и блокирует их обработку у нас. На отдельном ключе
+   * twparser не подсматривает — гонки нет.
+   */
+  function handleNorthCommand(commandJson) {
+    if (!chrome.runtime?.id) {
+      showConnectionLostNotification();
+      return;
+    }
+    try {
+      const command = JSON.parse(commandJson);
+      if (command.processed) return;
+      command.processed = true;
+      localStorage.setItem('tvc_north_command', JSON.stringify(command));
+
+      let action = null;
+      if (command.type === 'north_init') {
+        console.log('[Optioner Bridge/north] north_init: ticker:', command.ticker, 'url:', command.tradingViewUrl);
+        action = {
+          action: 'northInit',
+          ticker: command.ticker || null,
+          tradingViewUrl: command.tradingViewUrl || null,
+        };
+      } else if (command.type === 'north_expand_expiration') {
+        console.log('[Optioner Bridge/north] north_expand_expiration:', command.date, 'ticker:', command.ticker, 'url:', command.tradingViewUrl);
+        action = {
+          action: 'northExpandAndDump',
+          date: command.date,
+          ticker: command.ticker || null,
+          tradingViewUrl: command.tradingViewUrl || null,
+        };
+      } else {
+        return;
+      }
+
+      console.log('[Optioner Bridge/north] отправляю в background:', action.action);
+      chrome.runtime.sendMessage(action, (response) => {
+        console.log('[Optioner Bridge/north] ответ background:', response, 'lastError:', chrome.runtime.lastError?.message);
+        if (chrome.runtime.lastError) {
+          console.error('[Optioner Bridge/north] Ошибка отправки:', chrome.runtime.lastError.message);
+        }
+      });
+    } catch (e) {
+      console.error('[Optioner Bridge/north] Ошибка обработки команды:', e);
+    }
+  }
+
+  // Периодическая проверка приватного ключа на случай, если storage event
+  // не сработал (React пишет в той же вкладке — storage event не стреляет).
+  function checkAndHandleNorthCommand() {
+    const pendingCmd = localStorage.getItem('tvc_north_command');
+    if (!pendingCmd) return;
+    try {
+      const cmd = JSON.parse(pendingCmd);
+      if (!cmd.processed) handleNorthCommand(pendingCmd);
+    } catch (e) {}
+  }
+
   // Обработка refresh команды (refresh_specific, refresh_range, refresh_single_strike)
   // ЗАЧЕМ: Калькулятор записывает команду в localStorage, мы передаём в background
   function handleRefreshCommand(commandJson) {
@@ -470,6 +531,15 @@ function showConnectionLostNotification() {
     try {
       const cmd = JSON.parse(pendingRefreshCommand);
       if (!cmd.processed) handleRefreshCommand(pendingRefreshCommand);
+    } catch (e) {}
+  }
+
+  // Проверяем north-команду при загрузке (приватный ключ, не пересекается с twparser)
+  const pendingNorthCommand = localStorage.getItem('tvc_north_command');
+  if (pendingNorthCommand) {
+    try {
+      const cmd = JSON.parse(pendingNorthCommand);
+      if (!cmd.processed) handleNorthCommand(pendingNorthCommand);
     } catch (e) {}
   }
   
@@ -705,6 +775,7 @@ function showConnectionLostNotification() {
     syncFullChain();
     syncExpirationsList();
     checkAndHandleRefreshCommand();
+    checkAndHandleNorthCommand();
   }, 2000);
   
   
