@@ -35,10 +35,13 @@ import {
 import { calculateIntrinsicValueBlack76 } from './black76';
 
 // Режимы калькулятора
+// ETF математически эквивалентен STOCKS — попадает во все «не FUTURES, не CRYPTO»
+// ветки и автоматически использует multiplier 100 и rfr из FRED, как акции.
 export const CALCULATOR_MODES = {
   STOCKS: 'stocks',
   FUTURES: 'futures',
-  CRYPTO: 'crypto'
+  CRYPTO: 'crypto',
+  ETF: 'etf'
 };
 
 /**

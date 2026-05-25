@@ -16,12 +16,15 @@ import {
 } from '../../utils/futuresPricing';
 import { calculateDaysRemainingUTC, hasRemainingDaysUTC, getOldestEntryDate, isOptionActiveAtDay } from '../../utils/dateUtils';
 import { getOptionVolatility } from '../../utils/volatilitySurface';
+import { isStockLikeMode } from '../../utils/calculatorModes';
 
 // Режимы калькулятора
+// ETF математически эквивалентен STOCKS — отличается только бейдж в UI.
 const CALCULATOR_MODES = {
   STOCKS: 'stocks',
   FUTURES: 'futures',
-  CRYPTO: 'crypto'
+  CRYPTO: 'crypto',
+  ETF: 'etf'
 };
 
 /**
@@ -293,7 +296,7 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
 
     // Применяем корректировку P&L на основе группы акции (только для режима stocks)
     // ЗАЧЕМ: Разные типы акций требуют разных коэффициентов корректировки прогноза
-    if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
+    if (isStockLikeMode(calculatorMode) && stockClassification) {
       for (let i = 0; i < totalPLArray.length; i++) {
         totalPLArray[i] = adjustPLByStockGroup(totalPLArray[i], stockClassification);
       }

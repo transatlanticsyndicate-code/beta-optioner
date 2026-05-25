@@ -21,12 +21,16 @@ import { getOptionVolatility } from '../../utils/volatilitySurface';
 import { assessLiquidity, getLiquidityColor, formatLiquidityTooltip, LIQUIDITY_LEVELS } from '../../utils/liquidityCheck';
 import { calculateDaysRemainingUTC, getOldestEntryDate, isOptionActiveAtDay, isOptionExpiredAtDay, calculateDaysToExpirationFromToday } from '../../utils/dateUtils';
 import LockIcon from './LockIcon';
+import { isStockLikeMode } from '../../utils/calculatorModes';
 
 // Режимы калькулятора
+// ETF математически эквивалентен STOCKS — отличается только бейдж в UI.
+// Условия «акция-подобного» поведения вынесены в isStockLikeMode (см. utils/calculatorModes).
 const CALCULATOR_MODES = {
   STOCKS: 'stocks',
   FUTURES: 'futures',
-  CRYPTO: 'crypto'
+  CRYPTO: 'crypto',
+  ETF: 'etf'
 };
 
 // Helper: format ISO date (YYYY-MM-DD) to display format (DD.MM.YY)
@@ -195,7 +199,7 @@ function OptionsTableV3({
           ? calculateFuturesOptionPLValue(tempOpt, targetPrice || currentPrice, optDaysRemaining, contractMultiplier, optVolatility)
           : calculateStockOptionPLValue(tempOpt, targetPrice || currentPrice, optAssetPrice, optDaysRemaining, optVolatility, dividendYield, contractMultiplier, rfrSum);
 
-        if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
+        if (isStockLikeMode(calculatorMode) && stockClassification) {
           pl = adjustPLByStockGroup(pl, stockClassification);
         }
 
@@ -216,7 +220,7 @@ function OptionsTableV3({
               ? calculateFuturesOptionPLValue(tempOpt, anchorPrice, anchorDaysToExp, contractMultiplier, anchorIV)
               : calculateStockOptionPLValue(tempOpt, anchorPrice, optAssetPrice, anchorDaysToExp, anchorIV, dividendYield, contractMultiplier, rfrAnchor);
 
-            if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
+            if (isStockLikeMode(calculatorMode) && stockClassification) {
               plAtAnchor = adjustPLByStockGroup(plAtAnchor, stockClassification);
             }
 
@@ -1225,7 +1229,7 @@ function OptionsTableV3({
                       : calculateStockOptionPLValue(tempOpt, targetPrice || currentPrice, optionAssetPrice, optionDaysRemaining, optionVolatility, dividendYield, contractMultiplier, rfrOpt);
 
                     // Применяем корректировку P&L по группе акции (только для режима stocks, не для крипто)
-                    if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
+                    if (isStockLikeMode(calculatorMode) && stockClassification) {
                       pl = adjustPLByStockGroup(pl, stockClassification);
                     }
 
@@ -1261,7 +1265,7 @@ function OptionsTableV3({
                           ? calculateFuturesOptionPLValue(tempOpt, anchorPrice, anchorDaysToExp, contractMultiplier, anchorIV)
                           : calculateStockOptionPLValue(tempOpt, anchorPrice, optionAssetPrice, anchorDaysToExp, anchorIV, dividendYield, contractMultiplier, rfrAnchor);
                         
-                        if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
+                        if (isStockLikeMode(calculatorMode) && stockClassification) {
                           plAtAnchor = adjustPLByStockGroup(plAtAnchor, stockClassification);
                         }
                         
@@ -1405,7 +1409,7 @@ function OptionsTableV3({
                       : calculateStockOptionPLValue(tempOpt, targetPrice || currentPrice, optionAssetPrice, optionDaysRemaining, optionVolatility, dividendYield, contractMultiplier, rfrOpt);
 
                     // Применяем корректировку P&L по группе акции
-                    if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
+                    if (isStockLikeMode(calculatorMode) && stockClassification) {
                       pl = adjustPLByStockGroup(pl, stockClassification);
                     }
 
@@ -1431,7 +1435,7 @@ function OptionsTableV3({
                           ? calculateFuturesOptionPLValue(tempOpt, anchorPrice, anchorDaysToExp, contractMultiplier, anchorIV)
                           : calculateStockOptionPLValue(tempOpt, anchorPrice, optionAssetPrice, anchorDaysToExp, anchorIV, dividendYield, contractMultiplier, rfrAnchor);
                         
-                        if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
+                        if (isStockLikeMode(calculatorMode) && stockClassification) {
                           plAtAnchor = adjustPLByStockGroup(plAtAnchor, stockClassification);
                         }
 

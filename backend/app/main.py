@@ -19,7 +19,7 @@ import re
 from app.database import get_db, init_db
 from app.models.analysis_history import AnalysisHistory
 from app.models.user import Base as UserBase
-from app.routers import options, ai_chat, polygon, data_source_info, ib_monitoring, yahoo_proxy, crypto_rating, ml_api, ai_prediction, finnhub_proxy, options_universal, saved_configurations, barchart, futures_settings
+from app.routers import options, ai_chat, polygon, data_source_info, ib_monitoring, yahoo_proxy, crypto_rating, ml_api, ai_prediction, finnhub_proxy, options_universal, saved_configurations, barchart, futures_settings, etf_settings
 
 # Load environment variables from .env file
 env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
@@ -74,6 +74,7 @@ app.include_router(options_universal.router)
 app.include_router(saved_configurations.router)
 app.include_router(barchart.router)
 app.include_router(futures_settings.router)
+app.include_router(etf_settings.router)
 
 # Простой in-memory кэш (fallback если Redis недоступен)
 _data_cache: Dict = {}

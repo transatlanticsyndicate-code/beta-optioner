@@ -97,11 +97,14 @@ import { useExtensionData, useExtensionRefreshCommand, writeRefreshResult } from
 // const AI_SUPPORTED_TICKERS = [...];
 
 // Режимы калькулятора
-// ЗАЧЕМ: Определяет тип инструмента и соответствующую математику P&L
+// ЗАЧЕМ: Определяет тип инструмента и соответствующую математику P&L.
+// ETF использует ту же математику, что и STOCKS — отличается только визуально
+// (синий бейдж в шапке и синий бейдж в карточках сохранённых позиций).
 const CALCULATOR_MODES = {
   STOCKS: 'stocks',
   FUTURES: 'futures',
-  CRYPTO: 'crypto'
+  CRYPTO: 'crypto',
+  ETF: 'etf'
 };
 
 // Крипто-тикеры — для них не показываем группы акций и не запрашиваем классификацию
@@ -185,6 +188,7 @@ function UniversalOptionsCalculator() {
         const detectedType = detectInstrumentTypeByPattern(ticker);
         if (detectedType === 'futures') return CALCULATOR_MODES.FUTURES;
         if (detectedType === 'crypto') return CALCULATOR_MODES.CRYPTO;
+        if (detectedType === 'etf') return CALCULATOR_MODES.ETF;
       }
     } catch {}
     return CALCULATOR_MODES.STOCKS;
@@ -1453,13 +1457,15 @@ function UniversalOptionsCalculator() {
                 setCalculatorMode(CALCULATOR_MODES.FUTURES);
               } else if (detectedType === 'crypto') {
                 setCalculatorMode(CALCULATOR_MODES.CRYPTO);
+              } else if (detectedType === 'etf') {
+                setCalculatorMode(CALCULATOR_MODES.ETF);
               } else {
                 setCalculatorMode(CALCULATOR_MODES.STOCKS);
               }
             }
-            
+
             // Настройки фьючерса
-            if ((config.state.calculatorMode === CALCULATOR_MODES.FUTURES || 
+            if ((config.state.calculatorMode === CALCULATOR_MODES.FUTURES ||
                  detectInstrumentTypeByPattern(ticker) === 'futures') && ticker) {
               setSelectedFuture(getFutureByTicker(ticker));
             }
@@ -1664,6 +1670,11 @@ function UniversalOptionsCalculator() {
           setCalculatorMode(CALCULATOR_MODES.CRYPTO);
           setSelectedFuture(null);
           console.log('📊 Автоматически переключено в режим крипто:', ticker);
+        } else if (detectedType === 'etf') {
+          // Режим ETF — математика как у акций, отличается только бейдж в шапке
+          setCalculatorMode(CALCULATOR_MODES.ETF);
+          setSelectedFuture(null);
+          console.log('📊 Автоматически переключено в режим ETF:', ticker);
         } else {
           // Режим акций
           setCalculatorMode(CALCULATOR_MODES.STOCKS);
@@ -2658,9 +2669,10 @@ function UniversalOptionsCalculator() {
 
   const northActive = useMemo(() => options.some(o => o.fromNorthStrategy), [options]);
 
-  // Кнопка СЕВЕР: режим Акции, есть лонг по БА, нет ни одного видимого опциона, цена БА известна
+  // Кнопка СЕВЕР: режим Акции или ETF, есть лонг по БА, нет ни одного видимого опциона, цена БА известна
+  // ЗАЧЕМ: ETF использует ту же математику, что и акции, и тоже допускает строительство стратегии СЕВЕР
   const canShowNorthButton = useMemo(() => (
-    calculatorMode === CALCULATOR_MODES.STOCKS &&
+    (calculatorMode === CALCULATOR_MODES.STOCKS || calculatorMode === CALCULATOR_MODES.ETF) &&
     !!longPositionsEntry &&
     options.filter(o => o.visible !== false).length === 0 &&
     Number(currentPrice) > 0
@@ -3279,6 +3291,8 @@ function UniversalOptionsCalculator() {
               restoredMode = CALCULATOR_MODES.FUTURES;
             } else if (detectedType === 'crypto') {
               restoredMode = CALCULATOR_MODES.CRYPTO;
+            } else if (detectedType === 'etf') {
+              restoredMode = CALCULATOR_MODES.ETF;
             } else {
               restoredMode = CALCULATOR_MODES.STOCKS;
             }
@@ -3680,6 +3694,8 @@ function UniversalOptionsCalculator() {
           restoredMode = CALCULATOR_MODES.FUTURES;
         } else if (detectedType === 'crypto') {
           restoredMode = CALCULATOR_MODES.CRYPTO;
+        } else if (detectedType === 'etf') {
+          restoredMode = CALCULATOR_MODES.ETF;
         }
         setCalculatorMode(restoredMode);
       }
@@ -4099,25 +4115,32 @@ function UniversalOptionsCalculator() {
             <div className={`inline-flex items-center gap-4 p-3 border-2 rounded-lg ${
               calculatorMode === CALCULATOR_MODES.FUTURES
                 ? 'border-purple-400 bg-purple-50 dark:bg-purple-950/30'
-                : CRYPTO_TICKERS.includes((selectedTicker || '').toUpperCase())
-                  ? 'border-orange-400 bg-orange-50 dark:bg-orange-950/30'
-                  : 'border-teal-400 bg-teal-50 dark:bg-teal-950/30'
+                : calculatorMode === CALCULATOR_MODES.ETF
+                  ? 'border-blue-400 bg-blue-50 dark:bg-blue-950/30'
+                  : CRYPTO_TICKERS.includes((selectedTicker || '').toUpperCase())
+                    ? 'border-orange-400 bg-orange-50 dark:bg-orange-950/30'
+                    : 'border-teal-400 bg-teal-50 dark:bg-teal-950/30'
               }`}>
-              {/* Индикатор режима Акции/Фьючерсы/Крипто */}
-              {/* ЗАЧЕМ: Отображает текущий тип инструмента */}
+              {/* Индикатор режима Акции/ETF/Фьючерсы/Крипто */}
+              {/* ЗАЧЕМ: Отображает текущий тип инструмента; ETF — синий бейдж,
+                  математика как у акций, отличается только визуальный маркер */}
               <div className="flex items-center gap-1 bg-white/50 dark:bg-gray-800/50 rounded-md p-0.5">
                 <div className={`px-2 py-1 text-xs font-medium rounded ${
                   calculatorMode === CALCULATOR_MODES.FUTURES
                     ? 'bg-purple-500 text-white'
-                    : CRYPTO_TICKERS.includes((selectedTicker || '').toUpperCase())
-                      ? 'bg-orange-500 text-white'
-                      : 'bg-teal-500 text-white'
+                    : calculatorMode === CALCULATOR_MODES.ETF
+                      ? 'bg-blue-500 text-white'
+                      : CRYPTO_TICKERS.includes((selectedTicker || '').toUpperCase())
+                        ? 'bg-orange-500 text-white'
+                        : 'bg-teal-500 text-white'
                 }`}>
                   {calculatorMode === CALCULATOR_MODES.FUTURES
                     ? 'Фьючерсы'
-                    : CRYPTO_TICKERS.includes((selectedTicker || '').toUpperCase())
-                      ? 'Крипто'
-                      : 'Акции'}
+                    : calculatorMode === CALCULATOR_MODES.ETF
+                      ? 'ETF'
+                      : CRYPTO_TICKERS.includes((selectedTicker || '').toUpperCase())
+                        ? 'Крипто'
+                        : 'Акции'}
                 </div>
               </div>
 

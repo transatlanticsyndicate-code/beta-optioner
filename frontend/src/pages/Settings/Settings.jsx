@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Settings as SettingsIcon, TrendingUp, BarChart3, Palette } from 'lucide-react';
+import { Settings as SettingsIcon, TrendingUp, BarChart3, Palette, Landmark } from 'lucide-react';
 import SettingsGeneral from './SettingsGeneral';
 import SettingsMarketData from './SettingsMarketData';
 import SettingsFutures from './SettingsFutures';
+import SettingsEtf from './SettingsEtf';
 import SettingsComponents from './SettingsComponents';
 
 const SECTIONS = [
   { id: 'general', label: 'Общие', Icon: SettingsIcon },
   { id: 'market-data', label: 'Рыночные данные', Icon: BarChart3 },
   { id: 'futures', label: 'Фьючерсы', Icon: TrendingUp },
+  { id: 'etf', label: 'ETF', Icon: Landmark },
   { id: 'components', label: 'Компоненты', Icon: Palette },
 ];
 
@@ -17,6 +19,7 @@ const SECTION_COMPONENTS = {
   general: SettingsGeneral,
   'market-data': SettingsMarketData,
   futures: SettingsFutures,
+  etf: SettingsEtf,
   components: SettingsComponents,
 };
 

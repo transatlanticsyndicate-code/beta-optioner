@@ -3,6 +3,7 @@
  * ЗАЧЕМ: Упрощает UX, автоматически определяя тип инструмента
  * Затрагивает: калькулятор опционов, форма новой сделки
  */
+import { isEtfTicker } from './etfSettings';
 
 // Списки известных тикеров по категориям
 const KNOWN_INSTRUMENTS = {
@@ -57,17 +58,24 @@ export const detectInstrumentType = (ticker) => {
   }
   
   const upperTicker = ticker.toUpperCase().trim();
-  
+
   // Проверка на опционы (содержат дату и страйк, например: AAPL250117C00150000)
   if (/^[A-Z]{1,5}\d{6}[CP]\d{8}$/.test(upperTicker)) {
     return 'options';
   }
-  
+
+  // ETF проверяем ПЕРЕД блоком KNOWN_INSTRUMENTS, чтобы пользовательский список
+  // ETF (из настроек) переопределял статический список indices (где сейчас
+  // лежат SPY/QQQ/IWM/VOO/DIA). Это менее инвазивно, чем удалять их из indices.
+  if (isEtfTicker(upperTicker)) {
+    return 'etf';
+  }
+
   // Проверка на криптовалюты (заканчиваются на USD, USDT, BUSD и т.д.)
   if (/(USD|USDT|BUSD|USDC)$/.test(upperTicker)) {
     return 'crypto';
   }
-  
+
   // Проверка в известных списках
   if (KNOWN_INSTRUMENTS.stocks.includes(upperTicker)) {
     return 'stocks';
@@ -108,6 +116,7 @@ export const detectInstrumentType = (ticker) => {
 export const getInstrumentIcon = (type) => {
   const icons = {
     stocks: 'TrendingUp',
+    etf: 'Landmark',
     futures: 'Activity',
     indices: 'BarChart3',
     options: 'Target',
@@ -124,6 +133,7 @@ export const getInstrumentIcon = (type) => {
 export const getInstrumentColor = (type) => {
   const colors = {
     stocks: 'text-green-500',
+    etf: 'text-blue-500',
     futures: 'text-blue-500',
     indices: 'text-purple-500',
     options: 'text-orange-500',
@@ -140,6 +150,7 @@ export const getInstrumentColor = (type) => {
 export const getInstrumentName = (type) => {
   const names = {
     stocks: 'Акции',
+    etf: 'ETF',
     futures: 'Фьючерсы',
     indices: 'Индексы',
     options: 'Опционы',

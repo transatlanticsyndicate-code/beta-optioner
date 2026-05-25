@@ -7,6 +7,7 @@
 import { calculateOptionPrice } from '../../../utils/blackScholes';
 import { getRiskFreeRateSync } from '../../../hooks/useRiskFreeRate';
 import { adjustPLByStockGroup } from '../../../utils/optionPricing';
+import { isStockLikeMode } from '../../../utils/calculatorModes';
 
 /**
  * Рассчитывает сценарии для списка опционов
@@ -198,8 +199,8 @@ export function calculateSuperSelectionScenarios(options, currentPrice, dropPerc
         let pnlDownOnDay = priceDownOnDay - premium;
         let pnlUpOnDay = priceUpOnDay - premium;
 
-        // Применяем корректировку по группе акций (ТОЛЬКО для режима stocks)
-        if (calculatorMode === 'stocks' && classification) {
+        // Применяем корректировку по группе акций (для режима stocks и ETF — математика одинаковая)
+        if (isStockLikeMode(calculatorMode) && classification) {
             pnlDown = adjustPLByStockGroup(pnlDown, classification);
             pnlUp = adjustPLByStockGroup(pnlUp, classification);
             pnlDownOnDay = adjustPLByStockGroup(pnlDownOnDay, classification);

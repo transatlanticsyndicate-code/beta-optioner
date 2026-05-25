@@ -87,7 +87,27 @@ def init_db():
     from app.models import crypto_rating  # Import crypto rating models
     from app.models import saved_configuration  # Import saved configurations
     from app.models import futures_setting  # Import shared futures settings
+    from app.models import etf_setting  # Import shared ETF settings
     Base.metadata.create_all(bind=engine)
+
+    # ЗАЧЕМ: Сидинг таблицы etf_settings при первом запуске —
+    # если таблица пуста, наполняем её 5 популярными ETF (SPY, QQQ, IWM, VOO, DIA).
+    # Идемпотентно: если в таблице уже есть записи, сидинг не выполняется.
+    try:
+        from app.models.etf_setting import EtfSetting
+        with SessionLocal() as db:
+            if db.query(EtfSetting).count() == 0:
+                db.add_all([
+                    EtfSetting(ticker="SPY", name="SPDR S&P 500 ETF Trust"),
+                    EtfSetting(ticker="QQQ", name="Invesco QQQ Trust"),
+                    EtfSetting(ticker="IWM", name="iShares Russell 2000 ETF"),
+                    EtfSetting(ticker="VOO", name="Vanguard S&P 500 ETF"),
+                    EtfSetting(ticker="DIA", name="SPDR Dow Jones Industrial Average ETF"),
+                ])
+                db.commit()
+                print("✅ ETF settings seeded with 5 default tickers")
+    except Exception as e:
+        print(f"⚠️ ETF seeding skipped: {e}")
 
     # ЗАЧЕМ: Принудительный checkpoint при старте — сливаем все данные из WAL в основной .db файл
     # Защита от потери данных при внезапном перезапуске или деплое

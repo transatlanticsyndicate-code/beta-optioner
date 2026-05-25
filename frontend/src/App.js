@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { syncFuturesSettingsFromServer } from './utils/futuresSettings';
+import { syncEtfSettingsFromServer } from './utils/etfSettings';
 import LayoutWithSidebar from './components/Layout/LayoutWithSidebar';
 import ProtectedRoute from './components/ProtectedRoute';
 import OptionsAnalyzer from './pages/OptionsAnalyzer';
@@ -18,12 +19,14 @@ import DealsArchive from './pages/DealsArchive';
 import CryptoRating from './pages/CryptoRating';
 
 function App() {
-  // На старте подтягиваем общую таблицу настроек фьючерсов с сервера.
-  // ЗАЧЕМ: до этой ручки таблица жила только в localStorage и расходилась
+  // На старте подтягиваем общие таблицы настроек фьючерсов и ETF с сервера.
+  // ЗАЧЕМ: до этой ручки таблицы жили только в localStorage и расходились
   // между пользователями. Теперь сервер хранит единый список; кэш в
-  // localStorage остаётся для синхронных вызовов из калькулятора.
+  // localStorage остаётся для синхронных вызовов из калькулятора
+  // (getPointValue, isEtfTicker и т.п.).
   useEffect(() => {
     syncFuturesSettingsFromServer();
+    syncEtfSettingsFromServer();
   }, []);
 
   return (

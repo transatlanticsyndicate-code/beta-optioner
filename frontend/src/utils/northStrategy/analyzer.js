@@ -10,6 +10,7 @@
 import { calculateOptionPLValue, CALCULATOR_MODES } from '../universalPricing';
 import { getOptionVolatility } from '../volatilitySurface';
 import { adjustPLByStockGroup } from '../optionPricing';
+import { isStockLikeMode } from '../calculatorModes';
 
 /**
  * Нормализация IV: всё в десятичный формат (0.30 = 30%).
@@ -97,7 +98,7 @@ const computeOptionPL = ({
     },
   );
 
-  if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
+  if (isStockLikeMode(calculatorMode) && stockClassification) {
     pl = adjustPLByStockGroup(pl, stockClassification);
   }
   return pl;

@@ -37,6 +37,7 @@ import {
   validateImportData,
   importConfigurations,
 } from '../utils/configExportImport';
+import { isEtfTicker } from '../utils/etfSettings';
 
 function UniversalSavedConfigurations() {
   const navigate = useNavigate();
@@ -137,26 +138,37 @@ function UniversalSavedConfigurations() {
   };
 
   // Определение типа инструмента из конфигурации
-  // ЗАЧЕМ: Извлекает тип инструмента (акции/фьючерсы) из сохраненного состояния
+  // ЗАЧЕМ: Извлекает тип инструмента (акции/ETF/фьючерсы/крипто) из сохраненного состояния
   const getInstrumentType = (config) => {
     // Проверяем наличие calculatorMode в состоянии
     if (config.state?.calculatorMode) {
       const mode = config.state.calculatorMode;
-      const result = mode === 'stocks' ? 'Акции' : mode === 'crypto' ? 'Крипто' : 'Фьючерсы';
+      const result =
+        mode === 'etf' ? 'ETF' :
+        mode === 'stocks' ? 'Акции' :
+        mode === 'crypto' ? 'Крипто' :
+        'Фьючерсы';
       console.log(`🔍 [getInstrumentType] Определен по calculatorMode: ${mode} -> ${result}`, config.name);
       return result;
     }
-    
+
     // Fallback: определяем по тикеру
     const ticker = config.ticker || config.state?.selectedTicker || '';
-    
+
+    // ETF проверяем ДО фьючерсов: пользовательский список ETF (из настроек)
+    // должен переопределять любые паттерны.
+    if (isEtfTicker(ticker)) {
+      console.log(`🔍 [getInstrumentType] Определен по тикеру: ${ticker} -> ETF`, config.name);
+      return 'ETF';
+    }
+
     // Паттерны для фьючерсов
     const futuresPatterns = [
       /^[A-Z]{1,2}[FGHJKMNQUVXZ]\d{2}$/,  // ESU24, NQZ24
       /^[A-Z]{2,4}\d{2}$/,                 // MES24, MNQ24
       /^[A-Z]{1,2}\d{1}!$/,                // ES1!, NQ1!
     ];
-    
+
     const isFutures = futuresPatterns.some(pattern => pattern.test(ticker));
     const result = isFutures ? 'Фьючерсы' : 'Акции';
     console.log(`🔍 [getInstrumentType] Определен по тикеру: ${ticker} -> ${result}`, config.name);
@@ -212,7 +224,13 @@ function UniversalSavedConfigurations() {
         if (filterInstrumentType === 'stocks' && instrumentType !== 'Акции') {
           return false;
         }
+        if (filterInstrumentType === 'etf' && instrumentType !== 'ETF') {
+          return false;
+        }
         if (filterInstrumentType === 'futures' && instrumentType !== 'Фьючерсы') {
+          return false;
+        }
+        if (filterInstrumentType === 'crypto' && instrumentType !== 'Крипто') {
           return false;
         }
       }
@@ -397,7 +415,9 @@ function UniversalSavedConfigurations() {
                 <SelectContent>
                   <SelectItem value="all">Все инструменты</SelectItem>
                   <SelectItem value="stocks">Акции</SelectItem>
+                  <SelectItem value="etf">ETF</SelectItem>
                   <SelectItem value="futures">Фьючерсы</SelectItem>
+                  <SelectItem value="crypto">Крипто</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -532,11 +552,12 @@ function UniversalSavedConfigurations() {
                   {filteredConfigurations.map((config) => {
                     const instrumentType = getInstrumentType(config);
                     const isStocks = instrumentType === 'Акции';
+                    const isEtf = instrumentType === 'ETF';
                     const isCrypto = instrumentType === 'Крипто';
                     // Получаем дату входа опциона, если есть, иначе используем дату создания
                     const minEntryDate = getMinEntryDateFromConfig(config);
                     const displayDate = minEntryDate || config.createdAt;
-                    
+
                     return (
                       <TableRow key={config.id} className="hover:bg-gray-50">
                         <TableCell className="font-mono text-sm">
@@ -549,6 +570,8 @@ function UniversalSavedConfigurations() {
                           <div className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium ${
                             isStocks
                               ? 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300'
+                              : isEtf
+                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
                               : isCrypto
                               ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300'
                               : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'

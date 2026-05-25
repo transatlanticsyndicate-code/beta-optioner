@@ -33,6 +33,7 @@ import {
 } from '../components/ui/select';
 import { getConfigurations, deleteConfiguration, createConfigurationsBatch, getAllConfigurations, deleteAllConfigurations } from '../services/configurationsApi';
 import { supabase } from '../services/supabase';
+import { isEtfTicker } from '../utils/etfSettings';
 
 function DatabaseSavedConfigurations() {
   const navigate = useNavigate();
@@ -327,16 +328,25 @@ function DatabaseSavedConfigurations() {
   const getInstrumentType = (config) => {
     if (config.state?.calculatorMode) {
       const mode = config.state.calculatorMode;
-      return mode === 'stocks' ? 'Акции' : mode === 'crypto' ? 'Крипто' : 'Фьючерсы';
+      return mode === 'etf' ? 'ETF'
+        : mode === 'stocks' ? 'Акции'
+        : mode === 'crypto' ? 'Крипто'
+        : 'Фьючерсы';
     }
-    
+
     const ticker = config.ticker || '';
+
+    // ETF проверяем ДО фьючерсов — пользовательский список ETF переопределяет паттерны.
+    if (isEtfTicker(ticker)) {
+      return 'ETF';
+    }
+
     const futuresPatterns = [
       /^[A-Z]{1,2}[FGHJKMNQUVXZ]\d{2}$/,
       /^[A-Z]{2,4}\d{2}$/,
       /^[A-Z]{1,2}\d{1}!$/,
     ];
-    
+
     const isFutures = futuresPatterns.some(pattern => pattern.test(ticker));
     return isFutures ? 'Фьючерсы' : 'Акции';
   };
@@ -387,7 +397,13 @@ function DatabaseSavedConfigurations() {
         if (filterInstrumentType === 'stocks' && instrumentType !== 'Акции') {
           return false;
         }
+        if (filterInstrumentType === 'etf' && instrumentType !== 'ETF') {
+          return false;
+        }
         if (filterInstrumentType === 'futures' && instrumentType !== 'Фьючерсы') {
+          return false;
+        }
+        if (filterInstrumentType === 'crypto' && instrumentType !== 'Крипто') {
           return false;
         }
       }
@@ -604,7 +620,9 @@ function DatabaseSavedConfigurations() {
                 <SelectContent>
                   <SelectItem value="all">Все инструменты</SelectItem>
                   <SelectItem value="stocks">Акции</SelectItem>
+                  <SelectItem value="etf">ETF</SelectItem>
                   <SelectItem value="futures">Фьючерсы</SelectItem>
+                  <SelectItem value="crypto">Крипто</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -818,8 +836,9 @@ function DatabaseSavedConfigurations() {
                 {paginatedConfigurations.map((config) => {
                   const instrumentType = getInstrumentType(config);
                   const isStocks = instrumentType === 'Акции';
+                  const isEtf = instrumentType === 'ETF';
                   const isCrypto = instrumentType === 'Крипто';
-                  
+
                   return (
                     <TableRow key={config.id} className="hover:bg-gray-50">
                       {/* Чекбокс выбора — доступен для любой записи. */}
@@ -845,6 +864,8 @@ function DatabaseSavedConfigurations() {
                         <div className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium ${
                           isStocks
                             ? 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300'
+                            : isEtf
+                            ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
                             : isCrypto
                             ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300'
                             : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'

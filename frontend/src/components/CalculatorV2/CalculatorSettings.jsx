@@ -5,6 +5,7 @@ import { Switch } from '../ui/switch';
 import { Card } from '../ui/card';
 import { Input } from '../ui/input';
 import { useRiskFreeRate } from '../../hooks/useRiskFreeRate';
+import { isStockLikeMode } from '../../utils/calculatorModes';
 
 /**
  * Компонент настроек калькулятора
@@ -94,8 +95,8 @@ function CalculatorSettings({
           </div>
 
           {/* Переключатель учёта дивидендов (BSM модель) */}
-          {/* ЗАЧЕМ: Отображаем только в режиме акций, для фьючерсов дивиденды не актуальны */}
-          {calculatorMode === 'stocks' && (
+          {/* ЗАЧЕМ: Отображаем для акций и ETF (их математика идентична), для фьючерсов дивиденды не актуальны */}
+          {isStockLikeMode(calculatorMode) && (
             <div className="flex items-center justify-between">
               <div className="flex flex-col">
                 <Label htmlFor="use-dividends" className="text-sm font-normal cursor-pointer">

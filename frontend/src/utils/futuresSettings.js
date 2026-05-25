@@ -3,6 +3,7 @@
  * ЗАЧЕМ: Обеспечивает доступ к параметрам фьючерсов (pointValue) для универсального калькулятора
  * Затрагивает: UniversalOptionsCalculator, расчёты P&L для фьючерсов
  */
+import { isEtfTicker } from './etfSettings';
 
 // Предустановленные фьючерсы по умолчанию
 // ЗАЧЕМ: Используются если пользователь не настроил свои параметры
@@ -298,27 +299,35 @@ export const isFuturesTickerByPattern = (ticker) => {
 };
 
 /**
- * Определяет тип инструмента по тикеру (акции, фьючерсы или крипто)
+ * Определяет тип инструмента по тикеру (акции, ETF, фьючерсы или крипто)
  * ЗАЧЕМ: Автоматическое переключение режима калькулятора
  * @param {string} ticker - Тикер для проверки
- * @returns {'stocks'|'futures'|'crypto'} Тип инструмента
+ * @returns {'stocks'|'etf'|'futures'|'crypto'} Тип инструмента
  */
 export const detectInstrumentTypeByPattern = (ticker) => {
   if (!ticker) return 'stocks';
-  
+
   const upperTicker = ticker.toUpperCase().trim();
-  
+
+  // ETF проверяем ДО stocks: тикер ищется в общей таблице настроек
+  // (источник правды — backend, локальный кэш в localStorage).
+  // ЗАЧЕМ: SPY/QQQ/IWM/VOO/DIA и любые добавленные пользователем ETF
+  // должны попадать в режим ETF (синий бейдж), а не в обычные акции.
+  if (isEtfTicker(upperTicker)) {
+    return 'etf';
+  }
+
   // Проверяем на крипто-опционы (заканчиваются на USD, USDT, BUSD и т.д.)
   // ЗАЧЕМ: Крипто-опционы используют множитель 1, а не 100
   if (/(USD|USDT|BUSD|USDC)$/.test(upperTicker)) {
     return 'crypto';
   }
-  
+
   // Сначала проверяем по паттерну фьючерсов
   if (isFuturesTickerByPattern(ticker)) {
     return 'futures';
   }
-  
+
   // Если паттерн не подошёл — считаем акцией
   return 'stocks';
 };
