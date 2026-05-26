@@ -98,9 +98,10 @@ function OptionsTableV3({
   isFuturesMissingSettings = false, // Флаг: отсутствуют настройки фьючерса (блокирует расчёты)
   stockClassification = null, // Классификация акции для корректировки P&L (только для режима stocks)
   onOptionsTotalPLChange = null, // Callback для подъёма «ИТОГО» опционов в родителя (используется в P&L TOTAL карточки «Базовый актив»)
-  // Стратегия СЕВЕР: автоподбор пары Buy Call + Buy Put для лонг-позиции
+  // Стратегия СЕВЕР: автоподбор пары Buy Call + Buy Put
   onOpenNorthStrategy = null, // Открыть поп-ап подбора
-  canShowNorthButton = false, // Показывать ли кнопку (есть лонг по БА, нет опционов)
+  canShowNorthButton = false, // Показывать ли кнопку (нет видимых опционов, цена БА известна)
+  northMode = 'WITH_STOCK', // Режим: WITH_STOCK (есть позиция БА) | OPTIONS_ONLY (без позиции)
   northActive = false, // Показывать ли бейдж "Подобрано стратегией СЕВЕР"
   onReopenNorthResults = null, // Вернуться к экрану результатов (без перезапуска анализа)
   onCancelNorthSelection = null // Отменить подбор: удалить опционы стратегии
@@ -564,9 +565,9 @@ function OptionsTableV3({
           )}
         </div>
         <div className="flex items-center gap-2">
-          {/* Кнопка "Стратегия СЕВЕР" — слева от Save */}
+          {/* Кнопка "Стратегия СЕВЕР" — слева от Save. Название зависит от режима. */}
           {canShowNorthButton && onOpenNorthStrategy && (
-            <NorthButton onClick={onOpenNorthStrategy} />
+            <NorthButton onClick={onOpenNorthStrategy} mode={northMode} />
           )}
 
           {/* Супер кнопка для расширенного подбора опционов */}

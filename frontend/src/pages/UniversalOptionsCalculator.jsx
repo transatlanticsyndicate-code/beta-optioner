@@ -2669,14 +2669,21 @@ function UniversalOptionsCalculator() {
 
   const northActive = useMemo(() => options.some(o => o.fromNorthStrategy), [options]);
 
-  // Кнопка СЕВЕР: режим Акции или ETF, есть лонг по БА, нет ни одного видимого опциона, цена БА известна
-  // ЗАЧЕМ: ETF использует ту же математику, что и акции, и тоже допускает строительство стратегии СЕВЕР
+  // Режим СЕВЕР определяется наличием позиции в БА:
+  //   есть лонг   → WITH_STOCK   (кнопка «СЕВЕР актив + опционы»)
+  //   нет лонга   → OPTIONS_ONLY (кнопка «СЕВЕР только опционы»)
+  const northMode = useMemo(
+    () => (longPositionsEntry ? 'WITH_STOCK' : 'OPTIONS_ONLY'),
+    [longPositionsEntry],
+  );
+
+  // Кнопка СЕВЕР: режим Акции/ETF, нет ни одного видимого опциона, цена БА известна.
+  // Условие на позицию убрано: теперь без позиции включается режим OPTIONS_ONLY.
   const canShowNorthButton = useMemo(() => (
     (calculatorMode === CALCULATOR_MODES.STOCKS || calculatorMode === CALCULATOR_MODES.ETF) &&
-    !!longPositionsEntry &&
     options.filter(o => o.visible !== false).length === 0 &&
     Number(currentPrice) > 0
-  ), [calculatorMode, longPositionsEntry, options, currentPrice]);
+  ), [calculatorMode, options, currentPrice]);
 
   // Список экспираций и сама цепочка опционов теперь запрашиваются внутри
   // NorthStrategyDialog напрямую у расширения (refresh_range), чтобы данные
@@ -4613,6 +4620,7 @@ function UniversalOptionsCalculator() {
                       onOptionsTotalPLChange={setOptionsTableTotalPL}
                       onOpenNorthStrategy={handleOpenNorthStrategy}
                       canShowNorthButton={canShowNorthButton}
+                      northMode={northMode}
                       northActive={northActive}
                       onReopenNorthResults={handleReopenNorthResults}
                       onCancelNorthSelection={handleCancelNorthSelection}
@@ -4767,9 +4775,11 @@ function UniversalOptionsCalculator() {
         <NorthStrategyDialog
           isOpen={northDialogOpen}
           initialStep={northDialogStep}
+          mode={northMode}
           currentPrice={currentPrice}
           entryPrice={longPositionsEntry?.price || currentPrice}
           assetQuantity={longPositionsEntry?.quantity || 0}
+          leverage={baseAssetLeverage}
           ivSurface={ivSurface}
           calculatorMode={calculatorMode}
           dividendYield={useDividends ? dividendYield : 0}

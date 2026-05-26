@@ -1,11 +1,17 @@
 /**
- * Основной поп-ап стратегии СЕВЕР.
+ * Поп-ап стратегии СЕВЕР v2.
+ *
  * Управляет тремя экранами (загрузка цепочки → параметры → результаты) и держит
  * кэш результатов между переключениями экранов, чтобы не перезапускать анализ
  * при возврате к выбору.
+ *
+ * Режим (WITH_STOCK / OPTIONS_ONLY) приходит снаружи и определяет:
+ *  - что показывать в форме (точка входа есть только в WITH_STOCK);
+ *  - как считать критерий «низ» (актив + опционы vs только опционы);
+ *  - название поп-апа.
  */
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -17,22 +23,20 @@ import { Button } from '../../ui/button';
 import { Snowflake, Loader2, AlertTriangle } from 'lucide-react';
 import ParamsForm from './ParamsForm';
 import ResultsView from './ResultsView';
-import { analyzeNorthStrategy, findClosestExpiration } from '../../../utils/northStrategy/analyzer';
+import { analyzeNorthStrategy, NORTH_MODES } from '../../../utils/northStrategy/analyzer';
 import { DEFAULT_WEIGHTS } from '../../../utils/northStrategy/scoring';
 import { sendNorthExpandExpirationCommand, sendNorthInitCommand } from '../../../hooks/useExtensionData';
 
-// Двухстадийный диалог с TradingView:
-//  - Стадия 1 (открытие): читаем СПИСОК экспираций из localStorage tvc_expirations_list,
-//    куда расширение пишет даты по DTE-бейджам без парсинга строк.
-//  - Стадия 2 ("Подобрать"): шлём команду north_expand_expiration — расширение
-//    раскрывает нужную группу в таблице TV и дампит полную цепочку строк в
-//    tvc_full_chain. Здесь ждём, пока в нём появятся строки выбранной экспирации.
 const EXPIRATIONS_KEY = 'tvc_expirations_list';
 const FULL_CHAIN_KEY = 'tvc_full_chain';
-const EXPIRATIONS_MAX_AGE_MS = 10 * 60 * 1000;
 const POLL_INTERVAL_MS = 600;
-const EXPIRATIONS_TIMEOUT_MS = 35_000; // открытие таба + дамп
-const CHAIN_TIMEOUT_MS = 35_000;       // URL-навигация на series=YYYYMMDD + перезагрузка + дамп
+const EXPIRATIONS_TIMEOUT_MS = 35_000;
+const CHAIN_TIMEOUT_MS = 35_000;
+
+// Диапазон бегунка маржина = ±25 % от введённой базы. Пред-расчёт идёт по этим
+// границам — потом бегунок на экране результатов фильтрует подмножество.
+const MARGIN_PRECALC_LO_FACTOR = 0.75;
+const MARGIN_PRECALC_HI_FACTOR = 1.25;
 
 const readExpirationsList = () => {
   try {
@@ -58,7 +62,6 @@ const readFullChain = () => {
   }
 };
 
-/** Возвращает распарсенный tvc_full_chain как есть (с пустым options если такое). */
 const readFullChainRaw = () => {
   try {
     const raw = localStorage.getItem(FULL_CHAIN_KEY);
@@ -80,9 +83,11 @@ const chainHasDate = (chain, isoDate) => {
 function NorthStrategyDialog({
   isOpen,
   initialStep = 'params',
+  mode = NORTH_MODES.WITH_STOCK,
   currentPrice,
   entryPrice,
   assetQuantity,
+  leverage,
   ivSurface,
   calculatorMode,
   dividendYield,
@@ -98,18 +103,22 @@ function NorthStrategyDialog({
   const [params, setParams] = useState(initialState?.params || null);
   const [combinations, setCombinations] = useState(initialState?.combinations || []);
   const [weights, setWeights] = useState(initialState?.weights || DEFAULT_WEIGHTS);
+  const [marginCenter, setMarginCenter] = useState(initialState?.marginCenter ?? null);
 
-  // Стадия 1: список экспираций (быстро, без парсинга строк)
   const [availableExpirations, setAvailableExpirations] = useState([]);
-  const [expirationsStatus, setExpirationsStatus] = useState('idle'); // idle | loading | done | error
+  const [expirationsStatus, setExpirationsStatus] = useState('idle');
   const [expirationsMessage, setExpirationsMessage] = useState('');
 
-  // Стадия 2: полная цепочка для выбранной экспирации (после "Подобрать")
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analyzeMessage, setAnalyzeMessage] = useState('');
   const expirationsStartedAt = useRef(0);
 
-  // --- Стадия 1: подгружаем список экспираций при открытии ---
+  const withStock = mode === NORTH_MODES.WITH_STOCK;
+  const titleLabel = withStock ? 'актив + опционы' : 'только опционы';
+  const descriptionLabel = withStock
+    ? 'Подбор защитной пары Buy Call + Buy Put к лонг-позиции по базовому активу.'
+    : 'Подбор пары Buy Call + Buy Put без позиции по базовому активу.';
+
   useEffect(() => {
     if (!isOpen) return undefined;
 
@@ -117,17 +126,13 @@ function NorthStrategyDialog({
     if (initialState?.params) setParams(initialState.params);
     if (initialState?.combinations) setCombinations(initialState.combinations);
     if (initialState?.weights) setWeights(initialState.weights);
+    if (initialState?.marginCenter != null) setMarginCenter(initialState.marginCenter);
 
-    // Если открывают экран результатов с готовым кэшем — стадия 1 не нужна.
     if (initialStep === 'results' && initialState?.combinations?.length) {
       setExpirationsStatus('done');
       return undefined;
     }
 
-    // ВАЖНО: даже если в localStorage уже лежит tvc_expirations_list — он мог
-    // быть от ДРУГОГО тикера или с другими фильтрами. Считаем валидным только
-    // если: (а) ticker совпадает с нашим, (б) timestamp свежее момента открытия
-    // диалога (то есть пришёл по нашему свежему north_init).
     const openedAt = Date.now();
     expirationsStartedAt.current = openedAt;
     setAvailableExpirations([]);
@@ -148,8 +153,6 @@ function NorthStrategyDialog({
       return true;
     };
 
-    // Шлём команду расширению: открыть таб TV (если нет), поставить Next 90 days
-    // + All strikes, обновить список экспираций.
     sendNorthInitCommand({ ticker, tradingViewUrl });
 
     const interval = setInterval(() => {
@@ -170,7 +173,6 @@ function NorthStrategyDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
-  // --- Стадия 2: по "Подобрать" разворачиваем экспирацию и ждём цепочку ---
   const handleAnalyze = (formParams) => {
     setParams(formParams);
     setIsAnalyzing(true);
@@ -185,10 +187,6 @@ function NorthStrategyDialog({
 
     const startedAt = Date.now();
     const interval = setInterval(() => {
-      // Распознаём премаркет: свежий дамп пришёл (timestamp > startedAt),
-      // но в нём нет нашей даты — значит TV видела строки, но Bid/Ask у них
-      // нулевые, и парсер их отфильтровал. Ждём ещё 2 секунды на случай
-      // следующего дампа, потом показываем ошибку.
       const raw = readFullChainRaw();
       if (raw && raw.timestamp && raw.timestamp > startedAt) {
         const has = Array.isArray(raw.options) && raw.options.some(o => o && o.date === targetIso);
@@ -209,19 +207,22 @@ function NorthStrategyDialog({
         clearInterval(interval);
 
         try {
+          const baseMargin = Number(formParams.margin) || 6000;
           const result = analyzeNorthStrategy({
-            entry: entryPrice,
-            assetQuantity,
+            mode,
+            entry: withStock ? entryPrice : undefined,
+            assetQuantity: withStock ? assetQuantity : undefined,
+            leverage: withStock ? leverage : undefined,
             currentPrice,
             topPrice: formParams.topPrice,
             bottomPrice: formParams.bottomPrice,
-            midAPrice: formParams.midAPrice,
-            midBPrice: formParams.midBPrice,
             expirationDate: targetIso,
             calcDate: formParams.calcDate,
             strikeRangeMin: formParams.strikeRangeMin,
             strikeRangeMax: formParams.strikeRangeMax,
-            qty: formParams.qty,
+            plTolerance: formParams.plTolerance,
+            marginPreCalcMin: baseMargin * MARGIN_PRECALC_LO_FACTOR,
+            marginPreCalcMax: baseMargin * MARGIN_PRECALC_HI_FACTOR,
             chain: chain.options,
             ivSurface,
             calculatorMode,
@@ -229,9 +230,11 @@ function NorthStrategyDialog({
             stockClassification,
           });
           setCombinations(result);
+          // Бегунок маржина стартует на введённой базе.
+          setMarginCenter(baseMargin);
           setStep('results');
           if (onStateChange) {
-            onStateChange({ params: formParams, combinations: result, weights });
+            onStateChange({ params: formParams, combinations: result, weights, marginCenter: baseMargin });
           }
         } catch (err) {
           console.error('[NorthStrategy] Ошибка анализа:', err);
@@ -249,8 +252,6 @@ function NorthStrategyDialog({
         setIsAnalyzing(false);
         setAnalyzeMessage('');
         setExpirationsStatus('error');
-        // Распознаём премаркет: список экспираций есть, но в цепочке ни одного
-        // опциона с валидным ASK — биржа просто не показывает котировки.
         const list = readExpirationsList();
         const chainData = readFullChain();
         const hasExpList = !!list && Array.isArray(list.expirations) && list.expirations.length > 0;
@@ -308,13 +309,31 @@ function NorthStrategyDialog({
   const handleBack = () => setStep('params');
 
   const handlePick = (combination) => {
-    onApply({ combination, params, combinations, weights });
+    onApply({ combination, params, combinations, weights, marginCenter });
   };
 
-  // Стадия 1 нужна только на экране параметров. На экране результатов из кэша — не нужна.
+  const handleStateUpdate = (next) => {
+    if (next.weights !== undefined) setWeights(next.weights);
+    if (next.marginCenter !== undefined) setMarginCenter(next.marginCenter);
+    if (onStateChange) {
+      onStateChange({
+        params,
+        combinations,
+        weights: next.weights ?? weights,
+        marginCenter: next.marginCenter ?? marginCenter,
+      });
+    }
+  };
+
   const needsExpirations = step === 'params';
   const showLoader = isAnalyzing || (needsExpirations && expirationsStatus === 'loading');
   const showFetchError = needsExpirations && expirationsStatus === 'error';
+
+  // Бегунок маржина имеет смысл только если знаем введённую базу. Если нет params — fallback.
+  const marginBase = Number(params?.margin) || 6000;
+  const marginTolerance = Number(params?.marginTolerance) || 500;
+  const marginRangeLo = marginBase * MARGIN_PRECALC_LO_FACTOR;
+  const marginRangeHi = marginBase * MARGIN_PRECALC_HI_FACTOR;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -322,13 +341,13 @@ function NorthStrategyDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Snowflake className="h-5 w-5 text-sky-500" />
-            Стратегия СЕВЕР
+            Стратегия СЕВЕР · {titleLabel}
             <span className="text-sm font-normal text-muted-foreground">
               {step === 'params' ? '· параметры' : '· результаты'}
             </span>
           </DialogTitle>
           <DialogDescription>
-            Подбор защитной пары Buy Call + Buy Put к лонг-позиции по базовому активу.
+            {descriptionLabel}
           </DialogDescription>
         </DialogHeader>
 
@@ -373,8 +392,10 @@ function NorthStrategyDialog({
 
         {!showLoader && !showFetchError && step === 'params' && (
           <ParamsForm
+            mode={mode}
             currentPrice={currentPrice}
             entryPrice={entryPrice}
+            leverage={leverage}
             availableExpirations={availableExpirations}
             initialValues={params || undefined}
             onAnalyze={handleAnalyze}
@@ -384,12 +405,18 @@ function NorthStrategyDialog({
 
         {!showLoader && !showFetchError && step === 'results' && (
           <ResultsView
+            mode={mode}
             combinations={combinations}
             initialWeights={weights}
             params={params}
+            marginCenter={marginCenter ?? marginBase}
+            marginTolerance={marginTolerance}
+            marginRangeLo={marginRangeLo}
+            marginRangeHi={marginRangeHi}
             onPick={handlePick}
             onBack={handleBack}
             onCancel={onClose}
+            onStateUpdate={handleStateUpdate}
           />
         )}
       </DialogContent>

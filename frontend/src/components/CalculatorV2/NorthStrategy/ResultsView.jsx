@@ -1,14 +1,28 @@
 /**
- * Экран результатов стратегии СЕВЕР: 4 слайдера весов + топ-3 карточки.
- * Веса пересортировывают результаты на лету без повторного запуска анализатора.
+ * Экран результатов стратегии СЕВЕР v2.
+ *
+ * Состав:
+ *   - 2 бегунка весов (низ → 0, верх → max) — мгновенная пересортировка.
+ *   - 1 бегунок маржина — фильтр поверх кэша (без перерасчёта анализа).
+ *   - Один фокусированный вариант (лучший по текущим весам и марже).
+ *   - Выпадающий блок «Альтернативы» — компактный список всех валидных
+ *     комбинаций под текущими фильтрами, клик переключает фокус.
+ *
+ * Если ничего нет — заглушка с подсказкой ослабить ограничения.
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Button } from '../../ui/button';
 import { Label } from '../../ui/label';
 import { Slider } from '../../ui/slider';
-import { rankCombinations, DEFAULT_WEIGHTS } from '../../../utils/northStrategy/scoring';
+import { ChevronDown, ChevronUp } from 'lucide-react';
+import {
+  rankCombinations,
+  filterByMargin,
+  DEFAULT_WEIGHTS,
+} from '../../../utils/northStrategy/scoring';
 import ResultCard from './ResultCard';
+import { NORTH_MODES } from '../../../utils/northStrategy/analyzer';
 
 function WeightSlider({ label, value, onChange, hint }) {
   return (
@@ -29,36 +43,109 @@ function WeightSlider({ label, value, onChange, hint }) {
   );
 }
 
-function ResultsView({ combinations, initialWeights, params, onPick, onBack, onCancel }) {
+function MarginSlider({ value, onChange, rangeLo, rangeHi, tolerance }) {
+  return (
+    <div className="space-y-1">
+      <div className="flex justify-between items-baseline text-xs">
+        <Label className="text-xs">Маржин сделки</Label>
+        <span className="text-muted-foreground tabular-nums">
+          ${value.toFixed(0)} <span className="opacity-60">± {tolerance}</span>
+        </span>
+      </div>
+      <Slider
+        min={Math.round(rangeLo)}
+        max={Math.round(rangeHi)}
+        step={100}
+        value={[Math.round(value)]}
+        onValueChange={(v) => onChange(v[0])}
+      />
+      <div className="text-[10px] text-muted-foreground">
+        диапазон ${Math.round(rangeLo)}–${Math.round(rangeHi)}
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ message, onBack, onCancel }) {
+  return (
+    <div className="space-y-3">
+      <div className="rounded-md border border-amber-300 bg-amber-50 text-amber-800 text-xs p-3">
+        {message}
+      </div>
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" size="sm" onClick={onBack}>← К параметрам</Button>
+        <Button variant="outline" size="sm" onClick={onCancel}>Отмена</Button>
+      </div>
+    </div>
+  );
+}
+
+function ResultsView({
+  mode = NORTH_MODES.WITH_STOCK,
+  combinations,
+  initialWeights,
+  params,
+  marginCenter,
+  marginTolerance,
+  marginRangeLo,
+  marginRangeHi,
+  onPick,
+  onBack,
+  onCancel,
+  onStateUpdate,
+}) {
   const [weights, setWeights] = useState({
     bottomZero: initialWeights?.bottomZero ?? DEFAULT_WEIGHTS.bottomZero,
-    topZero: initialWeights?.topZero ?? DEFAULT_WEIGHTS.topZero,
-    midAMax: initialWeights?.midAMax ?? DEFAULT_WEIGHTS.midAMax,
-    midBMax: initialWeights?.midBMax ?? DEFAULT_WEIGHTS.midBMax,
+    topMax: initialWeights?.topMax ?? DEFAULT_WEIGHTS.topMax,
   });
+  const [marginValue, setMarginValue] = useState(marginCenter);
+  const [activeId, setActiveId] = useState(null);
+  const [altsOpen, setAltsOpen] = useState(false);
 
-  const ranked = useMemo(() => rankCombinations(combinations, weights), [combinations, weights]);
-  const top3 = ranked.slice(0, 3);
+  // Сначала фильтруем по маржину (бегунок), потом ранжируем по весам.
+  const filtered = useMemo(
+    () => filterByMargin(combinations, marginValue, marginTolerance),
+    [combinations, marginValue, marginTolerance],
+  );
+  const ranked = useMemo(() => rankCombinations(filtered, weights), [filtered, weights]);
+
+  // Выбранный (активный) вариант — лучший по текущим фильтрам, либо тот, что пользователь
+  // явно ткнул в списке альтернатив (если он ещё в отфильтрованной выдаче).
+  const activeCombination = useMemo(() => {
+    if (ranked.length === 0) return null;
+    if (activeId) {
+      const found = ranked.find((c) => c.id === activeId);
+      if (found) return found;
+    }
+    return ranked[0];
+  }, [ranked, activeId]);
+
+  // При изменениях весов или маржина — сбрасываем явный пик, чтобы фокус шёл на лучший по новым настройкам.
+  useEffect(() => {
+    setActiveId(null);
+  }, [weights, marginValue]);
+
+  // Пробрасываем изменения наверх для кэша между переключениями экранов.
+  useEffect(() => {
+    if (onStateUpdate) onStateUpdate({ weights });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weights]);
+  useEffect(() => {
+    if (onStateUpdate) onStateUpdate({ marginCenter: marginValue });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [marginValue]);
 
   if (combinations.length === 0) {
     return (
-      <div className="space-y-3">
-        <div className="rounded-md border border-amber-300 bg-amber-50 text-amber-800 text-xs p-3">
-          В выбранном диапазоне нет подходящих страйков с такой экспирацией.
-          Возможные причины:
-          <ul className="list-disc list-inside mt-1">
-            <li>В TradingView сейчас открыта другая экспирация — переключите её и попробуйте снова.</li>
-            <li>В диапазоне нет коллов выше точки входа или путов ниже точки входа.</li>
-            <li>У части опционов отсутствуют ASK или IV.</li>
-          </ul>
-        </div>
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" size="sm" onClick={onBack}>← К параметрам</Button>
-          <Button variant="outline" size="sm" onClick={onCancel}>Отмена</Button>
-        </div>
-      </div>
+      <EmptyState
+        message="Не удалось найти комбинации, удовлетворяющие жёстким фильтрам (маржа в диапазоне, опционы на верху в плюсе, низ в допустимом диапазоне P&L). Попробуйте расширить диапазон страйков, увеличить допустимый P&L по низу или изменить маржин."
+        onBack={onBack}
+        onCancel={onCancel}
+      />
     );
   }
+
+  const alternatives = ranked.filter((c) => c.id !== activeCombination?.id);
 
   return (
     <div className="space-y-4 max-h-[75vh] overflow-y-auto p-1.5">
@@ -67,55 +154,83 @@ function ResultsView({ combinations, initialWeights, params, onPick, onBack, onC
           Экспирация: <strong className="text-gray-700 dark:text-gray-300">{params?.expirationDate || '—'}</strong>
         </span>
         <span>
-          Проанализировано: <strong>{combinations.length}</strong> комбинаций. Показано топ-3.
+          Дата расчёта: <strong className="text-gray-700 dark:text-gray-300">{params?.calcDate || '—'}</strong>
+        </span>
+        <span>
+          Прошли фильтры: <strong>{combinations.length}</strong>, под текущий маржин: <strong>{filtered.length}</strong>
         </span>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-start">
+      <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-4 items-start">
         <div className="border rounded-md p-3 bg-muted/30 space-y-3">
           <div className="text-xs font-semibold text-gray-700 dark:text-gray-300">
             Веса критериев
           </div>
           <WeightSlider
             label="Цель по верху"
-            hint="P&L опционов на верху ≈ 0"
-            value={weights.topZero}
-            onChange={(v) => setWeights((w) => ({ ...w, topZero: v }))}
-          />
-          <WeightSlider
-            label="Уровень A"
-            hint="Максимум P&L всей позиции на A"
-            value={weights.midAMax}
-            onChange={(v) => setWeights((w) => ({ ...w, midAMax: v }))}
-          />
-          <WeightSlider
-            label="Уровень B"
-            hint="Максимум P&L всей позиции на B"
-            value={weights.midBMax}
-            onChange={(v) => setWeights((w) => ({ ...w, midBMax: v }))}
+            hint="P&L опционов на верху → max"
+            value={weights.topMax}
+            onChange={(v) => setWeights((w) => ({ ...w, topMax: v }))}
           />
           <WeightSlider
             label="Закрытие по низу"
-            hint="P&L всей позиции на низу ≈ 0"
+            hint={`P&L ${mode === NORTH_MODES.WITH_STOCK ? 'всей позиции' : 'опционов'} на низу ≈ 0`}
             value={weights.bottomZero}
             onChange={(v) => setWeights((w) => ({ ...w, bottomZero: v }))}
           />
+          <div className="border-t pt-3">
+            <MarginSlider
+              value={marginValue}
+              onChange={setMarginValue}
+              rangeLo={marginRangeLo}
+              rangeHi={marginRangeHi}
+              tolerance={marginTolerance}
+            />
+          </div>
         </div>
 
-        {top3.map((c, i) => (
-          <ResultCard
-            key={c.id}
-            rank={i + 1}
-            combination={c}
-            levels={params ? {
-              top: params.topPrice,
-              bottom: params.bottomPrice,
-              midA: params.midAPrice,
-              midB: params.midBPrice,
-            } : null}
-            onPick={() => onPick(c)}
-          />
-        ))}
+        <div className="space-y-3">
+          {activeCombination ? (
+            <ResultCard
+              variant="focused"
+              combination={activeCombination}
+              mode={mode}
+              levels={params ? { top: params.topPrice, bottom: params.bottomPrice } : null}
+              onPick={() => onPick(activeCombination)}
+            />
+          ) : (
+            <div className="rounded-md border border-amber-300 bg-amber-50 text-amber-800 text-xs p-3">
+              Под текущий маржин нет подходящих комбинаций. Сдвиньте бегунок маржина ближе к исходному значению или вернитесь к параметрам.
+            </div>
+          )}
+
+          {alternatives.length > 0 && (
+            <div className="border rounded-md bg-white dark:bg-gray-900">
+              <button
+                type="button"
+                onClick={() => setAltsOpen((v) => !v)}
+                className="w-full px-3 py-2 flex items-center justify-between text-xs hover:bg-gray-50 dark:hover:bg-gray-800"
+              >
+                <span className="font-medium">Альтернативы ({alternatives.length})</span>
+                {altsOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              </button>
+              {altsOpen && (
+                <div className="px-2 pb-2 space-y-1">
+                  {alternatives.map((c) => (
+                    <ResultCard
+                      key={c.id}
+                      variant="compact"
+                      combination={c}
+                      mode={mode}
+                      isActive={false}
+                      onSelect={() => setActiveId(c.id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="flex justify-between gap-2 pt-2">

@@ -1,47 +1,38 @@
 /**
- * Стратегия СЕВЕР — ранжирование комбинаций по 4 критериям с регулируемыми весами.
- * ЗАЧЕМ: Композитный score позволяет пользователю на лету пересортировать топ-варианты
- * без перезапуска самого расчёта.
+ * Стратегия СЕВЕР v2 — ранжирование комбинаций по 2 критериям + фильтр по марже.
  *
- * Идея:
- *  - Критерии 1 и 2 — "защитные", идеал = 0 (минимизация |PL|).
- *  - Критерии 3A и 3B — "бонусные", идеал = +∞ (максимизация PL).
- *  - Каждый критерий нормируется в [0..1] по min/max среди всех комбинаций
- *    (0 — лучший вариант, 1 — худший), затем взвешенно суммируется.
- *  - Меньший итоговый score = лучше.
+ * ЗАЧЕМ:
+ *  - 2 веса (низ → 0, верх → max) позволяют пользователю на лету пересортировать
+ *    варианты без перерасчёта анализа.
+ *  - Бегунок маржина даёт фильтр поверх кэша: показываем только комбинации,
+ *    стоимость которых попадает в [marginCenter − tol, marginCenter + tol].
+ *
+ * Идея ранжирования:
+ *  - Критерий «низ»: |bottomMetric| (идеал 0 — близость к 0).
+ *  - Критерий «верх»: −topOptions (идеал +∞ — максимизация P&L).
+ *  - Оба критерия нормируются в [0..1] по min/max среди отобранных комбинаций.
+ *  - Композитный score = w_низ × норм(низ) + w_верх × норм(верх).
+ *  - Меньший score = лучше.
  */
 
 export const DEFAULT_WEIGHTS = Object.freeze({
-  bottomZero: 35,
-  topZero: 35,
-  midAMax: 15,
-  midBMax: 15,
+  bottomZero: 50,
+  topMax: 50,
 });
 
-/**
- * Нормировка веса в [0..1] так, чтобы сумма была 1. Если все нули — равные веса.
- */
 const normalizeWeights = (weights) => {
   const w = {
-    bottomZero: Math.max(0, Number(weights.bottomZero) || 0),
-    topZero: Math.max(0, Number(weights.topZero) || 0),
-    midAMax: Math.max(0, Number(weights.midAMax) || 0),
-    midBMax: Math.max(0, Number(weights.midBMax) || 0),
+    bottomZero: Math.max(0, Number(weights?.bottomZero) || 0),
+    topMax: Math.max(0, Number(weights?.topMax) || 0),
   };
-  const sum = w.bottomZero + w.topZero + w.midAMax + w.midBMax;
-  if (sum <= 0) return { bottomZero: 0.25, topZero: 0.25, midAMax: 0.25, midBMax: 0.25 };
+  const sum = w.bottomZero + w.topMax;
+  if (sum <= 0) return { bottomZero: 0.5, topMax: 0.5 };
   return {
     bottomZero: w.bottomZero / sum,
-    topZero: w.topZero / sum,
-    midAMax: w.midAMax / sum,
-    midBMax: w.midBMax / sum,
+    topMax: w.topMax / sum,
   };
 };
 
-/**
- * Нормировка одной метрики в [0..1] по min/max среди комбинаций.
- * Возвращает 0 если max == min (все одинаковые) — нейтрально.
- */
 const normalizeMetric = (values) => {
   if (values.length === 0) return [];
   let min = values[0];
@@ -56,43 +47,51 @@ const normalizeMetric = (values) => {
 };
 
 /**
- * Ранжирование набора комбинаций.
- * Возвращает копию массива с добавленным полем `score` и нормализованными частями,
- * отсортированную по возрастанию score (лучшие — впереди).
+ * Фильтр комбинаций по маржину сделки (бегунок маржина на экране результатов).
+ *
+ * @param {Array} combinations
+ * @param {number} marginCenter   Центр диапазона (положение бегунка)
+ * @param {number} marginTolerance Допуск ±X (по умолчанию 500)
+ * @returns {Array} отфильтрованные комбинации
+ */
+export const filterByMargin = (combinations, marginCenter, marginTolerance) => {
+  if (!Array.isArray(combinations) || combinations.length === 0) return [];
+  if (!Number.isFinite(marginCenter) || !Number.isFinite(marginTolerance)) return combinations;
+  const lo = marginCenter - marginTolerance;
+  const hi = marginCenter + marginTolerance;
+  return combinations.filter((c) => {
+    const m = c?.cost?.marginUsed;
+    return Number.isFinite(m) && m >= lo && m <= hi;
+  });
+};
+
+/**
+ * Ранжирование комбинаций композитным score'ом.
+ * Сортирует по возрастанию (лучшие — первыми).
+ *
+ * @param {Array} combinations
+ * @param {{bottomZero:number, topMax:number}} weightsInput
+ * @returns {Array} копия с полями score и normalized
  */
 export const rankCombinations = (combinations, weightsInput = DEFAULT_WEIGHTS) => {
   if (!Array.isArray(combinations) || combinations.length === 0) return [];
 
   const weights = normalizeWeights(weightsInput);
 
-  // Метрики "чем меньше тем лучше":
-  //  - bottomTotal:  |PL|  (идеал 0)
-  //  - topOptions:   |PL|  (идеал 0)
-  //  - midATotal:   -PL    (идеал +∞)
-  //  - midBTotal:   -PL    (идеал +∞)
-  const bottomVals = combinations.map((c) => Math.abs(c.criteria.bottomTotal));
-  const topVals = combinations.map((c) => Math.abs(c.criteria.topOptions));
-  const midAVals = combinations.map((c) => -c.criteria.midATotal);
-  const midBVals = combinations.map((c) => -c.criteria.midBTotal);
+  const bottomVals = combinations.map((c) => Math.abs(c.criteria.bottomMetric));
+  const topVals = combinations.map((c) => -c.criteria.topOptions);
 
   const bottomNorm = normalizeMetric(bottomVals);
   const topNorm = normalizeMetric(topVals);
-  const midANorm = normalizeMetric(midAVals);
-  const midBNorm = normalizeMetric(midBVals);
 
-  const ranked = combinations.map((c, i) => {
-    const score =
-      weights.bottomZero * bottomNorm[i] +
-      weights.topZero * topNorm[i] +
-      weights.midAMax * midANorm[i] +
-      weights.midBMax * midBNorm[i];
-    return { ...c, score, normalized: {
+  const ranked = combinations.map((c, i) => ({
+    ...c,
+    score: weights.bottomZero * bottomNorm[i] + weights.topMax * topNorm[i],
+    normalized: {
       bottomZero: bottomNorm[i],
-      topZero: topNorm[i],
-      midAMax: midANorm[i],
-      midBMax: midBNorm[i],
-    } };
-  });
+      topMax: topNorm[i],
+    },
+  }));
 
   ranked.sort((a, b) => a.score - b.score);
   return ranked;
