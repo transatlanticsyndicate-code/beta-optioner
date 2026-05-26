@@ -98,6 +98,7 @@ function OptionsTableV3({
   isFuturesMissingSettings = false, // Флаг: отсутствуют настройки фьючерса (блокирует расчёты)
   stockClassification = null, // Классификация акции для корректировки P&L (только для режима stocks)
   onOptionsTotalPLChange = null, // Callback для подъёма «ИТОГО» опционов в родителя (используется в P&L TOTAL карточки «Базовый актив»)
+  onOptionsPLMapChange = null, // Callback для подъёма карты текущего P&L по optionId — используется при фиксации (snapshot Start P&L)
   // Стратегия СЕВЕР: автоподбор пары Buy Call + Buy Put
   onOpenNorthStrategy = null, // Открыть поп-ап подбора
   canShowNorthButton = false, // Показывать ли кнопку (нет видимых опционов, цена БА известна)
@@ -242,6 +243,102 @@ function OptionsTableV3({
       onOptionsTotalPLChange(optionsTableTotalPL);
     }
   }, [optionsTableTotalPL, onOptionsTotalPLChange]);
+
+  // Карта текущего P&L по optionId — используется родителем для снимка Start P&L при фиксации.
+  // ЗАЧЕМ: При переводе позиции в «Зафиксирована» каждой ноге без startPL нужно записать
+  // значение, которое сейчас показано в колонке P&L. Считаем здесь, чтобы переиспользовать
+  // ту же логику расчёта (учёт IV-поверхности, AI, якоря Fact P&L, поправок по группе акций).
+  const optionsPLMap = React.useMemo(() => {
+    if (!options || options.length === 0 || !currentPrice) return {};
+    const map = {};
+    const oldestEntry = getOldestEntryDate(options);
+    options.forEach(opt => {
+      if (opt.visible === false || !opt.strike) return;
+      const hasPremium = opt.isPremiumModified
+        ? (opt.customPremium !== null && opt.customPremium !== undefined)
+        : (opt.premium !== null && opt.premium !== undefined);
+      if (!hasPremium) return;
+      if (!isOptionActiveAtDay(opt, daysPassed, oldestEntry)) return;
+      if (isFuturesMissingSettings) return;
+
+      const currentDaysToExp = calculateDaysRemainingUTC(opt, 0, 30, oldestEntry);
+      const optDaysRemaining = calculateDaysRemainingUTC(opt, daysPassed, 30, oldestEntry);
+      const todaySimDaysForOpt = calculateDaysToExpirationFromToday(opt);
+
+      let optVolatility = getOptionVolatility(
+        opt,
+        currentDaysToExp,
+        optDaysRemaining,
+        ivSurface,
+        'simple',
+        null,
+        opt.manualIvOverride,
+        todaySimDaysForOpt
+      );
+
+      if (isAIEnabled && aiVolatilityMap && selectedTicker && targetPrice && !opt.manualIvOverride) {
+        const cacheKey = `${selectedTicker}_${opt.strike}_${opt.date}_${targetPrice.toFixed(2)}_${optDaysRemaining}`;
+        const aiVolatility = aiVolatilityMap[cacheKey];
+        if (aiVolatility) optVolatility = aiVolatility;
+      }
+
+      const effectivePremium = opt.isPremiumModified ? opt.customPremium : opt.premium;
+      const tempOpt = {
+        ...opt,
+        premium: effectivePremium,
+        ask: opt.isPremiumModified ? 0 : opt.ask,
+        bid: opt.isPremiumModified ? 0 : opt.bid
+      };
+
+      const rfrSum = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
+      const optAssetPrice = opt.assetPriceAtEntry || currentPrice;
+      let pl = calculatorMode === CALCULATOR_MODES.FUTURES
+        ? calculateFuturesOptionPLValue(tempOpt, targetPrice || currentPrice, optDaysRemaining, contractMultiplier, optVolatility)
+        : calculateStockOptionPLValue(tempOpt, targetPrice || currentPrice, optAssetPrice, optDaysRemaining, optVolatility, dividendYield, contractMultiplier, rfrSum);
+
+      if (isStockLikeMode(calculatorMode) && stockClassification) {
+        pl = adjustPLByStockGroup(pl, stockClassification);
+      }
+
+      if (opt.actualPL !== null && opt.actualPL !== undefined && opt.actualPLDate) {
+        const anchorDateObj = new Date(opt.actualPLDate + 'T00:00:00Z');
+        const oldestEntryDateObj = oldestEntry || new Date();
+        const anchorDaysPassed = Math.round((anchorDateObj - oldestEntryDateObj) / (1000 * 60 * 60 * 24));
+
+        if (daysPassed >= anchorDaysPassed) {
+          const anchorDaysToExp = calculateDaysRemainingUTC(opt, anchorDaysPassed, 30, oldestEntry);
+          const rfrAnchor = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
+          const anchorIV = opt.manualIvOverride !== null && opt.manualIvOverride !== undefined
+            ? opt.manualIvOverride
+            : optVolatility;
+          const anchorPrice = opt.actualPLPrice || currentPrice;
+
+          let plAtAnchor = calculatorMode === CALCULATOR_MODES.FUTURES
+            ? calculateFuturesOptionPLValue(tempOpt, anchorPrice, anchorDaysToExp, contractMultiplier, anchorIV)
+            : calculateStockOptionPLValue(tempOpt, anchorPrice, optAssetPrice, anchorDaysToExp, anchorIV, dividendYield, contractMultiplier, rfrAnchor);
+
+          if (isStockLikeMode(calculatorMode) && stockClassification) {
+            plAtAnchor = adjustPLByStockGroup(plAtAnchor, stockClassification);
+          }
+
+          const anchorQtySum = Number(opt.actualPLQuantity) > 0 ? Number(opt.actualPLQuantity) : (Number(opt.quantity) || 1);
+          const currentQtySum = Number(opt.quantity) || 0;
+          const anchorRatioSum = anchorQtySum > 0 ? (currentQtySum / anchorQtySum) : 1;
+          pl = opt.actualPL * anchorRatioSum + (pl - plAtAnchor);
+        }
+      }
+
+      map[opt.id] = pl;
+    });
+    return map;
+  }, [options, currentPrice, daysPassed, targetPrice, ivSurface, calculatorMode, contractMultiplier, dividendYield, isAIEnabled, aiVolatilityMap, selectedTicker, stockClassification, isFuturesMissingSettings]);
+
+  // Подъём карты P&L в родителя — нужен в момент фиксации позиции (snapshot Start P&L).
+  React.useEffect(() => {
+    if (typeof onOptionsPLMapChange === 'function') {
+      onOptionsPLMapChange(optionsPLMap);
+    }
+  }, [optionsPLMap, onOptionsPLMapChange]);
 
   // Функция обработки клика по заголовку колонки
   const handleSort = (column) => {
@@ -663,7 +760,7 @@ function OptionsTableV3({
           {/* ЗАЧЕМ: Клик по заголовку сортирует таблицу по этой колонке */}
           <div className="grid items-center text-xs font-medium text-muted-foreground px-2" style={{
             display: 'grid',
-            gridTemplateColumns: `30px minmax(0,0.9fr) minmax(0,0.9fr) minmax(0,0.7fr) minmax(0,0.55fr) ${hideColumns.includes('premium') ? '' : 'minmax(0,0.8fr) '}minmax(0,0.6fr) minmax(0,0.6fr) ${hideColumns.includes('oi') ? '' : 'minmax(0,0.6fr) '}minmax(0,0.4fr) minmax(0,0.55fr) minmax(0,0.55fr) minmax(0,0.65fr) minmax(0,0.55fr) minmax(0,1.1fr) minmax(0,0.75fr) minmax(0,0.7fr) 40px`.replace(/\s+/g, ' ').trim(),
+            gridTemplateColumns: `30px minmax(0,0.9fr) minmax(0,0.9fr) minmax(0,0.7fr) minmax(0,0.55fr) ${hideColumns.includes('premium') ? '' : 'minmax(0,0.8fr) '}minmax(0,0.6fr) minmax(0,0.6fr) ${hideColumns.includes('oi') ? '' : 'minmax(0,0.6fr) '}minmax(0,0.4fr) minmax(0,0.55fr) minmax(0,0.55fr) minmax(0,0.65fr) minmax(0,0.55fr) minmax(0,0.9fr) minmax(0,1.1fr) minmax(0,0.75fr) minmax(0,0.7fr) 40px`.replace(/\s+/g, ' ').trim(),
             gap: '6px'
           }}>
             <div></div>
@@ -725,6 +822,19 @@ function OptionsTableV3({
                 </Tooltip>
               </TooltipProvider>
             </div>
+            <div className="text-center flex items-center justify-center gap-0.5" style={{ fontSize: '0.7rem' }}>
+              Start P&L
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="w-3 h-3 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Снимок P&L в момент фиксации позиции.<br/>Не меняется во времени — нужен для сравнения с текущим P&L.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
             <div className="text-center" style={{ fontSize: '0.75rem' }}>P&L</div>
             <div className="text-center" style={{ fontSize: '0.75rem' }}>Fact P&L</div>
             <div className="text-center" style={{ fontSize: '0.75rem' }}>Close</div>
@@ -752,7 +862,7 @@ function OptionsTableV3({
                   }`}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: `30px minmax(0,0.9fr) minmax(0,0.9fr) minmax(0,0.7fr) minmax(0,0.55fr) ${hideColumns.includes('premium') ? '' : 'minmax(0,0.8fr) '}minmax(0,0.6fr) minmax(0,0.6fr) ${hideColumns.includes('oi') ? '' : 'minmax(0,0.6fr) '}minmax(0,0.4fr) minmax(0,0.55fr) minmax(0,0.55fr) minmax(0,0.65fr) minmax(0,0.55fr) minmax(0,1.1fr) minmax(0,0.75fr) minmax(0,0.7fr) 40px`.replace(/\s+/g, ' ').trim(),
+                  gridTemplateColumns: `30px minmax(0,0.9fr) minmax(0,0.9fr) minmax(0,0.7fr) minmax(0,0.55fr) ${hideColumns.includes('premium') ? '' : 'minmax(0,0.8fr) '}minmax(0,0.6fr) minmax(0,0.6fr) ${hideColumns.includes('oi') ? '' : 'minmax(0,0.6fr) '}minmax(0,0.4fr) minmax(0,0.55fr) minmax(0,0.55fr) minmax(0,0.65fr) minmax(0,0.55fr) minmax(0,0.9fr) minmax(0,1.1fr) minmax(0,0.75fr) minmax(0,0.7fr) 40px`.replace(/\s+/g, ' ').trim(),
                   gap: '6px'
                 }}
               >
@@ -1111,6 +1221,17 @@ function OptionsTableV3({
                     <span className={`text-xs font-bold ${option.isAssetPriceModified ? 'text-orange-500' : 'text-muted-foreground'}`}>
                       {option.assetPriceAtEntry ? option.assetPriceAtEntry.toFixed(2) : '—'}
                     </span>
+                  )}
+                </span>
+
+                {/* Start P&L — снимок P&L в момент фиксации позиции, не меняется во времени */}
+                <span className="text-right font-bold">
+                  {option.startPL !== null && option.startPL !== undefined ? (
+                    <span className={option.startPL > 0 ? 'text-green-600' : option.startPL < 0 ? 'text-red-600' : 'text-muted-foreground'}>
+                      {formatPLValue(option.startPL)}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
                   )}
                 </span>
 
@@ -1489,7 +1610,7 @@ function OptionsTableV3({
           })}
 
           {/* Итоговая строка */}
-          <div className="items-center text-sm border-t-2 border-cyan-500 bg-cyan-50/50 rounded-md p-2 font-bold" style={{ display: 'grid', gridTemplateColumns: `30px minmax(0,0.9fr) minmax(0,0.9fr) minmax(0,0.7fr) minmax(0,0.55fr) ${hideColumns.includes('premium') ? '' : 'minmax(0,0.8fr) '}minmax(0,0.6fr) minmax(0,0.6fr) ${hideColumns.includes('oi') ? '' : 'minmax(0,0.6fr) '}minmax(0,0.4fr) minmax(0,0.55fr) minmax(0,0.55fr) minmax(0,0.65fr) minmax(0,0.55fr) minmax(0,1.1fr) minmax(0,0.75fr) minmax(0,0.7fr) 40px`.replace(/\s+/g, ' ').trim(), gap: '6px' }}>
+          <div className="items-center text-sm border-t-2 border-cyan-500 bg-cyan-50/50 rounded-md p-2 font-bold" style={{ display: 'grid', gridTemplateColumns: `30px minmax(0,0.9fr) minmax(0,0.9fr) minmax(0,0.7fr) minmax(0,0.55fr) ${hideColumns.includes('premium') ? '' : 'minmax(0,0.8fr) '}minmax(0,0.6fr) minmax(0,0.6fr) ${hideColumns.includes('oi') ? '' : 'minmax(0,0.6fr) '}minmax(0,0.4fr) minmax(0,0.55fr) minmax(0,0.55fr) minmax(0,0.65fr) minmax(0,0.55fr) minmax(0,0.9fr) minmax(0,1.1fr) minmax(0,0.75fr) minmax(0,0.7fr) 40px`.replace(/\s+/g, ' ').trim(), gap: '6px' }}>
             <div></div>
             <div className="text-left">ИТОГО:</div>
             <div></div>
@@ -1506,6 +1627,25 @@ function OptionsTableV3({
             <div></div>
             <div className="text-right">
               {(() => {
+                // ИТОГО Start P&L — сумма зафиксированных снимков по видимым опционам.
+                // Считается из option.startPL, не пересчитывается во времени (значения заморожены).
+                const visibleOptionsWithStartPL = options.filter(opt =>
+                  opt.visible !== false && opt.startPL !== null && opt.startPL !== undefined
+                );
+                if (visibleOptionsWithStartPL.length === 0) {
+                  return <span className="text-muted-foreground">—</span>;
+                }
+                const totalStartPL = visibleOptionsWithStartPL.reduce((sum, opt) => sum + opt.startPL, 0);
+                const plColor = totalStartPL > 0 ? 'text-green-600' : totalStartPL < 0 ? 'text-red-600' : 'text-muted-foreground';
+                return (
+                  <span className={plColor}>
+                    {formatPLValue(totalStartPL)}
+                  </span>
+                );
+              })()}
+            </div>
+            <div className="text-right">
+              {(() => {
                 // Единый источник истины: значение из useMemo (см. начало компонента).
                 // То же число поднимается наверх через onOptionsTotalPLChange и используется
                 // в P&L TOTAL карточки «Базовый актив». Никаких параллельных пересчётов.
@@ -1519,7 +1659,6 @@ function OptionsTableV3({
                 );
               })()}
             </div>
-            <div></div>
             <div></div>
             <div></div>
             <div></div>

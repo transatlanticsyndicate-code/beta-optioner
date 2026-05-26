@@ -716,6 +716,10 @@ function UniversalOptionsCalculator() {
   // через callback onOptionsTotalPLChange — никаких параллельных пересчётов.
   const [optionsTableTotalPL, setOptionsTableTotalPL] = useState(0);
 
+  // Карта текущего P&L по optionId — снимается из таблицы и используется при фиксации позиции
+  // для записи поля startPL у каждой ноги (см. handlePromotePendingToStandard).
+  const [optionsPLMap, setOptionsPLMap] = useState({});
+
   // Миграция якорной P&L: для старых опционов, у которых заполнен actualPL, но не сохранён actualPLQuantity
   // (фикс масштабирования якоря по количеству был добавлен 2026-05-04, ранее это поле не сохранялось).
   // ЗАЧЕМ: Без actualPLQuantity формула якоря возвращается к старому (некорректному) поведению при смене количества.
@@ -3969,6 +3973,16 @@ function UniversalOptionsCalculator() {
         }
       }
 
+      // Snapshot Start P&L: каждой ноге без startPL записываем текущее значение P&L из таблицы.
+      // ЗАЧЕМ: Колонка Start P&L хранит P&L в момент фиксации позиции — это значение
+      // должно остаться неизменным навсегда для последующего сравнения с динамической P&L.
+      const optionsWithStartPL = options.map(opt => {
+        if (opt.startPL !== null && opt.startPL !== undefined) return opt;
+        const currentPL = optionsPLMap[opt.id];
+        if (currentPL === null || currentPL === undefined) return opt;
+        return { ...opt, startPL: currentPL };
+      });
+
       const configData = {
         status: 'standard',
         isLocked: true,
@@ -3978,7 +3992,7 @@ function UniversalOptionsCalculator() {
           selectedTicker,
           currentPrice,
           priceChange,
-          options,
+          options: optionsWithStartPL,
           positions,
           selectedExpirationDate,
           daysPassed,
@@ -4000,7 +4014,17 @@ function UniversalOptionsCalculator() {
 
       // Применяем флаги isLockedPosition к опционам в локальном state, чтобы
       // не было визуального рассинхрона до следующей загрузки.
-      setOptions(prev => prev.map(opt => ({ ...opt, isLockedPosition: true })));
+      // Одновременно сохраняем зафиксированный startPL.
+      setOptions(prev => prev.map(opt => {
+        const updated = { ...opt, isLockedPosition: true };
+        if (updated.startPL === null || updated.startPL === undefined) {
+          const currentPL = optionsPLMap[opt.id];
+          if (currentPL !== null && currentPL !== undefined) {
+            updated.startPL = currentPL;
+          }
+        }
+        return updated;
+      }));
       setPositions(prev => prev.map(pos => ({ ...pos, isLockedPosition: true })));
 
       alert('Позиция зафиксирована.');
@@ -4618,6 +4642,7 @@ function UniversalOptionsCalculator() {
                       }}
                       stockClassification={null}
                       onOptionsTotalPLChange={setOptionsTableTotalPL}
+                      onOptionsPLMapChange={setOptionsPLMap}
                       onOpenNorthStrategy={handleOpenNorthStrategy}
                       canShowNorthButton={canShowNorthButton}
                       northMode={northMode}
