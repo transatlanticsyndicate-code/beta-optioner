@@ -2709,7 +2709,17 @@ function UniversalOptionsCalculator() {
       northKind: kind,
     }));
     setOptions(prev => [...prev.filter(o => !o.fromNorthStrategy), ...stamped]);
-    setNorthState({ params, result, withStockState, optionsOnlyState });
+
+    // Для «Только опционы» убираем лонг-позицию БА, но запоминаем её —
+    // при «Отменить подбор» восстановим, чтобы действие было обратимо.
+    let removedLongPositions = [];
+    if (kind === 'optionsOnly') {
+      setPositions(prev => {
+        removedLongPositions = prev.filter(p => p.type === 'LONG');
+        return prev.filter(p => p.type !== 'LONG');
+      });
+    }
+    setNorthState({ params, result, withStockState, optionsOnlyState, removedLongPositions });
     setNorthDialogOpen(false);
 
     // Двигаем ползунок «дней до экспирации» на дату расчёта из параметров стратегии.
@@ -2733,6 +2743,15 @@ function UniversalOptionsCalculator() {
 
   const handleCancelNorthSelection = useCallback(() => {
     setOptions(prev => prev.filter(o => !o.fromNorthStrategy));
+    // Если при «Только опционы» удалили лонг БА — возвращаем её обратно.
+    setNorthState(prev => {
+      const removed = prev?.removedLongPositions;
+      if (Array.isArray(removed) && removed.length > 0) {
+        setPositions(curr => [...curr, ...removed]);
+      }
+      if (!prev) return prev;
+      return { ...prev, removedLongPositions: [] };
+    });
   }, []);
 
   const handleSaveStrategy = () => {

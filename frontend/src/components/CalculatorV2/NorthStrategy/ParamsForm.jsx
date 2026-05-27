@@ -43,8 +43,13 @@ function ParamsForm({
       bottomPrice: bottom,
       expirationDate: initialValues?.expirationDate ?? '',
       calcDate: initialValues?.calcDate ?? isoFromOffsetDays(30),
-      strikeRangeMin: initialValues?.strikeRangeMin ?? bottom,
-      strikeRangeMax: initialValues?.strikeRangeMax ?? top,
+      // По ТЗ: два независимых диапазона страйков.
+      //   Call: от точки входа до верха;
+      //   Put:  от низа до точки входа.
+      callStrikeMin: initialValues?.callStrikeMin ?? basePrice,
+      callStrikeMax: initialValues?.callStrikeMax ?? top,
+      putStrikeMin: initialValues?.putStrikeMin ?? bottom,
+      putStrikeMax: initialValues?.putStrikeMax ?? basePrice,
       plTolerance: initialValues?.plTolerance ?? 200,
       margin: initialValues?.margin ?? 6000,
       marginTolerance: initialValues?.marginTolerance ?? 500,
@@ -55,8 +60,10 @@ function ParamsForm({
   const [bottom, setBottom] = useState(defaults.bottomPrice);
   const [expirationDate, setExpirationDate] = useState(defaults.expirationDate);
   const [calcDate, setCalcDate] = useState(defaults.calcDate);
-  const [strikeMin, setStrikeMin] = useState(defaults.strikeRangeMin);
-  const [strikeMax, setStrikeMax] = useState(defaults.strikeRangeMax);
+  const [callStrikeMin, setCallStrikeMin] = useState(defaults.callStrikeMin);
+  const [callStrikeMax, setCallStrikeMax] = useState(defaults.callStrikeMax);
+  const [putStrikeMin, setPutStrikeMin] = useState(defaults.putStrikeMin);
+  const [putStrikeMax, setPutStrikeMax] = useState(defaults.putStrikeMax);
   const [plTolerance, setPlTolerance] = useState(defaults.plTolerance);
   const [margin, setMargin] = useState(defaults.margin);
   const [marginTolerance, setMarginTolerance] = useState(defaults.marginTolerance);
@@ -98,17 +105,24 @@ function ParamsForm({
     return all.slice(start, end);
   }, [availableExpirations, expirationDate]);
 
+  // Авто-обновление диапазонов страйков при изменении верха/низа.
+  // Call: entry → top. Put: bottom → entry.
   useEffect(() => {
-    setStrikeMin(toNum(bottom));
-    setStrikeMax(toNum(top));
-  }, [top, bottom]);
+    setCallStrikeMin(basePrice);
+    setCallStrikeMax(toNum(top));
+  }, [top, basePrice]);
+  useEffect(() => {
+    setPutStrikeMin(toNum(bottom));
+    setPutStrikeMax(basePrice);
+  }, [bottom, basePrice]);
 
   const errors = [];
   if (toNum(top) <= basePrice) errors.push('Верх должен быть выше точки входа');
   if (toNum(bottom) >= basePrice) errors.push('Низ должен быть ниже точки входа');
   if (!expirationDate) errors.push('Выберите дату экспирации');
   if (!calcDate) errors.push('Выберите дату расчёта');
-  if (toNum(strikeMin) >= toNum(strikeMax)) errors.push('Диапазон страйков задан некорректно');
+  if (toNum(callStrikeMin) >= toNum(callStrikeMax)) errors.push('Диапазон страйков Call задан некорректно');
+  if (toNum(putStrikeMin) >= toNum(putStrikeMax)) errors.push('Диапазон страйков Put задан некорректно');
   if (toNum(plTolerance) <= 0) errors.push('Допустимый диапазон P&L должен быть положительным');
   if (toNum(margin) <= 0) errors.push('Маржин должен быть положительным');
   if (toNum(marginTolerance) < 0) errors.push('Допуск маржина не может быть отрицательным');
@@ -120,8 +134,10 @@ function ParamsForm({
       bottomPrice: toNum(bottom),
       expirationDate,
       calcDate,
-      strikeRangeMin: toNum(strikeMin),
-      strikeRangeMax: toNum(strikeMax),
+      callStrikeMin: toNum(callStrikeMin),
+      callStrikeMax: toNum(callStrikeMax),
+      putStrikeMin: toNum(putStrikeMin),
+      putStrikeMax: toNum(putStrikeMax),
       plTolerance: toNum(plTolerance),
       margin: toNum(margin),
       marginTolerance: toNum(marginTolerance),
@@ -179,24 +195,49 @@ function ParamsForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <Label className="text-xs">Диапазон страйков, от ($)</Label>
-          <Input
-            type="number"
-            step="0.5"
-            value={strikeMin}
-            onChange={(e) => setStrikeMin(e.target.value)}
-          />
+      <div className="space-y-2">
+        <div className="text-xs font-medium">Диапазоны страйков</div>
+        <div className="grid grid-cols-[80px_1fr_1fr] items-end gap-2">
+          <div className="text-xs text-muted-foreground pb-2">Call</div>
+          <div>
+            <Label className="text-[10px]">от ($)</Label>
+            <Input
+              type="number"
+              step="0.5"
+              value={callStrikeMin}
+              onChange={(e) => setCallStrikeMin(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label className="text-[10px]">до ($)</Label>
+            <Input
+              type="number"
+              step="0.5"
+              value={callStrikeMax}
+              onChange={(e) => setCallStrikeMax(e.target.value)}
+            />
+          </div>
         </div>
-        <div>
-          <Label className="text-xs">до ($)</Label>
-          <Input
-            type="number"
-            step="0.5"
-            value={strikeMax}
-            onChange={(e) => setStrikeMax(e.target.value)}
-          />
+        <div className="grid grid-cols-[80px_1fr_1fr] items-end gap-2">
+          <div className="text-xs text-muted-foreground pb-2">Put</div>
+          <div>
+            <Label className="text-[10px]">от ($)</Label>
+            <Input
+              type="number"
+              step="0.5"
+              value={putStrikeMin}
+              onChange={(e) => setPutStrikeMin(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label className="text-[10px]">до ($)</Label>
+            <Input
+              type="number"
+              step="0.5"
+              value={putStrikeMax}
+              onChange={(e) => setPutStrikeMax(e.target.value)}
+            />
+          </div>
         </div>
       </div>
 

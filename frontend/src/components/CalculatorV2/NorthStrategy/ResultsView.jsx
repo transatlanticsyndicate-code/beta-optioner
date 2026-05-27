@@ -9,7 +9,7 @@
  * A/B (информационные, не критерии).
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Button } from '../../ui/button';
 import { Label } from '../../ui/label';
 import { Slider } from '../../ui/slider';
@@ -97,12 +97,17 @@ function BucketColumn({
     return ranked[0];
   }, [ranked, activeId]);
 
-  useEffect(() => {
+  // Сброс activeId — синхронно в обработчиках бегунков, а не через useEffect.
+  // ЗАЧЕМ: useEffect срабатывает ПОСЛЕ пересчёта `ranked`, и старый id всё ещё
+  // находится в обновлённом списке — фокус не слетал на новый лучший вариант.
+  const setWeight = (key, v) => {
     setActiveId(null);
-  }, [bucketState.weights, bucketState.marginCenter]);
-
-  const setWeight = (key, v) => onUpdate({ weights: { ...bucketState.weights, [key]: v } });
-  const setMargin = (v) => onUpdate({ marginCenter: v });
+    onUpdate({ weights: { ...bucketState.weights, [key]: v } });
+  };
+  const setMargin = (v) => {
+    setActiveId(null);
+    onUpdate({ marginCenter: v });
+  };
 
   const alternatives = ranked.filter((c) => c.id !== activeCombination?.id);
 

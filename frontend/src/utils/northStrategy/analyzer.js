@@ -139,8 +139,11 @@ export const analyzeNorthStrategy = ({
   bottomPrice,
   expirationDate,
   calcDate,
-  strikeRangeMin,
-  strikeRangeMax,
+  // По ТЗ: два независимых диапазона страйков — Call (entry→top) и Put (bottom→entry).
+  callStrikeMin,
+  callStrikeMax,
+  putStrikeMin,
+  putStrikeMax,
   plTolerance,
   marginPreCalcMin,
   marginPreCalcMax,
@@ -179,9 +182,9 @@ export const analyzeNorthStrategy = ({
     const strike = Number(o.strike);
     return (
       o.type === 'CALL' &&
-      strike > entry &&
-      strike >= strikeRangeMin &&
-      strike <= strikeRangeMax
+      Number.isFinite(callStrikeMin) && Number.isFinite(callStrikeMax) &&
+      strike >= callStrikeMin &&
+      strike <= callStrikeMax
     );
   });
 
@@ -189,9 +192,9 @@ export const analyzeNorthStrategy = ({
     const strike = Number(o.strike);
     return (
       o.type === 'PUT' &&
-      strike < entry &&
-      strike >= strikeRangeMin &&
-      strike <= strikeRangeMax
+      Number.isFinite(putStrikeMin) && Number.isFinite(putStrikeMax) &&
+      strike >= putStrikeMin &&
+      strike <= putStrikeMax
     );
   });
 
