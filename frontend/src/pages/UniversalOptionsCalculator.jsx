@@ -3823,12 +3823,19 @@ function UniversalOptionsCalculator() {
 
       // Восстанавливаем флаги блокировки для опционов если конфигурация была зафиксирована
       // ЗАЧЕМ: После редактирования зафиксированная позиция должна остаться зафиксированной
+      // Одновременно фиксируем startPL для ног без снимка (нужно для колонки Start P&L).
       let optionsToSave = options;
       if (config.isLocked) {
-        optionsToSave = options.map(opt => ({
-          ...opt,
-          isLockedPosition: true
-        }));
+        optionsToSave = options.map(opt => {
+          const updated = { ...opt, isLockedPosition: true };
+          if (updated.startPL === null || updated.startPL === undefined) {
+            const currentPL = optionsPLMap[opt.id];
+            if (currentPL !== null && currentPL !== undefined) {
+              updated.startPL = currentPL;
+            }
+          }
+          return updated;
+        });
       }
 
       // Обновляем конфигурацию
@@ -3891,6 +3898,18 @@ function UniversalOptionsCalculator() {
       // Генерируем новое название на основе текущих данных
       const updatedName = generateConfigurationName();
 
+      // Snapshot Start P&L для зафиксированной позиции: если конфигурация уже standard,
+      // новые ноги (добавленные после первой фиксации) получают свой снимок сейчас.
+      // Существующие startPL не пересчитываются.
+      const optionsForSave = loadedConfigStatus === 'standard'
+        ? options.map(opt => {
+            if (opt.startPL !== null && opt.startPL !== undefined) return opt;
+            const currentPL = optionsPLMap[opt.id];
+            if (currentPL === null || currentPL === undefined) return opt;
+            return { ...opt, startPL: currentPL };
+          })
+        : options;
+
       // Подготавливаем данные для API
       const configData = {
         name: updatedName,
@@ -3898,7 +3917,7 @@ function UniversalOptionsCalculator() {
           selectedTicker,
           currentPrice,
           priceChange,
-          options,
+          options: optionsForSave,
           positions,
           selectedExpirationDate,
           daysPassed,
@@ -3918,12 +3937,17 @@ function UniversalOptionsCalculator() {
 
       console.log('✅ [handleSaveDBConfiguration] Ответ сервера:', result);
 
+      // Локально применяем зафиксированный startPL, если он был добавлен
+      if (loadedConfigStatus === 'standard' && optionsForSave !== options) {
+        setOptions(optionsForSave);
+      }
+
       // Обновляем исходное состояние после сохранения
       setOriginalDBConfig({
         selectedTicker,
         currentPrice,
         priceChange,
-        options: JSON.stringify(options),
+        options: JSON.stringify(optionsForSave),
         positions: JSON.stringify(positions),
         selectedExpirationDate,
         daysPassed,
@@ -4047,6 +4071,24 @@ function UniversalOptionsCalculator() {
         }
       }
 
+      const targetStatus = configuration.status || 'standard';
+
+      // Snapshot Start P&L: если позиция сохраняется в standard (зафиксирована),
+      // каждой ноге без startPL записываем текущее значение P&L.
+      // ЗАЧЕМ: Start P&L — снимок прибыли/убытка в момент фиксации позиции,
+      // не меняется во времени. Для нового сохранения сразу в standard это
+      // первый и единственный момент захвата.
+      let configState = configuration.state;
+      if (targetStatus === 'standard' && configState && Array.isArray(configState.options)) {
+        const optionsWithStartPL = configState.options.map(opt => {
+          if (opt.startPL !== null && opt.startPL !== undefined) return opt;
+          const currentPL = optionsPLMap[opt.id];
+          if (currentPL === null || currentPL === undefined) return opt;
+          return { ...opt, startPL: currentPL };
+        });
+        configState = { ...configState, options: optionsWithStartPL };
+      }
+
       // Подготавливаем данные для API
       // ЗАЧЕМ: Поле status управляет дальнейшим поведением:
       // - 'pending' → при открытии калькулятор автообновит котировки от расширения
@@ -4058,8 +4100,8 @@ function UniversalOptionsCalculator() {
         ticker: configuration.ticker,
         entryDate: configuration.entryDate,
         isLocked: configuration.isLocked,
-        status: configuration.status || 'standard',
-        state: configuration.state,
+        status: targetStatus,
+        state: configState,
         dealSettings: configuration.dealSettings,
         dealInfo: configuration.dealInfo,
         userId: userId
@@ -4069,6 +4111,18 @@ function UniversalOptionsCalculator() {
       const result = await createConfiguration(configData);
 
       console.log('✅ Конфигурация сохранена в БД:', result.data);
+
+      // Локально обновляем options, чтобы зафиксированные значения
+      // сразу появились в колонке Start P&L без перезагрузки страницы.
+      if (targetStatus === 'standard') {
+        setOptions(prev => prev.map(opt => {
+          if (opt.startPL !== null && opt.startPL !== undefined) return opt;
+          const currentPL = optionsPLMap[opt.id];
+          if (currentPL === null || currentPL === undefined) return opt;
+          return { ...opt, startPL: currentPL };
+        }));
+      }
+
       const statusLabel = configData.status === 'standard' ? 'Зафиксирована' : 'В ожидании';
       alert(`Позиция сохранена со статусом «${statusLabel}»!\nID: ${result.data.id}`);
     } catch (error) {
