@@ -1,22 +1,22 @@
 /**
- * Стратегия СЕВЕР v2 — анализатор комбинаций Buy Call + Buy Put.
+ * Стратегия СЕВЕР v2-corrected — анализатор комбинаций Buy Call + Buy Put.
  *
- * ЗАЧЕМ: На лонг-позицию (или без неё) подбираем защитную пару опционов так, чтобы
+ * ЗАЧЕМ: На лонг-позицию по БА подбираем защитную пару опционов так, чтобы
  * на низу конструкция была близка к 0 (защита), а на верху P&L опционов был максимален.
  *
- * Два режима:
- *  - WITH_STOCK    : актив + опционы. Стоковая часть фиксирована (введённая позиция),
- *                    маржа сделки = премии + стоковая часть с учётом плеча.
- *                    Критерий «низ» = P&L total (актив + опционы) при цене низа на calcDate → 0.
- *  - OPTIONS_ONLY  : только опционы. Стоковой части и плеча БА нет.
- *                    Критерий «низ» = P&L опционов при цене низа на calcDate → 0.
+ * Один запуск анализа возвращает СРАЗУ ДВЕ выборки на одной и той же позиции:
+ *  - `withStock`    : актив + опционы. Маржа = премии + (assetQuantity × entry / leverage).
+ *                     Критерий «низ» = P&L всей позиции (актив + опционы) на calcDate → 0.
+ *  - `optionsOnly`  : только опционы. Стоковая часть и плечо БА игнорируются.
+ *                     Критерий «низ» = P&L опционов на calcDate → 0.
  *
- * Критерий «верх» одинаков: P&L опционов при цене верха на calcDate → max.
+ * Критерий «верх» одинаков: P&L опционов на верху на calcDate → max.
  *
- * Авто-лимит количеств: ручные ограничения сняты, количества (qC, qP) подбираются
- * автоматически в пределах верхней границы маржина (cost ≤ marginPreCalcMax).
- * Жёсткие фильтры из Doc2 применяются здесь: cost в диапазоне, опционы на верху > 0,
- * |критерий «низ»| ≤ plTolerance.
+ * Уровни A и B (информационные, в скоринг не входят):
+ *   A = entry + (top - entry) / 2     — половина пути от входа до верха
+ *   B = entry + (bot - entry) / 2     — половина пути от входа до низа
+ * На каждой комбинации в `meta` сохраняется P&L на A и B (для withStock — total,
+ * для optionsOnly — только опционы).
  */
 
 import { calculateOptionPLValue, CALCULATOR_MODES } from '../universalPricing';
@@ -24,9 +24,9 @@ import { getOptionVolatility } from '../volatilitySurface';
 import { adjustPLByStockGroup } from '../optionPricing';
 import { isStockLikeMode } from '../calculatorModes';
 
-export const NORTH_MODES = Object.freeze({
-  WITH_STOCK: 'WITH_STOCK',
-  OPTIONS_ONLY: 'OPTIONS_ONLY',
+export const NORTH_KINDS = Object.freeze({
+  WITH_STOCK: 'withStock',
+  OPTIONS_ONLY: 'optionsOnly',
 });
 
 const CONTRACT_MULTIPLIER = 100;
@@ -68,10 +68,6 @@ const buildOptionPosition = ({ chainOpt, action, quantity, entryAssetPrice, entr
   assetPriceAtEntry: entryAssetPrice,
 });
 
-/**
- * P&L одного опциона на заданной цене и дате расчёта.
- * Повторяет пайплайн OptionsTableV3 (IV из ivSurface, поправка stockClassification).
- */
 const computeOptionPL = ({
   option,
   targetPrice,
@@ -112,9 +108,6 @@ const computeOptionPL = ({
   return pl;
 };
 
-/**
- * Найти ближайшую к заданной дате доступную экспирацию из цепочки.
- */
 export const findClosestExpiration = (chain, targetIso) => {
   if (!Array.isArray(chain) || chain.length === 0 || !targetIso) return null;
   const uniqueDates = Array.from(new Set(chain.map((o) => o.date).filter(Boolean)));
@@ -133,32 +126,11 @@ export const findClosestExpiration = (chain, targetIso) => {
 };
 
 /**
- * Анализ комбинаций Buy Call + Buy Put.
+ * Анализ комбинаций Buy Call + Buy Put — возвращает СРАЗУ ДВЕ выборки.
  *
- * @param {Object} params
- * @param {'WITH_STOCK'|'OPTIONS_ONLY'} params.mode
- * @param {number} params.entry              Точка входа в БА (только WITH_STOCK)
- * @param {number} params.assetQuantity      Количество акций (только WITH_STOCK)
- * @param {number} params.leverage           Плечо БА (только WITH_STOCK)
- * @param {number} params.currentPrice       Текущая цена БА
- * @param {number} params.topPrice           Цель по верху
- * @param {number} params.bottomPrice        Закрытие по низу
- * @param {string} params.expirationDate     ISO экспирация
- * @param {string} params.calcDate           ISO дата расчёта
- * @param {number} params.strikeRangeMin
- * @param {number} params.strikeRangeMax
- * @param {number} params.plTolerance        Допуск P&L по низу (например 200)
- * @param {number} params.marginPreCalcMin   Нижняя граница маржи для пред-расчёта (например 4500)
- * @param {number} params.marginPreCalcMax   Верхняя граница маржи для пред-расчёта (например 7500)
- * @param {Array}  params.chain              Цепочка опционов
- * @param {Object} params.ivSurface
- * @param {string} params.calculatorMode     'stocks' | 'etf' (поведение в этих режимах общее)
- * @param {number} params.dividendYield
- * @param {Object} params.stockClassification
- * @returns {Array} комбинации с meta и criteria (без score — он добавляется в scoring.js)
+ * @returns {{withStock: Array, optionsOnly: Array, levels: {a:number,b:number}}}
  */
 export const analyzeNorthStrategy = ({
-  mode,
   entry,
   assetQuantity,
   leverage,
@@ -178,29 +150,24 @@ export const analyzeNorthStrategy = ({
   dividendYield = 0,
   stockClassification = null,
 }) => {
-  if (!expirationDate || !calcDate) return [];
-  if (!Array.isArray(chain) || chain.length === 0) return [];
-  if (!Number.isFinite(plTolerance) || plTolerance <= 0) return [];
-  if (!Number.isFinite(marginPreCalcMax) || marginPreCalcMax <= 0) return [];
+  const empty = { withStock: [], optionsOnly: [], levels: { a: null, b: null } };
+  if (!entry || !assetQuantity) return empty;
+  if (!expirationDate || !calcDate) return empty;
+  if (!Array.isArray(chain) || chain.length === 0) return empty;
+  if (!Number.isFinite(plTolerance) || plTolerance <= 0) return empty;
+  if (!Number.isFinite(marginPreCalcMax) || marginPreCalcMax <= 0) return empty;
 
-  const withStock = mode === NORTH_MODES.WITH_STOCK;
-  if (withStock && (!entry || !assetQuantity)) return [];
-
-  // Цена входа в опционы: для WITH_STOCK — entry (вход в актив), для OPTIONS_ONLY — текущая цена
-  const optionEntryPrice = withStock ? entry : Number(currentPrice) || 0;
-
-  // Стоковая часть маржи (фикс): assetQuantity * entry / leverage. В OPTIONS_ONLY = 0.
   const safeLeverage = Number(leverage) > 0 ? Number(leverage) : 1;
-  const stockMargin = withStock ? (assetQuantity * entry) / safeLeverage : 0;
+  const stockMargin = (assetQuantity * entry) / safeLeverage;
 
-  // Если только стоковая часть уже за пределами верхней границы — анализ невозможен.
-  if (stockMargin > marginPreCalcMax) return [];
+  // Бюджет под опционные премии: верхняя граница берётся максимально широкая,
+  // чтобы одна и та же расчётная пара могла попасть и в withStock,
+  // и в optionsOnly — внутри отфильтруем отдельно.
+  const optionBudgetMax = marginPreCalcMax;
 
-  // Бюджет под опционные премии: что осталось после стоковой части до верхней границы маржина.
-  const optionBudgetMax = marginPreCalcMax - stockMargin;
-  if (optionBudgetMax <= 0) return [];
+  const levelA = entry + (topPrice - entry) / 2;
+  const levelB = entry + (bottomPrice - entry) / 2;
 
-  // Фильтр цепочки по выбранной экспирации, валидным ASK и IV.
   const dateChain = chain.filter((o) => o.date === expirationDate);
   const validOptions = dateChain.filter((o) => {
     const ask = Number(o.ask);
@@ -208,16 +175,11 @@ export const analyzeNorthStrategy = ({
     return Number.isFinite(ask) && ask > 0 && iv > 0 && o.strike != null;
   });
 
-  // Граница страйков:
-  //  - В WITH_STOCK: Call > entry; Put < entry (как в v1, имеет финансовый смысл).
-  //  - В OPTIONS_ONLY: Call > currentPrice; Put < currentPrice (симметрично).
-  const splitPivot = withStock ? entry : Number(currentPrice) || 0;
-
   const callCandidates = validOptions.filter((o) => {
     const strike = Number(o.strike);
     return (
       o.type === 'CALL' &&
-      strike > splitPivot &&
+      strike > entry &&
       strike >= strikeRangeMin &&
       strike <= strikeRangeMax
     );
@@ -227,28 +189,32 @@ export const analyzeNorthStrategy = ({
     const strike = Number(o.strike);
     return (
       o.type === 'PUT' &&
-      strike < splitPivot &&
+      strike < entry &&
       strike >= strikeRangeMin &&
       strike <= strikeRangeMax
     );
   });
 
-  if (callCandidates.length === 0 || putCandidates.length === 0) return [];
+  if (callCandidates.length === 0 || putCandidates.length === 0) {
+    return { ...empty, levels: { a: levelA, b: levelB } };
+  }
 
   const today = todayIso();
   const todayDaysToExp = daysBetween(today, expirationDate);
   const daysFromTodayToCalcDate = daysBetween(today, calcDate);
   const daysRemainingAtCalcDate = Math.max(0, todayDaysToExp - daysFromTodayToCalcDate);
 
-  // P&L акций фиксирован (не зависит от опционов) — считаем один раз.
-  const assetPLBottom = withStock ? (bottomPrice - entry) * assetQuantity : 0;
+  const assetPLAt = (price) => (price - entry) * assetQuantity;
+  const assetPLBottom = assetPLAt(bottomPrice);
+  const assetPLAtA = assetPLAt(levelA);
+  const assetPLAtB = assetPLAt(levelB);
 
-  const results = [];
+  const withStock = [];
+  const optionsOnly = [];
 
   for (const call of callCandidates) {
     const callPremiumDollars = Number(call.ask) * CONTRACT_MULTIPLIER;
     if (callPremiumDollars <= 0) continue;
-    // Максимальное qC такое, что только Call-нога не превышает бюджет.
     const maxQC = Math.max(1, Math.floor(optionBudgetMax / callPremiumDollars));
 
     for (const put of putCandidates) {
@@ -263,28 +229,32 @@ export const analyzeNorthStrategy = ({
         for (let qP = 1; qP <= maxQP; qP += 1) {
           const putCost = qP * putPremiumDollars;
           const optionsCost = callCost + putCost;
-          const marginUsed = stockMargin + optionsCost;
+          const marginWithStock = stockMargin + optionsCost;
+          const marginOptionsOnly = optionsCost;
 
-          // Жёсткий фильтр маржи: пред-расчётный диапазон [4500, 7500] по умолчанию.
-          if (marginUsed > marginPreCalcMax) break; // qP только растёт — дальше тоже мимо
-          if (marginUsed < marginPreCalcMin) continue;
+          // Если ОБА превышают верхнюю границу — дальше по qP бессмысленно.
+          if (marginWithStock > marginPreCalcMax && marginOptionsOnly > marginPreCalcMax) break;
+
+          const fitsWithStock = marginWithStock >= marginPreCalcMin && marginWithStock <= marginPreCalcMax;
+          const fitsOptionsOnly = marginOptionsOnly >= marginPreCalcMin && marginOptionsOnly <= marginPreCalcMax;
+          if (!fitsWithStock && !fitsOptionsOnly) continue;
 
           const callOpt = buildOptionPosition({
             chainOpt: call,
             action: 'Buy',
             quantity: qC,
-            entryAssetPrice: optionEntryPrice,
+            entryAssetPrice: entry,
             entryDate: today,
           });
           const putOpt = buildOptionPosition({
             chainOpt: put,
             action: 'Buy',
             quantity: qP,
-            entryAssetPrice: optionEntryPrice,
+            entryAssetPrice: entry,
             entryDate: today,
           });
 
-          const computeFor = (price) => (
+          const sumOptionsAt = (price) => (
             computeOptionPL({
               option: callOpt,
               targetPrice: price,
@@ -309,18 +279,14 @@ export const analyzeNorthStrategy = ({
             })
           );
 
-          const optionsPLTop = computeFor(topPrice);
-          // Жёсткий фильтр: на цели опционы отдельно должны быть в плюсе.
+          const optionsPLTop = sumOptionsAt(topPrice);
           if (!(optionsPLTop > 0)) continue;
 
-          const optionsPLBottom = computeFor(bottomPrice);
-          const totalPLBottom = optionsPLBottom + assetPLBottom;
-          const bottomMetric = withStock ? totalPLBottom : optionsPLBottom;
+          const optionsPLBottom = sumOptionsAt(bottomPrice);
+          const optionsPLAtA = sumOptionsAt(levelA);
+          const optionsPLAtB = sumOptionsAt(levelB);
 
-          // Жёсткий фильтр: «низ» в пределах допустимого диапазона P&L.
-          if (Math.abs(bottomMetric) > plTolerance) continue;
-
-          results.push({
+          const baseRecord = {
             id: `${call.strike}-${put.strike}-${qC}-${qP}`,
             call: {
               strike: Number(call.strike),
@@ -338,28 +304,56 @@ export const analyzeNorthStrategy = ({
             },
             qtyCall: qC,
             qtyPut: qP,
-            cost: {
-              optionsCost,
-              stockMargin,
-              marginUsed,
-            },
-            criteria: {
-              bottomMetric,       // что хотим к 0 (с учётом режима)
-              topOptions: optionsPLTop, // что максимизируем
-            },
-            meta: {
-              optionsPLBottom,
-              optionsPLTop,
-              assetPLBottom,
-              totalPLBottom,
-              mode,
-            },
-            positions: [callOpt, putOpt],
-          });
+          };
+
+          if (fitsWithStock) {
+            const totalPLBottom = optionsPLBottom + assetPLBottom;
+            if (Math.abs(totalPLBottom) <= plTolerance) {
+              withStock.push({
+                ...baseRecord,
+                kind: NORTH_KINDS.WITH_STOCK,
+                cost: { optionsCost, stockMargin, marginUsed: marginWithStock },
+                criteria: { bottomMetric: totalPLBottom, topOptions: optionsPLTop },
+                meta: {
+                  optionsPLBottom,
+                  optionsPLTop,
+                  assetPLBottom,
+                  totalPLBottom,
+                  levelA,
+                  levelB,
+                  plAtLevelA: optionsPLAtA + assetPLAtA,
+                  plAtLevelB: optionsPLAtB + assetPLAtB,
+                },
+                positions: [callOpt, putOpt],
+              });
+            }
+          }
+
+          if (fitsOptionsOnly) {
+            if (Math.abs(optionsPLBottom) <= plTolerance) {
+              optionsOnly.push({
+                ...baseRecord,
+                kind: NORTH_KINDS.OPTIONS_ONLY,
+                cost: { optionsCost, stockMargin: 0, marginUsed: marginOptionsOnly },
+                criteria: { bottomMetric: optionsPLBottom, topOptions: optionsPLTop },
+                meta: {
+                  optionsPLBottom,
+                  optionsPLTop,
+                  assetPLBottom: 0,
+                  totalPLBottom: optionsPLBottom,
+                  levelA,
+                  levelB,
+                  plAtLevelA: optionsPLAtA,
+                  plAtLevelB: optionsPLAtB,
+                },
+                positions: [callOpt, putOpt],
+              });
+            }
+          }
         }
       }
     }
   }
 
-  return results;
+  return { withStock, optionsOnly, levels: { a: levelA, b: levelB } };
 };

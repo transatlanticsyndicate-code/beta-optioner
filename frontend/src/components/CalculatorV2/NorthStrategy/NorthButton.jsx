@@ -1,24 +1,16 @@
 /**
  * Кнопка «Стратегия СЕВЕР» — открывает поп-ап подбора пары Buy Call + Buy Put.
  *
- * v2: одна кнопка с динамическим названием, режим определяется наличием позиции БА:
- *   - есть позиция → «СЕВЕР актив + опционы», режим WITH_STOCK
- *   - нет позиции → «СЕВЕР только опционы»,   режим OPTIONS_ONLY
- *
- * Сам режим определяется снаружи; компонент только показывает нужный текст.
+ * v2-corrected: одна кнопка, появляется только при наличии лонг-позиции БА.
+ * Анализатор всегда гонит ОБА варианта (актив+опционы и только опционы)
+ * на одной и той же введённой позиции и показывает оба результата.
  */
 
 import React from 'react';
 import { Snowflake } from 'lucide-react';
 import { Button } from '../../ui/button';
-import { NORTH_MODES } from '../../../utils/northStrategy/analyzer';
 
-function NorthButton({ onClick, disabled = false, mode = NORTH_MODES.WITH_STOCK }) {
-  const label = mode === NORTH_MODES.OPTIONS_ONLY ? 'СЕВЕР только опционы' : 'СЕВЕР актив + опционы';
-  const title = mode === NORTH_MODES.OPTIONS_ONLY
-    ? 'Стратегия СЕВЕР — подбор пары Buy Call + Buy Put без базового актива'
-    : 'Стратегия СЕВЕР — подбор пары Buy Call + Buy Put к лонг-позиции по активу';
-
+function NorthButton({ onClick, disabled = false }) {
   return (
     <Button
       size="sm"
@@ -29,10 +21,10 @@ function NorthButton({ onClick, disabled = false, mode = NORTH_MODES.WITH_STOCK 
         background: 'linear-gradient(135deg, #38bdf8 0%, #0ea5e9 50%, #0369a1 100%)',
         boxShadow: disabled ? 'none' : '0 2px 8px rgba(14, 165, 233, 0.4)',
       }}
-      title={title}
+      title="Стратегия СЕВЕР — подбор пары Buy Call + Buy Put к лонг-позиции по активу"
     >
       <Snowflake className="h-4 w-4 mr-1" />
-      {label}
+      СЕВЕР
     </Button>
   );
 }

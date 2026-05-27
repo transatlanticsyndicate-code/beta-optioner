@@ -1,14 +1,14 @@
 /**
- * Поп-ап стратегии СЕВЕР v2.
+ * Поп-ап стратегии СЕВЕР v2-corrected.
  *
  * Управляет тремя экранами (загрузка цепочки → параметры → результаты) и держит
  * кэш результатов между переключениями экранов, чтобы не перезапускать анализ
  * при возврате к выбору.
  *
- * Режим (WITH_STOCK / OPTIONS_ONLY) приходит снаружи и определяет:
- *  - что показывать в форме (точка входа есть только в WITH_STOCK);
- *  - как считать критерий «низ» (актив + опционы vs только опционы);
- *  - название поп-апа.
+ * Анализатор за один запуск возвращает СРАЗУ ДВЕ выборки на одной и той же
+ * позиции — `withStock` (актив + опционы) и `optionsOnly` (только опционы).
+ * Для каждой выборки в диалоге хранится свой набор состояний бегунков
+ * (`weights` и `marginCenter`), которые пробрасываются в `ResultsView`.
  */
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -23,7 +23,7 @@ import { Button } from '../../ui/button';
 import { Snowflake, Loader2, AlertTriangle } from 'lucide-react';
 import ParamsForm from './ParamsForm';
 import ResultsView from './ResultsView';
-import { analyzeNorthStrategy, NORTH_MODES } from '../../../utils/northStrategy/analyzer';
+import { analyzeNorthStrategy } from '../../../utils/northStrategy/analyzer';
 import { DEFAULT_WEIGHTS } from '../../../utils/northStrategy/scoring';
 import { sendNorthExpandExpirationCommand, sendNorthInitCommand } from '../../../hooks/useExtensionData';
 
@@ -80,10 +80,14 @@ const chainHasDate = (chain, isoDate) => {
   return false;
 };
 
+const makeDefaultBucketState = (marginCenter) => ({
+  weights: { ...DEFAULT_WEIGHTS },
+  marginCenter,
+});
+
 function NorthStrategyDialog({
   isOpen,
   initialStep = 'params',
-  mode = NORTH_MODES.WITH_STOCK,
   currentPrice,
   entryPrice,
   assetQuantity,
@@ -101,9 +105,15 @@ function NorthStrategyDialog({
 }) {
   const [step, setStep] = useState(initialStep);
   const [params, setParams] = useState(initialState?.params || null);
-  const [combinations, setCombinations] = useState(initialState?.combinations || []);
-  const [weights, setWeights] = useState(initialState?.weights || DEFAULT_WEIGHTS);
-  const [marginCenter, setMarginCenter] = useState(initialState?.marginCenter ?? null);
+  const [result, setResult] = useState(
+    initialState?.result || { withStock: [], optionsOnly: [], levels: { a: null, b: null } },
+  );
+  const [withStockState, setWithStockState] = useState(
+    initialState?.withStockState || makeDefaultBucketState(6000),
+  );
+  const [optionsOnlyState, setOptionsOnlyState] = useState(
+    initialState?.optionsOnlyState || makeDefaultBucketState(6000),
+  );
 
   const [availableExpirations, setAvailableExpirations] = useState([]);
   const [expirationsStatus, setExpirationsStatus] = useState('idle');
@@ -113,22 +123,18 @@ function NorthStrategyDialog({
   const [analyzeMessage, setAnalyzeMessage] = useState('');
   const expirationsStartedAt = useRef(0);
 
-  const withStock = mode === NORTH_MODES.WITH_STOCK;
-  const titleLabel = withStock ? 'актив + опционы' : 'только опционы';
-  const descriptionLabel = withStock
-    ? 'Подбор защитной пары Buy Call + Buy Put к лонг-позиции по базовому активу.'
-    : 'Подбор пары Buy Call + Buy Put без позиции по базовому активу.';
-
   useEffect(() => {
     if (!isOpen) return undefined;
 
     setStep(initialStep);
     if (initialState?.params) setParams(initialState.params);
-    if (initialState?.combinations) setCombinations(initialState.combinations);
-    if (initialState?.weights) setWeights(initialState.weights);
-    if (initialState?.marginCenter != null) setMarginCenter(initialState.marginCenter);
+    if (initialState?.result) setResult(initialState.result);
+    if (initialState?.withStockState) setWithStockState(initialState.withStockState);
+    if (initialState?.optionsOnlyState) setOptionsOnlyState(initialState.optionsOnlyState);
 
-    if (initialStep === 'results' && initialState?.combinations?.length) {
+    const hasCache = initialState?.result
+      && (initialState.result.withStock?.length || initialState.result.optionsOnly?.length);
+    if (initialStep === 'results' && hasCache) {
       setExpirationsStatus('done');
       return undefined;
     }
@@ -208,11 +214,10 @@ function NorthStrategyDialog({
 
         try {
           const baseMargin = Number(formParams.margin) || 6000;
-          const result = analyzeNorthStrategy({
-            mode,
-            entry: withStock ? entryPrice : undefined,
-            assetQuantity: withStock ? assetQuantity : undefined,
-            leverage: withStock ? leverage : undefined,
+          const analysis = analyzeNorthStrategy({
+            entry: entryPrice,
+            assetQuantity,
+            leverage,
             currentPrice,
             topPrice: formParams.topPrice,
             bottomPrice: formParams.bottomPrice,
@@ -229,16 +234,23 @@ function NorthStrategyDialog({
             dividendYield,
             stockClassification,
           });
-          setCombinations(result);
-          // Бегунок маржина стартует на введённой базе.
-          setMarginCenter(baseMargin);
+          setResult(analysis);
+          const freshWith = makeDefaultBucketState(baseMargin);
+          const freshOnly = makeDefaultBucketState(baseMargin);
+          setWithStockState(freshWith);
+          setOptionsOnlyState(freshOnly);
           setStep('results');
           if (onStateChange) {
-            onStateChange({ params: formParams, combinations: result, weights, marginCenter: baseMargin });
+            onStateChange({
+              params: formParams,
+              result: analysis,
+              withStockState: freshWith,
+              optionsOnlyState: freshOnly,
+            });
           }
         } catch (err) {
           console.error('[NorthStrategy] Ошибка анализа:', err);
-          setCombinations([]);
+          setResult({ withStock: [], optionsOnly: [], levels: { a: null, b: null } });
           setStep('results');
         } finally {
           setIsAnalyzing(false);
@@ -308,20 +320,30 @@ function NorthStrategyDialog({
 
   const handleBack = () => setStep('params');
 
-  const handlePick = (combination) => {
-    onApply({ combination, params, combinations, weights, marginCenter });
+  const handlePick = (combination, kind) => {
+    onApply({
+      combination,
+      kind,
+      params,
+      result,
+      withStockState,
+      optionsOnlyState,
+    });
   };
 
-  const handleStateUpdate = (next) => {
-    if (next.weights !== undefined) setWeights(next.weights);
-    if (next.marginCenter !== undefined) setMarginCenter(next.marginCenter);
-    if (onStateChange) {
-      onStateChange({
-        params,
-        combinations,
-        weights: next.weights ?? weights,
-        marginCenter: next.marginCenter ?? marginCenter,
-      });
+  const updateBucket = (kind, next) => {
+    if (kind === 'withStock') {
+      const merged = { ...withStockState, ...next };
+      setWithStockState(merged);
+      if (onStateChange) {
+        onStateChange({ params, result, withStockState: merged, optionsOnlyState });
+      }
+    } else {
+      const merged = { ...optionsOnlyState, ...next };
+      setOptionsOnlyState(merged);
+      if (onStateChange) {
+        onStateChange({ params, result, withStockState, optionsOnlyState: merged });
+      }
     }
   };
 
@@ -329,7 +351,6 @@ function NorthStrategyDialog({
   const showLoader = isAnalyzing || (needsExpirations && expirationsStatus === 'loading');
   const showFetchError = needsExpirations && expirationsStatus === 'error';
 
-  // Бегунок маржина имеет смысл только если знаем введённую базу. Если нет params — fallback.
   const marginBase = Number(params?.margin) || 6000;
   const marginTolerance = Number(params?.marginTolerance) || 500;
   const marginRangeLo = marginBase * MARGIN_PRECALC_LO_FACTOR;
@@ -337,17 +358,17 @@ function NorthStrategyDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className={step === 'results' ? 'sm:max-w-6xl' : 'sm:max-w-3xl'}>
+      <DialogContent className={step === 'results' ? 'sm:max-w-7xl' : 'sm:max-w-3xl'}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Snowflake className="h-5 w-5 text-sky-500" />
-            Стратегия СЕВЕР · {titleLabel}
+            Стратегия СЕВЕР
             <span className="text-sm font-normal text-muted-foreground">
               {step === 'params' ? '· параметры' : '· результаты'}
             </span>
           </DialogTitle>
           <DialogDescription>
-            {descriptionLabel}
+            Подбор защитной пары Buy Call + Buy Put. На экране результатов — лучшие варианты для двух видов сделки: актив + опционы и только опционы.
           </DialogDescription>
         </DialogHeader>
 
@@ -392,7 +413,6 @@ function NorthStrategyDialog({
 
         {!showLoader && !showFetchError && step === 'params' && (
           <ParamsForm
-            mode={mode}
             currentPrice={currentPrice}
             entryPrice={entryPrice}
             leverage={leverage}
@@ -405,18 +425,17 @@ function NorthStrategyDialog({
 
         {!showLoader && !showFetchError && step === 'results' && (
           <ResultsView
-            mode={mode}
-            combinations={combinations}
-            initialWeights={weights}
+            result={result}
             params={params}
-            marginCenter={marginCenter ?? marginBase}
+            withStockState={withStockState}
+            optionsOnlyState={optionsOnlyState}
             marginTolerance={marginTolerance}
             marginRangeLo={marginRangeLo}
             marginRangeHi={marginRangeHi}
             onPick={handlePick}
             onBack={handleBack}
             onCancel={onClose}
-            onStateUpdate={handleStateUpdate}
+            onBucketUpdate={updateBucket}
           />
         )}
       </DialogContent>

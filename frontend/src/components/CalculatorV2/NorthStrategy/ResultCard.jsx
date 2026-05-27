@@ -1,17 +1,21 @@
 /**
- * Карточка одной комбинации стратегии СЕВЕР v2.
+ * Карточка одной комбинации стратегии СЕВЕР v2-corrected.
  *
  * Две вариации через проп `variant`:
- *   - 'focused' — крупная карточка фокусированного варианта (в центре экрана результатов);
+ *   - 'focused' — крупная карточка фокусированного варианта (в колонке выборки);
  *   - 'compact' — строка в выпадающем списке альтернатив (кликабельная).
  *
- * Критерии: «низ» (метрика близости к 0) и «верх» (P&L опционов).
+ * `kind` определяет семантику отображения (актив+опционы / только опционы):
+ *   - 'withStock'   : метка «низ» = P&L всей позиции; в стоимости отдельно
+ *                      показывается стоковая часть; уровни A/B показывают P&L total.
+ *   - 'optionsOnly' : метка «низ» = P&L опционов; стоковой части нет;
+ *                      уровни A/B показывают P&L только опционов.
  */
 
 import React from 'react';
 import { Button } from '../../ui/button';
 import { formatCurrency, getPLColor } from '../ExitCalculator/utils/formatters';
-import { NORTH_MODES } from '../../../utils/northStrategy/analyzer';
+import { NORTH_KINDS } from '../../../utils/northStrategy/analyzer';
 
 function CriterionRow({ label, hint, value, idealZero }) {
   const colorClass = idealZero ? 'text-gray-700 dark:text-gray-300' : getPLColor(value);
@@ -28,10 +32,23 @@ function CriterionRow({ label, hint, value, idealZero }) {
   );
 }
 
-function FocusedCard({ combination, levels, mode, onPick }) {
-  const { call, put, qtyCall, qtyPut, criteria, cost, score } = combination;
+function InfoLevelRow({ label, price, value }) {
+  return (
+    <div className="flex justify-between items-baseline text-[11px] py-0.5">
+      <div className="text-muted-foreground">
+        {label} <span className="text-gray-700 dark:text-gray-300">${price.toFixed(2)}</span>
+      </div>
+      <span className="font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap tabular-nums">
+        {formatCurrency(value)}
+      </span>
+    </div>
+  );
+}
+
+function FocusedCard({ combination, levels, kind, onPick }) {
+  const { call, put, qtyCall, qtyPut, criteria, cost, meta, score } = combination;
   const fmtLevel = (v) => (Number.isFinite(v) ? `$${Number(v).toFixed(2)}` : null);
-  const withStock = mode === NORTH_MODES.WITH_STOCK;
+  const withStock = kind === NORTH_KINDS.WITH_STOCK;
 
   return (
     <div className="border-2 border-sky-400 rounded-lg overflow-hidden bg-white dark:bg-gray-900 shadow-md">
@@ -88,6 +105,16 @@ function FocusedCard({ combination, levels, mode, onPick }) {
         />
       </div>
 
+      {meta && Number.isFinite(meta.levelA) && Number.isFinite(meta.levelB) && (
+        <div className="px-4 py-2 bg-gray-50/60 dark:bg-gray-800/50 border-t border-gray-100 dark:border-gray-800">
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
+            Информационно — {withStock ? 'P&L всей позиции' : 'P&L опционов'} на уровнях
+          </div>
+          <InfoLevelRow label="A" price={meta.levelA} value={meta.plAtLevelA} />
+          <InfoLevelRow label="B" price={meta.levelB} value={meta.plAtLevelB} />
+        </div>
+      )}
+
       <div className="px-4 py-3 border-t bg-white dark:bg-gray-900">
         <Button
           size="sm"
@@ -102,9 +129,9 @@ function FocusedCard({ combination, levels, mode, onPick }) {
   );
 }
 
-function CompactCard({ combination, mode, isActive, onSelect }) {
+function CompactCard({ combination, kind, isActive, onSelect }) {
   const { call, put, qtyCall, qtyPut, criteria, cost, score } = combination;
-  const withStock = mode === NORTH_MODES.WITH_STOCK;
+  const withStock = kind === NORTH_KINDS.WITH_STOCK;
   const baseClass = isActive
     ? 'border-sky-400 bg-sky-50 dark:bg-sky-950/30'
     : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800';
@@ -140,12 +167,12 @@ function CompactCard({ combination, mode, isActive, onSelect }) {
   );
 }
 
-function ResultCard({ variant = 'focused', combination, levels, mode, isActive, onPick, onSelect }) {
+function ResultCard({ variant = 'focused', combination, levels, kind, isActive, onPick, onSelect }) {
   if (variant === 'compact') {
     return (
       <CompactCard
         combination={combination}
-        mode={mode}
+        kind={kind}
         isActive={isActive}
         onSelect={onSelect}
       />
@@ -155,7 +182,7 @@ function ResultCard({ variant = 'focused', combination, levels, mode, isActive, 
     <FocusedCard
       combination={combination}
       levels={levels}
-      mode={mode}
+      kind={kind}
       onPick={onPick}
     />
   );

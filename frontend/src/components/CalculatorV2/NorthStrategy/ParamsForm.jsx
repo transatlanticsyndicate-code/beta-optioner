@@ -1,19 +1,17 @@
 /**
- * Форма параметров стратегии СЕВЕР v2.
+ * Форма параметров стратегии СЕВЕР v2-corrected.
  *
- * v2: убраны промежуточные уровни (midA/B) и ручные ограничения количеств
- * (теперь они подбираются автоматически по маржину).
- * Добавлены: блок маржина сделки (маржин + допуск) и поле допустимого
- * диапазона P&L по низу.
+ * Без выбора вида сделки — анализатор всегда возвращает обе выборки
+ * (актив+опционы и только опционы) на одной и той же введённой позиции.
  *
- * Видимость «точки входа в БА» зависит от режима: только WITH_STOCK.
+ * Промежуточных уровней A/B нет — они вычисляются автоматически и попадают
+ * в карточки результата как информационные строки.
  */
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
-import { NORTH_MODES } from '../../../utils/northStrategy/analyzer';
 
 const toNum = (v) => {
   const n = parseFloat(v);
@@ -27,7 +25,6 @@ const isoFromOffsetDays = (offsetDays) => {
 };
 
 function ParamsForm({
-  mode = NORTH_MODES.WITH_STOCK,
   currentPrice,
   entryPrice,
   leverage,
@@ -36,9 +33,7 @@ function ParamsForm({
   onAnalyze,
   onCancel,
 }) {
-  const withStock = mode === NORTH_MODES.WITH_STOCK;
-  // Базовая цена для дефолтов: в WITH_STOCK — точка входа, в OPTIONS_ONLY — текущая.
-  const basePrice = withStock ? (entryPrice || currentPrice || 0) : (currentPrice || 0);
+  const basePrice = entryPrice || currentPrice || 0;
 
   const defaults = useMemo(() => {
     const top = initialValues?.topPrice ?? Number((basePrice * 1.30).toFixed(2));
@@ -66,7 +61,6 @@ function ParamsForm({
   const [margin, setMargin] = useState(defaults.margin);
   const [marginTolerance, setMarginTolerance] = useState(defaults.marginTolerance);
 
-  // Автоподбор экспирации ~+60 дней
   useEffect(() => {
     if (expirationDate || !Array.isArray(availableExpirations) || availableExpirations.length === 0) return;
     const target = new Date(isoFromOffsetDays(60)).getTime();
@@ -82,7 +76,6 @@ function ParamsForm({
     setExpirationDate(best);
   }, [availableExpirations, expirationDate]);
 
-  // Дропдаун ±3 даты вокруг выбранной (с обращением границ при упоре в край).
   const dropdownExpirations = useMemo(() => {
     const all = Array.isArray(availableExpirations) ? availableExpirations.slice().sort() : [];
     if (all.length === 0) return [];
@@ -105,15 +98,14 @@ function ParamsForm({
     return all.slice(start, end);
   }, [availableExpirations, expirationDate]);
 
-  // Авто-обновление диапазона страйков при изменении верха/низа
   useEffect(() => {
     setStrikeMin(toNum(bottom));
     setStrikeMax(toNum(top));
   }, [top, bottom]);
 
   const errors = [];
-  if (toNum(top) <= basePrice) errors.push('Верх должен быть выше точки входа / текущей цены');
-  if (toNum(bottom) >= basePrice) errors.push('Низ должен быть ниже точки входа / текущей цены');
+  if (toNum(top) <= basePrice) errors.push('Верх должен быть выше точки входа');
+  if (toNum(bottom) >= basePrice) errors.push('Низ должен быть ниже точки входа');
   if (!expirationDate) errors.push('Выберите дату экспирации');
   if (!calcDate) errors.push('Выберите дату расчёта');
   if (toNum(strikeMin) >= toNum(strikeMax)) errors.push('Диапазон страйков задан некорректно');
@@ -139,11 +131,7 @@ function ParamsForm({
   return (
     <div className="space-y-3 max-h-[70vh] overflow-y-auto p-1.5">
       <div className="text-xs text-muted-foreground">
-        {withStock ? (
-          <>Точка входа в БА: <strong>${(entryPrice || currentPrice || 0).toFixed(2)}</strong></>
-        ) : (
-          <>Текущая цена БА: <strong>${(currentPrice || 0).toFixed(2)}</strong></>
-        )}
+        Точка входа в БА: <strong>${(entryPrice || currentPrice || 0).toFixed(2)}</strong>
       </div>
 
       <div className="grid grid-cols-[1fr_1px_1fr] gap-4">
@@ -212,11 +200,9 @@ function ParamsForm({
         </div>
       </div>
 
-      {/* Блок маржина сделки. Плечо берётся из общего блока настроек. */}
+      {/* Блок маржина сделки — общий на оба вида (актив+опционы и только опционы). */}
       <div className="border rounded-md p-3 space-y-3 bg-muted/30">
-        <div className="text-xs font-medium">
-          Маржин сделки {withStock ? '(актив + опционы)' : '(только опционы)'}
-        </div>
+        <div className="text-xs font-medium">Маржин сделки</div>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <Label className="text-xs">Маржин ($)</Label>
@@ -239,17 +225,10 @@ function ParamsForm({
             />
           </div>
         </div>
-        {withStock && (
-          <div className="text-[11px] text-muted-foreground">
-            Плечо БА: <strong>×{Number(leverage) > 0 ? Number(leverage) : 1}</strong>
-            <span className="ml-1">— меняется в блоке настроек калькулятора.</span>
-          </div>
-        )}
-        {!withStock && (
-          <div className="text-[11px] text-muted-foreground">
-            Без позиции в активе — плечо БА в расчёте маржина не участвует.
-          </div>
-        )}
+        <div className="text-[11px] text-muted-foreground">
+          Плечо БА: <strong>×{Number(leverage) > 0 ? Number(leverage) : 1}</strong>
+          <span className="ml-1">— меняется в блоке настроек калькулятора.</span>
+        </div>
       </div>
 
       {errors.length > 0 && (
