@@ -20,6 +20,7 @@ import { calculateFuturesOptionPLValue, calculateFuturesOptionTheoreticalPrice }
 import { getOptionVolatility } from '../../utils/volatilitySurface';
 import { assessLiquidity, getLiquidityColor, formatLiquidityTooltip, LIQUIDITY_LEVELS } from '../../utils/liquidityCheck';
 import { calculateDaysRemainingUTC, getOldestEntryDate, isOptionActiveAtDay, isOptionExpiredAtDay, calculateDaysToExpirationFromToday } from '../../utils/dateUtils';
+import { computeStartPL } from '../../utils/startPLSnapshot';
 import LockIcon from './LockIcon';
 import { isStockLikeMode } from '../../utils/calculatorModes';
 
@@ -98,11 +99,9 @@ function OptionsTableV3({
   isFuturesMissingSettings = false, // Флаг: отсутствуют настройки фьючерса (блокирует расчёты)
   stockClassification = null, // Классификация акции для корректировки P&L (только для режима stocks)
   onOptionsTotalPLChange = null, // Callback для подъёма «ИТОГО» опционов в родителя (используется в P&L TOTAL карточки «Базовый актив»)
-  onOptionsPLMapChange = null, // Callback для подъёма карты текущего P&L по optionId — используется при фиксации (snapshot Start P&L)
-  // Стратегия СЕВЕР: автоподбор пары Buy Call + Buy Put
+  // Стратегия СЕВЕР: автоподбор пары Buy Call + Buy Put для лонг-позиции
   onOpenNorthStrategy = null, // Открыть поп-ап подбора
-  canShowNorthButton = false, // Показывать ли кнопку (нет видимых опционов, цена БА известна)
-  northMode = 'WITH_STOCK', // Режим: WITH_STOCK (есть позиция БА) | OPTIONS_ONLY (без позиции)
+  canShowNorthButton = false, // Показывать ли кнопку (есть лонг по БА, нет опционов)
   northActive = false, // Показывать ли бейдж "Подобрано стратегией СЕВЕР"
   onReopenNorthResults = null, // Вернуться к экрану результатов (без перезапуска анализа)
   onCancelNorthSelection = null // Отменить подбор: удалить опционы стратегии
@@ -244,101 +243,29 @@ function OptionsTableV3({
     }
   }, [optionsTableTotalPL, onOptionsTotalPLChange]);
 
-  // Карта текущего P&L по optionId — используется родителем для снимка Start P&L при фиксации.
-  // ЗАЧЕМ: При переводе позиции в «Зафиксирована» каждой ноге без startPL нужно записать
-  // значение, которое сейчас показано в колонке P&L. Считаем здесь, чтобы переиспользовать
-  // ту же логику расчёта (учёт IV-поверхности, AI, якоря Fact P&L, поправок по группе акций).
-  const optionsPLMap = React.useMemo(() => {
-    if (!options || options.length === 0 || !currentPrice) return {};
+  // Карта Start P&L по optionId — считается из снимка исходных данных (option.startSnapshot)
+  // и текущих симуляционных параметров (targetPrice, daysPassed). Корректировки IV, Fact P&L,
+  // обновлённых котировок НЕ влияют — это и есть суть «изначального прогноза калькулятора».
+  const optionsStartPLMap = React.useMemo(() => {
+    if (!options || options.length === 0) return {};
     const map = {};
-    const oldestEntry = getOldestEntryDate(options);
     options.forEach(opt => {
-      if (opt.visible === false || !opt.strike) return;
-      const hasPremium = opt.isPremiumModified
-        ? (opt.customPremium !== null && opt.customPremium !== undefined)
-        : (opt.premium !== null && opt.premium !== undefined);
-      if (!hasPremium) return;
-      if (!isOptionActiveAtDay(opt, daysPassed, oldestEntry)) return;
-      if (isFuturesMissingSettings) return;
-
-      const currentDaysToExp = calculateDaysRemainingUTC(opt, 0, 30, oldestEntry);
-      const optDaysRemaining = calculateDaysRemainingUTC(opt, daysPassed, 30, oldestEntry);
-      const todaySimDaysForOpt = calculateDaysToExpirationFromToday(opt);
-
-      let optVolatility = getOptionVolatility(
-        opt,
-        currentDaysToExp,
-        optDaysRemaining,
-        ivSurface,
-        'simple',
-        null,
-        opt.manualIvOverride,
-        todaySimDaysForOpt
-      );
-
-      if (isAIEnabled && aiVolatilityMap && selectedTicker && targetPrice && !opt.manualIvOverride) {
-        const cacheKey = `${selectedTicker}_${opt.strike}_${opt.date}_${targetPrice.toFixed(2)}_${optDaysRemaining}`;
-        const aiVolatility = aiVolatilityMap[cacheKey];
-        if (aiVolatility) optVolatility = aiVolatility;
-      }
-
-      const effectivePremium = opt.isPremiumModified ? opt.customPremium : opt.premium;
-      const tempOpt = {
-        ...opt,
-        premium: effectivePremium,
-        ask: opt.isPremiumModified ? 0 : opt.ask,
-        bid: opt.isPremiumModified ? 0 : opt.bid
+      const snapshot = opt.startSnapshot;
+      if (!snapshot) return;
+      const ctx = {
+        allOptions: options,
+        currentPrice,
+        targetPrice,
+        daysPassed,
+        calculatorMode,
+        contractMultiplier,
       };
-
-      const rfrSum = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
-      const optAssetPrice = opt.assetPriceAtEntry || currentPrice;
-      let pl = calculatorMode === CALCULATOR_MODES.FUTURES
-        ? calculateFuturesOptionPLValue(tempOpt, targetPrice || currentPrice, optDaysRemaining, contractMultiplier, optVolatility)
-        : calculateStockOptionPLValue(tempOpt, targetPrice || currentPrice, optAssetPrice, optDaysRemaining, optVolatility, dividendYield, contractMultiplier, rfrSum);
-
-      if (isStockLikeMode(calculatorMode) && stockClassification) {
-        pl = adjustPLByStockGroup(pl, stockClassification);
-      }
-
-      if (opt.actualPL !== null && opt.actualPL !== undefined && opt.actualPLDate) {
-        const anchorDateObj = new Date(opt.actualPLDate + 'T00:00:00Z');
-        const oldestEntryDateObj = oldestEntry || new Date();
-        const anchorDaysPassed = Math.round((anchorDateObj - oldestEntryDateObj) / (1000 * 60 * 60 * 24));
-
-        if (daysPassed >= anchorDaysPassed) {
-          const anchorDaysToExp = calculateDaysRemainingUTC(opt, anchorDaysPassed, 30, oldestEntry);
-          const rfrAnchor = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
-          const anchorIV = opt.manualIvOverride !== null && opt.manualIvOverride !== undefined
-            ? opt.manualIvOverride
-            : optVolatility;
-          const anchorPrice = opt.actualPLPrice || currentPrice;
-
-          let plAtAnchor = calculatorMode === CALCULATOR_MODES.FUTURES
-            ? calculateFuturesOptionPLValue(tempOpt, anchorPrice, anchorDaysToExp, contractMultiplier, anchorIV)
-            : calculateStockOptionPLValue(tempOpt, anchorPrice, optAssetPrice, anchorDaysToExp, anchorIV, dividendYield, contractMultiplier, rfrAnchor);
-
-          if (isStockLikeMode(calculatorMode) && stockClassification) {
-            plAtAnchor = adjustPLByStockGroup(plAtAnchor, stockClassification);
-          }
-
-          const anchorQtySum = Number(opt.actualPLQuantity) > 0 ? Number(opt.actualPLQuantity) : (Number(opt.quantity) || 1);
-          const currentQtySum = Number(opt.quantity) || 0;
-          const anchorRatioSum = anchorQtySum > 0 ? (currentQtySum / anchorQtySum) : 1;
-          pl = opt.actualPL * anchorRatioSum + (pl - plAtAnchor);
-        }
-      }
-
+      const pl = computeStartPL(snapshot, opt, ctx);
+      if (pl === null || pl === undefined || Number.isNaN(pl)) return;
       map[opt.id] = pl;
     });
     return map;
-  }, [options, currentPrice, daysPassed, targetPrice, ivSurface, calculatorMode, contractMultiplier, dividendYield, isAIEnabled, aiVolatilityMap, selectedTicker, stockClassification, isFuturesMissingSettings]);
-
-  // Подъём карты P&L в родителя — нужен в момент фиксации позиции (snapshot Start P&L).
-  React.useEffect(() => {
-    if (typeof onOptionsPLMapChange === 'function') {
-      onOptionsPLMapChange(optionsPLMap);
-    }
-  }, [optionsPLMap, onOptionsPLMapChange]);
+  }, [options, currentPrice, targetPrice, daysPassed, calculatorMode, contractMultiplier]);
 
   // Функция обработки клика по заголовку колонки
   const handleSort = (column) => {
@@ -662,9 +589,9 @@ function OptionsTableV3({
           )}
         </div>
         <div className="flex items-center gap-2">
-          {/* Кнопка "Стратегия СЕВЕР" — слева от Save. Название зависит от режима. */}
+          {/* Кнопка "Стратегия СЕВЕР" — слева от Save */}
           {canShowNorthButton && onOpenNorthStrategy && (
-            <NorthButton onClick={onOpenNorthStrategy} mode={northMode} />
+            <NorthButton onClick={onOpenNorthStrategy} />
           )}
 
           {/* Супер кнопка для расширенного подбора опционов */}
@@ -1224,15 +1151,19 @@ function OptionsTableV3({
                   )}
                 </span>
 
-                {/* Start P&L — снимок P&L в момент фиксации позиции, не меняется во времени */}
+                {/* Start P&L — параллельный расчёт P&L с замороженными исходными данными
+                    (премия, IV, цена актива, количество на момент сохранения). Реагирует
+                    на симуляцию (целевая цена, дни), но игнорирует корректировки
+                    (manualIvOverride, actualPL, обновлённые котировки, AI-волатильность). */}
                 <span className="text-right font-bold">
-                  {option.startPL !== null && option.startPL !== undefined ? (
-                    <span className={option.startPL > 0 ? 'text-green-600' : option.startPL < 0 ? 'text-red-600' : 'text-muted-foreground'}>
-                      {formatPLValue(option.startPL)}
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
+                  {(() => {
+                    const startPL = optionsStartPLMap[option.id];
+                    if (startPL === null || startPL === undefined) {
+                      return <span className="text-muted-foreground">—</span>;
+                    }
+                    const color = startPL > 0 ? 'text-green-600' : startPL < 0 ? 'text-red-600' : 'text-muted-foreground';
+                    return <span className={color}>{formatPLValue(startPL)}</span>;
+                  })()}
                 </span>
 
                 {/* P/L (Прибыль/Убыток) */}
@@ -1627,15 +1558,16 @@ function OptionsTableV3({
             <div></div>
             <div className="text-right">
               {(() => {
-                // ИТОГО Start P&L — сумма зафиксированных снимков по видимым опционам.
-                // Считается из option.startPL, не пересчитывается во времени (значения заморожены).
-                const visibleOptionsWithStartPL = options.filter(opt =>
-                  opt.visible !== false && opt.startPL !== null && opt.startPL !== undefined
-                );
-                if (visibleOptionsWithStartPL.length === 0) {
+                // ИТОГО Start P&L — сумма пересчитанных значений по видимым опционам со снимком.
+                // Динамически следует за симуляцией (как и сами ячейки), но входы заморожены.
+                const ids = options
+                  .filter(opt => opt.visible !== false)
+                  .map(opt => opt.id)
+                  .filter(id => optionsStartPLMap[id] !== undefined);
+                if (ids.length === 0) {
                   return <span className="text-muted-foreground">—</span>;
                 }
-                const totalStartPL = visibleOptionsWithStartPL.reduce((sum, opt) => sum + opt.startPL, 0);
+                const totalStartPL = ids.reduce((sum, id) => sum + optionsStartPLMap[id], 0);
                 const plColor = totalStartPL > 0 ? 'text-green-600' : totalStartPL < 0 ? 'text-red-600' : 'text-muted-foreground';
                 return (
                   <span className={plColor}>

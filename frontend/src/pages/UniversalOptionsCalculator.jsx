@@ -26,6 +26,7 @@ import { applyStrategy, getAllStrategies } from '../config/optionsStrategies';
 import { saveCustomStrategy, getCustomStrategies, deleteCustomStrategy, applyCustomStrategy } from '../utils/customStrategies';
 import { detectInstrumentType } from '../utils/instrumentTypeDetector';
 import { createConfiguration, getConfiguration, updateConfiguration } from '../services/configurationsApi';
+import { buildStartSnapshot } from '../utils/startPLSnapshot';
 import { supabase } from '../services/supabase';
 import { Card, CardContent } from '../components/ui/card';
 import {
@@ -715,10 +716,6 @@ function UniversalOptionsCalculator() {
   // ЗАЧЕМ: P&L TOTAL = P&L актива + ИТОГО таблицы. Значение приходит снизу из OptionsTableV3
   // через callback onOptionsTotalPLChange — никаких параллельных пересчётов.
   const [optionsTableTotalPL, setOptionsTableTotalPL] = useState(0);
-
-  // Карта текущего P&L по optionId — снимается из таблицы и используется при фиксации позиции
-  // для записи поля startPL у каждой ноги (см. handlePromotePendingToStandard).
-  const [optionsPLMap, setOptionsPLMap] = useState({});
 
   // Миграция якорной P&L: для старых опционов, у которых заполнен actualPL, но не сохранён actualPLQuantity
   // (фикс масштабирования якоря по количеству был добавлен 2026-05-04, ранее это поле не сохранялось).
@@ -2673,21 +2670,14 @@ function UniversalOptionsCalculator() {
 
   const northActive = useMemo(() => options.some(o => o.fromNorthStrategy), [options]);
 
-  // Режим СЕВЕР определяется наличием позиции в БА:
-  //   есть лонг   → WITH_STOCK   (кнопка «СЕВЕР актив + опционы»)
-  //   нет лонга   → OPTIONS_ONLY (кнопка «СЕВЕР только опционы»)
-  const northMode = useMemo(
-    () => (longPositionsEntry ? 'WITH_STOCK' : 'OPTIONS_ONLY'),
-    [longPositionsEntry],
-  );
-
-  // Кнопка СЕВЕР: режим Акции/ETF, нет ни одного видимого опциона, цена БА известна.
-  // Условие на позицию убрано: теперь без позиции включается режим OPTIONS_ONLY.
+  // Кнопка СЕВЕР: режим Акции или ETF, есть лонг по БА, нет ни одного видимого опциона, цена БА известна.
+  // В v2-corrected анализатор сам гонит оба варианта (актив+опционы и только опционы) на одной и той же позиции.
   const canShowNorthButton = useMemo(() => (
     (calculatorMode === CALCULATOR_MODES.STOCKS || calculatorMode === CALCULATOR_MODES.ETF) &&
+    !!longPositionsEntry &&
     options.filter(o => o.visible !== false).length === 0 &&
     Number(currentPrice) > 0
-  ), [calculatorMode, options, currentPrice]);
+  ), [calculatorMode, longPositionsEntry, options, currentPrice]);
 
   // Список экспираций и сама цепочка опционов теперь запрашиваются внутри
   // NorthStrategyDialog напрямую у расширения (refresh_range), чтобы данные
@@ -2700,11 +2690,9 @@ function UniversalOptionsCalculator() {
   }, []);
 
   const handleReopenNorthResults = useCallback(() => {
-    if (!northState || !northState.combinations || northState.combinations.length === 0) {
-      setNorthDialogStep('params');
-    } else {
-      setNorthDialogStep('results');
-    }
+    const cache = northState?.result;
+    const hasCache = cache && ((cache.withStock?.length || 0) + (cache.optionsOnly?.length || 0) > 0);
+    setNorthDialogStep(hasCache ? 'results' : 'params');
     setNorthDialogOpen(true);
   }, [northState]);
 
@@ -2712,15 +2700,16 @@ function UniversalOptionsCalculator() {
     setNorthState(next);
   }, []);
 
-  const handleApplyNorthCombination = useCallback(({ combination, params, combinations, weights }) => {
+  const handleApplyNorthCombination = useCallback(({ combination, kind, params, result, withStockState, optionsOnlyState }) => {
     if (!combination || !Array.isArray(combination.positions)) return;
     const stamped = combination.positions.map(opt => ({
       ...opt,
       id: `north-${opt.type}-${opt.strike}-${opt.date}-${opt.quantity}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       fromNorthStrategy: true,
+      northKind: kind,
     }));
     setOptions(prev => [...prev.filter(o => !o.fromNorthStrategy), ...stamped]);
-    setNorthState({ params, combinations, weights });
+    setNorthState({ params, result, withStockState, optionsOnlyState });
     setNorthDialogOpen(false);
 
     // Двигаем ползунок «дней до экспирации» на дату расчёта из параметров стратегии.
@@ -3823,16 +3812,23 @@ function UniversalOptionsCalculator() {
 
       // Восстанавливаем флаги блокировки для опционов если конфигурация была зафиксирована
       // ЗАЧЕМ: После редактирования зафиксированная позиция должна остаться зафиксированной
-      // Одновременно фиксируем startPL для ног без снимка (нужно для колонки Start P&L).
-      let optionsToSave = options;
+      // Одновременно фиксируем startSnapshot для ног без снимка (колонка Start P&L)
+      // и вычищаем legacy-поле startPL (число — старая неверная реализация).
+      const snapshotCtx = {
+        allOptions: options,
+        currentPrice,
+        ivSurface,
+        dividendYield: useDividends ? dividendYield : 0,
+      };
+      let optionsToSave = options.map(opt => {
+        const { startPL: _legacyStartPL, ...cleaned } = opt;
+        return cleaned;
+      });
       if (config.isLocked) {
-        optionsToSave = options.map(opt => {
+        optionsToSave = optionsToSave.map(opt => {
           const updated = { ...opt, isLockedPosition: true };
-          if (updated.startPL === null || updated.startPL === undefined) {
-            const currentPL = optionsPLMap[opt.id];
-            if (currentPL !== null && currentPL !== undefined) {
-              updated.startPL = currentPL;
-            }
+          if (!updated.startSnapshot) {
+            updated.startSnapshot = buildStartSnapshot(opt, snapshotCtx);
           }
           return updated;
         });
@@ -3898,17 +3894,26 @@ function UniversalOptionsCalculator() {
       // Генерируем новое название на основе текущих данных
       const updatedName = generateConfigurationName();
 
-      // Snapshot Start P&L для зафиксированной позиции: если конфигурация уже standard,
-      // новые ноги (добавленные после первой фиксации) получают свой снимок сейчас.
-      // Существующие startPL не пересчитываются.
+      // Snapshot Start P&L: для зафиксированной позиции (standard) — новые ноги без
+      // startSnapshot получают свой снимок исходных данных. Существующие снимки не
+      // пересчитываются. Legacy-поле startPL (число — старая реализация) вычищаем
+      // у любых опционов.
+      const snapshotCtx = {
+        allOptions: options,
+        currentPrice,
+        ivSurface,
+        dividendYield: useDividends ? dividendYield : 0,
+      };
+      const cleanedOptions = options.map(opt => {
+        const { startPL: _legacyStartPL, ...cleaned } = opt;
+        return cleaned;
+      });
       const optionsForSave = loadedConfigStatus === 'standard'
-        ? options.map(opt => {
-            if (opt.startPL !== null && opt.startPL !== undefined) return opt;
-            const currentPL = optionsPLMap[opt.id];
-            if (currentPL === null || currentPL === undefined) return opt;
-            return { ...opt, startPL: currentPL };
+        ? cleanedOptions.map(opt => {
+            if (opt.startSnapshot) return opt;
+            return { ...opt, startSnapshot: buildStartSnapshot(opt, snapshotCtx) };
           })
-        : options;
+        : cleanedOptions;
 
       // Подготавливаем данные для API
       const configData = {
@@ -3937,10 +3942,9 @@ function UniversalOptionsCalculator() {
 
       console.log('✅ [handleSaveDBConfiguration] Ответ сервера:', result);
 
-      // Локально применяем зафиксированный startPL, если он был добавлен
-      if (loadedConfigStatus === 'standard' && optionsForSave !== options) {
-        setOptions(optionsForSave);
-      }
+      // Локально применяем то, что отправили (включая возможно добавленный startSnapshot
+      // и снятый legacy startPL) — чтобы UI сразу отразил состояние БД без перезагрузки.
+      setOptions(optionsForSave);
 
       // Обновляем исходное состояние после сохранения
       setOriginalDBConfig({
@@ -3997,14 +4001,19 @@ function UniversalOptionsCalculator() {
         }
       }
 
-      // Snapshot Start P&L: каждой ноге без startPL записываем текущее значение P&L из таблицы.
-      // ЗАЧЕМ: Колонка Start P&L хранит P&L в момент фиксации позиции — это значение
-      // должно остаться неизменным навсегда для последующего сравнения с динамической P&L.
-      const optionsWithStartPL = options.map(opt => {
-        if (opt.startPL !== null && opt.startPL !== undefined) return opt;
-        const currentPL = optionsPLMap[opt.id];
-        if (currentPL === null || currentPL === undefined) return opt;
-        return { ...opt, startPL: currentPL };
+      // Snapshot Start P&L: при переводе в standard каждой ноге без startSnapshot
+      // записываем снимок исходных данных (премия/bid/ask/IV/assetPrice/quantity/divYield).
+      // Из всех опционов вычищаем legacy-поле startPL (число — старая реализация).
+      const snapshotCtx = {
+        allOptions: options,
+        currentPrice,
+        ivSurface,
+        dividendYield: useDividends ? dividendYield : 0,
+      };
+      const optionsWithSnapshot = options.map(opt => {
+        const { startPL: _legacyStartPL, ...cleaned } = opt;
+        if (cleaned.startSnapshot) return cleaned;
+        return { ...cleaned, startSnapshot: buildStartSnapshot(opt, snapshotCtx) };
       });
 
       const configData = {
@@ -4016,7 +4025,7 @@ function UniversalOptionsCalculator() {
           selectedTicker,
           currentPrice,
           priceChange,
-          options: optionsWithStartPL,
+          options: optionsWithSnapshot,
           positions,
           selectedExpirationDate,
           daysPassed,
@@ -4032,23 +4041,10 @@ function UniversalOptionsCalculator() {
       const result = await updateConfiguration(loadedConfigId, configData, userId);
       console.log('✅ Позиция переведена в Зафиксирована:', result?.data);
 
-      // Локально обновляем состояние UI без перезагрузки
+      // Локально обновляем состояние UI без перезагрузки.
       setLoadedConfigStatus('standard');
       setIsLocked(true);
-
-      // Применяем флаги isLockedPosition к опционам в локальном state, чтобы
-      // не было визуального рассинхрона до следующей загрузки.
-      // Одновременно сохраняем зафиксированный startPL.
-      setOptions(prev => prev.map(opt => {
-        const updated = { ...opt, isLockedPosition: true };
-        if (updated.startPL === null || updated.startPL === undefined) {
-          const currentPL = optionsPLMap[opt.id];
-          if (currentPL !== null && currentPL !== undefined) {
-            updated.startPL = currentPL;
-          }
-        }
-        return updated;
-      }));
+      setOptions(optionsWithSnapshot.map(opt => ({ ...opt, isLockedPosition: true })));
       setPositions(prev => prev.map(pos => ({ ...pos, isLockedPosition: true })));
 
       alert('Позиция зафиксирована.');
@@ -4078,15 +4074,25 @@ function UniversalOptionsCalculator() {
       // ЗАЧЕМ: Start P&L — снимок прибыли/убытка в момент фиксации позиции,
       // не меняется во времени. Для нового сохранения сразу в standard это
       // первый и единственный момент захвата.
+      // Snapshot Start P&L: если позиция сохраняется в standard, каждой ноге без
+      // startSnapshot записываем снимок исходных данных. Из всех опционов вычищаем
+      // legacy-поле startPL (число из старой реализации).
       let configState = configuration.state;
-      if (targetStatus === 'standard' && configState && Array.isArray(configState.options)) {
-        const optionsWithStartPL = configState.options.map(opt => {
-          if (opt.startPL !== null && opt.startPL !== undefined) return opt;
-          const currentPL = optionsPLMap[opt.id];
-          if (currentPL === null || currentPL === undefined) return opt;
-          return { ...opt, startPL: currentPL };
+      if (configState && Array.isArray(configState.options)) {
+        const snapshotCtx = {
+          allOptions: configState.options,
+          currentPrice,
+          ivSurface,
+          dividendYield: useDividends ? dividendYield : 0,
+        };
+        const processed = configState.options.map(opt => {
+          const { startPL: _legacyStartPL, ...cleaned } = opt;
+          if (targetStatus === 'standard' && !cleaned.startSnapshot) {
+            return { ...cleaned, startSnapshot: buildStartSnapshot(opt, snapshotCtx) };
+          }
+          return cleaned;
         });
-        configState = { ...configState, options: optionsWithStartPL };
+        configState = { ...configState, options: processed };
       }
 
       // Подготавливаем данные для API
@@ -4112,15 +4118,10 @@ function UniversalOptionsCalculator() {
 
       console.log('✅ Конфигурация сохранена в БД:', result.data);
 
-      // Локально обновляем options, чтобы зафиксированные значения
-      // сразу появились в колонке Start P&L без перезагрузки страницы.
-      if (targetStatus === 'standard') {
-        setOptions(prev => prev.map(opt => {
-          if (opt.startPL !== null && opt.startPL !== undefined) return opt;
-          const currentPL = optionsPLMap[opt.id];
-          if (currentPL === null || currentPL === undefined) return opt;
-          return { ...opt, startPL: currentPL };
-        }));
+      // Локально применяем то, что отправили (со startSnapshot и без legacy startPL),
+      // чтобы колонка Start P&L сразу заработала без перезагрузки страницы.
+      if (Array.isArray(configState?.options)) {
+        setOptions(configState.options);
       }
 
       const statusLabel = configData.status === 'standard' ? 'Зафиксирована' : 'В ожидании';
@@ -4696,10 +4697,8 @@ function UniversalOptionsCalculator() {
                       }}
                       stockClassification={null}
                       onOptionsTotalPLChange={setOptionsTableTotalPL}
-                      onOptionsPLMapChange={setOptionsPLMap}
                       onOpenNorthStrategy={handleOpenNorthStrategy}
                       canShowNorthButton={canShowNorthButton}
-                      northMode={northMode}
                       northActive={northActive}
                       onReopenNorthResults={handleReopenNorthResults}
                       onCancelNorthSelection={handleCancelNorthSelection}
@@ -4854,7 +4853,6 @@ function UniversalOptionsCalculator() {
         <NorthStrategyDialog
           isOpen={northDialogOpen}
           initialStep={northDialogStep}
-          mode={northMode}
           currentPrice={currentPrice}
           entryPrice={longPositionsEntry?.price || currentPrice}
           assetQuantity={longPositionsEntry?.quantity || 0}
