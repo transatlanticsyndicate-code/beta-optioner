@@ -2710,13 +2710,38 @@ function UniversalOptionsCalculator() {
     }));
     setOptions(prev => [...prev.filter(o => !o.fromNorthStrategy), ...stamped]);
 
-    // Для «Только опционы» убираем лонг-позицию БА, но запоминаем её —
-    // при «Отменить подбор» восстановим, чтобы действие было обратимо.
+    // Запоминаем исходные LONG-позиции БА (нужно для обратимости).
+    // Для «Только опционы» лонг убирается полностью.
+    // Для «Актив + опционы» лонг замещается на тот, что нашёл алгоритм
+    // (количество = combination.qtyStock, цена = entry из параметров).
     let removedLongPositions = [];
     if (kind === 'optionsOnly') {
       setPositions(prev => {
         removedLongPositions = prev.filter(p => p.type === 'LONG');
         return prev.filter(p => p.type !== 'LONG');
+      });
+    } else if (kind === 'withStock') {
+      const newQty = Number(combination.qtyStock) || 0;
+      // Цена входа берётся из снимка опционной ноги (там лежит entry,
+      // с которым считался прайсинг — самый надёжный источник).
+      const newPrice = Number(combination.positions?.[0]?.assetPriceAtEntry) || 0;
+      setPositions(prev => {
+        removedLongPositions = prev.filter(p => p.type === 'LONG');
+        const withoutLong = prev.filter(p => p.type !== 'LONG');
+        if (newQty <= 0) return withoutLong;
+        // Используем тикер и валидные поля из снимка исходной лонг-позиции,
+        // чтобы не плодить новые поля и сохранить совместимость с остальным UI.
+        const template = removedLongPositions[0] || {};
+        const replaced = {
+          ...template,
+          id: `north-stock-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          type: 'LONG',
+          quantity: newQty,
+          price: newPrice > 0 ? newPrice : (Number(template.price) || 0),
+          visible: true,
+          fromNorthStrategy: true,
+        };
+        return [...withoutLong, replaced];
       });
     }
     setNorthState({ params, result, withStockState, optionsOnlyState, removedLongPositions });
@@ -2742,8 +2767,10 @@ function UniversalOptionsCalculator() {
   }, []);
 
   const handleCancelNorthSelection = useCallback(() => {
+    // Чистим всё, что пришло от стратегии: опционы и (в withStock) подменённую лонг-позицию.
     setOptions(prev => prev.filter(o => !o.fromNorthStrategy));
-    // Если при «Только опционы» удалили лонг БА — возвращаем её обратно.
+    setPositions(prev => prev.filter(p => !p.fromNorthStrategy));
+    // Восстанавливаем исходные лонг-позиции из снимка.
     setNorthState(prev => {
       const removed = prev?.removedLongPositions;
       if (Array.isArray(removed) && removed.length > 0) {

@@ -72,11 +72,35 @@ const PALETTE = {
   },
 };
 
+function LegsList({ title, legs }) {
+  if (!Array.isArray(legs) || legs.length === 0) return null;
+  return (
+    <div className="space-y-0.5">
+      <div className="text-gray-600 dark:text-gray-400 text-xs">{title}</div>
+      <div className="pl-2 space-y-0.5">
+        {legs.map((leg) => (
+          <div key={`${leg.strike}-${leg.quantity}`} className="flex justify-between text-sm">
+            <span className="font-medium">
+              {leg.quantity} × ${leg.strike}
+            </span>
+            <span className="text-muted-foreground tabular-nums">
+              @ ${Number(leg.ask || 0).toFixed(2)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function FocusedCard({ combination, levels, kind, onPick }) {
-  const { call, put, qtyCall, qtyPut, criteria, cost, meta, score } = combination;
+  const { calls = [], puts = [], qtyStock, criteria, cost, meta, score } = combination;
   const fmtLevel = (v) => (Number.isFinite(v) ? `$${Number(v).toFixed(2)}` : null);
   const withStock = kind === NORTH_KINDS.WITH_STOCK;
   const palette = PALETTE[kind] || PALETTE.withStock;
+  const entryFromMeta = Number.isFinite(meta?.levelA) && Number.isFinite(levels?.top)
+    ? (2 * meta.levelA - levels.top)
+    : null;
 
   return (
     <div className={`border-2 ${palette.border} rounded-lg overflow-hidden bg-white dark:bg-gray-900 shadow-md`}>
@@ -90,19 +114,20 @@ function FocusedCard({ combination, levels, kind, onPick }) {
         </div>
       </div>
 
-      <div className="px-4 py-3 bg-gray-50 dark:bg-gray-800 text-sm space-y-1">
-        <div className="flex justify-between">
-          <span className="text-gray-600 dark:text-gray-400">Buy Call</span>
-          <span className="font-medium">
-            {qtyCall} × ${call.strike} <span className="text-muted-foreground">@ ${call.ask.toFixed(2)}</span>
-          </span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-gray-600 dark:text-gray-400">Buy Put</span>
-          <span className="font-medium">
-            {qtyPut} × ${put.strike} <span className="text-muted-foreground">@ ${put.ask.toFixed(2)}</span>
-          </span>
-        </div>
+      <div className="px-4 py-3 bg-gray-50 dark:bg-gray-800 text-sm space-y-2">
+        <LegsList title="Buy Call" legs={calls} />
+        <LegsList title="Buy Put" legs={puts} />
+        {withStock && Number.isFinite(qtyStock) && qtyStock > 0 && (
+          <div className="flex justify-between pt-1 border-t border-gray-200 dark:border-gray-700">
+            <span className="text-gray-600 dark:text-gray-400">Акции</span>
+            <span className="font-medium">
+              {qtyStock} шт
+              {Number.isFinite(entryFromMeta) && (
+                <span className="text-muted-foreground ml-1">@ ${entryFromMeta.toFixed(2)}</span>
+              )}
+            </span>
+          </div>
+        )}
         <div className="flex justify-between pt-1 border-t border-gray-200 dark:border-gray-700">
           <span className="text-gray-600 dark:text-gray-400">Маржа сделки</span>
           <span className="font-semibold tabular-nums">
@@ -164,8 +189,13 @@ function FocusedCard({ combination, levels, kind, onPick }) {
   );
 }
 
+function legsSummary(legs, prefix) {
+  if (!Array.isArray(legs) || legs.length === 0) return '';
+  return `${prefix}: ` + legs.map((l) => `${l.quantity}×$${l.strike}`).join(' + ');
+}
+
 function CompactCard({ combination, kind, isActive, onSelect }) {
-  const { call, put, qtyCall, qtyPut, criteria, cost, score } = combination;
+  const { calls = [], puts = [], qtyStock, criteria, cost, score } = combination;
   const withStock = kind === NORTH_KINDS.WITH_STOCK;
   const palette = PALETTE[kind] || PALETTE.withStock;
   const baseClass = isActive
@@ -180,8 +210,14 @@ function CompactCard({ combination, kind, isActive, onSelect }) {
     >
       <div className="flex items-center justify-between text-xs gap-3">
         <div className="flex-1 min-w-0 truncate">
+          {withStock && Number.isFinite(qtyStock) && qtyStock > 0 && (
+            <span className="font-medium mr-2">A{qtyStock}</span>
+          )}
           <span className="font-medium">
-            {qtyCall}×C${call.strike} + {qtyPut}×P${put.strike}
+            {legsSummary(calls, 'C')}
+          </span>
+          <span className="font-medium ml-2">
+            {legsSummary(puts, 'P')}
           </span>
           <span className="text-muted-foreground ml-2">
             маржа ${cost.marginUsed.toFixed(0)}
