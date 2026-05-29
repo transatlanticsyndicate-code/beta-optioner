@@ -53,6 +53,8 @@ function ParamsForm({
       plTolerance: initialValues?.plTolerance ?? 200,
       margin: initialValues?.margin ?? 6000,
       marginTolerance: initialValues?.marginTolerance ?? 500,
+      // Минимальная доля акции в марже (только для режима «актив + опционы»), %.
+      minStockMarginPct: initialValues?.minStockMarginPct ?? 40,
     };
   }, [basePrice, initialValues]);
 
@@ -67,6 +69,7 @@ function ParamsForm({
   const [plTolerance, setPlTolerance] = useState(defaults.plTolerance);
   const [margin, setMargin] = useState(defaults.margin);
   const [marginTolerance, setMarginTolerance] = useState(defaults.marginTolerance);
+  const [minStockMarginPct, setMinStockMarginPct] = useState(defaults.minStockMarginPct);
 
   useEffect(() => {
     if (expirationDate || !Array.isArray(availableExpirations) || availableExpirations.length === 0) return;
@@ -126,6 +129,7 @@ function ParamsForm({
   if (toNum(plTolerance) <= 0) errors.push('Допустимый диапазон P&L должен быть положительным');
   if (toNum(margin) <= 0) errors.push('Маржин должен быть положительным');
   if (toNum(marginTolerance) < 0) errors.push('Допуск маржина не может быть отрицательным');
+  if (toNum(minStockMarginPct) < 0 || toNum(minStockMarginPct) > 100) errors.push('Доля акции должна быть от 0 до 100%');
 
   const handleSubmit = () => {
     if (errors.length > 0) return;
@@ -141,6 +145,7 @@ function ParamsForm({
       plTolerance: toNum(plTolerance),
       margin: toNum(margin),
       marginTolerance: toNum(marginTolerance),
+      minStockMarginPct: toNum(minStockMarginPct),
     });
   };
 
@@ -264,6 +269,22 @@ function ParamsForm({
               value={marginTolerance}
               onChange={(e) => setMarginTolerance(e.target.value)}
             />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label className="text-xs">Мин. доля акции (%)</Label>
+            <Input
+              type="number"
+              step="5"
+              min="0"
+              max="100"
+              value={minStockMarginPct}
+              onChange={(e) => setMinStockMarginPct(e.target.value)}
+            />
+          </div>
+          <div className="flex items-end text-[11px] text-muted-foreground pb-2">
+            Только для вида «актив + опционы».
           </div>
         </div>
         <div className="text-[11px] text-muted-foreground">

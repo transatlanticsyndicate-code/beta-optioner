@@ -16,6 +16,7 @@ import { Slider } from '../../ui/slider';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import {
   rankCombinations,
+  rankCombinationsDefault,
   filterByMargin,
 } from '../../../utils/northStrategy/scoring';
 import ResultCard from './ResultCard';
@@ -40,24 +41,21 @@ function WeightSlider({ label, value, onChange, hint }) {
   );
 }
 
-function MarginSlider({ value, onChange, rangeLo, rangeHi, tolerance }) {
+function MarginInfo({ marginBase, tolerance }) {
+  // Маржа всех вариантов жёстко ограничена коридором база ± допуск ещё на этапе
+  // подбора, поэтому здесь — статичная информация, без подвижного бегунка.
+  const lo = Math.round(marginBase - tolerance);
+  const hi = Math.round(marginBase + tolerance);
   return (
     <div className="space-y-1">
       <div className="flex justify-between items-baseline text-xs">
         <Label className="text-xs">Маржин сделки</Label>
         <span className="text-muted-foreground tabular-nums">
-          ${value.toFixed(0)} <span className="opacity-60">± {tolerance}</span>
+          ${Math.round(marginBase)} <span className="opacity-60">± {tolerance}</span>
         </span>
       </div>
-      <Slider
-        min={Math.round(rangeLo)}
-        max={Math.round(rangeHi)}
-        step={100}
-        value={[Math.round(value)]}
-        onValueChange={(v) => onChange(v[0])}
-      />
       <div className="text-[10px] text-muted-foreground">
-        диапазон ${Math.round(rangeLo)}–${Math.round(rangeHi)}
+        коридор ${lo}–${hi}
       </div>
     </div>
   );
@@ -69,9 +67,8 @@ function BucketColumn({
   kind,
   combinations,
   bucketState,
+  marginBase,
   marginTolerance,
-  marginRangeLo,
-  marginRangeHi,
   params,
   onUpdate,
   onPick,
@@ -79,13 +76,20 @@ function BucketColumn({
   const [activeId, setActiveId] = useState(null);
   const [altsOpen, setAltsOpen] = useState(false);
 
+  // Страховка: варианты уже в коридоре база ± допуск (гарантирует анализатор).
   const filtered = useMemo(
-    () => filterByMargin(combinations, bucketState.marginCenter, marginTolerance),
-    [combinations, bucketState.marginCenter, marginTolerance],
+    () => filterByMargin(combinations, marginBase, marginTolerance),
+    [combinations, marginBase, marginTolerance],
   );
+  // По умолчанию — лексикографический порядок (фильтры → максимум верха).
+  // Если пользователь поднял вес низа ползунком — взвешенный режим.
   const ranked = useMemo(
-    () => rankCombinations(filtered, bucketState.weights),
-    [filtered, bucketState.weights],
+    () => (
+      bucketState.weights.bottomZero > 0
+        ? rankCombinations(filtered, bucketState.weights)
+        : rankCombinationsDefault(filtered, marginBase)
+    ),
+    [filtered, bucketState.weights, marginBase],
   );
 
   const activeCombination = useMemo(() => {
@@ -104,10 +108,6 @@ function BucketColumn({
     setActiveId(null);
     onUpdate({ weights: { ...bucketState.weights, [key]: v } });
   };
-  const setMargin = (v) => {
-    setActiveId(null);
-    onUpdate({ marginCenter: v });
-  };
 
   const alternatives = ranked.filter((c) => c.id !== activeCombination?.id);
 
@@ -117,7 +117,7 @@ function BucketColumn({
         <span className="font-semibold text-gray-700 dark:text-gray-300">{title}</span>
         <span className="ml-2">·</span>
         <span className="ml-2">прошли фильтры: <strong>{combinations.length}</strong></span>
-        <span className="ml-2">· под текущий маржин: <strong>{filtered.length}</strong></span>
+        <span className="ml-2">· в коридоре маржи: <strong>{filtered.length}</strong></span>
       </div>
 
       <div className="border rounded-md p-3 bg-muted/30 space-y-3">
@@ -137,13 +137,7 @@ function BucketColumn({
           onChange={(v) => setWeight('bottomZero', v)}
         />
         <div className="border-t pt-3">
-          <MarginSlider
-            value={bucketState.marginCenter}
-            onChange={setMargin}
-            rangeLo={marginRangeLo}
-            rangeHi={marginRangeHi}
-            tolerance={marginTolerance}
-          />
+          <MarginInfo marginBase={marginBase} tolerance={marginTolerance} />
         </div>
       </div>
 
@@ -200,9 +194,8 @@ function ResultsView({
   params,
   withStockState,
   optionsOnlyState,
+  marginBase,
   marginTolerance,
-  marginRangeLo,
-  marginRangeHi,
   onPick,
   onBack,
   onCancel,
@@ -252,22 +245,20 @@ function ResultsView({
           kind={NORTH_KINDS.WITH_STOCK}
           combinations={withStockList}
           bucketState={withStockState}
+          marginBase={marginBase}
           marginTolerance={marginTolerance}
-          marginRangeLo={marginRangeLo}
-          marginRangeHi={marginRangeHi}
           params={params}
           onUpdate={(next) => onBucketUpdate(NORTH_KINDS.WITH_STOCK, next)}
           onPick={onPick}
         />
         <BucketColumn
           title="Только опционы"
-          hintBottom="P&L опционов на низу ≈ 0"
+          hintBottom="P&L опционов на низу ≈ 0 или лучше"
           kind={NORTH_KINDS.OPTIONS_ONLY}
           combinations={optionsOnlyList}
           bucketState={optionsOnlyState}
+          marginBase={marginBase}
           marginTolerance={marginTolerance}
-          marginRangeLo={marginRangeLo}
-          marginRangeHi={marginRangeHi}
           params={params}
           onUpdate={(next) => onBucketUpdate(NORTH_KINDS.OPTIONS_ONLY, next)}
           onPick={onPick}

@@ -7,8 +7,9 @@
  *
  * Анализатор за один запуск возвращает СРАЗУ ДВЕ выборки на одной и той же
  * позиции — `withStock` (актив + опционы) и `optionsOnly` (только опционы).
- * Для каждой выборки в диалоге хранится свой набор состояний бегунков
- * (`weights` и `marginCenter`), которые пробрасываются в `ResultsView`.
+ * Для каждой выборки в диалоге хранится свой набор весов (`weights`), который
+ * пробрасывается в `ResultsView`. Коридор маржи (база ± допуск) гарантирует сам
+ * анализатор, поэтому подвижного бегунка маржи на экране результатов больше нет.
  */
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -32,11 +33,6 @@ const FULL_CHAIN_KEY = 'tvc_full_chain';
 const POLL_INTERVAL_MS = 600;
 const EXPIRATIONS_TIMEOUT_MS = 35_000;
 const CHAIN_TIMEOUT_MS = 35_000;
-
-// Диапазон бегунка маржина = ±25 % от введённой базы. Пред-расчёт идёт по этим
-// границам — потом бегунок на экране результатов фильтрует подмножество.
-const MARGIN_PRECALC_LO_FACTOR = 0.75;
-const MARGIN_PRECALC_HI_FACTOR = 1.25;
 
 const readExpirationsList = () => {
   try {
@@ -80,9 +76,8 @@ const chainHasDate = (chain, isoDate) => {
   return false;
 };
 
-const makeDefaultBucketState = (marginCenter) => ({
+const makeDefaultBucketState = () => ({
   weights: { ...DEFAULT_WEIGHTS },
-  marginCenter,
 });
 
 function NorthStrategyDialog({
@@ -109,10 +104,10 @@ function NorthStrategyDialog({
     initialState?.result || { withStock: [], optionsOnly: [], levels: { a: null, b: null } },
   );
   const [withStockState, setWithStockState] = useState(
-    initialState?.withStockState || makeDefaultBucketState(6000),
+    initialState?.withStockState || makeDefaultBucketState(),
   );
   const [optionsOnlyState, setOptionsOnlyState] = useState(
-    initialState?.optionsOnlyState || makeDefaultBucketState(6000),
+    initialState?.optionsOnlyState || makeDefaultBucketState(),
   );
 
   const [availableExpirations, setAvailableExpirations] = useState([]);
@@ -228,8 +223,9 @@ function NorthStrategyDialog({
             putStrikeMin: formParams.putStrikeMin,
             putStrikeMax: formParams.putStrikeMax,
             plTolerance: formParams.plTolerance,
-            marginPreCalcMin: baseMargin * MARGIN_PRECALC_LO_FACTOR,
-            marginPreCalcMax: baseMargin * MARGIN_PRECALC_HI_FACTOR,
+            marginBase: baseMargin,
+            marginTolerance: Number(formParams.marginTolerance) || 0,
+            minStockMarginPct: (Number(formParams.minStockMarginPct) || 40) / 100,
             chain: chain.options,
             ivSurface,
             calculatorMode,
@@ -237,8 +233,8 @@ function NorthStrategyDialog({
             stockClassification,
           });
           setResult(analysis);
-          const freshWith = makeDefaultBucketState(baseMargin);
-          const freshOnly = makeDefaultBucketState(baseMargin);
+          const freshWith = makeDefaultBucketState();
+          const freshOnly = makeDefaultBucketState();
           setWithStockState(freshWith);
           setOptionsOnlyState(freshOnly);
           setStep('results');
@@ -355,8 +351,6 @@ function NorthStrategyDialog({
 
   const marginBase = Number(params?.margin) || 6000;
   const marginTolerance = Number(params?.marginTolerance) || 500;
-  const marginRangeLo = marginBase * MARGIN_PRECALC_LO_FACTOR;
-  const marginRangeHi = marginBase * MARGIN_PRECALC_HI_FACTOR;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -431,9 +425,8 @@ function NorthStrategyDialog({
             params={params}
             withStockState={withStockState}
             optionsOnlyState={optionsOnlyState}
+            marginBase={marginBase}
             marginTolerance={marginTolerance}
-            marginRangeLo={marginRangeLo}
-            marginRangeHi={marginRangeHi}
             onPick={handlePick}
             onBack={handleBack}
             onCancel={onClose}

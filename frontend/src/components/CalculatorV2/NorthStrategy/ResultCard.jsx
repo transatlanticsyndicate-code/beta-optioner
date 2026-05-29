@@ -117,6 +117,11 @@ function FocusedCard({ combination, levels, kind, onPick }) {
       <div className="px-4 py-3 bg-gray-50 dark:bg-gray-800 text-sm space-y-2">
         <LegsList title="Buy Call" legs={calls} />
         <LegsList title="Buy Put" legs={puts} />
+        {!withStock && (
+          <div className="text-[11px] text-muted-foreground">
+            Тип: {puts.length === 0 ? 'чистый CALL' : 'CALL + PUT'}
+          </div>
+        )}
         {withStock && Number.isFinite(qtyStock) && qtyStock > 0 && (
           <div className="flex justify-between pt-1 border-t border-gray-200 dark:border-gray-700">
             <span className="text-gray-600 dark:text-gray-400">Акции</span>
@@ -139,14 +144,27 @@ function FocusedCard({ combination, levels, kind, onPick }) {
             )}
           </span>
         </div>
+        {withStock && Number.isFinite(cost.stockMarginPct) && (
+          <div className="flex justify-between">
+            <span className="text-gray-600 dark:text-gray-400">Доля акции в марже</span>
+            <span className="font-medium tabular-nums">{(cost.stockMarginPct * 100).toFixed(0)}%</span>
+          </div>
+        )}
       </div>
 
       {/* Порядок строк: Верх → A → B → Низ. A и B — информационные. */}
       <div className="px-4 py-2 divide-y divide-gray-100 dark:divide-gray-800">
         <CriterionRow
-          label={`Цель по верху${fmtLevel(levels?.top) ? ` (${fmtLevel(levels?.top)})` : ''} — P&L опционов`}
-          hint="чем больше, тем лучше"
-          value={criteria.topOptions}
+          label={
+            `Цель по верху${fmtLevel(levels?.top) ? ` (${fmtLevel(levels?.top)})` : ''} — `
+            + (withStock ? 'P&L всей позиции' : 'P&L опционов')
+          }
+          hint={
+            withStock
+              ? `акция ${formatCurrency(meta?.assetPLTop ?? 0)} + опционы ${formatCurrency(meta?.optionsPLTop ?? criteria.topOptions)}`
+              : 'чем больше, тем лучше'
+          }
+          value={withStock ? (criteria.topTotal ?? meta?.totalPLTop ?? criteria.topOptions) : criteria.topOptions}
         />
         {meta && Number.isFinite(meta.levelA) && (
           <InfoLevelRow
@@ -224,9 +242,14 @@ function CompactCard({ combination, kind, isActive, onSelect }) {
           </span>
         </div>
         <div className="flex items-center gap-3 tabular-nums">
-          <span className={`whitespace-nowrap ${getPLColor(criteria.topOptions)}`}>
-            верх {formatCurrency(criteria.topOptions)}
-          </span>
+          {(() => {
+            const topVal = withStock ? (criteria.topTotal ?? criteria.topOptions) : criteria.topOptions;
+            return (
+              <span className={`whitespace-nowrap ${getPLColor(topVal)}`}>
+                верх {withStock ? '(total)' : ''} {formatCurrency(topVal)}
+              </span>
+            );
+          })()}
           <span className="whitespace-nowrap text-gray-700 dark:text-gray-300">
             низ {withStock ? '(total)' : '(opt)'} {formatCurrency(criteria.bottomMetric)}
           </span>

@@ -44,6 +44,30 @@ const CONTRACT_MULTIPLIER = 100;
 const MAX_GREEDY_ITERATIONS = 60;
 const STOCK_STEP = 25;
 const STOCK_MIN = 50;
+// Минимальная доля маржи на акцию для режима withStock (по ТЗ — не меньше 40%).
+export const DEFAULT_MIN_STOCK_MARGIN_PCT = 0.40;
+
+/**
+ * Проверка низа в зависимости от режима низа.
+ *  - strictAbs        : |bottomMetric| ≤ tol (минус и плюс ограничены симметрично);
+ *  - noWorseThanLoss  : bottomMetric ≥ −tol (минус ограничен, плюс разрешён).
+ */
+const bottomPasses = (bottomMetric, plTolerance, bottomMode) => (
+  bottomMode === 'strictAbs'
+    ? Math.abs(bottomMetric) <= plTolerance
+    : bottomMetric >= -plTolerance
+);
+
+/**
+ * Штраф за низ для ранжирования: 0 — низ идеален/лучше идеала.
+ *  - strictAbs        : |bottomMetric| (любое отклонение от 0 — штраф);
+ *  - noWorseThanLoss  : max(0, −bottomMetric) (плюс штрафа не даёт).
+ */
+const bottomPenaltyOf = (bottomMetric, bottomMode) => (
+  bottomMode === 'strictAbs'
+    ? Math.abs(bottomMetric)
+    : Math.max(0, -bottomMetric)
+);
 
 const normalizeIV = (iv) => {
   const n = Number(iv);
@@ -213,34 +237,45 @@ const greedyBuild = ({
   callPrecomp,
   putPrecomp,
   entry,
+  topPrice,
   bottomPrice,
   levelA,
   levelB,
   leverage,
-  marginPreCalcMin,
-  marginPreCalcMax,
+  marginMin,
+  marginMax,
   plTolerance,
+  minStockMarginPct,
 }) => {
   const withStock = mode === NORTH_KINDS.WITH_STOCK;
+  // Режим низа: withStock — строго ±tol (низ всей позиции около 0);
+  // optionsOnly — «не хуже убытка» (плюс снизу допустим).
+  const bottomMode = withStock ? 'strictAbs' : 'noWorseThanLoss';
+  const bottomPass = (bm) => bottomPasses(bm, plTolerance, bottomMode);
+  const bottomPenalty = (bm) => bottomPenaltyOf(bm, bottomMode);
+
   const stockMargin = withStock ? (qtyStock * entry) / leverage : 0;
-  if (stockMargin > marginPreCalcMax) return null;
-  const budget = marginPreCalcMax - stockMargin;
+  if (stockMargin > marginMax) return null;
+  const budget = marginMax - stockMargin;
   if (budget <= 0) return null;
 
-  let spent = callSeed.costPerContract + putSeed.costPerContract;
+  // putSeed может быть null — это конструкция «только CALL» (для optionsOnly).
+  const hasPut = !!putSeed;
+  let spent = callSeed.costPerContract + (hasPut ? putSeed.costPerContract : 0);
   if (spent > budget) return null;
 
   // Карты страйк → quantity.
   const callsMap = new Map();
   const putsMap = new Map();
   callsMap.set(callSeed.strike, 1);
-  putsMap.set(putSeed.strike, 1);
+  if (hasPut) putsMap.set(putSeed.strike, 1);
 
-  let plOptionsTop = callSeed.plTop + putSeed.plTop;
-  let plOptionsBottom = callSeed.plBottom + putSeed.plBottom;
-  let plOptionsAtA = callSeed.plLevelA + putSeed.plLevelA;
-  let plOptionsAtB = callSeed.plLevelB + putSeed.plLevelB;
+  let plOptionsTop = callSeed.plTop + (hasPut ? putSeed.plTop : 0);
+  let plOptionsBottom = callSeed.plBottom + (hasPut ? putSeed.plBottom : 0);
+  let plOptionsAtA = callSeed.plLevelA + (hasPut ? putSeed.plLevelA : 0);
+  let plOptionsAtB = callSeed.plLevelB + (hasPut ? putSeed.plLevelB : 0);
 
+  const assetPLTop = withStock ? (topPrice - entry) * qtyStock : 0;
   const assetPLBottom = withStock ? (bottomPrice - entry) * qtyStock : 0;
   const assetPLAtA = withStock ? (levelA - entry) * qtyStock : 0;
   const assetPLAtB = withStock ? (levelB - entry) * qtyStock : 0;
@@ -250,7 +285,10 @@ const greedyBuild = ({
 
   // Жадно: до MAX_GREEDY_ITERATIONS контрактов или пока есть улучшение.
   for (let iter = 0; iter < MAX_GREEDY_ITERATIONS; iter += 1) {
-    const needBottomImprovement = Math.abs(bottomMetric) > plTolerance;
+    // Улучшаем низ только пока он НЕ проходит фильтр. Как только низ допустим
+    // (для optionsOnly это bm ≥ −tol — минус мелкий минус допустим), переходим
+    // к максимизации верха, не добавляя лишних путов в чистый CALL.
+    const needBottomImprovement = !bottomPass(bottomMetric);
     let bestImpr = 0;
     let bestSide = null;
     let bestStrike = null;
@@ -267,9 +305,10 @@ const greedyBuild = ({
         const newBM = computeBottomMetric(newPlBottom);
         let impr;
         if (needBottomImprovement) {
-          impr = Math.abs(bottomMetric) - Math.abs(newBM);
+          impr = bottomPenalty(bottomMetric) - bottomPenalty(newBM);
         } else {
-          if (Math.abs(newBM) > plTolerance) continue;
+          // Низ уже в допуске — не разрешаем ему выйти за допустимое.
+          if (!bottomPass(newBM)) continue;
           impr = newPlTop - plOptionsTop;
         }
         if (impr > bestImpr) {
@@ -294,9 +333,18 @@ const greedyBuild = ({
 
   // Финальные жёсткие фильтры.
   const marginUsed = stockMargin + spent;
-  if (marginUsed < marginPreCalcMin || marginUsed > marginPreCalcMax) return null;
-  if (Math.abs(bottomMetric) > plTolerance) return null;
+  if (marginUsed < marginMin || marginUsed > marginMax) return null;
+  if (!bottomPass(bottomMetric)) return null;
   if (!(plOptionsTop > 0)) return null;
+
+  const totalPLTop = plOptionsTop + assetPLTop;
+  if (withStock) {
+    // Верх всей позиции должен быть положительным.
+    if (!(totalPLTop > 0)) return null;
+    // Доля акции в марже не меньше заданной (по ТЗ — 40%).
+    const stockMarginPct = marginUsed > 0 ? stockMargin / marginUsed : 0;
+    if (stockMarginPct < minStockMarginPct) return null;
+  }
 
   return {
     qtyStock,
@@ -310,9 +358,12 @@ const greedyBuild = ({
     plOptionsAtA,
     plOptionsAtB,
     bottomMetric,
+    bottomPenalty: bottomPenalty(bottomMetric),
+    assetPLTop,
     assetPLBottom,
     assetPLAtA,
     assetPLAtB,
+    totalPLTop,
   };
 };
 
@@ -399,16 +450,24 @@ const finalizeCombination = ({
       optionsCost: raw.spent,
       stockMargin: raw.stockMargin,
       marginUsed: raw.marginUsed,
+      stockMarginPct: raw.marginUsed > 0 ? raw.stockMargin / raw.marginUsed : 0,
     },
     criteria: {
       bottomMetric: raw.bottomMetric,
+      bottomPenalty: raw.bottomPenalty,
+      // topOptions — P&L только опционов (отдельный фильтр «опционы сверху > 0» и UI).
       topOptions: raw.plOptionsTop,
+      // topTotal — главный критерий верха: для withStock это акция + опционы,
+      // для optionsOnly совпадает с topOptions.
+      topTotal: mode === NORTH_KINDS.WITH_STOCK ? raw.totalPLTop : raw.plOptionsTop,
     },
     meta: {
       optionsPLBottom: raw.plOptionsBottom,
       optionsPLTop: raw.plOptionsTop,
       assetPLBottom: raw.assetPLBottom,
+      assetPLTop: raw.assetPLTop,
       totalPLBottom: raw.bottomMetric,
+      totalPLTop: raw.totalPLTop,
       levelA,
       levelB,
       plAtLevelA: raw.plOptionsAtA + raw.assetPLAtA,
@@ -437,8 +496,9 @@ export const analyzeNorthStrategy = ({
   putStrikeMin,
   putStrikeMax,
   plTolerance,
-  marginPreCalcMin,
-  marginPreCalcMax,
+  marginBase,
+  marginTolerance,
+  minStockMarginPct = DEFAULT_MIN_STOCK_MARGIN_PCT,
   chain,
   ivSurface = null,
   calculatorMode = CALCULATOR_MODES.STOCKS,
@@ -450,7 +510,13 @@ export const analyzeNorthStrategy = ({
   if (!expirationDate || !calcDate) return empty;
   if (!Array.isArray(chain) || chain.length === 0) return empty;
   if (!Number.isFinite(plTolerance) || plTolerance <= 0) return empty;
-  if (!Number.isFinite(marginPreCalcMax) || marginPreCalcMax <= 0) return empty;
+  if (!Number.isFinite(marginBase) || marginBase <= 0) return empty;
+
+  // Жёсткий коридор маржи = база ± допуск (по ТЗ — финальный фильтр и границы поиска).
+  const marginTol = Number.isFinite(marginTolerance) ? Math.max(0, marginTolerance) : 0;
+  const marginMin = Math.max(0, marginBase - marginTol);
+  const marginMax = marginBase + marginTol;
+  const minStockPct = Number.isFinite(minStockMarginPct) ? minStockMarginPct : DEFAULT_MIN_STOCK_MARGIN_PCT;
 
   const safeLeverage = Number(leverage) > 0 ? Number(leverage) : 1;
   const levelA = entry + (topPrice - entry) / 2;
@@ -509,11 +575,16 @@ export const analyzeNorthStrategy = ({
     return { ...empty, levels: { a: levelA, b: levelB } };
   }
 
-  // qtyStock-сетка для withStock: от 50 до максимально возможного по марже, шаг 25.
-  const maxStockQty = Math.floor((marginPreCalcMax * safeLeverage) / entry);
+  // qtyStock-сетка для withStock: старт считаем от минимальной доли акции
+  // (чтобы не перебирать заведомо отсеиваемые мелкие позиции), верх — по коридору маржи.
+  const maxStockQty = Math.floor((marginMax * safeLeverage) / entry);
+  const minStockMarginAbs = marginMin * minStockPct;
+  const minQtyByPct = Math.ceil((minStockMarginAbs * safeLeverage) / entry);
+  const qtyStartRaw = Math.max(STOCK_MIN, minQtyByPct);
+  const qtyStart = Math.ceil(qtyStartRaw / STOCK_STEP) * STOCK_STEP;
   const stockGrid = [];
-  if (maxStockQty >= STOCK_MIN) {
-    for (let q = STOCK_MIN; q <= maxStockQty; q += STOCK_STEP) stockGrid.push(q);
+  if (maxStockQty >= qtyStart) {
+    for (let q = qtyStart; q <= maxStockQty; q += STOCK_STEP) stockGrid.push(q);
   }
 
   const withStock = [];
@@ -539,6 +610,16 @@ export const analyzeNorthStrategy = ({
     bucket.push(finalized);
   };
 
+  const commonArgs = {
+    callPrecomp,
+    putPrecomp,
+    entry, topPrice, bottomPrice, levelA, levelB,
+    leverage: safeLeverage,
+    marginMin, marginMax,
+    plTolerance,
+    minStockMarginPct: minStockPct,
+  };
+
   // withStock: сетка qtyStock × все стартовые пары (callSeed × putSeed).
   for (const qtyStock of stockGrid) {
     for (const callSeed of callPrecomp) {
@@ -548,19 +629,14 @@ export const analyzeNorthStrategy = ({
           mode: NORTH_KINDS.WITH_STOCK,
           callSeed,
           putSeed,
-          callPrecomp,
-          putPrecomp,
-          entry, bottomPrice, levelA, levelB,
-          leverage: safeLeverage,
-          marginPreCalcMin, marginPreCalcMax,
-          plTolerance,
+          ...commonArgs,
         });
         tryAdd(combo, NORTH_KINDS.WITH_STOCK, withStock, seenWithStock);
       }
     }
   }
 
-  // optionsOnly: qtyStock = 0, та же сетка стартов.
+  // optionsOnly: qtyStock = 0, та же сетка пар callSeed × putSeed.
   for (const callSeed of callPrecomp) {
     for (const putSeed of putPrecomp) {
       const combo = greedyBuild({
@@ -568,15 +644,23 @@ export const analyzeNorthStrategy = ({
         mode: NORTH_KINDS.OPTIONS_ONLY,
         callSeed,
         putSeed,
-        callPrecomp,
-        putPrecomp,
-        entry, bottomPrice, levelA, levelB,
-        leverage: safeLeverage,
-        marginPreCalcMin, marginPreCalcMax,
-        plTolerance,
+        ...commonArgs,
       });
       tryAdd(combo, NORTH_KINDS.OPTIONS_ONLY, optionsOnly, seenOptionsOnly);
     }
+  }
+
+  // optionsOnly: конструкция «только CALL» — отдельный проход без пут-сида.
+  // Пут может быть добавлен жадно, если это нужно для низа; иначе остаётся чистый колл.
+  for (const callSeed of callPrecomp) {
+    const combo = greedyBuild({
+      qtyStock: 0,
+      mode: NORTH_KINDS.OPTIONS_ONLY,
+      callSeed,
+      putSeed: null,
+      ...commonArgs,
+    });
+    tryAdd(combo, NORTH_KINDS.OPTIONS_ONLY, optionsOnly, seenOptionsOnly);
   }
 
   return { withStock, optionsOnly, levels: { a: levelA, b: levelB } };
