@@ -259,13 +259,14 @@ function OptionsTableV3({
         daysPassed,
         calculatorMode,
         contractMultiplier,
+        ivSurface,
       };
       const pl = computeStartPL(snapshot, opt, ctx);
       if (pl === null || pl === undefined || Number.isNaN(pl)) return;
       map[opt.id] = pl;
     });
     return map;
-  }, [options, currentPrice, targetPrice, daysPassed, calculatorMode, contractMultiplier]);
+  }, [options, currentPrice, targetPrice, daysPassed, calculatorMode, contractMultiplier, ivSurface]);
 
   // Функция обработки клика по заголовку колонки
   const handleSort = (column) => {
