@@ -138,6 +138,11 @@ function OptionsTableV3({
   const [editingAssetPrice, setEditingAssetPrice] = React.useState(null); // optionId для редактирования цены актива
   const [editingBid, setEditingBid] = React.useState(null); // optionId для редактирования bid
   const [editingAsk, setEditingAsk] = React.useState(null); // optionId для редактирования ask
+  // Локальный «черновой» текст для поля «Fact P&L» по каждому опциону.
+  // ЗАЧЕМ: type="number" в controlled-инпуте теряет промежуточный «-», потому что браузер
+  // в этот момент возвращает пустую строку, и обработчик сбрасывает значение в null.
+  // Используем type="text" + локальный черновик, чтобы пользователь мог ввести отрицательное.
+  const [actualPLDraft, setActualPLDraft] = React.useState({});
   const [isRefreshingAll, setIsRefreshingAll] = React.useState(false); // Состояние обновления всех опционов
   const scrolledToAtm = React.useRef(new Set()); // Отслеживаем, для каких опционов уже был скролл
 
@@ -1362,11 +1367,47 @@ function OptionsTableV3({
 
                 {/* Фактическая P&L — ручная коррекция P&L на конкретный день */}
                 {/* ЗАЧЕМ: Позволяет пользователю зафиксировать реальную P&L и использовать её как якорь для проекций */}
+                {/* Тип text + черновик в локальном state, чтобы можно было ввести отрицательное значение
+                    (type="number" в controlled-инпуте теряет промежуточный «-»). */}
                 <Input
-                  type="number"
-                  step="0.01"
-                  value={option.actualPL !== null && option.actualPL !== undefined ? option.actualPL : ''}
-                  onChange={(e) => handleActualPLChange(option.id, e.target.value)}
+                  type="text"
+                  inputMode="decimal"
+                  value={
+                    actualPLDraft[option.id] !== undefined
+                      ? actualPLDraft[option.id]
+                      : (option.actualPL !== null && option.actualPL !== undefined ? String(option.actualPL) : '')
+                  }
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    // Разрешаем пусто, «-», целые и дробные числа с опциональным минусом.
+                    if (raw === '' || /^-?\d*\.?\d*$/.test(raw)) {
+                      setActualPLDraft(prev => ({ ...prev, [option.id]: raw }));
+                    }
+                  }}
+                  onBlur={(e) => {
+                    const raw = e.target.value;
+                    // Фиксируем значение через тот же обработчик. «-» и пусто трактуются как null.
+                    const isValidNumber = raw !== '' && raw !== '-' && !Number.isNaN(parseFloat(raw));
+                    handleActualPLChange(option.id, isValidNumber ? raw : '');
+                    setActualPLDraft(prev => {
+                      const next = { ...prev };
+                      delete next[option.id];
+                      return next;
+                    });
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.target.blur();
+                    }
+                    if (e.key === 'Escape') {
+                      setActualPLDraft(prev => {
+                        const next = { ...prev };
+                        delete next[option.id];
+                        return next;
+                      });
+                      e.target.blur();
+                    }
+                  }}
                   placeholder={(() => {
                     // Placeholder = текущий теоретический P&L
                     const hasPremium = option.isPremiumModified ? (option.customPremium !== null && option.customPremium !== undefined) : (option.premium !== null && option.premium !== undefined);
@@ -1375,7 +1416,7 @@ function OptionsTableV3({
                   })()}
                   disabled={option.isLockedPosition}
                   className="w-full px-1 text-right text-xs border rounded"
-                  style={{ 
+                  style={{
                     fontSize: '0.7rem',
                     backgroundColor: (option.actualPL !== null && option.actualPL !== undefined) ? '#fef3c7' : 'transparent'
                   }}
