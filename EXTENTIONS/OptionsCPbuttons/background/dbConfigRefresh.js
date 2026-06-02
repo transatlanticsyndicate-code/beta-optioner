@@ -107,8 +107,13 @@ function buildTvOptionsUrl(ticker, options = []) {
 /**
  * Ждём появления таблицы опционов на TV через polling DOM
  * ЗАЧЕМ: TV — SPA, таблица рендерится позже page load. Polling надёжнее чем delay.
+ *
+ * @param {string[]} expectedPrefixes - префиксы секций нужных экспираций ("June 20", …).
+ *   Если переданы — дополнительно ждём, пока отрисуется хотя бы одна из них, а не
+ *   просто «какая-то» таблица. На холодной вкладке без этого парсер уходил по пустым
+ *   строкам и в калькулятор не попадало ничего.
  */
-async function waitForTvOptionsTable(tabId, timeoutMs = 30000) {
+async function waitForTvOptionsTable(tabId, timeoutMs = 30000, expectedPrefixes = []) {
   const POLL_INTERVAL = 1000;
   const startTime = Date.now();
 
@@ -116,7 +121,7 @@ async function waitForTvOptionsTable(tabId, timeoutMs = 30000) {
     try {
       const results = await chrome.scripting.executeScript({
         target: { tabId },
-        func: () => {
+        func: (prefixes) => {
           // Ищем маркеры загруженной таблицы опционов TV.
           // ВАЖНО: priceWrap- (с дефисом) — это цена в чейне страницы; priceWrapper- (с -er)
           // — цена в правом виджет-баре (watchlist), которая отрисовывается раньше чейна.
@@ -125,8 +130,22 @@ async function waitForTvOptionsTable(tabId, timeoutMs = 30000) {
           // первый клик «Да, обновить» после свежего открытия TV не доносил цену до калькулятора.
           const hasTable = document.querySelectorAll('td[class*="td-"]').length > 5;
           const hasPriceWrap = !!document.querySelector('[class*="priceWrap-"]');
-          return hasTable && hasPriceWrap;
-        }
+          if (!hasTable || !hasPriceWrap) return false;
+
+          // ЗАЧЕМ: убеждаемся, что отрисована хотя бы одна из запрошенных секций-экспираций.
+          // Иначе таблица «есть», а нужных строк ещё нет → парсер вернёт null по всем опционам.
+          if (prefixes && prefixes.length > 0) {
+            const groupCells = document.querySelectorAll('[class*="groupCell"]');
+            let sectionReady = false;
+            for (const gc of groupCells) {
+              const t = (gc.textContent || '').trim();
+              if (prefixes.some(p => t.startsWith(p))) { sectionReady = true; break; }
+            }
+            if (!sectionReady) return false;
+          }
+          return true;
+        },
+        args: [expectedPrefixes]
       });
       if (results?.[0]?.result) {
         console.log('[TVC DbConfig] TV таблица загружена');
@@ -139,6 +158,27 @@ async function waitForTvOptionsTable(tabId, timeoutMs = 30000) {
   }
   console.log('[TVC DbConfig] Timeout ожидания таблицы TV');
   return false;
+}
+
+/**
+ * Префиксы секций экспираций ("June 20", …) для опционов конфигурации.
+ * ЗАЧЕМ: TradingView группирует строки по экспирации с заголовком вида "June 20".
+ * Используется и для проверки готовности таблицы, и для скролла к секции.
+ */
+function _expirationPrefixes(options = []) {
+  const monthNames = ['January','February','March','April','May','June',
+                      'July','August','September','October','November','December'];
+  const set = new Set();
+  for (const o of (options || [])) {
+    if (!o || !o.date) continue;
+    const dc = String(o.date).replace(/-/g, '');
+    if (dc.length < 8) continue;
+    const m = parseInt(dc.substring(4, 6), 10);
+    const d = parseInt(dc.substring(6, 8), 10);
+    if (!m || !d) continue;
+    set.add(monthNames[m - 1] + ' ' + d);
+  }
+  return [...set];
 }
 
 /**
@@ -716,138 +756,31 @@ async function executeDbConfigRefresh(calcTabId, configData) {
       return;
     }
 
-    await writeStatusToCalculator(calcTabId, 'collecting', 5, 'Ожидание загрузки TradingView...');
+    // === АВТО-ПОВТОР СБОРА ДАННЫХ ===========================================
+    // ЗАЧЕМ: «второй клик» пользователя превращаем в автоматический повтор.
+    // Холодная (только что открытая) вкладка TradingView часто не успевает
+    // отрисовать таблицу/цену/строки за одну попытку — раньше тут срабатывал ранний
+    // return ДО sendPrIVToCalc, и в калькулятор не уходило НИЧЕГО (даже цена). Помогал
+    // только повторный заход на уже прогретую вкладку. Теперь повтор делаем сами.
 
-    // Ждём появления таблицы опционов на TV (SPA рендерится после page load)
-    const tableReady = await waitForTvOptionsTable(tvTabs[0].id, 30000);
-    if (!tableReady) {
-      await writeStatusToCalculator(calcTabId, 'error', 0, 'TradingView не загрузил таблицу опционов');
-      return;
-    }
-
-    // Проверяем content script — нужно всегда, даже для существующей вкладки
-    let scriptReady = await ensureContentScriptLoaded(tvTabs[0].id);
-    if (!scriptReady) {
-      await delay(3000);
-      scriptReady = await ensureContentScriptLoaded(tvTabs[0].id);
-    }
-    if (!scriptReady) {
-      await writeStatusToCalculator(calcTabId, 'error', 0, 'Не удалось загрузить скрипты на TradingView');
-      return;
-    }
-
-    // Группируем опционы по дате для handleRefreshSpecificOptions
-    const optionsByDate = {};
-    for (const opt of configData.options) {
-      if (!optionsByDate[opt.date]) optionsByDate[opt.date] = [];
-      optionsByDate[opt.date].push({
-        type: opt.type,
-        strike: opt.strike,
-        date: opt.date,
-        optionType: opt.type
-      });
-    }
-
-    await writeStatusToCalculator(calcTabId, 'collecting', 10,
-      `Обновление ${configData.options.length} опционов из TradingView...`);
-
-    // Получаем live данные с TV через существующий механизм
-    // ВАЖНО: НЕ используем updateCalculatorState из refreshSpecific,
-    // т.к. он пишет в calculatorState (который калькулятор не читает при dbConfig).
-    // Вместо этого получаем сырые данные и обновляем через React.
-    const tvTabs2 = await chrome.tabs.query({ url: '*://*.tradingview.com/options/*' });
-    if (tvTabs2.length === 0) {
-      await writeStatusToCalculator(calcTabId, 'error', 0, 'Вкладка TradingView закрыта');
-      return;
-    }
-    const tvTabId = tvTabs2[0].id;
-
-    // ЗАЧЕМ: Content script может быть не загружен (новая вкладка, перезагрузка расширения).
-    // Без этого sendMessage упадёт — цена и IV будут null.
-    await ensureContentScriptLoaded(tvTabId);
-
-    // Получаем underlying price до парсинга — priceWrap видим пока скролл не сместился.
-    // ЗАЧЕМ: 10 попыток × 1с (вместо 5) — на свежезагруженной TradingView
-    // элемент priceWrap- (чейновая цена в шапке) может отрисоваться позже таблицы;
-    // если за всё окно цена так и не появилась — лучше остановиться с явной ошибкой,
-    // чем отправить в калькулятор команду с currentPrice: null (раньше это выглядело
-    // как «обновление прошло, но цена БА не изменилась»).
-    let underlyingPrice = null;
-    for (let pa = 0; pa < 10 && !underlyingPrice; pa++) {
-      if (pa > 0) await delay(1000);
-      const priceResult = await chrome.tabs.sendMessage(tvTabId, { action: 'getUnderlyingPrice' }).catch(() => null);
-      underlyingPrice = priceResult?.price;
-      if (!underlyingPrice) {
-        // Inline-fallback: селектор и скип-лист зеркалят src/utils.js →
-        // getUnderlyingPrice / TV_SIDEBAR_SKIP_SELECTOR, чтобы не подхватить
-        // цену чужого тикера из правого сайдбара (priceWrapper-* / watchlist /
-        // detailsWidget — TV использует их на новой вёрстке).
-        const fb = await chrome.scripting.executeScript({
-          target: { tabId: tvTabId },
-          func: () => {
-            const SKIP = [
-              '[class*="widgetbar-widget"]',
-              '[class*="widgetbar-page"]',
-              '[class*="watchlist"]',
-              '[class*="watch-list"]',
-              '[class*="detailsWidget"]',
-              '[data-name="right-toolbar"]',
-              '[data-name="watchlist"]'
-            ].join(',');
-            // priceWrap- (с дефисом) — чейн страницы; priceWrapper- (без дефиса) — сайдбар, отсекаем сразу.
-            const wraps = document.querySelectorAll('[class*="priceWrap-"]');
-            for (const el of wraps) {
-              if (el.closest(SKIP)) continue;
-              const text = el.textContent.replace(/[^0-9.,]/g, '');
-              const p = parseFloat(text.replace(/,/g, ''));
-              if (p > 0) return p;
-            }
-            return null;
-          }
-        }).catch(() => []);
-        underlyingPrice = fb?.[0]?.result;
+    // Скролл к секции нужной экспирации (инжектится в страницу TradingView).
+    const scrollToSectionFn = (optDate) => {
+      const monthNames = ['January','February','March','April','May','June',
+                           'July','August','September','October','November','December'];
+      const dc = optDate.replace(/-/g, '');
+      const prefix = monthNames[parseInt(dc.substring(4, 6), 10) - 1] + ' ' + parseInt(dc.substring(6, 8), 10);
+      for (const tr of document.querySelectorAll('tr')) {
+        const gc = tr.querySelector('[class*="groupCell"]');
+        if (gc && gc.textContent?.trim().startsWith(prefix)) {
+          tr.scrollIntoView({ block: 'start', behavior: 'instant' });
+          break;
+        }
       }
-    }
-    console.log('[TVC DbConfig] Underlying price:', underlyingPrice);
+    };
 
-    // ЗАЩИТА: если цена БА так и не получена — не отправляем команду молча с null,
-    // а сообщаем пользователю об ошибке. Иначе калькулятор обновил бы только IV/опционы,
-    // оставив старую цену БА, и пользователь решил бы, что «обновление не сработало».
-    if (!underlyingPrice) {
-      await writeStatusToCalculator(calcTabId, 'error', 0,
-        'Не удалось снять цену базового актива с TradingView — попробуйте ещё раз через пару секунд');
-      return;
-    }
-
-    // ЗАЧЕМ: Прямой парсинг через executeScript — надёжнее чем scrollAndParse,
-    // т.к. не зависит от виртуализации и тайминга content script.
-    // Для каждой даты: скроллим к секции → ждём → парсим IV и страйк.
-    const tvOptions = [];
-    for (const opt of configData.options) {
-      // Скроллим к нужной секции
-      await chrome.scripting.executeScript({
-        target: { tabId: tvTabId },
-        func: (optDate) => {
-          const monthNames = ['January','February','March','April','May','June',
-                               'July','August','September','October','November','December'];
-          const dc = optDate.replace(/-/g, '');
-          const prefix = monthNames[parseInt(dc.substring(4, 6), 10) - 1] + ' ' + parseInt(dc.substring(6, 8), 10);
-          for (const tr of document.querySelectorAll('tr')) {
-            const gc = tr.querySelector('[class*="groupCell"]');
-            if (gc && gc.textContent?.trim().startsWith(prefix)) {
-              tr.scrollIntoView({ block: 'start', behavior: 'instant' });
-              break;
-            }
-          }
-        },
-        args: [opt.date]
-      }).catch(() => {});
-      await delay(1500);
-
-      // Парсим данные из секции
-      const parseResult = await chrome.scripting.executeScript({
-        target: { tabId: tvTabId },
-        func: (optDate, optStrike, optType) => {
+    // Парсер одной строки опциона (инжектится в страницу TradingView).
+    // ЗАЧЕМ: вынесен в const, чтобы переиспользовать при повторных тиках ожидания строки.
+    const parseRowFn = (optDate, optStrike, optType) => {
           const monthNames = ['January','February','March','April','May','June',
                                'July','August','September','October','November','December'];
           const dc = optDate.replace(/-/g, '');
@@ -1026,17 +959,121 @@ async function executeDbConfigRefresh(calcTabId, configData) {
             };
           }
           return null;
-        },
-        args: [opt.date, opt.strike, opt.type]
-      }).catch(() => []);
+    };
 
-      const parsed = parseResult?.[0]?.result;
-      if (parsed) {
-        tvOptions.push({ ...parsed, type: opt.type });
-        console.log('[TVC DbConfig] Parsed:', opt.date, opt.strike,
-          'IV:', parsed.iv, 'Δ:', parsed.delta, 'Γ:', parsed.gamma,
-          'Θ:', parsed.theta, 'V:', parsed.vega);
+    // Параметры повторов и аккумуляторы результата сбора.
+    const COLLECT_MAX_ATTEMPTS = 3;
+    const expectedPrefixes = _expirationPrefixes(configData.options);
+    let underlyingPrice = null;
+    let tvOptions = [];
+
+    for (let attempt = 1; attempt <= COLLECT_MAX_ATTEMPTS; attempt++) {
+      await writeStatusToCalculator(calcTabId, 'collecting', 5,
+        attempt > 1 ? `TradingView ещё догружается — повтор ${attempt}…` : 'Ожидание загрузки TradingView...');
+
+      // Заново находим вкладку TV (могла быть только что создана/перенавигирована).
+      const tvNow = await chrome.tabs.query({ url: '*://*.tradingview.com/options/*' });
+      if (tvNow.length === 0) {
+        if (attempt < COLLECT_MAX_ATTEMPTS) { await delay(3000); continue; }
+        await writeStatusToCalculator(calcTabId, 'error', 0, 'Вкладка TradingView закрыта');
+        return;
       }
+      const tvTabId = tvNow[0].id;
+
+      // Ждём И таблицу, И хотя бы одну из запрошенных секций-экспираций.
+      // На холодной вкладке (attempt 1) даём больше времени, на прогретой — меньше.
+      const tableReady = await waitForTvOptionsTable(tvTabId, attempt === 1 ? 30000 : 15000, expectedPrefixes);
+      if (!tableReady) {
+        if (attempt < COLLECT_MAX_ATTEMPTS) { await delay(3000); continue; }
+        await writeStatusToCalculator(calcTabId, 'error', 0, 'TradingView не загрузил таблицу опционов');
+        return;
+      }
+
+      // Content script на TV декларирован в manifest; вызов — no-op заглушка (см. refreshHelpers.js).
+      await ensureContentScriptLoaded(tvTabId);
+      await writeStatusToCalculator(calcTabId, 'collecting', 10,
+        `Обновление ${configData.options.length} опционов из TradingView...`);
+
+      // --- Цена базового актива (10×1с) ---
+      // priceWrap- (с дефисом) — чейновая цена в шапке; сайдбар (priceWrapper-/watchlist) отсекаем.
+      let price = null;
+      for (let pa = 0; pa < 10 && !price; pa++) {
+        if (pa > 0) await delay(1000);
+        const priceResult = await chrome.tabs.sendMessage(tvTabId, { action: 'getUnderlyingPrice' }).catch(() => null);
+        price = priceResult?.price;
+        if (!price) {
+          const fb = await chrome.scripting.executeScript({
+            target: { tabId: tvTabId },
+            func: () => {
+              const SKIP = [
+                '[class*="widgetbar-widget"]',
+                '[class*="widgetbar-page"]',
+                '[class*="watchlist"]',
+                '[class*="watch-list"]',
+                '[class*="detailsWidget"]',
+                '[data-name="right-toolbar"]',
+                '[data-name="watchlist"]'
+              ].join(',');
+              const wraps = document.querySelectorAll('[class*="priceWrap-"]');
+              for (const el of wraps) {
+                if (el.closest(SKIP)) continue;
+                const text = el.textContent.replace(/[^0-9.,]/g, '');
+                const p = parseFloat(text.replace(/,/g, ''));
+                if (p > 0) return p;
+              }
+              return null;
+            }
+          }).catch(() => []);
+          price = fb?.[0]?.result;
+        }
+      }
+      if (price) underlyingPrice = price;
+      console.log('[TVC DbConfig] Underlying price:', underlyingPrice, '· попытка', attempt);
+
+      // --- Парсинг строк опционов с условным ожиданием рендера ---
+      // ЗАЧЕМ: вместо одной слепой паузы delay(1500) — до ~8 коротких тиков:
+      // скролл к секции → подождать → распарсить. Поздний рендер строки больше не даёт null.
+      const collected = [];
+      for (const opt of configData.options) {
+        let parsed = null;
+        for (let t = 0; t < 8 && !parsed; t++) {
+          await chrome.scripting.executeScript({
+            target: { tabId: tvTabId },
+            func: scrollToSectionFn,
+            args: [opt.date]
+          }).catch(() => {});
+          await delay(500);
+          const parseResult = await chrome.scripting.executeScript({
+            target: { tabId: tvTabId },
+            func: parseRowFn,
+            args: [opt.date, opt.strike, opt.type]
+          }).catch(() => []);
+          parsed = parseResult?.[0]?.result;
+        }
+        if (parsed) {
+          collected.push({ ...parsed, type: opt.type });
+          console.log('[TVC DbConfig] Parsed:', opt.date, opt.strike,
+            'IV:', parsed.iv, 'Δ:', parsed.delta, 'Γ:', parsed.gamma,
+            'Θ:', parsed.theta, 'V:', parsed.vega);
+        }
+      }
+      if (collected.length > 0) tvOptions = collected;
+
+      // Успех: получены и цена БА, и хотя бы один распарсенный опцион.
+      if (underlyingPrice && tvOptions.length > 0) break;
+
+      if (attempt < COLLECT_MAX_ATTEMPTS) {
+        console.log(`[TVC DbConfig] Неполный сбор (цена=${underlyingPrice}, опц.=${tvOptions.length}) — повтор`);
+        await delay(3000);
+      }
+    }
+
+    // ЗАЩИТА: цена БА так и не получена за все попытки — не отправляем команду
+    // молча с null, а сообщаем пользователю об ошибке.
+    if (!underlyingPrice) {
+      await writeStatusToCalculator(calcTabId, 'error', 0,
+        'Не удалось снять цену базового актива с TradingView — попробуйте ещё раз через пару секунд');
+      return;
     }
 
     // ЗАЧЕМ: Собираем данные для оверлея сравнения — старые из калькулятора, новые с TV
