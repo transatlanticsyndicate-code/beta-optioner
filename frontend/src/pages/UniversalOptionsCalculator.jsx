@@ -675,6 +675,27 @@ function UniversalOptionsCalculator() {
           ...prev,
           type: type
         }));
+
+        // Синхронизируем режим калькулятора с выбранным тикером.
+        // ЗАЧЕМ: без этого contractMultiplier остаётся от прежнего режима
+        // (по умолчанию 100 для акций), и P&L по Крипте/фьючерсам при сборке
+        // новой позиции считается неверно — до перезагрузки страницы, которая
+        // переопределяет режим из URL. Повторяем ту же паттерн-детекцию, что и
+        // при инициализации из расширения/сохранёнки, чтобы поведение совпадало.
+        const detectedMode = detectInstrumentTypeByPattern(ticker);
+        if (detectedMode === 'futures') {
+          setCalculatorMode(CALCULATOR_MODES.FUTURES);
+          setSelectedFuture(getFutureByTicker(ticker));
+        } else if (detectedMode === 'crypto') {
+          setCalculatorMode(CALCULATOR_MODES.CRYPTO);
+          setSelectedFuture(null);
+        } else if (detectedMode === 'etf') {
+          setCalculatorMode(CALCULATOR_MODES.ETF);
+          setSelectedFuture(null);
+        } else {
+          setCalculatorMode(CALCULATOR_MODES.STOCKS);
+          setSelectedFuture(null);
+        }
       });
       setSelectedTicker(ticker);
       // Если priceData уже есть — не нужно загружать цену заново, но даты экспирации нужны
