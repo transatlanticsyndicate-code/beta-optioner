@@ -846,7 +846,9 @@ function OptionsTableV3({
                 <div className="flex items-center gap-1 text-right">
                   <Input
                     type="number"
-                    value={option.quantity}
+                    // Приводим к строке: React для number-инпута сравнивает значения нестрого
+                    // ("05" == 5), из-за чего ведущий ноль не стирался. Строковое сравнение это чинит.
+                    value={String(option.quantity)}
                     onChange={(e) => !option.isLockedPosition && handleFieldChange(option.id, 'quantity', parseInt(e.target.value) || 0)}
                     className="h-7 text-right text-muted-foreground text-sm px-1 font-bold w-[34px]"
                     disabled={option.isLockedPosition}
