@@ -4214,7 +4214,7 @@ function UniversalOptionsCalculator() {
   });
 
   return (
-    <div className="min-h-screen bg-background text-foreground" style={{ minWidth: '1570px', maxWidth: '1570px' }}>
+    <div className="min-h-screen bg-background text-foreground" style={{ minWidth: '1570px' }}>
       <div className="p-6">
         {/* === ПРЕДУПРЕЖДЕНИЕ О НЕДОСТОВЕРНОЙ ЦЕНЕ БАЗОВОГО АКТИВА === */}
         {/* ЗАЧЕМ: Если расширение не смогло однозначно привязать цену к текущему тикеру
