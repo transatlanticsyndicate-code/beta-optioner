@@ -18,6 +18,14 @@ const toNum = (v) => {
   return Number.isFinite(n) ? n : 0;
 };
 
+// Округление до ближайшего кратного 5 (цены и страйки). Пустую/нечисловую
+// строку не трогаем, чтобы не мешать вводу.
+const round5 = (v) => {
+  const n = parseFloat(v);
+  if (!Number.isFinite(n)) return v;
+  return Math.round(n / 5) * 5;
+};
+
 const isoFromOffsetDays = (offsetDays) => {
   const d = new Date();
   d.setUTCDate(d.getUTCDate() + offsetDays);
@@ -36,8 +44,10 @@ function ParamsForm({
   const basePrice = entryPrice || currentPrice || 0;
 
   const defaults = useMemo(() => {
-    const top = initialValues?.topPrice ?? Number((basePrice * 1.30).toFixed(2));
-    const bottom = initialValues?.bottomPrice ?? Number((basePrice * 0.85).toFixed(2));
+    // Цены и страйки округляем до кратного 5 (и для авто-дефолтов, и для
+    // восстановленных значений при возврате с экрана результатов).
+    const top = round5(initialValues?.topPrice ?? basePrice * 1.30);
+    const bottom = round5(initialValues?.bottomPrice ?? basePrice * 0.85);
     return {
       topPrice: top,
       bottomPrice: bottom,
@@ -46,10 +56,10 @@ function ParamsForm({
       // По ТЗ: два независимых диапазона страйков.
       //   Call: от точки входа до верха;
       //   Put:  от низа до точки входа.
-      callStrikeMin: initialValues?.callStrikeMin ?? basePrice,
-      callStrikeMax: initialValues?.callStrikeMax ?? top,
-      putStrikeMin: initialValues?.putStrikeMin ?? bottom,
-      putStrikeMax: initialValues?.putStrikeMax ?? basePrice,
+      callStrikeMin: round5(initialValues?.callStrikeMin ?? basePrice),
+      callStrikeMax: round5(initialValues?.callStrikeMax ?? top),
+      putStrikeMin: round5(initialValues?.putStrikeMin ?? bottom),
+      putStrikeMax: round5(initialValues?.putStrikeMax ?? basePrice),
       plTolerance: initialValues?.plTolerance ?? 200,
       margin: initialValues?.margin ?? 6000,
       marginTolerance: initialValues?.marginTolerance ?? 500,
@@ -108,16 +118,21 @@ function ParamsForm({
     return all.slice(start, end);
   }, [availableExpirations, expirationDate]);
 
-  // Авто-обновление диапазонов страйков при изменении верха/низа.
-  // Call: entry → top. Put: bottom → entry.
-  useEffect(() => {
-    setCallStrikeMin(basePrice);
-    setCallStrikeMax(toNum(top));
-  }, [top, basePrice]);
-  useEffect(() => {
-    setPutStrikeMin(toNum(bottom));
-    setPutStrikeMax(basePrice);
-  }, [bottom, basePrice]);
+  // Завершение ввода «Цель по верху»: округляем до 5 и подтягиваем верхнюю
+  // границу страйков Call (Call следует за целью по верху). Нижняя граница Call
+  // («Call от») — независимая, ручные правки не затираются.
+  const handleTopBlur = () => {
+    const r = round5(top);
+    setTop(r);
+    setCallStrikeMax(r);
+  };
+  // Завершение ввода «Закрытие по низу»: округляем до 5 и подтягиваем нижнюю
+  // границу страйков Put («Put от»). Верхняя граница Put («Put до») — независимая.
+  const handleBottomBlur = () => {
+    const r = round5(bottom);
+    setBottom(r);
+    setPutStrikeMin(r);
+  };
 
   const errors = [];
   if (toNum(top) <= basePrice) errors.push('Верх должен быть выше точки входа');
@@ -133,15 +148,16 @@ function ParamsForm({
 
   const handleSubmit = () => {
     if (errors.length > 0) return;
+    // Цены и страйки гарантированно кратны 5 (на случай ввода без потери фокуса).
     onAnalyze({
-      topPrice: toNum(top),
-      bottomPrice: toNum(bottom),
+      topPrice: toNum(round5(top)),
+      bottomPrice: toNum(round5(bottom)),
       expirationDate,
       calcDate,
-      callStrikeMin: toNum(callStrikeMin),
-      callStrikeMax: toNum(callStrikeMax),
-      putStrikeMin: toNum(putStrikeMin),
-      putStrikeMax: toNum(putStrikeMax),
+      callStrikeMin: toNum(round5(callStrikeMin)),
+      callStrikeMax: toNum(round5(callStrikeMax)),
+      putStrikeMin: toNum(round5(putStrikeMin)),
+      putStrikeMax: toNum(round5(putStrikeMax)),
       plTolerance: toNum(plTolerance),
       margin: toNum(margin),
       marginTolerance: toNum(marginTolerance),
@@ -159,11 +175,23 @@ function ParamsForm({
         <div className="space-y-3">
           <div>
             <Label className="text-xs">Цель по верху ($)</Label>
-            <Input type="number" step="0.01" value={top} onChange={(e) => setTop(e.target.value)} />
+            <Input
+              type="number"
+              step="5"
+              value={top}
+              onChange={(e) => setTop(e.target.value)}
+              onBlur={handleTopBlur}
+            />
           </div>
           <div>
             <Label className="text-xs">Закрытие по низу ($)</Label>
-            <Input type="number" step="0.01" value={bottom} onChange={(e) => setBottom(e.target.value)} />
+            <Input
+              type="number"
+              step="5"
+              value={bottom}
+              onChange={(e) => setBottom(e.target.value)}
+              onBlur={handleBottomBlur}
+            />
           </div>
           <div>
             <Label className="text-xs">Допустимый диапазон P&L по низу ± ($)</Label>
@@ -208,18 +236,20 @@ function ParamsForm({
             <Label className="text-[10px]">от ($)</Label>
             <Input
               type="number"
-              step="0.5"
+              step="5"
               value={callStrikeMin}
               onChange={(e) => setCallStrikeMin(e.target.value)}
+              onBlur={() => setCallStrikeMin(round5(callStrikeMin))}
             />
           </div>
           <div>
             <Label className="text-[10px]">до ($)</Label>
             <Input
               type="number"
-              step="0.5"
+              step="5"
               value={callStrikeMax}
               onChange={(e) => setCallStrikeMax(e.target.value)}
+              onBlur={() => setCallStrikeMax(round5(callStrikeMax))}
             />
           </div>
         </div>
@@ -229,18 +259,20 @@ function ParamsForm({
             <Label className="text-[10px]">от ($)</Label>
             <Input
               type="number"
-              step="0.5"
+              step="5"
               value={putStrikeMin}
               onChange={(e) => setPutStrikeMin(e.target.value)}
+              onBlur={() => setPutStrikeMin(round5(putStrikeMin))}
             />
           </div>
           <div>
             <Label className="text-[10px]">до ($)</Label>
             <Input
               type="number"
-              step="0.5"
+              step="5"
               value={putStrikeMax}
               onChange={(e) => setPutStrikeMax(e.target.value)}
+              onBlur={() => setPutStrikeMax(round5(putStrikeMax))}
             />
           </div>
         </div>
