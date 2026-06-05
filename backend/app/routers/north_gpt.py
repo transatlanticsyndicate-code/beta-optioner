@@ -8,10 +8,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 from sqlalchemy import nullslast
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 from app.database import get_db
 from app.models.north_gpt_prompt import NorthGptPrompt
+from app.services import north_gpt_validator as validator
+from app.services.openai_client import OpenAIClient
 
 router = APIRouter(prefix="/api/north-gpt", tags=["north_gpt"])
 
@@ -97,3 +99,141 @@ def touch_prompt(prompt_id: str, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(prompt)
     return {"status": "success", "data": prompt.to_dict()}
+
+
+# ============ Pydantic: подбор комбинаций ============
+class NorthGptParams(BaseModel):
+    expirationDate: Optional[str] = None
+    calcDate: Optional[str] = None
+    topPrice: Optional[float] = None
+    bottomPrice: Optional[float] = None
+    callStrikeMin: Optional[float] = None
+    callStrikeMax: Optional[float] = None
+    putStrikeMin: Optional[float] = None
+    putStrikeMax: Optional[float] = None
+    plTolerance: Optional[float] = None
+    margin: Optional[float] = None
+    marginTolerance: Optional[float] = None
+    minStockMarginPct: Optional[float] = None
+
+    class Config:
+        extra = "allow"
+
+
+class NorthGptContext(BaseModel):
+    entryPrice: float
+    assetQuantity: Optional[float] = None
+    leverage: Optional[float] = 1.0
+    currentPrice: Optional[float] = None
+    calculatorMode: Optional[str] = None
+    dividendYield: Optional[float] = None
+    ticker: Optional[str] = None
+
+    class Config:
+        extra = "allow"
+
+
+class NorthGptSelectRequest(BaseModel):
+    params: NorthGptParams
+    prompt: str = ""
+    chain: List[Dict[str, Any]] = []
+    context: NorthGptContext
+    promptId: Optional[str] = None
+
+
+# ЗАЧЕМ: фабрика клиента вынесена отдельно, чтобы тесты могли подменить её мок-объектом
+def get_openai_client():
+    return OpenAIClient()
+
+
+def _friendly_openai_error(e):
+    """Понятное русское сообщение по типу ошибки OpenAI."""
+    name = type(e).__name__
+    msg = str(e)
+    low = msg.lower()
+    if name == "AuthenticationError" or "api key" in low or "OPENAI_API_KEY" in msg:
+        return "ChatGPT не настроен: отсутствует или неверный ключ API"
+    if name == "APITimeoutError" or "timeout" in low or "timed out" in low:
+        return "ChatGPT не ответил вовремя, попробуйте ещё раз"
+    if name == "RateLimitError" or "rate limit" in low:
+        return "Слишком много запросов к ChatGPT, подождите немного"
+    return f"Ошибка ChatGPT: {msg}"
+
+
+def _filter_chain(chain, expiration):
+    """Оставить только выбранную экспирацию (защита, фронт уже фильтрует)."""
+    out = []
+    for row in chain or []:
+        d = row.get("date")
+        if expiration and d and d != expiration:
+            continue
+        out.append(row)
+    return out
+
+
+def _compact_chain(chain):
+    """Компактная цепочка для промпта (меньше токенов): модели не нужны греки кроме delta."""
+    compact = []
+    for row in chain:
+        compact.append({
+            "type": (row.get("type") or "").upper(),
+            "strike": row.get("strike"),
+            "bid": row.get("bid"),
+            "ask": row.get("ask"),
+            "iv": row.get("impliedVolatility", row.get("iv")),
+            "delta": row.get("delta"),
+        })
+    return compact
+
+
+def _build_block(combo, chain_index, ranges, context):
+    """Собрать один блок ответа: валидация ног + стоимость + режим."""
+    combo = combo or {}
+    rationale = combo.get("rationale", "")
+    res = validator.validate_combination(
+        legs=combo.get("legs", []),
+        stock_quantity=combo.get("stock_quantity", 0),
+        chain_index=chain_index, ranges=ranges)
+    if not res["positions"]:
+        return {"error": "ChatGPT не собрал валидную комбинацию из доступных страйков",
+                "rationale": rationale}
+    cost = validator.compute_cost(
+        res["positions"], res["qtyStock"],
+        context.get("entryPrice"), context.get("leverage", 1.0))
+    kind = "withStock" if res["qtyStock"] > 0 else "optionsOnly"
+    return {"kind": kind, "positions": res["positions"], "calls": res["calls"],
+            "puts": res["puts"], "qtyStock": res["qtyStock"], "cost": cost,
+            "rationale": rationale}
+
+
+@router.post("/select")
+def select(req: NorthGptSelectRequest, db: Session = Depends(get_db)):
+    """
+    Подобрать две комбинации через ChatGPT и проверить их по реальной цепочке.
+    Возвращает {status, withAsset, optionsOnly} или {status:'error', error}.
+    """
+    try:
+        p = req.params
+        ranges = {"call": (p.callStrikeMin, p.callStrikeMax),
+                  "put": (p.putStrikeMin, p.putStrikeMax)}
+        ctx = req.context.model_dump()
+        full_chain = _filter_chain(req.chain, p.expirationDate)
+        idx = validator.build_chain_index(full_chain, ctx.get("entryPrice"))
+        compact = _compact_chain(full_chain)
+        result = get_openai_client().select_combinations(
+            req.prompt, p.model_dump(), compact)
+        response = {
+            "status": "success",
+            "withAsset": _build_block(result.get("with_asset"), idx, ranges, ctx),
+            "optionsOnly": _build_block(result.get("options_only"), idx, ranges, ctx),
+        }
+        # отметить выбранный промпт как последний использованный (единый для всех)
+        if req.promptId:
+            prompt = db.query(NorthGptPrompt).filter(
+                NorthGptPrompt.id == req.promptId).first()
+            if prompt:
+                prompt.last_used_at = func.now()
+                db.commit()
+        return response
+    except Exception as e:
+        return {"status": "error", "error": _friendly_openai_error(e)}
