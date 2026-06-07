@@ -24,6 +24,13 @@ const daysBetween = (fromIso, toIso) => {
 
 const todayIso = () => new Date().toISOString().split('T')[0];
 
+// IV в долях: цепочка из расширения присылает в процентах (54.62) — делим на 100.
+const normalizeIV = (iv) => {
+  const n = Number(iv);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return n > 1.5 ? n / 100 : n;
+};
+
 // Точная копия computeOptionPL из northStrategy/analyzer — тот же расчёт P&L,
 // чтобы превью результата совпадало с тем, что покажет калькулятор после «Применить».
 const computeOptionPL = ({
@@ -151,4 +158,75 @@ export const enrichNorthGptCombination = (combination, ctx) => {
       plAtLevelB: optionsPLB + assetPLB,
     },
   };
+};
+
+/**
+ * Посчитать для КАЖДОГО опциона цепочки прогнозный P&L одного купленного
+ * контракта на дату расчёта при цене актива topPrice и bottomPrice.
+ *
+ * ЗАЧЕМ: модель не умеет точно оценивать опционы «в уме» (в веб-ChatGPT это
+ * делал код-интерпретатор). Отдаём ей готовые числа — теми же функциями, что
+ * и экран результата — и модель лишь складывает их с количеством. Итог модели
+ * в точности совпадает с тем, что покажет калькулятор.
+ *
+ * Возвращает копию цепочки с добавленными plTop и plBottom (доллары за 1 контракт).
+ */
+export const precomputeChainPLs = (chain, ctx) => {
+  if (!Array.isArray(chain)) return chain;
+  const {
+    entry,
+    currentPrice,
+    topPrice,
+    bottomPrice,
+    expirationDate,
+    calcDate,
+    ivSurface = null,
+    calculatorMode = CALCULATOR_MODES.STOCKS,
+    dividendYield = 0,
+    stockClassification = null,
+  } = ctx || {};
+
+  const today = todayIso();
+  const todayDaysToExp = daysBetween(today, expirationDate);
+  const daysRemainingAtCalcDate = daysBetween(calcDate, expirationDate);
+  const common = {
+    currentPrice,
+    daysRemainingAtCalcDate,
+    todayDaysToExp,
+    ivSurface,
+    calculatorMode,
+    dividendYield,
+    stockClassification,
+  };
+
+  return chain.map((row) => {
+    const option = {
+      action: 'Buy',
+      type: (row.type || '').toUpperCase(),
+      strike: Number(row.strike),
+      date: row.date || expirationDate,
+      quantity: 1,
+      premium: Number(row.ask) || 0,
+      bid: Number(row.bid) || 0,
+      ask: Number(row.ask) || 0,
+      impliedVolatility: normalizeIV(row.impliedVolatility ?? row.iv ?? row.askIV),
+      delta: Number(row.delta) || 0,
+      entryDate: today,
+      assetPriceAtEntry: entry,
+    };
+    let plTop = 0;
+    let plBottom = 0;
+    try {
+      plTop = computeOptionPL({ option, targetPrice: topPrice, ...common });
+      plBottom = computeOptionPL({ option, targetPrice: bottomPrice, ...common });
+    } catch (e) {
+      plTop = 0;
+      plBottom = 0;
+    }
+    return {
+      ...row,
+      plTop: Number.isFinite(plTop) ? Math.round(plTop) : 0,
+      plBottom: Number.isFinite(plBottom) ? Math.round(plBottom) : 0,
+    };
+  });
 };

@@ -79,8 +79,8 @@ def test_select_returns_two_validated_blocks(monkeypatch):
     assert captured["constraints"]["leverage"] == 1.0
     # Тикер НЕ уходит в модель (ни в constraints, ни в компактной цепочке).
     assert "ticker" not in captured["constraints"]
-    # Цепочка для модели — только сжатые поля.
-    assert set(captured["chain"][0].keys()) == {"type", "strike", "bid", "ask", "iv", "delta"}
+    # Цепочка для модели — сжатые поля + готовые plTop/plBottom.
+    assert set(captured["chain"][0].keys()) == {"type", "strike", "bid", "ask", "iv", "delta", "plTop", "plBottom"}
 
 
 def test_select_hallucinated_strike_becomes_block_error(monkeypatch):

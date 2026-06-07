@@ -23,7 +23,7 @@ import { Sparkles, Loader2, AlertTriangle } from 'lucide-react';
 import NorthGptParamsForm from './NorthGptParamsForm';
 import NorthGptResultsView from './NorthGptResultsView';
 import { requestNorthGptCombination } from '../../../services/northGptApi';
-import { enrichNorthGptCombination } from '../../../utils/northGptStrategy/enrich';
+import { enrichNorthGptCombination, precomputeChainPLs } from '../../../utils/northGptStrategy/enrich';
 import { sendNorthExpandExpirationCommand, sendNorthInitCommand } from '../../../hooks/useExtensionData';
 
 const EXPIRATIONS_KEY = 'tvc_expirations_list';
@@ -181,11 +181,26 @@ function NorthGptStrategyDialog({
       dividendYield,
       ticker,
     };
+    // Контекст ценообразования: для предрасчёта P&L по страйкам и для итогового enrich.
+    const plCtx = {
+      entry: effectiveEntry,
+      currentPrice,
+      topPrice: numericParams.topPrice,
+      bottomPrice: numericParams.bottomPrice,
+      expirationDate: numericParams.expirationDate,
+      calcDate: numericParams.calcDate,
+      ivSurface,
+      calculatorMode,
+      dividendYield,
+      stockClassification,
+    };
     try {
+      // Кладём в цепочку готовые plTop/plBottom — чтобы модель не оценивала опционы сама.
+      const chainForModel = precomputeChainPLs(chainOptions, plCtx);
       const data = await requestNorthGptCombination({
         params: numericParams,
         prompt,
-        chain: chainOptions,
+        chain: chainForModel,
         context,
         promptId,
       });
@@ -194,21 +209,9 @@ function NorthGptStrategyDialog({
       if (!data || data.status === 'error') {
         nextResult = { error: (data && data.error) || 'ChatGPT не вернул ответ' };
       } else {
-        const enrichCtx = {
-          entry: effectiveEntry,
-          currentPrice,
-          topPrice: numericParams.topPrice,
-          bottomPrice: numericParams.bottomPrice,
-          expirationDate: numericParams.expirationDate,
-          calcDate: numericParams.calcDate,
-          ivSurface,
-          calculatorMode,
-          dividendYield,
-          stockClassification,
-        };
         nextResult = {
-          withAsset: enrichNorthGptCombination(data.withAsset, enrichCtx),
-          optionsOnly: enrichNorthGptCombination(data.optionsOnly, enrichCtx),
+          withAsset: enrichNorthGptCombination(data.withAsset, plCtx),
+          optionsOnly: enrichNorthGptCombination(data.optionsOnly, plCtx),
           debug: data.debug || null,
         };
       }

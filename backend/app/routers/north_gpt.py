@@ -187,6 +187,10 @@ def _compact_chain(chain):
             "ask": row.get("ask"),
             "iv": row.get("impliedVolatility", row.get("iv")),
             "delta": row.get("delta"),
+            # Готовый P&L 1 контракта на дату расчёта при цене topPrice / bottomPrice
+            # (считается фронтендом тем же движком, что и экран). Модель их складывает.
+            "plTop": row.get("plTop"),
+            "plBottom": row.get("plBottom"),
         })
     return compact
 
