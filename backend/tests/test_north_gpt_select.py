@@ -2,11 +2,26 @@
 Тест эндпоинта /api/north-gpt/select с подменённым (мок) клиентом OpenAI.
 ЗАЧЕМ: проверяем сборку двух блоков и сверку с реальной ценой, без сети.
 """
+import time
 from fastapi.testclient import TestClient
 from app.main import app
 import app.routers.north_gpt as ng
 
 client = TestClient(app)
+
+
+def post_and_wait(payload, tries=300, delay=0.02):
+    """POST /select запускает фоновую задачу; опрашиваем результат до готовности."""
+    r = client.post("/api/north-gpt/select", json=payload)
+    j = r.json()
+    assert j["status"] == "pending", j
+    job_id = j["jobId"]
+    for _ in range(tries):
+        rr = client.get(f"/api/north-gpt/select/{job_id}").json()
+        if rr["status"] != "pending":
+            return rr
+        time.sleep(delay)
+    raise AssertionError("Фоновая задача не завершилась за отведённое время")
 
 
 class FakeClient:
@@ -50,9 +65,7 @@ def test_select_returns_two_validated_blocks(monkeypatch):
             return super().select_combinations(user_prompt, constraints, chain)
 
     monkeypatch.setattr(ng, "get_openai_client", lambda: CapturingClient())
-    r = client.post("/api/north-gpt/select", json=PAYLOAD)
-    assert r.status_code == 200
-    data = r.json()
+    data = post_and_wait(PAYLOAD)
     assert data["status"] == "success"
     assert data["withAsset"]["positions"][0]["premium"] == 5.2  # реальный ask из цепочки
     assert data["withAsset"]["qtyStock"] == 100
@@ -80,8 +93,7 @@ def test_select_hallucinated_strike_becomes_block_error(monkeypatch):
                                  "stock_quantity": 0, "rationale": "y"},
             }
     monkeypatch.setattr(ng, "get_openai_client", lambda: HallucinatingClient())
-    r = client.post("/api/north-gpt/select", json=PAYLOAD)
-    data = r.json()
+    data = post_and_wait(PAYLOAD)
     assert data["status"] == "success"
     assert "error" in data["withAsset"]  # выдуманный страйк → блок с ошибкой
     assert data["optionsOnly"]["positions"][0]["type"] == "PUT"  # второй блок валиден
@@ -117,8 +129,7 @@ def test_select_forwards_debug(monkeypatch):
             )
 
     monkeypatch.setattr(ng, "get_openai_client", lambda: DebugClient())
-    r = client.post("/api/north-gpt/select", json=PAYLOAD)
-    data = r.json()
+    data = post_and_wait(PAYLOAD)
     assert data["status"] == "success"
     assert data["debug"]["model"] == "gpt-test"
     assert data["debug"]["rawResponse"] == "{raw}"
@@ -130,7 +141,6 @@ def test_select_openai_failure_returns_friendly_error(monkeypatch):
         def select_combinations(self, *a, **k):
             raise RuntimeError("OPENAI_API_KEY не задан в .env")
     monkeypatch.setattr(ng, "get_openai_client", lambda: BrokenClient())
-    r = client.post("/api/north-gpt/select", json=PAYLOAD)
-    data = r.json()
+    data = post_and_wait(PAYLOAD)
     assert data["status"] == "error"
     assert "ChatGPT" in data["error"]

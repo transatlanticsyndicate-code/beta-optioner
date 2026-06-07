@@ -3,6 +3,11 @@ API роутер стратегии «Север GPT»
 ЗАЧЕМ: библиотека промптов (CRUD) и эндпоинт ИИ-подбора опционных комбинаций
 через ChatGPT. Аутентификации в проекте нет — промпты общие для всех.
 """
+import uuid
+import time
+import threading
+from concurrent.futures import ThreadPoolExecutor
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
@@ -257,48 +262,86 @@ def _build_block(combo, chain_index, ranges, context):
             "rationale": rationale}
 
 
+# ===== Асинхронный подбор =====
+# ЗАЧЕМ: gpt-5.5 «думает» 2-3 минуты. Держать HTTP-соединение открытым так долго
+# ненадёжно (прокси/таймауты). Поэтому запускаем работу в фоновом потоке, сразу
+# отдаём jobId, а фронтенд опрашивает результат через GET /select/{jobId}.
+_JOBS = {}
+_JOBS_LOCK = threading.Lock()
+_EXECUTOR = ThreadPoolExecutor(max_workers=4)
+_JOB_TTL = 900  # сек — через сколько забываем старые задачи
+
+
+def _prune_jobs():
+    cutoff = time.time() - _JOB_TTL
+    with _JOBS_LOCK:
+        for k in [k for k, v in _JOBS.items() if v.get("ts", 0) < cutoff]:
+            _JOBS.pop(k, None)
+
+
+def _do_select(req):
+    """Сама работа подбора (выполняется в фоновом потоке). Может бросить исключение."""
+    p = req.params
+    ranges = {"call": (p.callStrikeMin, p.callStrikeMax),
+              "put": (p.putStrikeMin, p.putStrikeMax)}
+    ctx = req.context.model_dump()
+    full_chain = _filter_chain(req.chain, p.expirationDate)
+    idx = validator.build_chain_index(full_chain, ctx.get("entryPrice"))
+    compact = _compact_chain(full_chain)
+    # Позиционный контекст (вход, текущая цена, плечо) — иначе ИИ не посчитает
+    # P&L всей позиции и размер акции. Тикер намеренно НЕ передаём (обезличенность).
+    constraints = p.model_dump()
+    constraints["entryPrice"] = ctx.get("entryPrice")
+    constraints["currentPrice"] = ctx.get("currentPrice")
+    constraints["leverage"] = ctx.get("leverage")
+    # Подстановка реальных чисел вместо плейсхолдеров ({вход}, {цель_верх}, ...).
+    filled_prompt = _fill_prompt_placeholders(req.prompt, constraints)
+    out = get_openai_client().select_combinations(filled_prompt, constraints, compact)
+    result, debug = out if isinstance(out, tuple) else (out, {})
+    return {
+        "withAsset": _build_block(result.get("with_asset"), idx, ranges, ctx),
+        "optionsOnly": _build_block(result.get("options_only"), idx, ranges, ctx),
+        "debug": debug,  # точный запрос и сырой ответ для служебного просмотра
+    }
+
+
+def _run_select_job(job_id, req):
+    try:
+        res = _do_select(req)
+        with _JOBS_LOCK:
+            _JOBS[job_id] = {"status": "done", "result": res, "ts": time.time()}
+    except Exception as e:
+        with _JOBS_LOCK:
+            _JOBS[job_id] = {"status": "error", "error": _friendly_openai_error(e), "ts": time.time()}
+
+
 @router.post("/select")
 def select(req: NorthGptSelectRequest, db: Session = Depends(get_db)):
-    """
-    Подобрать две комбинации через ChatGPT и проверить их по реальной цепочке.
-    Возвращает {status, withAsset, optionsOnly} или {status:'error', error}.
-    """
-    try:
-        p = req.params
-        ranges = {"call": (p.callStrikeMin, p.callStrikeMax),
-                  "put": (p.putStrikeMin, p.putStrikeMax)}
-        ctx = req.context.model_dump()
-        full_chain = _filter_chain(req.chain, p.expirationDate)
-        idx = validator.build_chain_index(full_chain, ctx.get("entryPrice"))
-        compact = _compact_chain(full_chain)
-        # ЗАЧЕМ: даём модели позиционный контекст (вход, текущая цена, плечо).
-        # Без них ИИ не может корректно считать P&L всей позиции на низу и
-        # подобрать размер акции. Тикер намеренно НЕ передаём (обезличенность).
-        constraints = p.model_dump()
-        constraints["entryPrice"] = ctx.get("entryPrice")
-        constraints["currentPrice"] = ctx.get("currentPrice")
-        constraints["leverage"] = ctx.get("leverage")
-        # Подставляем реальные числа вместо плейсхолдеров в промпте ({вход}, {цель_верх}, ...).
-        filled_prompt = _fill_prompt_placeholders(req.prompt, constraints)
-        out = get_openai_client().select_combinations(filled_prompt, constraints, compact)
-        # Клиент возвращает (result, debug); мок в тестах может вернуть просто dict.
-        if isinstance(out, tuple):
-            result, debug = out
-        else:
-            result, debug = out, {}
-        response = {
-            "status": "success",
-            "withAsset": _build_block(result.get("with_asset"), idx, ranges, ctx),
-            "optionsOnly": _build_block(result.get("options_only"), idx, ranges, ctx),
-            "debug": debug,  # точный запрос и сырой ответ для служебного просмотра
-        }
-        # отметить выбранный промпт как последний использованный (единый для всех)
-        if req.promptId:
-            prompt = db.query(NorthGptPrompt).filter(
-                NorthGptPrompt.id == req.promptId).first()
-            if prompt:
-                prompt.last_used_at = func.now()
-                db.commit()
-        return response
-    except Exception as e:
-        return {"status": "error", "error": _friendly_openai_error(e)}
+    """Запустить подбор в фоне; вернуть {status:'pending', jobId}."""
+    _prune_jobs()
+    # Отметить выбранный промпт как последний использованный (быстро, синхронно).
+    if req.promptId:
+        prompt = db.query(NorthGptPrompt).filter(NorthGptPrompt.id == req.promptId).first()
+        if prompt:
+            prompt.last_used_at = func.now()
+            db.commit()
+    job_id = uuid.uuid4().hex
+    with _JOBS_LOCK:
+        _JOBS[job_id] = {"status": "pending", "ts": time.time()}
+    _EXECUTOR.submit(_run_select_job, job_id, req)
+    return {"status": "pending", "jobId": job_id}
+
+
+@router.get("/select/{job_id}")
+def select_result(job_id: str):
+    """Опрос результата подбора по jobId."""
+    _prune_jobs()
+    with _JOBS_LOCK:
+        job = _JOBS.get(job_id)
+    if not job:
+        return {"status": "error", "error": "Задача не найдена или устарела — запустите подбор заново."}
+    if job["status"] == "pending":
+        return {"status": "pending"}
+    if job["status"] == "error":
+        return {"status": "error", "error": job.get("error", "Ошибка подбора")}
+    return {"status": "success", **job["result"]}

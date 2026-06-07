@@ -168,7 +168,7 @@ function NorthGptStrategyDialog({
   // Запрос к ChatGPT по уже собранной цепочке.
   const runGptSelect = async (chainOptions, formParams) => {
     setIsAnalyzing(true);
-    setAnalyzeMessage('ChatGPT подбирает комбинацию…');
+    setAnalyzeMessage('ChatGPT анализирует цепочку и подбирает комбинацию… это может занять 1–3 минуты.');
     const { prompt, promptId, ...numericParams } = formParams;
     const context = {
       entryPrice,

@@ -13,15 +13,33 @@ const API_BASE_URL = process.env.REACT_APP_API_URL
  */
 export const requestNorthGptCombination = async ({ params, prompt, chain, context, promptId = null }) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/north-gpt/select`, {
+    // Подбор идёт в фоне (gpt-5.5 «думает» минуты): запускаем задачу...
+    const startResp = await fetch(`${API_BASE_URL}/api/north-gpt/select`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ params, prompt, chain, context, promptId }),
     });
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    if (!startResp.ok) throw new Error(`HTTP error! status: ${startResp.status}`);
+    const started = await startResp.json();
+    // Совместимость: если сервер вдруг вернул готовый результат сразу — отдаём его.
+    if (started.status !== 'pending' || !started.jobId) return started;
+
+    // ...и опрашиваем результат, пока не будет готов.
+    const { jobId } = started;
+    const POLL_MS = 3000;
+    const MAX_MS = 6 * 60 * 1000; // ждём до 6 минут
+    const startedAt = Date.now();
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      await new Promise((resolve) => setTimeout(resolve, POLL_MS));
+      const pollResp = await fetch(`${API_BASE_URL}/api/north-gpt/select/${jobId}`);
+      if (!pollResp.ok) throw new Error(`HTTP error! status: ${pollResp.status}`);
+      const pj = await pollResp.json();
+      if (pj.status !== 'pending') return pj;
+      if (Date.now() - startedAt > MAX_MS) {
+        return { status: 'error', error: 'Превышено время ожидания ответа ChatGPT. Попробуйте ещё раз.' };
+      }
     }
-    return await response.json();
   } catch (error) {
     console.error('Ошибка подбора «Север GPT»:', error);
     throw error;

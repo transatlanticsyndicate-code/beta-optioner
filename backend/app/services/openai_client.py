@@ -63,6 +63,10 @@ class OpenAIClient:
         self.model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
         self.temperature = float(os.getenv("OPENAI_TEMPERATURE", "0.2"))
         self.max_tokens = int(os.getenv("OPENAI_MAX_TOKENS", "1500"))
+        # Глубина раздумий для рассуждающих моделей: minimal|low|medium|high.
+        # По умолчанию НЕ задаём — используем дефолт модели (проверено: даёт
+        # качественный подбор). Можно понизить через env ради скорости/цены.
+        self.reasoning_effort = os.getenv("OPENAI_REASONING_EFFORT") or None
         self.system_prompt = self._load_template()
 
     def _load_template(self):
@@ -74,6 +78,12 @@ class OpenAIClient:
             return ("Ты — опционный стратег. Верни РОВНО две комбинации (with_asset и "
                     "options_only) строго по JSON-схеме. Только покупка Call/Put, страйки — "
                     "только из присланной цепочки. Цены не присылай.")
+
+    def _is_reasoning_model(self):
+        """gpt-5+ и o-серия — рассуждающие модели с иным контрактом вызова."""
+        m = (self.model or "").lower()
+        return (m.startswith("o1") or m.startswith("o3") or m.startswith("o4")
+                or m.startswith("gpt-5"))
 
     def select_combinations(self, user_prompt, constraints, chain):
         """
@@ -93,13 +103,22 @@ class OpenAIClient:
             {"role": "system", "content": system},
             {"role": "user", "content": user_payload},
         ]
-        resp = self.client.chat.completions.create(
-            model=self.model,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-            response_format={"type": "json_schema", "json_schema": COMBINATION_SCHEMA},
-            messages=messages,
-        )
+        params = {
+            "model": self.model,
+            "response_format": {"type": "json_schema", "json_schema": COMBINATION_SCHEMA},
+            "messages": messages,
+        }
+        if self._is_reasoning_model():
+            # Рассуждающие модели (o-series, gpt-5+): свой лимит токенов (включает
+            # «мысли»). Ставим с запасом — при малом лимите модель тратит всё на
+            # рассуждение и возвращает пустой ответ. Платим только за фактические токены.
+            params["max_completion_tokens"] = max(self.max_tokens, 16000)
+            if self.reasoning_effort:
+                params["reasoning_effort"] = self.reasoning_effort
+        else:
+            params["temperature"] = self.temperature
+            params["max_tokens"] = self.max_tokens
+        resp = self.client.chat.completions.create(**params)
         content = resp.choices[0].message.content
         debug = {"model": self.model, "messages": messages, "rawResponse": content}
         if not content:
