@@ -186,6 +186,57 @@ def _compact_chain(chain):
     return compact
 
 
+def _fmt_num(v):
+    """Число для подстановки в промпт: без лишнего .0."""
+    if v is None:
+        return ""
+    try:
+        f = float(v)
+        return str(int(f)) if f == int(f) else str(f)
+    except (TypeError, ValueError):
+        return str(v)
+
+
+def _fill_prompt_placeholders(prompt, c):
+    """
+    Подставить значения параметров вместо плейсхолдеров в тексте промпта.
+    ЗАЧЕМ: пользователь пишет промпт со ссылками ({вход}, {цель_верх}, ...),
+    а при подборе на их место подставляются реальные числа из параметров.
+    Неизвестные плейсхолдеры остаются как есть.
+    """
+    if not prompt:
+        return prompt
+    days = ""
+    cd = c.get("calcDate")
+    if cd:
+        try:
+            from datetime import date
+            y, m, d = (int(x) for x in str(cd).split("-"))
+            days = str((date(y, m, d) - date.today()).days)
+        except Exception:
+            days = ""
+    mapping = {
+        "{вход}": _fmt_num(c.get("entryPrice")),
+        "{текущая}": _fmt_num(c.get("currentPrice")),
+        "{цель_верх}": _fmt_num(c.get("topPrice")),
+        "{цель_низ}": _fmt_num(c.get("bottomPrice")),
+        "{маржин}": _fmt_num(c.get("margin")),
+        "{допуск_маржин}": _fmt_num(c.get("marginTolerance")),
+        "{допуск_низ}": _fmt_num(c.get("plTolerance")),
+        "{плечо}": _fmt_num(c.get("leverage")),
+        "{доля_акции}": _fmt_num(c.get("minStockMarginPct")),
+        "{страйки_колл}": f"{_fmt_num(c.get('callStrikeMin'))}-{_fmt_num(c.get('callStrikeMax'))}",
+        "{страйки_пут}": f"{_fmt_num(c.get('putStrikeMin'))}-{_fmt_num(c.get('putStrikeMax'))}",
+        "{дата}": str(cd or ""),
+        "{экспирация}": str(c.get("expirationDate") or ""),
+        "{дней}": days,
+    }
+    out = prompt
+    for token, value in mapping.items():
+        out = out.replace(token, value)
+    return out
+
+
 def _build_block(combo, chain_index, ranges, context):
     """Собрать один блок ответа: валидация ног + стоимость + режим."""
     combo = combo or {}
@@ -227,8 +278,10 @@ def select(req: NorthGptSelectRequest, db: Session = Depends(get_db)):
         constraints["entryPrice"] = ctx.get("entryPrice")
         constraints["currentPrice"] = ctx.get("currentPrice")
         constraints["leverage"] = ctx.get("leverage")
+        # Подставляем реальные числа вместо плейсхолдеров в промпте ({вход}, {цель_верх}, ...).
+        filled_prompt = _fill_prompt_placeholders(req.prompt, constraints)
         result = get_openai_client().select_combinations(
-            req.prompt, constraints, compact)
+            filled_prompt, constraints, compact)
         response = {
             "status": "success",
             "withAsset": _build_block(result.get("with_asset"), idx, ranges, ctx),

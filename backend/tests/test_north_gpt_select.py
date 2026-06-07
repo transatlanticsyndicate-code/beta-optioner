@@ -87,6 +87,20 @@ def test_select_hallucinated_strike_becomes_block_error(monkeypatch):
     assert data["optionsOnly"]["positions"][0]["type"] == "PUT"  # второй блок валиден
 
 
+def test_fill_prompt_placeholders():
+    c = {"entryPrice": 55, "topPrice": 70, "bottomPrice": 45, "margin": 6000,
+         "marginTolerance": 500, "plTolerance": 200, "leverage": 1, "currentPrice": 58}
+    out = ng._fill_prompt_placeholders(
+        "Вход {вход}, цель {цель_верх}, низ {цель_низ}, маржин {маржин}+/-{допуск_маржин}, низ +/-{допуск_низ}, плечо {плечо}", c)
+    assert "Вход 55" in out
+    assert "цель 70" in out
+    assert "низ 45" in out
+    assert "маржин 6000+/-500" in out
+    assert "+/-200" in out
+    assert "плечо 1" in out
+    assert "{" not in out  # все плейсхолдеры заменены
+
+
 def test_select_openai_failure_returns_friendly_error(monkeypatch):
     class BrokenClient:
         def select_combinations(self, *a, **k):

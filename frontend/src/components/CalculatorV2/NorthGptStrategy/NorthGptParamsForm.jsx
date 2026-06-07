@@ -415,6 +415,9 @@ function NorthGptParamsForm({
           onChange={(e) => setPromptText(e.target.value)}
           placeholder="Опишите, как ChatGPT должен подобрать комбинацию…"
         />
+        <div className="text-[10px] text-muted-foreground leading-relaxed">
+          {'Подстановки (заменяются числами при подборе): {вход} {текущая} {цель_верх} {цель_низ} {маржин} {допуск_маржин} {допуск_низ} {плечо} {доля_акции} {страйки_колл} {страйки_пут} {дата} {экспирация} {дней}'}
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <Input
             className="h-8 flex-1 min-w-[140px]"
