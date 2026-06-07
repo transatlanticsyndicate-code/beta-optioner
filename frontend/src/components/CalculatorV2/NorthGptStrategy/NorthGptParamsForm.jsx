@@ -47,6 +47,9 @@ function NorthGptParamsForm({
     const top = round5(initialValues?.topPrice ?? basePrice * 1.30);
     const bottom = round5(initialValues?.bottomPrice ?? basePrice * 0.85);
     return {
+      // Точка входа: по умолчанию — обнаруженная по позиции (или текущая цена),
+      // но пользователь может переписать (вход может отличаться от текущей цены).
+      entry: initialValues?.entryPrice ?? basePrice,
       topPrice: top,
       bottomPrice: bottom,
       expirationDate: initialValues?.expirationDate ?? '',
@@ -62,6 +65,7 @@ function NorthGptParamsForm({
     };
   }, [basePrice, initialValues]);
 
+  const [entry, setEntry] = useState(defaults.entry);
   const [top, setTop] = useState(defaults.topPrice);
   const [bottom, setBottom] = useState(defaults.bottomPrice);
   const [expirationDate, setExpirationDate] = useState(defaults.expirationDate);
@@ -247,8 +251,9 @@ function NorthGptParamsForm({
   };
 
   const errors = [];
-  if (toNum(top) <= basePrice) errors.push('Верх должен быть выше точки входа');
-  if (toNum(bottom) >= basePrice) errors.push('Низ должен быть ниже точки входа');
+  if (toNum(entry) <= 0) errors.push('Укажите точку входа');
+  if (toNum(top) <= toNum(entry)) errors.push('Верх должен быть выше точки входа');
+  if (toNum(bottom) >= toNum(entry)) errors.push('Низ должен быть ниже точки входа');
   if (!expirationDate) errors.push('Выберите дату экспирации');
   if (!calcDate) errors.push('Выберите дату расчёта');
   if (toNum(callStrikeMin) >= toNum(callStrikeMax)) errors.push('Диапазон страйков Call задан некорректно');
@@ -262,6 +267,7 @@ function NorthGptParamsForm({
   const handleSubmit = () => {
     if (errors.length > 0) return;
     onAnalyze({
+      entryPrice: toNum(entry),
       topPrice: toNum(round5(top)),
       bottomPrice: toNum(round5(bottom)),
       expirationDate,
@@ -281,8 +287,19 @@ function NorthGptParamsForm({
 
   return (
     <div className="space-y-3 max-h-[70vh] overflow-y-auto p-1.5">
-      <div className="text-xs text-muted-foreground">
-        Точка входа в БА: <strong>${(entryPrice || currentPrice || 0).toFixed(2)}</strong>
+      <div className="flex items-end gap-3">
+        <div className="w-40">
+          <Label className="text-xs">Точка входа в БА ($)</Label>
+          <Input
+            type="number"
+            step="0.01"
+            value={entry}
+            onChange={(e) => setEntry(e.target.value)}
+          />
+        </div>
+        <div className="text-[11px] text-muted-foreground pb-2">
+          Текущая цена: ${(currentPrice || 0).toFixed(2)}. Точка входа может отличаться — поправьте при необходимости.
+        </div>
       </div>
 
       <div className="grid grid-cols-[1fr_1px_1fr] gap-4">

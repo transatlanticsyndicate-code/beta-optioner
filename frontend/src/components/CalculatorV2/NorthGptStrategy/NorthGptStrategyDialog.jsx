@@ -170,8 +170,10 @@ function NorthGptStrategyDialog({
     setIsAnalyzing(true);
     setAnalyzeMessage('ChatGPT анализирует цепочку и подбирает комбинацию… это может занять 1–3 минуты.');
     const { prompt, promptId, ...numericParams } = formParams;
+    // Точка входа из формы (пользователь мог переписать); иначе авто-значение.
+    const effectiveEntry = numericParams.entryPrice ?? entryPrice;
     const context = {
-      entryPrice,
+      entryPrice: effectiveEntry,
       assetQuantity,
       leverage,
       currentPrice,
@@ -193,7 +195,7 @@ function NorthGptStrategyDialog({
         nextResult = { error: (data && data.error) || 'ChatGPT не вернул ответ' };
       } else {
         const enrichCtx = {
-          entry: entryPrice,
+          entry: effectiveEntry,
           currentPrice,
           topPrice: numericParams.topPrice,
           bottomPrice: numericParams.bottomPrice,
