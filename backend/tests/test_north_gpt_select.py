@@ -101,6 +101,30 @@ def test_fill_prompt_placeholders():
     assert "{" not in out  # все плейсхолдеры заменены
 
 
+def test_select_forwards_debug(monkeypatch):
+    class DebugClient:
+        def select_combinations(self, user_prompt, constraints, chain):
+            return (
+                {
+                    "with_asset": {"legs": [{"option_type": "CALL", "strike": 150.0, "quantity": 1, "side": "BUY"}],
+                                   "stock_quantity": 10, "rationale": "x"},
+                    "options_only": {"legs": [{"option_type": "PUT", "strike": 140.0, "quantity": 1, "side": "BUY"}],
+                                     "stock_quantity": 0, "rationale": "y"},
+                },
+                {"model": "gpt-test",
+                 "messages": [{"role": "system", "content": "S"}, {"role": "user", "content": "U"}],
+                 "rawResponse": "{raw}"},
+            )
+
+    monkeypatch.setattr(ng, "get_openai_client", lambda: DebugClient())
+    r = client.post("/api/north-gpt/select", json=PAYLOAD)
+    data = r.json()
+    assert data["status"] == "success"
+    assert data["debug"]["model"] == "gpt-test"
+    assert data["debug"]["rawResponse"] == "{raw}"
+    assert len(data["debug"]["messages"]) == 2
+
+
 def test_select_openai_failure_returns_friendly_error(monkeypatch):
     class BrokenClient:
         def select_combinations(self, *a, **k):

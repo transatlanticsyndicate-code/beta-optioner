@@ -78,7 +78,10 @@ class OpenAIClient:
     def select_combinations(self, user_prompt, constraints, chain):
         """
         Запросить у ChatGPT две комбинации.
-        Возвращает dict {with_asset, options_only} (как прислала модель).
+        Возвращает кортеж (result, debug):
+          result — dict {with_asset, options_only} (как прислала модель);
+          debug  — {model, messages, rawResponse} — точный запрос и сырой ответ
+                   (для служебного просмотра «что ушло / что вернулось»).
         """
         user_payload = json.dumps(
             {"constraints": constraints, "chain": chain}, ensure_ascii=False
@@ -86,20 +89,22 @@ class OpenAIClient:
         system = self.system_prompt
         if user_prompt and user_prompt.strip():
             system = system + "\n\nДОПОЛНИТЕЛЬНЫЕ УКАЗАНИЯ ПОЛЬЗОВАТЕЛЯ:\n" + user_prompt.strip()
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user_payload},
+        ]
         resp = self.client.chat.completions.create(
             model=self.model,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
             response_format={"type": "json_schema", "json_schema": COMBINATION_SCHEMA},
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user_payload},
-            ],
+            messages=messages,
         )
         content = resp.choices[0].message.content
+        debug = {"model": self.model, "messages": messages, "rawResponse": content}
         if not content:
             raise RuntimeError("ChatGPT вернул пустой ответ")
-        return json.loads(content)
+        return json.loads(content), debug
 
     def analyze(self, ticker, metrics):
         """Не поддерживается: клиент используется только для подбора «Север GPT»."""

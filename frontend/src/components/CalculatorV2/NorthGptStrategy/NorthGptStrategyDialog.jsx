@@ -207,6 +207,7 @@ function NorthGptStrategyDialog({
         nextResult = {
           withAsset: enrichNorthGptCombination(data.withAsset, enrichCtx),
           optionsOnly: enrichNorthGptCombination(data.optionsOnly, enrichCtx),
+          debug: data.debug || null,
         };
       }
 

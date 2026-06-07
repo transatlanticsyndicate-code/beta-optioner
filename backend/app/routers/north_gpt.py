@@ -280,12 +280,17 @@ def select(req: NorthGptSelectRequest, db: Session = Depends(get_db)):
         constraints["leverage"] = ctx.get("leverage")
         # Подставляем реальные числа вместо плейсхолдеров в промпте ({вход}, {цель_верх}, ...).
         filled_prompt = _fill_prompt_placeholders(req.prompt, constraints)
-        result = get_openai_client().select_combinations(
-            filled_prompt, constraints, compact)
+        out = get_openai_client().select_combinations(filled_prompt, constraints, compact)
+        # Клиент возвращает (result, debug); мок в тестах может вернуть просто dict.
+        if isinstance(out, tuple):
+            result, debug = out
+        else:
+            result, debug = out, {}
         response = {
             "status": "success",
             "withAsset": _build_block(result.get("with_asset"), idx, ranges, ctx),
             "optionsOnly": _build_block(result.get("options_only"), idx, ranges, ctx),
+            "debug": debug,  # точный запрос и сырой ответ для служебного просмотра
         }
         # отметить выбранный промпт как последний использованный (единый для всех)
         if req.promptId:

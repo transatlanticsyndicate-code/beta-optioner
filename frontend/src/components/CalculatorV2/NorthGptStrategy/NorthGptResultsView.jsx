@@ -10,7 +10,7 @@
 
 import React from 'react';
 import { Button } from '../../ui/button';
-import { RotateCcw, X, ArrowLeft, AlertTriangle } from 'lucide-react';
+import { RotateCcw, X, ArrowLeft, AlertTriangle, FileSearch } from 'lucide-react';
 import ResultCard from '../NorthStrategy/ResultCard';
 
 function Rationale({ text }) {
@@ -54,6 +54,36 @@ function Block({ title, block, levels, onApply }) {
 }
 
 function NorthGptResultsView({ result, levels, onApply, onRequery, onCancel, onBack }) {
+  // Служебный просмотр: открыть в новой вкладке полный текст запроса в GPT и сырой ответ.
+  const openDebug = () => {
+    const dbg = result?.debug || {};
+    const esc = (s) => String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const messages = Array.isArray(dbg.messages)
+      ? dbg.messages.map((m) => `=== ${String(m.role).toUpperCase()} ===\n${m.content}`).join('\n\n')
+      : '— нет данных запроса —';
+    const finalJson = JSON.stringify(
+      { withAsset: result?.withAsset, optionsOnly: result?.optionsOnly }, null, 2,
+    );
+    const html = '<!doctype html><html lang="ru"><head><meta charset="utf-8">'
+      + '<title>Север GPT — запрос и ответ</title>'
+      + '<style>body{font-family:system-ui,Segoe UI,Roboto,sans-serif;margin:24px;background:#0b0b0f;color:#e5e7eb}'
+      + 'h1{color:#c084fc;font-size:18px}h2{color:#a855f7;margin:20px 0 8px}'
+      + 'pre{white-space:pre-wrap;word-break:break-word;background:#15151c;padding:12px;border-radius:8px;border:1px solid #2a2a35;font-size:12px;line-height:1.5}'
+      + '.muted{color:#9ca3af;font-size:12px}</style></head><body>'
+      + '<h1>Север GPT — отладка</h1>'
+      + '<p class="muted">Модель: ' + esc(dbg.model || '—') + '</p>'
+      + '<h2>1. Запрос в GPT (полностью)</h2><pre>' + esc(messages) + '</pre>'
+      + '<h2>2. Ответ GPT (как есть)</h2><pre>' + esc(dbg.rawResponse || '— нет ответа —') + '</pre>'
+      + '<h2>3. Итог после проверки по реальной цепочке</h2><pre>' + esc(finalJson) + '</pre>'
+      + '</body></html>';
+    const w = window.open('', '_blank');
+    if (w && w.document) {
+      w.document.write(html);
+      w.document.close();
+    }
+  };
+
   // Полный провал запроса (обе комбинации не получены) — отдельный экран ошибки.
   if (result?.error && !result?.withAsset && !result?.optionsOnly) {
     return (
@@ -86,7 +116,18 @@ function NorthGptResultsView({ result, levels, onApply, onRequery, onCancel, onB
         <Block title="Только опционы" block={result?.optionsOnly} levels={levels} onApply={onApply} />
       </div>
 
-      <div className="flex flex-wrap justify-end gap-2 border-t pt-3">
+      <div className="flex flex-wrap items-center justify-end gap-2 border-t pt-3">
+        {result?.debug && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mr-auto text-muted-foreground"
+            onClick={openDebug}
+            title="Открыть в новой вкладке точный запрос в GPT и его ответ"
+          >
+            <FileSearch className="h-3.5 w-3.5 mr-1" /> Запрос/ответ
+          </Button>
+        )}
         <Button variant="outline" size="sm" onClick={onBack}>
           <ArrowLeft className="h-3.5 w-3.5 mr-1" /> Вернуться к настройкам
         </Button>
