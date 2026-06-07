@@ -41,7 +41,15 @@ PAYLOAD = {
 
 
 def test_select_returns_two_validated_blocks(monkeypatch):
-    monkeypatch.setattr(ng, "get_openai_client", lambda: FakeClient())
+    captured = {}
+
+    class CapturingClient(FakeClient):
+        def select_combinations(self, user_prompt, constraints, chain):
+            captured["constraints"] = constraints
+            captured["chain"] = chain
+            return super().select_combinations(user_prompt, constraints, chain)
+
+    monkeypatch.setattr(ng, "get_openai_client", lambda: CapturingClient())
     r = client.post("/api/north-gpt/select", json=PAYLOAD)
     assert r.status_code == 200
     data = r.json()
@@ -52,6 +60,14 @@ def test_select_returns_two_validated_blocks(monkeypatch):
     assert data["withAsset"]["rationale"] == "rA"
     assert data["optionsOnly"]["positions"][0]["type"] == "PUT"
     assert data["optionsOnly"]["kind"] == "optionsOnly"
+    # Позиционный контекст проброшен в модель (вход, текущая цена, плечо).
+    assert captured["constraints"]["entryPrice"] == 145.0
+    assert captured["constraints"]["currentPrice"] == 150.0
+    assert captured["constraints"]["leverage"] == 1.0
+    # Тикер НЕ уходит в модель (ни в constraints, ни в компактной цепочке).
+    assert "ticker" not in captured["constraints"]
+    # Цепочка для модели — только сжатые поля.
+    assert set(captured["chain"][0].keys()) == {"type", "strike", "bid", "ask", "iv", "delta"}
 
 
 def test_select_hallucinated_strike_becomes_block_error(monkeypatch):

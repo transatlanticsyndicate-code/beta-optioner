@@ -220,8 +220,15 @@ def select(req: NorthGptSelectRequest, db: Session = Depends(get_db)):
         full_chain = _filter_chain(req.chain, p.expirationDate)
         idx = validator.build_chain_index(full_chain, ctx.get("entryPrice"))
         compact = _compact_chain(full_chain)
+        # ЗАЧЕМ: даём модели позиционный контекст (вход, текущая цена, плечо).
+        # Без них ИИ не может корректно считать P&L всей позиции на низу и
+        # подобрать размер акции. Тикер намеренно НЕ передаём (обезличенность).
+        constraints = p.model_dump()
+        constraints["entryPrice"] = ctx.get("entryPrice")
+        constraints["currentPrice"] = ctx.get("currentPrice")
+        constraints["leverage"] = ctx.get("leverage")
         result = get_openai_client().select_combinations(
-            req.prompt, p.model_dump(), compact)
+            req.prompt, constraints, compact)
         response = {
             "status": "success",
             "withAsset": _build_block(result.get("with_asset"), idx, ranges, ctx),
