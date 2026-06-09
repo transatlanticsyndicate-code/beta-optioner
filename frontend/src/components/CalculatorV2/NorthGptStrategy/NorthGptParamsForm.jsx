@@ -20,12 +20,6 @@ const toNum = (v) => {
   return Number.isFinite(n) ? n : 0;
 };
 
-const round5 = (v) => {
-  const n = parseFloat(v);
-  if (!Number.isFinite(n)) return v;
-  return Math.round(n / 5) * 5;
-};
-
 const isoFromOffsetDays = (offsetDays) => {
   const d = new Date();
   d.setUTCDate(d.getUTCDate() + offsetDays);
@@ -44,8 +38,8 @@ function NorthGptParamsForm({
   const basePrice = entryPrice || currentPrice || 0;
 
   const defaults = useMemo(() => {
-    const top = round5(initialValues?.topPrice ?? basePrice * 1.30);
-    const bottom = round5(initialValues?.bottomPrice ?? basePrice * 0.85);
+    const top = initialValues?.topPrice ?? basePrice * 1.30;
+    const bottom = initialValues?.bottomPrice ?? basePrice * 0.85;
     return {
       // Точка входа: по умолчанию — обнаруженная по позиции (или текущая цена),
       // но пользователь может переписать (вход может отличаться от текущей цены).
@@ -54,10 +48,10 @@ function NorthGptParamsForm({
       bottomPrice: bottom,
       expirationDate: initialValues?.expirationDate ?? '',
       calcDate: initialValues?.calcDate ?? isoFromOffsetDays(30),
-      callStrikeMin: round5(initialValues?.callStrikeMin ?? basePrice),
-      callStrikeMax: round5(initialValues?.callStrikeMax ?? top),
-      putStrikeMin: round5(initialValues?.putStrikeMin ?? bottom),
-      putStrikeMax: round5(initialValues?.putStrikeMax ?? basePrice),
+      callStrikeMin: initialValues?.callStrikeMin ?? basePrice,
+      callStrikeMax: initialValues?.callStrikeMax ?? top,
+      putStrikeMin: initialValues?.putStrikeMin ?? bottom,
+      putStrikeMax: initialValues?.putStrikeMax ?? basePrice,
       plTolerance: initialValues?.plTolerance ?? 200,
       margin: initialValues?.margin ?? 6000,
       marginTolerance: initialValues?.marginTolerance ?? 500,
@@ -239,17 +233,6 @@ function NorthGptParamsForm({
     return all.slice(start, end);
   }, [availableExpirations, expirationDate]);
 
-  const handleTopBlur = () => {
-    const r = round5(top);
-    setTop(r);
-    setCallStrikeMax(r);
-  };
-  const handleBottomBlur = () => {
-    const r = round5(bottom);
-    setBottom(r);
-    setPutStrikeMin(r);
-  };
-
   const errors = [];
   if (toNum(entry) <= 0) errors.push('Укажите точку входа');
   if (toNum(top) <= toNum(entry)) errors.push('Верх должен быть выше точки входа');
@@ -268,14 +251,14 @@ function NorthGptParamsForm({
     if (errors.length > 0) return;
     onAnalyze({
       entryPrice: toNum(entry),
-      topPrice: toNum(round5(top)),
-      bottomPrice: toNum(round5(bottom)),
+      topPrice: toNum(top),
+      bottomPrice: toNum(bottom),
       expirationDate,
       calcDate,
-      callStrikeMin: toNum(round5(callStrikeMin)),
-      callStrikeMax: toNum(round5(callStrikeMax)),
-      putStrikeMin: toNum(round5(putStrikeMin)),
-      putStrikeMax: toNum(round5(putStrikeMax)),
+      callStrikeMin: toNum(callStrikeMin),
+      callStrikeMax: toNum(callStrikeMax),
+      putStrikeMin: toNum(putStrikeMin),
+      putStrikeMax: toNum(putStrikeMax),
       plTolerance: toNum(plTolerance),
       margin: toNum(margin),
       marginTolerance: toNum(marginTolerance),
@@ -306,13 +289,13 @@ function NorthGptParamsForm({
         <div className="space-y-3">
           <div>
             <Label className="text-xs">Цель по верху ($)</Label>
-            <Input type="number" step="5" value={top}
-              onChange={(e) => setTop(e.target.value)} onBlur={handleTopBlur} />
+            <Input type="number" step="1" value={top}
+              onChange={(e) => setTop(e.target.value)} />
           </div>
           <div>
             <Label className="text-xs">Закрытие по низу ($)</Label>
-            <Input type="number" step="5" value={bottom}
-              onChange={(e) => setBottom(e.target.value)} onBlur={handleBottomBlur} />
+            <Input type="number" step="1" value={bottom}
+              onChange={(e) => setBottom(e.target.value)} />
           </div>
           <div>
             <Label className="text-xs">Допустимый диапазон P&L по низу ± ($)</Label>
@@ -350,30 +333,26 @@ function NorthGptParamsForm({
           <div className="text-xs text-muted-foreground pb-2">Call</div>
           <div>
             <Label className="text-[10px]">от ($)</Label>
-            <Input type="number" step="5" value={callStrikeMin}
-              onChange={(e) => setCallStrikeMin(e.target.value)}
-              onBlur={() => setCallStrikeMin(round5(callStrikeMin))} />
+            <Input type="number" step="1" value={callStrikeMin}
+              onChange={(e) => setCallStrikeMin(e.target.value)} />
           </div>
           <div>
             <Label className="text-[10px]">до ($)</Label>
-            <Input type="number" step="5" value={callStrikeMax}
-              onChange={(e) => setCallStrikeMax(e.target.value)}
-              onBlur={() => setCallStrikeMax(round5(callStrikeMax))} />
+            <Input type="number" step="1" value={callStrikeMax}
+              onChange={(e) => setCallStrikeMax(e.target.value)} />
           </div>
         </div>
         <div className="grid grid-cols-[80px_1fr_1fr] items-end gap-2">
           <div className="text-xs text-muted-foreground pb-2">Put</div>
           <div>
             <Label className="text-[10px]">от ($)</Label>
-            <Input type="number" step="5" value={putStrikeMin}
-              onChange={(e) => setPutStrikeMin(e.target.value)}
-              onBlur={() => setPutStrikeMin(round5(putStrikeMin))} />
+            <Input type="number" step="1" value={putStrikeMin}
+              onChange={(e) => setPutStrikeMin(e.target.value)} />
           </div>
           <div>
             <Label className="text-[10px]">до ($)</Label>
-            <Input type="number" step="5" value={putStrikeMax}
-              onChange={(e) => setPutStrikeMax(e.target.value)}
-              onBlur={() => setPutStrikeMax(round5(putStrikeMax))} />
+            <Input type="number" step="1" value={putStrikeMax}
+              onChange={(e) => setPutStrikeMax(e.target.value)} />
           </div>
         </div>
       </div>
