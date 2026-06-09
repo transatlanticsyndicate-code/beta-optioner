@@ -233,6 +233,10 @@ function NorthGptParamsForm({
     return all.slice(start, end);
   }, [availableExpirations, expirationDate]);
 
+  // Удобство: «верх» подтягивает верхнюю границу Call-страйков, «низ» — нижнюю Put.
+  const handleTopBlur = () => setCallStrikeMax(top);
+  const handleBottomBlur = () => setPutStrikeMin(bottom);
+
   const errors = [];
   if (toNum(entry) <= 0) errors.push('Укажите точку входа');
   if (toNum(top) <= toNum(entry)) errors.push('Верх должен быть выше точки входа');
@@ -290,12 +294,12 @@ function NorthGptParamsForm({
           <div>
             <Label className="text-xs">Цель по верху ($)</Label>
             <Input type="number" step="1" value={top}
-              onChange={(e) => setTop(e.target.value)} />
+              onChange={(e) => setTop(e.target.value)} onBlur={handleTopBlur} />
           </div>
           <div>
             <Label className="text-xs">Закрытие по низу ($)</Label>
             <Input type="number" step="1" value={bottom}
-              onChange={(e) => setBottom(e.target.value)} />
+              onChange={(e) => setBottom(e.target.value)} onBlur={handleBottomBlur} />
           </div>
           <div>
             <Label className="text-xs">Допустимый диапазон P&L по низу ± ($)</Label>
