@@ -2,7 +2,7 @@ import { Asset, Config, FinancialEntry, State } from './types';
 import { WeeklyStatsService } from './WeeklyStatsService';
 import { DEFAULT_CONFIG, DEFAULT_DEPOSIT } from './config';
 import { INITIAL_ASSETS, INITIAL_FINANCIAL_CATEGORIES, INITIAL_FINANCIAL_TYPES } from './initialAssets';
-import { supabase } from './lib/supabase';
+import { loadState, saveState } from './lib/api';
 
 /**
  * Класс Store управляет состоянием приложения, синхронизацией с LocalStorage и Supabase.
@@ -157,21 +157,15 @@ export class Store {
     async loadFromCloud() {
 
         try {
-            const { data, error } = await supabase
-                .from('app_state')
-                .select('content')
-                .eq('id', 'global')
-                .single();
+            const content = await loadState();
 
-            if (error && error.code !== 'PGRST116') throw error;
-
-            if (data && data.content) {
-                if (this.validateState(data.content)) {
+            if (content) {
+                if (this.validateState(content)) {
                     // Normalize/Migrate state
                     this.state = {
-                        ...data.content,
+                        ...content,
                         financial: {
-                            transactions: (data.content.financial?.transactions || []).map((t: Partial<FinancialEntry> & { amount?: number }) => ({
+                            transactions: (content.financial?.transactions || []).map((t: Partial<FinancialEntry> & { amount?: number }) => ({
                                 id: t.id || Math.random().toString(36).substr(2, 9),
                                 type: t.type || 'expense',
                                 category: t.category || 'Unknown',
@@ -184,27 +178,27 @@ export class Store {
                                 exchangeRate: t.exchangeRate,
                                 description: t.description || ''
                             } as FinancialEntry)),
-                            types: data.content.financial?.types || INITIAL_FINANCIAL_TYPES,
-                            categories: data.content.financial?.categories || INITIAL_FINANCIAL_CATEGORIES,
-                            categoryFilter: Array.isArray(data.content.financial?.categoryFilter)
-                                ? data.content.financial.categoryFilter
-                                : (data.content.financial?.categoryFilter ? [data.content.financial.categoryFilter] : []),
-                            dateFilterType: data.content.financial?.dateFilterType || 'all',
-                            customStartDate: data.content.financial?.customStartDate || null,
-                            customEndDate: data.content.financial?.customEndDate || null,
-                            sortOrder: data.content.financial?.sortOrder || 'asc'
+                            types: content.financial?.types || INITIAL_FINANCIAL_TYPES,
+                            categories: content.financial?.categories || INITIAL_FINANCIAL_CATEGORIES,
+                            categoryFilter: Array.isArray(content.financial?.categoryFilter)
+                                ? content.financial.categoryFilter
+                                : (content.financial?.categoryFilter ? [content.financial.categoryFilter] : []),
+                            dateFilterType: content.financial?.dateFilterType || 'all',
+                            customStartDate: content.financial?.customStartDate || null,
+                            customEndDate: content.financial?.customEndDate || null,
+                            sortOrder: content.financial?.sortOrder || 'asc'
                         },
                         weeklyStats: {
-                            transactions: (data.content.weeklyStats?.transactions && data.content.weeklyStats.transactions.length > 0)
-                                ? data.content.weeklyStats.transactions
+                            transactions: (content.weeklyStats?.transactions && content.weeklyStats.transactions.length > 0)
+                                ? content.weeklyStats.transactions
                                 : WeeklyStatsService.getInitialData(),
-                            types: data.content.weeklyStats?.types || [],
-                            categories: data.content.weeklyStats?.categories || [],
-                            categoryFilter: data.content.weeklyStats?.categoryFilter || [],
-                            sortOrder: data.content.weeklyStats?.sortOrder || 'desc',
-                            dateFilterType: data.content.weeklyStats?.dateFilterType || 'all',
-                            customStartDate: data.content.weeklyStats?.customStartDate || null,
-                            customEndDate: data.content.weeklyStats?.customEndDate || null
+                            types: content.weeklyStats?.types || [],
+                            categories: content.weeklyStats?.categories || [],
+                            categoryFilter: content.weeklyStats?.categoryFilter || [],
+                            sortOrder: content.weeklyStats?.sortOrder || 'desc',
+                            dateFilterType: content.weeklyStats?.dateFilterType || 'all',
+                            customStartDate: content.weeklyStats?.customStartDate || null,
+                            customEndDate: content.weeklyStats?.customEndDate || null
                         }
                     };
 
@@ -218,11 +212,12 @@ export class Store {
                 } else {
                     console.error('Invalid cloud state received');
                 }
-            } else if (!data) {
-                // If no cloud state exists, save current default state
+            } else {
+                // Облачного состояния ещё нет — сохраняем текущее (дефолтное)
                 this.saveToCloud();
             }
         } catch (e) {
+            if ((e as Error).message === 'UNAUTHORIZED') throw e; // пусть Auth покажет экран пароля
             console.error('Error loading from cloud:', e);
         }
     }
@@ -246,15 +241,7 @@ export class Store {
 
         try {
             this.isSyncing = true;
-            const { error } = await supabase
-                .from('app_state')
-                .upsert({
-                    id: 'global',
-                    content: this.state,
-                    updated_at: new Date().toISOString()
-                }, { onConflict: 'id' });
-
-            if (error) throw error;
+            await saveState(this.state);
         } catch (e) {
             console.error('Error saving to cloud:', e);
         } finally {
