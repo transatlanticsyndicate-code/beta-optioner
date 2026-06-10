@@ -5,7 +5,7 @@ import { INITIAL_ASSETS, INITIAL_FINANCIAL_CATEGORIES, INITIAL_FINANCIAL_TYPES }
 import { loadState, saveState } from './lib/api';
 
 /**
- * Класс Store управляет состоянием приложения, синхронизацией с LocalStorage и Supabase.
+ * Класс Store управляет состоянием приложения, синхронизацией с LocalStorage и нашим backend.
  * Реализует паттерн Observable для уведомления подписчиков об изменениях.
  */
 export class Store {
@@ -152,7 +152,7 @@ export class Store {
     }
 
     /**
-     * Загружает данные из облачного хранилища Supabase (таблица app_state, id: global).
+     * Загружает данные из нашего облачного хранилища (backend beta, таблица crypto_app_state, id: global).
      */
     async loadFromCloud() {
 

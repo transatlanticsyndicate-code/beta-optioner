@@ -27,11 +27,15 @@ class App {
         // 2. Initialize UI
         this.ui = new UI(this.store.getState(), this.handleAction.bind(this));
 
-        // 3. Initialize Auth (auth disabled — always load from cloud)
+        // 3. Initialize Auth (парольный вход; onReady вызывается только после успешного входа)
         new Auth(async () => {
             try {
                 await this.store.loadFromCloud();
-            } catch (e) { console.error('Cloud load failed, using local state', e); }
+            } catch (e) {
+                // Нет доступа (просрочен/неверен пропуск) — пробрасываем, чтобы Auth показал экран пароля
+                if ((e as Error).message === 'UNAUTHORIZED') throw e;
+                console.error('Cloud load failed, using local state', e);
+            }
 
             // Check Rankings
             const state = this.store.getState();
