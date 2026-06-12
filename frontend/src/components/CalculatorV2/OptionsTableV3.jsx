@@ -156,7 +156,7 @@ function OptionsTableV3({
 
   // Состояние для сортировки таблицы
   // ЗАЧЕМ: Позволяет пользователю сортировать опционы по разным колонкам
-  const [sortColumn, setSortColumn] = React.useState('date'); // По умолчанию сортировка по дате экспирации
+  const [sortColumn, setSortColumn] = React.useState('type'); // По умолчанию: сверху колы, снизу путы
   const [sortDirection, setSortDirection] = React.useState('asc'); // asc | desc
 
   // ИТОГО таблицы опционов — единое вычисление для отображения в строке «ИТОГО»
@@ -302,9 +302,10 @@ function OptionsTableV3({
 
       switch (sortColumn) {
         case 'type':
-          // Сортируем по типу (CALL/PUT) + action (Buy/Sell)
-          valueA = `${a.type}_${a.action}`;
-          valueB = `${b.type}_${b.action}`;
+          // Сортируем по типу: CALL раньше PUT (колы сверху, путы снизу),
+          // внутри группы — по дате экспирации, как в обычном виде
+          valueA = `${a.type}_${a.date || ''}`;
+          valueB = `${b.type}_${b.date || ''}`;
           break;
         case 'date':
           // Сортируем по дате экспирации
