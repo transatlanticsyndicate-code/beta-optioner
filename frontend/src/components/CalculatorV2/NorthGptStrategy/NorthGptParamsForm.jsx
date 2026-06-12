@@ -26,6 +26,24 @@ const isoFromOffsetDays = (offsetDays) => {
   return d.toISOString().split('T')[0];
 };
 
+// Округление денежных полей до 2 знаков (центы). Нефинитное значение
+// (пустая строка / частичный ввод) возвращаем как есть, чтобы не затирать ввод.
+const round2 = (v) => {
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? Math.round(n * 100) / 100 : v;
+};
+
+// Сколько целых дней от сегодняшней даты (UTC) до выбранной ISO-даты.
+// Обратная операция к isoFromOffsetDays — для двусторонней связи «дней» ⇄ «дата расчёта».
+const daysFromIsoDate = (iso) => {
+  if (!iso) return null;
+  const target = new Date(`${iso}T00:00:00Z`).getTime();
+  if (!Number.isFinite(target)) return null;
+  const now = new Date();
+  const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return Math.round((target - todayUtc) / 86400000);
+};
+
 function NorthGptParamsForm({
   currentPrice,
   entryPrice,
@@ -38,8 +56,9 @@ function NorthGptParamsForm({
   const basePrice = entryPrice || currentPrice || 0;
 
   const defaults = useMemo(() => {
-    const top = initialValues?.topPrice ?? basePrice * 1.30;
-    const bottom = initialValues?.bottomPrice ?? basePrice * 0.85;
+    const top = round2(initialValues?.topPrice ?? basePrice * 1.30);
+    const bottom = round2(initialValues?.bottomPrice ?? basePrice * 0.85);
+    const calcDate = initialValues?.calcDate ?? isoFromOffsetDays(30);
     return {
       // Точка входа: по умолчанию — обнаруженная по позиции (или текущая цена),
       // но пользователь может переписать (вход может отличаться от текущей цены).
@@ -47,13 +66,15 @@ function NorthGptParamsForm({
       topPrice: top,
       bottomPrice: bottom,
       expirationDate: initialValues?.expirationDate ?? '',
-      calcDate: initialValues?.calcDate ?? isoFromOffsetDays(30),
-      callStrikeMin: initialValues?.callStrikeMin ?? basePrice,
-      callStrikeMax: initialValues?.callStrikeMax ?? top,
-      putStrikeMin: initialValues?.putStrikeMin ?? bottom,
-      putStrikeMax: initialValues?.putStrikeMax ?? basePrice,
+      calcDate,
+      // Кол-во дней до даты расчёта (по умолчанию 30); связано с calcDate в обе стороны.
+      calcDays: daysFromIsoDate(calcDate) ?? 30,
+      callStrikeMin: round2(initialValues?.callStrikeMin ?? basePrice),
+      callStrikeMax: round2(initialValues?.callStrikeMax ?? top),
+      putStrikeMin: round2(initialValues?.putStrikeMin ?? bottom),
+      putStrikeMax: round2(initialValues?.putStrikeMax ?? basePrice),
       plTolerance: initialValues?.plTolerance ?? 200,
-      margin: initialValues?.margin ?? 6000,
+      margin: initialValues?.margin ?? 4000,
       marginTolerance: initialValues?.marginTolerance ?? 500,
       minStockMarginPct: initialValues?.minStockMarginPct ?? 40,
     };
@@ -64,6 +85,7 @@ function NorthGptParamsForm({
   const [bottom, setBottom] = useState(defaults.bottomPrice);
   const [expirationDate, setExpirationDate] = useState(defaults.expirationDate);
   const [calcDate, setCalcDate] = useState(defaults.calcDate);
+  const [calcDays, setCalcDays] = useState(defaults.calcDays);
   const [callStrikeMin, setCallStrikeMin] = useState(defaults.callStrikeMin);
   const [callStrikeMax, setCallStrikeMax] = useState(defaults.callStrikeMax);
   const [putStrikeMin, setPutStrikeMin] = useState(defaults.putStrikeMin);
@@ -234,8 +256,29 @@ function NorthGptParamsForm({
   }, [availableExpirations, expirationDate]);
 
   // Удобство: «верх» подтягивает верхнюю границу Call-страйков, «низ» — нижнюю Put.
-  const handleTopBlur = () => setCallStrikeMax(top);
-  const handleBottomBlur = () => setPutStrikeMin(bottom);
+  // Заодно на blur округляем денежное поле до 2 знаков.
+  const handleTopBlur = () => {
+    const r = round2(top);
+    setTop(r);
+    setCallStrikeMax(r);
+  };
+  const handleBottomBlur = () => {
+    const r = round2(bottom);
+    setBottom(r);
+    setPutStrikeMin(r);
+  };
+
+  // Двусторонняя связь «дней» ⇄ «дата расчёта».
+  const handleCalcDaysChange = (v) => {
+    setCalcDays(v);
+    const n = parseInt(v, 10);
+    if (Number.isFinite(n)) setCalcDate(isoFromOffsetDays(n));
+  };
+  const handleCalcDateChange = (v) => {
+    setCalcDate(v);
+    const d = daysFromIsoDate(v);
+    if (d !== null) setCalcDays(d);
+  };
 
   const errors = [];
   if (toNum(entry) <= 0) errors.push('Укажите точку входа');
@@ -255,14 +298,14 @@ function NorthGptParamsForm({
     if (errors.length > 0) return;
     onAnalyze({
       entryPrice: toNum(entry),
-      topPrice: toNum(top),
-      bottomPrice: toNum(bottom),
+      topPrice: round2(toNum(top)),
+      bottomPrice: round2(toNum(bottom)),
       expirationDate,
       calcDate,
-      callStrikeMin: toNum(callStrikeMin),
-      callStrikeMax: toNum(callStrikeMax),
-      putStrikeMin: toNum(putStrikeMin),
-      putStrikeMax: toNum(putStrikeMax),
+      callStrikeMin: round2(toNum(callStrikeMin)),
+      callStrikeMax: round2(toNum(callStrikeMax)),
+      putStrikeMin: round2(toNum(putStrikeMin)),
+      putStrikeMax: round2(toNum(putStrikeMax)),
       plTolerance: toNum(plTolerance),
       margin: toNum(margin),
       marginTolerance: toNum(marginTolerance),
@@ -293,12 +336,12 @@ function NorthGptParamsForm({
         <div className="space-y-3">
           <div>
             <Label className="text-xs">Цель по верху ($)</Label>
-            <Input type="number" step="1" value={top}
+            <Input type="number" step="0.01" value={top}
               onChange={(e) => setTop(e.target.value)} onBlur={handleTopBlur} />
           </div>
           <div>
             <Label className="text-xs">Закрытие по низу ($)</Label>
-            <Input type="number" step="1" value={bottom}
+            <Input type="number" step="0.01" value={bottom}
               onChange={(e) => setBottom(e.target.value)} onBlur={handleBottomBlur} />
           </div>
           <div>
@@ -326,7 +369,17 @@ function NorthGptParamsForm({
           </div>
           <div>
             <Label className="text-xs">Дата расчёта</Label>
-            <Input type="date" value={calcDate} onChange={(e) => setCalcDate(e.target.value)} />
+            <div className="flex items-end gap-2">
+              <div className="w-20">
+                <Label className="text-[10px] text-muted-foreground">Дней</Label>
+                <Input type="number" step="1" min="0" value={calcDays}
+                  onChange={(e) => handleCalcDaysChange(e.target.value)} />
+              </div>
+              <div className="flex-1">
+                <Input type="date" value={calcDate}
+                  onChange={(e) => handleCalcDateChange(e.target.value)} />
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -337,26 +390,30 @@ function NorthGptParamsForm({
           <div className="text-xs text-muted-foreground pb-2">Call</div>
           <div>
             <Label className="text-[10px]">от ($)</Label>
-            <Input type="number" step="1" value={callStrikeMin}
-              onChange={(e) => setCallStrikeMin(e.target.value)} />
+            <Input type="number" step="0.01" value={callStrikeMin}
+              onChange={(e) => setCallStrikeMin(e.target.value)}
+              onBlur={() => setCallStrikeMin(round2(callStrikeMin))} />
           </div>
           <div>
             <Label className="text-[10px]">до ($)</Label>
-            <Input type="number" step="1" value={callStrikeMax}
-              onChange={(e) => setCallStrikeMax(e.target.value)} />
+            <Input type="number" step="0.01" value={callStrikeMax}
+              onChange={(e) => setCallStrikeMax(e.target.value)}
+              onBlur={() => setCallStrikeMax(round2(callStrikeMax))} />
           </div>
         </div>
         <div className="grid grid-cols-[80px_1fr_1fr] items-end gap-2">
           <div className="text-xs text-muted-foreground pb-2">Put</div>
           <div>
             <Label className="text-[10px]">от ($)</Label>
-            <Input type="number" step="1" value={putStrikeMin}
-              onChange={(e) => setPutStrikeMin(e.target.value)} />
+            <Input type="number" step="0.01" value={putStrikeMin}
+              onChange={(e) => setPutStrikeMin(e.target.value)}
+              onBlur={() => setPutStrikeMin(round2(putStrikeMin))} />
           </div>
           <div>
             <Label className="text-[10px]">до ($)</Label>
-            <Input type="number" step="1" value={putStrikeMax}
-              onChange={(e) => setPutStrikeMax(e.target.value)} />
+            <Input type="number" step="0.01" value={putStrikeMax}
+              onChange={(e) => setPutStrikeMax(e.target.value)}
+              onBlur={() => setPutStrikeMax(round2(putStrikeMax))} />
           </div>
         </div>
       </div>
