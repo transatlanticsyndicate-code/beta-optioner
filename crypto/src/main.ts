@@ -27,6 +27,9 @@ class App {
         // 2. Initialize UI
         this.ui = new UI(this.store.getState(), this.handleAction.bind(this));
 
+        // Индикатор синхронизации: Store сообщает статус сохранения → UI показывает в шапке
+        this.store.onSyncStatusChange = (s) => { if (this.ui) this.ui.setSyncStatus(s); };
+
         // 3. Initialize Auth (парольный вход; onReady вызывается только после успешного входа)
         new Auth(async () => {
             try {

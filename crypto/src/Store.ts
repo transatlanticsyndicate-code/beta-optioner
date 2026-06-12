@@ -47,6 +47,13 @@ export class Store {
         weekly: 0
     };
 
+    // ЗАЧЕМ: статус сохранения в базу для индикатора в шапке.
+    // Раньше ошибки сохранения были молчаливыми (так потеряли данные) — теперь видны.
+    public onSyncStatusChange: ((status: 'saving' | 'saved' | 'error') => void) | null = null;
+    private setSync(status: 'saving' | 'saved' | 'error') {
+        if (this.onSyncStatusChange) this.onSyncStatusChange(status);
+    }
+
     /**
      * @param onStateChange Колбэк, вызываемый при любом изменении состояния
      */
@@ -209,6 +216,7 @@ export class Store {
                     // Sync Cloud State to Local Storage (Cache)
                     localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.state));
                     this.notify();
+                    this.setSync('saved'); // данные в базе и локально совпадают
                 } else {
                     console.error('Invalid cloud state received');
                 }
@@ -219,6 +227,7 @@ export class Store {
         } catch (e) {
             if ((e as Error).message === 'UNAUTHORIZED') throw e; // пусть Auth покажет экран пароля
             console.error('Error loading from cloud:', e);
+            this.setSync('error');
         }
     }
 
@@ -232,18 +241,23 @@ export class Store {
 
         if (this.lastValidCounts.financial > 0 && currentFinancial === 0) {
             console.warn('Safety Check: Financial data is empty but was previously present. Sync aborted to prevent data loss.');
+            this.setSync('error');
             return;
         }
         if (this.lastValidCounts.weekly > 0 && currentWeekly === 0) {
             console.warn('Safety Check: Weekly stats are empty but were previously present. Sync aborted to prevent data loss.');
+            this.setSync('error');
             return;
         }
 
         try {
             this.isSyncing = true;
+            this.setSync('saving');
             await saveState(this.state);
+            this.setSync('saved');
         } catch (e) {
             console.error('Error saving to cloud:', e);
+            this.setSync('error');
         } finally {
             this.isSyncing = false;
         }
