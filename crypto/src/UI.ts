@@ -64,6 +64,24 @@ export class UI {
     }
 
     /**
+     * Обновляет индикатор синхронизации с базой в шапке.
+     * ЗАЧЕМ: делает видимым сбой сохранения (раньше он был молчаливым).
+     */
+    setSyncStatus(status: 'saving' | 'saved' | 'error') {
+        const el = document.getElementById('sync-status');
+        if (!el) return;
+        const map = {
+            saving: { text: '⟳ Сохранение…', color: 'var(--text-secondary, #888)', title: 'Идёт сохранение в базу' },
+            saved: { text: '✓ Сохранено', color: '#22c55e', title: 'Данные сохранены в базе' },
+            error: { text: '⚠ Не сохранено', color: '#ef4444', title: 'Данные НЕ сохранились в базу — проверьте вход и соединение' },
+        };
+        const v = map[status] || map.saved;
+        el.textContent = v.text;
+        el.style.color = v.color;
+        el.setAttribute('title', v.title);
+    }
+
+    /**
      * Выполняет полную перерисовку компонентов, которые не обновляются внутри sub-renderers автономно.
      */
     render() {

@@ -1,149 +1,42 @@
+// ЗАЧЕМ: простой парольный вход вместо Supabase Auth.
+// Если в браузере есть валидный токен — сразу запускаем приложение (onReady).
+// Иначе показываем экран ввода пароля; после успешного входа — onReady().
+import { getToken, login, clearToken } from './lib/api';
 
-import { User } from '@supabase/supabase-js';
-
-/**
- * Класс Auth отвечает за интеграцию с Supabase Auth, отображение форм входа
- * и управление UI-компонентами профиля пользователя.
- */
 export class Auth {
-    /** Текущий авторизованный пользователь */
-    user: User | null = null;
-    /** Колбэк, вызываемый при изменении статуса авторизации */
-    onAuthStateChange: ((user: User | null) => void) | null = null;
+    private onReady: () => void | Promise<void>;
 
-    constructor(onAuthStateChange?: (user: User | null) => void) {
-        this.onAuthStateChange = onAuthStateChange || null;
+    constructor(onReady: () => void | Promise<void>) {
+        this.onReady = onReady;
         this.init();
-        this.injectStyles();
-    }
-
-    private injectStyles() {
-        // Keeping styles for dropdown and avatar, adding styles for inline login
-        const style = document.createElement('style');
-        style.innerHTML = `
-            .auth-dropdown {
-                position: absolute;
-                top: 100%;
-                right: 0;
-                margin-top: 8px;
-                background: var(--panel-bg);
-                border: 1px solid var(--border-color);
-                border-radius: 6px;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-                z-index: 100;
-                min-width: 160px;
-                display: none;
-                flex-direction: column;
-                padding: 4px;
-            }
-            .auth-dropdown.show {
-                display: flex;
-            }
-            .auth-item {
-                padding: 8px 12px;
-                font-size: 0.85rem;
-                color: var(--text-primary);
-                cursor: pointer;
-                border-radius: 4px;
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                transition: background 0.1s;
-            }
-            .auth-item:hover {
-                background: var(--highlight-bg);
-            }
-            .auth-item.danger {
-                color: var(--danger-color);
-            }
-            .user-avatar-btn {
-                width: 32px;
-                height: 32px;
-                border-radius: 50%;
-                background: var(--btn-bg);
-                border: 1px solid var(--border-color);
-                cursor: pointer;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: var(--text-secondary);
-                transition: all 0.2s;
-            }
-            .user-avatar-btn:hover {
-                border-color: var(--accent-color);
-                color: var(--accent-color);
-            }
-            
-            /* Inline Login Form Styles */
-            .inline-auth-container {
-                background: var(--panel-bg);
-                padding: 2rem;
-                border-radius: 12px;
-                border: 1px solid var(--border-color);
-                width: 100%;
-                max-width: 360px;
-                box-shadow: 0 4px 24px rgba(0,0,0,0.2);
-                text-align: center;
-            }
-            .inline-auth-container h2 {
-                margin-top: 0;
-                margin-bottom: 1.5rem;
-                font-size: 1.5rem;
-                color: var(--text-primary);
-            }
-            .inline-auth-input {
-                width: 100%;
-                margin-bottom: 1rem;
-                padding: 10px;
-                border-radius: 6px;
-                border: 1px solid var(--border-color);
-                background: var(--input-bg);
-                color: var(--text-primary);
-                box-sizing: border-box;
-                font-family: inherit;
-            }
-            .inline-auth-btn {
-                width: 100%;
-                padding: 10px;
-                background: var(--accent-color);
-                color: #fff;
-                border: none;
-                border-radius: 6px;
-                cursor: pointer;
-                font-weight: 600;
-                margin-bottom: 1rem;
-                transition: opacity 0.2s;
-            }
-            .inline-auth-btn:hover {
-                opacity: 0.9;
-            }
-            .inline-auth-switch {
-                background: transparent;
-                border: none;
-                color: var(--text-secondary);
-                font-size: 0.9rem;
-                cursor: pointer;
-                text-decoration: underline;
-            }
-            .inline-auth-switch:hover {
-                color: var(--accent-color);
-            }
-        `;
-        document.head.appendChild(style);
     }
 
     private async init() {
-        // Auth disabled: skip session check, immediately show protected view
-        this.handleViewChange();
-
-        // Notify subscriber as if anonymous/guest user
-        if (this.onAuthStateChange) {
-            this.onAuthStateChange(this.user);
+        if (getToken()) {
+            // токен есть — пробуем сразу запуститься; при 401 Store бросит UNAUTHORIZED
+            try {
+                await this.start();
+                return;
+            } catch (e) {
+                if ((e as Error).message === 'UNAUTHORIZED') {
+                    clearToken();
+                } else {
+                    console.error('Startup error', e);
+                    return;
+                }
+            }
         }
+        this.renderLogin();
     }
 
-    private handleViewChange() {
-        // Auth disabled: always show protected content unconditionally
+    /** Показать защищённый контент и запустить загрузку данных. */
+    private async start() {
+        this.revealProtectedView();
+        await this.onReady();
+    }
+
+    /** Раскрыть защищённый блок страницы (как было при «отключённом» Auth). */
+    private revealProtectedView() {
         const protectedView = document.getElementById('protected-view');
         const publicView = document.getElementById('public-view');
         const globalStats = document.getElementById('global-stats');
@@ -154,10 +47,51 @@ export class Auth {
             publicView.style.display = 'none';
             publicView.innerHTML = '';
         }
-        // Clear auth container (no login/user button shown)
         const authContainer = document.getElementById('auth-container');
         if (authContainer) authContainer.innerHTML = '';
     }
 
-}
+    private renderLogin() {
+        const overlay = document.createElement('div');
+        overlay.id = 'crypto-login-overlay';
+        overlay.style.cssText =
+            'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;' +
+            'background:var(--bg-color,#0e0e12);z-index:9999;';
+        overlay.innerHTML = `
+            <form id="crypto-login-form" style="display:flex;flex-direction:column;gap:12px;
+                 min-width:280px;padding:28px;border:1px solid var(--border-color,#333);
+                 border-radius:10px;background:var(--panel-bg,#16161c);">
+                <div style="font-size:1.1rem;color:var(--text-primary,#eee);text-align:center;">
+                    Вход</div>
+                <input id="crypto-login-pw" type="password" placeholder="Пароль" autofocus
+                    style="padding:10px;border-radius:6px;border:1px solid var(--border-color,#333);
+                    background:var(--input-bg,#0e0e12);color:var(--text-primary,#eee);" />
+                <div id="crypto-login-err" style="color:#e06;font-size:0.8rem;min-height:1em;"></div>
+                <button type="submit" style="padding:10px;border-radius:6px;border:none;
+                    background:var(--accent-color,#3b82f6);color:#fff;cursor:pointer;">Войти</button>
+            </form>`;
+        document.body.appendChild(overlay);
 
+        const form = overlay.querySelector('#crypto-login-form') as HTMLFormElement;
+        const input = overlay.querySelector('#crypto-login-pw') as HTMLInputElement;
+        const err = overlay.querySelector('#crypto-login-err') as HTMLDivElement;
+
+        form.addEventListener('submit', async (ev) => {
+            ev.preventDefault();
+            err.textContent = '';
+            const ok = await login(input.value).catch(() => false);
+            if (!ok) {
+                err.textContent = 'Неверный пароль';
+                input.select();
+                return;
+            }
+            try {
+                await this.start();
+                overlay.remove();
+            } catch (e) {
+                err.textContent = 'Ошибка загрузки данных';
+                console.error(e);
+            }
+        });
+    }
+}

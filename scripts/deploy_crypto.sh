@@ -25,7 +25,8 @@ fail() { echo -e "${RED}[deploy-crypto]${NC} $1"; exit 1; }
 log "Checking SSH connection..."
 ssh -o ConnectTimeout=5 "$SSH_HOST" "echo ok" > /dev/null 2>&1 || fail "Cannot connect to $SSH_HOST. Check ~/.ssh/config."
 
-[[ -f "$LOCAL_CRYPTO/.env.local" ]] || fail "crypto/.env.local not found. Needed for Vite build (VITE_SUPABASE_* keys)."
+# ЗАЧЕМ: после переезда с Supabase на свой backend сборка больше не требует секретов —
+# адрес API относительный (/api), пароль вводит пользователь. .env.local не обязателен.
 
 # ============== Build ==============
 log "Installing dependencies..."
