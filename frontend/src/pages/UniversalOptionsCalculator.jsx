@@ -71,6 +71,7 @@ import {
 } from '../components/CalculatorV2';
 import OptionsTableV3 from '../components/CalculatorV2/OptionsTableV3';
 import NorthStrategyDialog from '../components/CalculatorV2/NorthStrategy/NorthStrategyDialog';
+import NorthGptStrategyDialog from '../components/CalculatorV2/NorthGptStrategy/NorthGptStrategyDialog';
 import FinancialControl from '../components/CalculatorV2/FinancialControl';
 import ExitCalculator from '../components/CalculatorV2/ExitCalculator';
 import { ScenarioCard, LiquidityWarning, GreeksWarning } from '../components/CalculatorV2/ExitCalculator/components';
@@ -2802,6 +2803,107 @@ function UniversalOptionsCalculator() {
     });
   }, []);
 
+  // ===== Стратегия «Север GPT» (ИИ-подбор через ChatGPT) =====
+  // Параллельна «Северу»: отдельный флаг fromNorthGptStrategy и отдельное
+  // состояние, поэтому две стратегии не пересекаются. «Север» не модифицируется.
+  const [northGptDialogOpen, setNorthGptDialogOpen] = useState(false);
+  const [northGptDialogStep, setNorthGptDialogStep] = useState('params');
+  const [northGptState, setNorthGptState] = useState(null);
+
+  const northGptActive = useMemo(() => options.some(o => o.fromNorthGptStrategy), [options]);
+  // Кнопка «Север GPT» показывается при тех же условиях, что и «Север».
+  const canShowNorthGptButton = canShowNorthButton;
+
+  const handleOpenNorthGptStrategy = useCallback(() => {
+    setNorthGptDialogStep('params');
+    setNorthGptDialogOpen(true);
+  }, []);
+
+  const handleReopenNorthGptResults = useCallback(() => {
+    const cache = northGptState?.result;
+    const hasCache = !!cache && (cache.withAsset || cache.optionsOnly || cache.error);
+    setNorthGptDialogStep(hasCache ? 'results' : 'params');
+    setNorthGptDialogOpen(true);
+  }, [northGptState]);
+
+  const handleNorthGptStateChange = useCallback((next) => {
+    setNorthGptState(next);
+  }, []);
+
+  const handleApplyNorthGptCombination = useCallback(({ combination, kind, params }) => {
+    if (!combination || !Array.isArray(combination.positions)) return;
+    const stamped = combination.positions.map(opt => ({
+      ...opt,
+      id: `north-gpt-${opt.type}-${opt.strike}-${opt.date}-${opt.quantity}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      fromNorthGptStrategy: true,
+      northGptKind: kind,
+    }));
+    setOptions(prev => [...prev.filter(o => !o.fromNorthGptStrategy), ...stamped]);
+
+    // Обратимость: запоминаем исходные LONG-позиции. Для «Только опционы» лонг
+    // убирается; для «Актив + опционы» замещается на рекомендованный ChatGPT.
+    let removedLongPositions = [];
+    if (kind === 'optionsOnly') {
+      setPositions(prev => {
+        removedLongPositions = prev.filter(p => p.type === 'LONG');
+        return prev.filter(p => p.type !== 'LONG');
+      });
+    } else if (kind === 'withStock') {
+      const newQty = Number(combination.qtyStock) || 0;
+      const newPrice = Number(combination.positions?.[0]?.assetPriceAtEntry) || 0;
+      setPositions(prev => {
+        removedLongPositions = prev.filter(p => p.type === 'LONG');
+        const withoutLong = prev.filter(p => p.type !== 'LONG');
+        if (newQty <= 0) return withoutLong;
+        const template = removedLongPositions[0] || {};
+        const replaced = {
+          ...template,
+          id: `north-gpt-stock-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          type: 'LONG',
+          quantity: newQty,
+          price: newPrice > 0 ? newPrice : (Number(template.price) || 0),
+          visible: true,
+          fromNorthGptStrategy: true,
+        };
+        return [...withoutLong, replaced];
+      });
+    }
+    // Функциональное обновление сохраняет result (его выставил onStateChange до
+    // применения) и корректно фиксирует removedLongPositions для отмены.
+    setNorthGptState(prev => ({ ...(prev || {}), params, removedLongPositions }));
+    setNorthGptDialogOpen(false);
+
+    // Двигаем ползунок «дней» на дату расчёта — как в «Севере».
+    if (params?.calcDate) {
+      const calcDateParsed = parseDateAtStartOfDay(params.calcDate);
+      let baseDate = null;
+      stamped.forEach(opt => {
+        const ed = parseDateAtStartOfDay(opt.entryDate || new Date().toISOString().split('T')[0]);
+        if (ed && (!baseDate || ed < baseDate)) baseDate = ed;
+      });
+      if (calcDateParsed && baseDate) {
+        const diff = Math.round((calcDateParsed.getTime() - baseDate.getTime()) / (1000 * 60 * 60 * 24));
+        const clamped = Math.max(0, diff);
+        setDaysPassed(clamped);
+        setUserAdjustedDays(true);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleCancelNorthGptSelection = useCallback(() => {
+    setOptions(prev => prev.filter(o => !o.fromNorthGptStrategy));
+    setPositions(prev => prev.filter(p => !p.fromNorthGptStrategy));
+    setNorthGptState(prev => {
+      const removed = prev?.removedLongPositions;
+      if (Array.isArray(removed) && removed.length > 0) {
+        setPositions(curr => [...curr, ...removed]);
+      }
+      if (!prev) return prev;
+      return { ...prev, removedLongPositions: [] };
+    });
+  }, []);
+
   const handleSaveStrategy = () => {
     if (strategyName.trim() && strategyComment.trim()) {
       try {
@@ -4769,6 +4871,11 @@ function UniversalOptionsCalculator() {
                       northActive={northActive}
                       onReopenNorthResults={handleReopenNorthResults}
                       onCancelNorthSelection={handleCancelNorthSelection}
+                      onOpenNorthGptStrategy={handleOpenNorthGptStrategy}
+                      canShowNorthGptButton={canShowNorthGptButton}
+                      northGptActive={northGptActive}
+                      onReopenNorthGptResults={handleReopenNorthGptResults}
+                      onCancelNorthGptSelection={handleCancelNorthGptSelection}
                     />
                   ) : (
                     <div className="w-full h-[80px] flex items-center justify-center text-muted-foreground text-sm">
@@ -4941,6 +5048,30 @@ function UniversalOptionsCalculator() {
           onClose={() => setNorthDialogOpen(false)}
           onApply={handleApplyNorthCombination}
           onStateChange={handleNorthStateChange}
+        />
+
+        <NorthGptStrategyDialog
+          isOpen={northGptDialogOpen}
+          initialStep={northGptDialogStep}
+          currentPrice={currentPrice}
+          entryPrice={longPositionsEntry?.price || currentPrice}
+          assetQuantity={longPositionsEntry?.quantity || 0}
+          leverage={baseAssetLeverage}
+          ivSurface={ivSurface}
+          calculatorMode={calculatorMode}
+          dividendYield={useDividends ? dividendYield : 0}
+          stockClassification={null}
+          ticker={selectedTicker}
+          tradingViewUrl={selectedTicker ? (() => {
+            const fmt = (d) => `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}${String(d.getUTCDate()).padStart(2, '0')}`;
+            const today = new Date();
+            const to = new Date(today.getTime() + 150 * 24 * 60 * 60 * 1000);
+            return `${getTradingViewLink(selectedTicker, extensionTicker ? extensionExchange : null)}&series_date_from=${fmt(today)}&series_date_to=${fmt(to)}&strikes_filter_condition=all`;
+          })() : null}
+          initialState={northGptState}
+          onClose={() => setNorthGptDialogOpen(false)}
+          onApply={handleApplyNorthGptCombination}
+          onStateChange={handleNorthGptStateChange}
         />
 
         {/* Диалог сохранения в БД (единственный режим сохранения)

@@ -13,6 +13,7 @@ class AIProvider(Enum):
     """Доступные AI провайдеры"""
     GEMINI = "gemini"
     CLAUDE = "claude"
+    OPENAI = "openai"  # ЗАЧЕМ: ChatGPT для стратегии «Север GPT» (подбор через отдельный эндпоинт)
 
 
 class AIAnalyzer:
@@ -40,6 +41,12 @@ class AIAnalyzer:
             from .claude_client import ClaudeClient
             self.client = ClaudeClient()
             print(f"🟣 Claude client initialized in {time.time() - client_start:.2f}s")
+        elif self.provider == AIProvider.OPENAI:
+            # ЗАЧЕМ: OpenAI используется стратегией «Север GPT» через отдельный
+            # эндпоинт (select_combinations). Общий analyze() здесь не применяется.
+            from .openai_client import OpenAIClient
+            self.client = OpenAIClient()
+            print(f"🟢 OpenAI client initialized in {time.time() - client_start:.2f}s")
         
         print(f"🤖 AIAnalyzer total init time: {time.time() - init_start:.2f}s")
     

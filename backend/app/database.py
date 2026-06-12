@@ -88,6 +88,7 @@ def init_db():
     from app.models import saved_configuration  # Import saved configurations
     from app.models import futures_setting  # Import shared futures settings
     from app.models import etf_setting  # Import shared ETF settings
+    from app.models import north_gpt_prompt  # Import «Север GPT» prompts
     Base.metadata.create_all(bind=engine)
 
     # ЗАЧЕМ: Сидинг таблицы etf_settings при первом запуске —

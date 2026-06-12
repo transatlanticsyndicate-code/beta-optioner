@@ -7,6 +7,8 @@ import { sendRefreshSpecificCommand } from '../../hooks/useExtensionData';
 import { SuperButton, SuperSelectionModal } from './SuperSelection';
 import NorthButton from './NorthStrategy/NorthButton';
 import NorthBadge from './NorthStrategy/NorthBadge';
+import NorthGptButton from './NorthGptStrategy/NorthGptButton';
+import NorthGptBadge from './NorthGptStrategy/NorthGptBadge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -104,7 +106,13 @@ function OptionsTableV3({
   canShowNorthButton = false, // Показывать ли кнопку (есть лонг по БА, нет опционов)
   northActive = false, // Показывать ли бейдж "Подобрано стратегией СЕВЕР"
   onReopenNorthResults = null, // Вернуться к экрану результатов (без перезапуска анализа)
-  onCancelNorthSelection = null // Отменить подбор: удалить опционы стратегии
+  onCancelNorthSelection = null, // Отменить подбор: удалить опционы стратегии
+  // Стратегия СЕВЕР GPT: ИИ-подбор через ChatGPT (параллельно «Северу»)
+  onOpenNorthGptStrategy = null,
+  canShowNorthGptButton = false,
+  northGptActive = false,
+  onReopenNorthGptResults = null,
+  onCancelNorthGptSelection = null
 }) {
   // DEBUG: Логирование параметров для отладки сохранения конфигурации из БД
   React.useEffect(() => {
@@ -593,11 +601,20 @@ function OptionsTableV3({
               onCancel={onCancelNorthSelection}
             />
           )}
+          {northGptActive && (
+            <NorthGptBadge
+              onReopenResults={onReopenNorthGptResults}
+              onCancel={onCancelNorthGptSelection}
+            />
+          )}
         </div>
         <div className="flex items-center gap-2">
           {/* Кнопка "Стратегия СЕВЕР" — слева от Save */}
           {canShowNorthButton && onOpenNorthStrategy && (
             <NorthButton onClick={onOpenNorthStrategy} />
+          )}
+          {canShowNorthGptButton && onOpenNorthGptStrategy && (
+            <NorthGptButton onClick={onOpenNorthGptStrategy} />
           )}
 
           {/* Супер кнопка для расширенного подбора опционов */}
