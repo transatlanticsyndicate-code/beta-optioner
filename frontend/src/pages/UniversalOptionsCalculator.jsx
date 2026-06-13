@@ -2811,8 +2811,17 @@ function UniversalOptionsCalculator() {
   const [northGptState, setNorthGptState] = useState(null);
 
   const northGptActive = useMemo(() => options.some(o => o.fromNorthGptStrategy), [options]);
-  // Кнопка «Север GPT» показывается при тех же условиях, что и «Север».
-  const canShowNorthGptButton = canShowNorthButton;
+  // Кнопка «Север GPT» — те же условия, что и «Север», НО дополнительно доступна
+  // на крипте (источник цепочки — Binance через Options Bridge). Старый
+  // математический «Север» на крипте не включаем — отсюда отдельный мемо.
+  const canShowNorthGptButton = useMemo(() => (
+    (calculatorMode === CALCULATOR_MODES.STOCKS ||
+      calculatorMode === CALCULATOR_MODES.ETF ||
+      calculatorMode === CALCULATOR_MODES.CRYPTO) &&
+    !!longPositionsEntry &&
+    options.filter(o => o.visible !== false).length === 0 &&
+    Number(currentPrice) > 0
+  ), [calculatorMode, longPositionsEntry, options, currentPrice]);
 
   const handleOpenNorthGptStrategy = useCallback(() => {
     setNorthGptDialogStep('params');
@@ -5062,7 +5071,7 @@ function UniversalOptionsCalculator() {
           dividendYield={useDividends ? dividendYield : 0}
           stockClassification={null}
           ticker={selectedTicker}
-          tradingViewUrl={selectedTicker ? (() => {
+          tradingViewUrl={selectedTicker && calculatorMode !== CALCULATOR_MODES.CRYPTO ? (() => {
             const fmt = (d) => `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}${String(d.getUTCDate()).padStart(2, '0')}`;
             const today = new Date();
             const to = new Date(today.getTime() + 150 * 24 * 60 * 60 * 1000);

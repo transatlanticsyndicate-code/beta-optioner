@@ -83,3 +83,22 @@ def test_compute_cost_with_stock():
     assert c["stockMargin"] == 100 * 145.0
     assert c["marginUsed"] == 100 * 145.0 + 5.2 * 100
     assert 0 < c["stockMarginPct"] < 1
+
+
+def test_compute_cost_crypto_multiplier_one():
+    # Крипто-опционы Binance: контракт = 1 единица, не 100.
+    positions = [{"type": "CALL", "ask": 1200.0, "quantity": 2}]
+    c = compute_cost(positions, qty_stock=0, entry_price=63000.0,
+                     leverage=1.0, contract_multiplier=1)
+    assert c["optionsCost"] == 1200.0 * 1 * 2
+    assert c["marginUsed"] == 2400.0
+
+
+def test_compute_cost_crypto_stock_margin_share():
+    # С базовым активом (BTC): доля актива в марже считается с множителем 1.
+    positions = [{"type": "PUT", "ask": 1000.0, "quantity": 1}]
+    c = compute_cost(positions, qty_stock=1, entry_price=63000.0,
+                     leverage=1.0, contract_multiplier=1)
+    assert c["stockMargin"] == 1 * 63000.0
+    assert c["marginUsed"] == 63000.0 + 1000.0
+    assert 0 < c["stockMarginPct"] < 1

@@ -49,6 +49,31 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  // Стратегия «Север GPT» (крипта): собрать список экспираций из Binance API.
+  // ЗАЧЕМ: поп-ап ждёт tvc_expirations_list. Данные публичные — берём в фоне, без вкладки Binance.
+  if (message.action === 'northInit') {
+    if (self.northChain && typeof self.northChain.buildNorthExpirationsList === 'function') {
+      self.northChain.buildNorthExpirationsList(message.ticker)
+        .then((r) => sendResponse(r))
+        .catch((e) => sendResponse({ ok: false, reason: e.message }));
+    } else {
+      sendResponse({ ok: false, reason: 'northChain module not loaded' });
+    }
+    return true;
+  }
+
+  // Стратегия «Север GPT» (крипта): собрать полную цепочку выбранной экспирации.
+  if (message.action === 'northExpandAndDump') {
+    if (self.northChain && typeof self.northChain.buildNorthFullChain === 'function') {
+      self.northChain.buildNorthFullChain(message.ticker, message.date)
+        .then((r) => sendResponse(r))
+        .catch((e) => sendResponse({ ok: false, reason: e.message }));
+    } else {
+      sendResponse({ ok: false, reason: 'northChain module not loaded' });
+    }
+    return true;
+  }
+
   // Синхронизировать удаление опциона в калькулятор
   if (message.action === 'syncDeleteToCalculator') {
     handleSyncDeleteToCalculator(message, sendResponse);

@@ -582,11 +582,15 @@ export function sendClearSlicesCommand(chartUrl = null) {
  * tvc_expirations_list. Без раскрытия групп — это быстро и подходит для
  * первого открытия поп-апа СЕВЕР.
  */
-export function sendNorthInitCommand({ ticker, tradingViewUrl }) {
+export function sendNorthInitCommand({ ticker, tradingViewUrl, market }) {
   const command = {
     type: 'north_init',
     ticker: ticker || null,
     tradingViewUrl: tradingViewUrl || null,
+    // ЗАЧЕМ market: на странице калькулятора могут одновременно работать два моста —
+    // TradingView (акции) и Binance (крипта). По этому полю каждый берёт только свои
+    // команды и не мешает другому. 'crypto' → Binance, иначе → TradingView.
+    market: market || 'equity',
     timestamp: Date.now(),
     processed: false,
   };
@@ -605,12 +609,14 @@ export function sendNorthInitCommand({ ticker, tradingViewUrl }) {
  * @param {string} [args.ticker] - короткий тикер для поиска уже открытого таба
  * @param {string} [args.tradingViewUrl] - URL опционной страницы TV для создания таба
  */
-export function sendNorthExpandExpirationCommand({ expirationDate, ticker, tradingViewUrl }) {
+export function sendNorthExpandExpirationCommand({ expirationDate, ticker, tradingViewUrl, market }) {
   const command = {
     type: 'north_expand_expiration',
     date: expirationDate,
     ticker: ticker || null,
     tradingViewUrl: tradingViewUrl || null,
+    // См. комментарий market в sendNorthInitCommand: маршрутизация между двумя мостами.
+    market: market || 'equity',
     timestamp: Date.now(),
     processed: false,
   };

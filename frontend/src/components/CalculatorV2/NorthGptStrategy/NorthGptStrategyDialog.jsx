@@ -92,6 +92,18 @@ function NorthGptStrategyDialog({
   onApply,
   onStateChange,
 }) {
+  // Источник данных опционов зависит от режима калькулятора: крипта → Binance
+  // (расширение Options Bridge), иначе → TradingView (Options CP Buttons). От этого
+  // зависят маршрутизация команды (market) и тексты, которые видит пользователь.
+  const isCrypto = calculatorMode === 'crypto';
+  const market = isCrypto ? 'crypto' : 'equity';
+  const sourceLabel = isCrypto ? 'Binance' : 'TradingView';
+  const extLabel = isCrypto ? 'Options Bridge' : 'Options CP Buttons';
+  // У крипты нет премаркета/выходных — биржа 24/7, поэтому формулировка иная.
+  const noQuotesMessage = isCrypto
+    ? 'Binance сейчас не отдаёт котировки Bid/Ask по опционам этой экспирации. Попробуйте другую экспирацию или повторите позже.'
+    : 'TradingView сейчас не показывает котировки Bid/Ask по опционам — скорее всего биржа ещё закрыта (премаркет / выходной). Попробуйте после открытия торгов.';
+
   const [step, setStep] = useState(initialStep);
   const [params, setParams] = useState(initialState?.params || null);
   const [result, setResult] = useState(initialState?.result || null);
@@ -129,7 +141,7 @@ function NorthGptStrategyDialog({
     expirationsStartedAt.current = openedAt;
     setAvailableExpirations([]);
     setExpirationsStatus('loading');
-    setExpirationsMessage('Открываем TradingView и считываем список экспираций...');
+    setExpirationsMessage(`Открываем ${sourceLabel} и считываем список экспираций...`);
 
     const normalizedTicker = (ticker || '').toUpperCase();
     const tryConsume = () => {
@@ -145,7 +157,7 @@ function NorthGptStrategyDialog({
       return true;
     };
 
-    sendNorthInitCommand({ ticker, tradingViewUrl });
+    sendNorthInitCommand({ ticker, tradingViewUrl, market });
 
     const interval = setInterval(() => {
       if (tryConsume()) {
@@ -156,7 +168,7 @@ function NorthGptStrategyDialog({
         clearInterval(interval);
         setExpirationsStatus('error');
         setExpirationsMessage(
-          'Не получили список экспираций от TradingView. Проверь, что расширение Options CP Buttons обновлено и не блокируется браузером.',
+          `Не получили список экспираций от ${sourceLabel}. Проверь, что расширение ${extLabel} обновлено и не блокируется браузером.`,
         );
       }
     }, POLL_INTERVAL_MS);
@@ -234,10 +246,10 @@ function NorthGptStrategyDialog({
     setParams(formParams);
     lastParamsRef.current = formParams;
     setIsAnalyzing(true);
-    setAnalyzeMessage('Разворачиваем экспирацию в TradingView и читаем цепочку...');
+    setAnalyzeMessage(`Разворачиваем экспирацию в ${sourceLabel} и читаем цепочку...`);
 
     const targetIso = formParams.expirationDate;
-    sendNorthExpandExpirationCommand({ expirationDate: targetIso, ticker, tradingViewUrl });
+    sendNorthExpandExpirationCommand({ expirationDate: targetIso, ticker, tradingViewUrl, market });
 
     const startedAt = Date.now();
     const interval = setInterval(() => {
@@ -249,9 +261,7 @@ function NorthGptStrategyDialog({
           setIsAnalyzing(false);
           setAnalyzeMessage('');
           setExpirationsStatus('error');
-          setExpirationsMessage(
-            'TradingView сейчас не показывает котировки Bid/Ask по опционам — скорее всего биржа ещё закрыта (премаркет / выходной). Попробуйте после открытия торгов.',
-          );
+          setExpirationsMessage(noQuotesMessage);
           return;
         }
       }
@@ -274,9 +284,7 @@ function NorthGptStrategyDialog({
         const hasExpList = !!list && Array.isArray(list.expirations) && list.expirations.length > 0;
         const hasChain = !!chainData && Array.isArray(chainData.options) && chainData.options.length > 0;
         if (hasExpList && !hasChain) {
-          setExpirationsMessage(
-            'TradingView сейчас не показывает котировки Bid/Ask по опционам — скорее всего биржа ещё закрыта (премаркет / выходной). Попробуйте после открытия торгов.',
-          );
+          setExpirationsMessage(noQuotesMessage);
         } else {
           setExpirationsMessage(`Не удалось получить опционы для экспирации ${targetIso}.`);
         }
@@ -299,7 +307,7 @@ function NorthGptStrategyDialog({
     setAvailableExpirations([]);
     setExpirationsStatus('loading');
     setExpirationsMessage('Перечитываем список экспираций...');
-    sendNorthInitCommand({ ticker, tradingViewUrl });
+    sendNorthInitCommand({ ticker, tradingViewUrl, market });
 
     const normalizedTicker = (ticker || '').toUpperCase();
     const tryConsume = () => {
@@ -323,7 +331,11 @@ function NorthGptStrategyDialog({
       if (Date.now() - expirationsStartedAt.current > EXPIRATIONS_TIMEOUT_MS) {
         clearInterval(interval);
         setExpirationsStatus('error');
-        setExpirationsMessage('Список экспираций так и не пришёл. Открой в TradingView таблицу опционов нужного тикера.');
+        setExpirationsMessage(
+          isCrypto
+            ? 'Список экспираций так и не пришёл. Проверь, что расширение Options Bridge установлено и включено.'
+            : 'Список экспираций так и не пришёл. Открой в TradingView таблицу опционов нужного тикера.',
+        );
       }
     }, POLL_INTERVAL_MS);
   };
@@ -362,7 +374,7 @@ function NorthGptStrategyDialog({
             {isAnalyzing ? (
               <span>{analyzeMessage || 'Подбираем комбинации…'}</span>
             ) : (
-              <span>{expirationsMessage || 'Ожидаем список экспираций от TradingView...'}</span>
+              <span>{expirationsMessage || `Ожидаем список экспираций от ${sourceLabel}...`}</span>
             )}
           </div>
         )}
@@ -372,7 +384,7 @@ function NorthGptStrategyDialog({
             <div className="flex items-start gap-2 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800">
               <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
               <div>
-                <div className="font-medium">Не удалось получить данные из TradingView</div>
+                <div className="font-medium">{`Не удалось получить данные из ${sourceLabel}`}</div>
                 {expirationsMessage && <div className="text-xs mt-1">{expirationsMessage}</div>}
                 <div className="text-xs mt-2 text-red-700">
                   Проверьте, что расширение установлено, включено и обновлено в <code className="text-[11px] bg-red-100 px-1 rounded">chrome://extensions</code>. Блокировщики рекламы или режим инкогнито временно отключите.

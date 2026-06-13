@@ -113,9 +113,14 @@ def validate_combination(legs, stock_quantity, chain_index, ranges):
             "qtyStock": qty_stock, "errors": errors}
 
 
-def compute_cost(positions, qty_stock, entry_price, leverage):
-    """Стоимость/маржин комбинации (как в «Севере»: опционы по ask*100)."""
-    options_cost = sum(float(p["ask"]) * 100 * int(p["quantity"]) for p in positions)
+def compute_cost(positions, qty_stock, entry_price, leverage, contract_multiplier=100):
+    """
+    Стоимость/маржин комбинации (как в «Севере»: опционы по ask * множитель контракта).
+    ЗАЧЕМ contract_multiplier: для акций/ETF контракт = 100 единиц базового актива,
+    для крипты (Binance) = 1. Без этого стоимость опционов и доля актива в марже
+    считались бы для крипты в 100 раз неверно. Дефолт 100 — обратная совместимость.
+    """
+    options_cost = sum(float(p["ask"]) * contract_multiplier * int(p["quantity"]) for p in positions)
     lev = leverage if leverage and leverage > 0 else 1.0
     stock_margin = (qty_stock * entry_price) / lev if qty_stock and entry_price else 0
     margin_used = stock_margin + options_cost

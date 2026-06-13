@@ -246,6 +246,15 @@ def _fill_prompt_placeholders(prompt, c):
     return out
 
 
+def _contract_multiplier(context):
+    """
+    Множитель контракта по режиму калькулятора: крипта (Binance) = 1, иначе = 100.
+    ЗАЧЕМ: опционы на акции/ETF — это 100 единиц базового актива, крипто-опционы Binance — 1.
+    """
+    mode = (context.get("calculatorMode") or "").lower()
+    return 1 if mode == "crypto" else 100
+
+
 def _build_block(combo, chain_index, ranges, context):
     """Собрать один блок ответа: валидация ног + стоимость + режим."""
     combo = combo or {}
@@ -259,7 +268,8 @@ def _build_block(combo, chain_index, ranges, context):
                 "rationale": rationale}
     cost = validator.compute_cost(
         res["positions"], res["qtyStock"],
-        context.get("entryPrice"), context.get("leverage", 1.0))
+        context.get("entryPrice"), context.get("leverage", 1.0),
+        _contract_multiplier(context))
     kind = "withStock" if res["qtyStock"] > 0 else "optionsOnly"
     return {"kind": kind, "positions": res["positions"], "calls": res["calls"],
             "puts": res["puts"], "qtyStock": res["qtyStock"], "cost": cost,

@@ -5,6 +5,7 @@
 
 importScripts(
   'background/calculator.js',
+  'background/northChain.js',
   'background/messageHandler.js',
   'background/refreshHelpers.js',
   'background/refreshShared.js',

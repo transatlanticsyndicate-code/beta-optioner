@@ -301,6 +301,9 @@ function showConnectionLostNotification() {
     try {
       const command = JSON.parse(commandJson);
       if (command.processed) return;
+      // Крипту обрабатывает расширение Binance. Выходим НЕ помечая processed,
+      // чтобы Binance-мост увидел команду необработанной и собрал доску из Binance API.
+      if (command.market === 'crypto') return;
       command.processed = true;
       localStorage.setItem('tvc_north_command', JSON.stringify(command));
 
@@ -668,6 +671,20 @@ function showConnectionLostNotification() {
     return true;
   });
   
+  // Не перезаписываем в localStorage более свежий объект более старым.
+  // ЗАЧЕМ: на странице калькулятора может одновременно работать второй мост (Binance,
+  // для крипты), который синкает те же ключи. Сравнение по timestamp не даёт устаревшей
+  // копии из «чужого» расширения затереть только что собранную свежую цепочку.
+  function incomingIsNewer(key, incoming) {
+    try {
+      const cur = JSON.parse(localStorage.getItem(key) || 'null');
+      if (cur && cur.timestamp && incoming && incoming.timestamp) {
+        return incoming.timestamp > cur.timestamp;
+      }
+    } catch (e) {}
+    return true;
+  }
+
   // Синхронизировать tvc_full_chain из расширения в localStorage калькулятора
   function syncFullChain() {
     if (!chrome.runtime?.id) return;
@@ -680,7 +697,7 @@ function showConnectionLostNotification() {
       const currentData = localStorage.getItem('tvc_full_chain');
       const newData = JSON.stringify(fullChain);
 
-      if (currentData !== newData) {
+      if (currentData !== newData && incomingIsNewer('tvc_full_chain', fullChain)) {
         localStorage.setItem('tvc_full_chain', newData);
         // Триггерим событие для React
         window.dispatchEvent(new StorageEvent('storage', {
@@ -704,7 +721,7 @@ function showConnectionLostNotification() {
       const currentData = localStorage.getItem('tvc_expirations_list');
       const newData = JSON.stringify(list);
 
-      if (currentData !== newData) {
+      if (currentData !== newData && incomingIsNewer('tvc_expirations_list', list)) {
         localStorage.setItem('tvc_expirations_list', newData);
         window.dispatchEvent(new StorageEvent('storage', {
           key: 'tvc_expirations_list',
