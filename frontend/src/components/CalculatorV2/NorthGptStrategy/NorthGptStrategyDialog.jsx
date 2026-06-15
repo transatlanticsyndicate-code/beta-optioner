@@ -410,6 +410,7 @@ function NorthGptStrategyDialog({
             currentPrice={currentPrice}
             entryPrice={entryPrice}
             leverage={leverage}
+            calculatorMode={calculatorMode}
             availableExpirations={availableExpirations}
             initialValues={params || undefined}
             onAnalyze={handleAnalyze}

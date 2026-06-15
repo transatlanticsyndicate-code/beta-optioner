@@ -14,6 +14,7 @@ import { Label } from '../../ui/label';
 import { Save, RefreshCw, Pencil, Trash2 } from 'lucide-react';
 import { DEFAULT_NORTH_GPT_PROMPT } from './northGptConstants';
 import { getPrompts, createPrompt, updatePrompt, deletePrompt } from '../../../services/northGptApi';
+import { getNorthGptDefaults } from '../../../utils/strategyDefaults';
 
 const toNum = (v) => {
   const n = parseFloat(v);
@@ -48,6 +49,7 @@ function NorthGptParamsForm({
   currentPrice,
   entryPrice,
   leverage,
+  calculatorMode,
   availableExpirations,
   initialValues,
   onAnalyze,
@@ -56,9 +58,14 @@ function NorthGptParamsForm({
   const basePrice = entryPrice || currentPrice || 0;
 
   const defaults = useMemo(() => {
+    // Значения по умолчанию из настроек сайта (/settings?section=defaults) —
+    // отдельный набор для акций и для крипты, выбирается по режиму калькулятора.
+    // Применяются при «чистом» открытии; если форма восстанавливается из
+    // initialValues (прошлый запуск) — приоритет у них.
+    const ud = getNorthGptDefaults(calculatorMode);
     const top = round2(initialValues?.topPrice ?? basePrice * 1.30);
     const bottom = round2(initialValues?.bottomPrice ?? basePrice * 0.85);
-    const calcDate = initialValues?.calcDate ?? isoFromOffsetDays(30);
+    const calcDate = initialValues?.calcDate ?? isoFromOffsetDays(ud.calcDays);
     return {
       // Точка входа: по умолчанию — обнаруженная по позиции (или текущая цена),
       // но пользователь может переписать (вход может отличаться от текущей цены).
@@ -67,18 +74,18 @@ function NorthGptParamsForm({
       bottomPrice: bottom,
       expirationDate: initialValues?.expirationDate ?? '',
       calcDate,
-      // Кол-во дней до даты расчёта (по умолчанию 30); связано с calcDate в обе стороны.
-      calcDays: daysFromIsoDate(calcDate) ?? 30,
+      // Кол-во дней до даты расчёта (дефолт из настроек); связано с calcDate в обе стороны.
+      calcDays: daysFromIsoDate(calcDate) ?? ud.calcDays,
       callStrikeMin: round2(initialValues?.callStrikeMin ?? basePrice),
       callStrikeMax: round2(initialValues?.callStrikeMax ?? top),
       putStrikeMin: round2(initialValues?.putStrikeMin ?? bottom),
       putStrikeMax: round2(initialValues?.putStrikeMax ?? basePrice),
-      plTolerance: initialValues?.plTolerance ?? 200,
-      margin: initialValues?.margin ?? 4000,
-      marginTolerance: initialValues?.marginTolerance ?? 500,
-      minStockMarginPct: initialValues?.minStockMarginPct ?? 40,
+      plTolerance: initialValues?.plTolerance ?? ud.plTolerance,
+      margin: initialValues?.margin ?? ud.margin,
+      marginTolerance: initialValues?.marginTolerance ?? ud.marginTolerance,
+      minStockMarginPct: initialValues?.minStockMarginPct ?? ud.minStockMarginPct,
     };
-  }, [basePrice, initialValues]);
+  }, [basePrice, initialValues, calculatorMode]);
 
   const [entry, setEntry] = useState(defaults.entry);
   const [top, setTop] = useState(defaults.topPrice);

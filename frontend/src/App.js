@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { syncFuturesSettingsFromServer } from './utils/futuresSettings';
 import { syncEtfSettingsFromServer } from './utils/etfSettings';
+import { syncStrategyDefaultsFromServer } from './utils/strategyDefaults';
 import LayoutWithSidebar from './components/Layout/LayoutWithSidebar';
 import ProtectedRoute from './components/ProtectedRoute';
 import OptionsAnalyzer from './pages/OptionsAnalyzer';
@@ -27,6 +28,8 @@ function App() {
   useEffect(() => {
     syncFuturesSettingsFromServer();
     syncEtfSettingsFromServer();
+    // Значения по умолчанию для экранов подбора «Север» / «Север GPT».
+    syncStrategyDefaultsFromServer();
   }, []);
 
   return (

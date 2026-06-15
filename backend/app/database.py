@@ -90,6 +90,7 @@ def init_db():
     from app.models import etf_setting  # Import shared ETF settings
     from app.models import north_gpt_prompt  # Import «Север GPT» prompts
     from app.models import crypto_app_state  # Import crypto cloud state
+    from app.models import strategy_default_setting  # Import «Север»/«Север GPT» defaults
     Base.metadata.create_all(bind=engine)
 
     # ЗАЧЕМ: Сидинг таблицы etf_settings при первом запуске —

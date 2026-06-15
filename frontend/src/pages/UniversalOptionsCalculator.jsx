@@ -2692,14 +2692,10 @@ function UniversalOptionsCalculator() {
 
   const northActive = useMemo(() => options.some(o => o.fromNorthStrategy), [options]);
 
-  // Кнопка СЕВЕР: режим Акции или ETF, есть лонг по БА, нет ни одного видимого опциона, цена БА известна.
-  // В v2-corrected анализатор сам гонит оба варианта (актив+опционы и только опционы) на одной и той же позиции.
-  const canShowNorthButton = useMemo(() => (
-    (calculatorMode === CALCULATOR_MODES.STOCKS || calculatorMode === CALCULATOR_MODES.ETF) &&
-    !!longPositionsEntry &&
-    options.filter(o => o.visible !== false).length === 0 &&
-    Number(currentPrice) > 0
-  ), [calculatorMode, longPositionsEntry, options, currentPrice]);
+  // Классическая (математическая) стратегия «Север» выведена из использования —
+  // её кнопка скрыта (нужен только «Север GPT»). Флаг оставлен = false, чтобы не
+  // показывать кнопку; сам код стратегии не удаляем.
+  const canShowNorthButton = false;
 
   // Список экспираций и сама цепочка опционов теперь запрашиваются внутри
   // NorthStrategyDialog напрямую у расширения (refresh_range), чтобы данные
