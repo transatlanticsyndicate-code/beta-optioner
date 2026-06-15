@@ -18,6 +18,21 @@ export class FinancialActions {
                 break;
             }
 
+            case FinancialActionType.UPDATE_TRANSACTION: {
+                // Заменяем запись на месте по id, чтобы она сохранила свою позицию в списке
+                const updated = payload as FinancialEntry;
+                const idx = financial.transactions.findIndex(t => t.id === updated.id);
+                if (idx >= 0) {
+                    financial.transactions = [
+                        ...financial.transactions.slice(0, idx),
+                        updated,
+                        ...financial.transactions.slice(idx + 1)
+                    ];
+                    hasChanges = true;
+                }
+                break;
+            }
+
             case FinancialActionType.DELETE_TRANSACTION: {
                 const id = payload as string;
                 financial.transactions = financial.transactions.filter(t => t.id !== id);

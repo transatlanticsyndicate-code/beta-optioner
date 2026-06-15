@@ -511,12 +511,14 @@ button.cancel-btn:hover {
 }
 
 /* Инпуты внутри строки в режиме редактирования */
-tr.weekly-row-editing td {
+tr.weekly-row-editing td,
+tr.fin-row-editing td {
     padding-top: 4px;
     padding-bottom: 4px;
 }
 
-input.weekly-edit-input {
+input.weekly-edit-input,
+input.fin-edit-input {
     width: 100%;
     box-sizing: border-box;
     padding: 4px 6px;
@@ -528,11 +530,32 @@ input.weekly-edit-input {
     text-align: right;
 }
 
-input.weekly-edit-input[type="date"] {
+input.weekly-edit-input[type="date"],
+input.fin-edit-input[type="date"] {
     text-align: left;
 }
 
-input.weekly-edit-input:focus {
+/* Выпадающий список категории и текстовое примечание — выравнивание влево */
+select.fin-edit-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 4px 6px;
+    font-size: 0.9em;
+    font-family: var(--font-mono);
+    background: var(--input-bg, var(--btn-bg));
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    text-align: left;
+}
+
+input.fin-edit-input[type="text"] {
+    text-align: left;
+}
+
+input.weekly-edit-input:focus,
+input.fin-edit-input:focus,
+select.fin-edit-input:focus {
     outline: none;
     border-color: var(--accent-color);
 }
