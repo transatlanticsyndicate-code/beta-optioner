@@ -5042,11 +5042,11 @@ function UniversalOptionsCalculator() {
           stockClassification={null}
           ticker={selectedTicker}
           tradingViewUrl={selectedTicker ? (() => {
-            // Окно дат для TV: сегодня → +150 дней. Гарантирует, что в таблице будут
+            // Окно дат для TV: сегодня → +180 дней. Гарантирует, что в таблице будут
             // и серии вокруг +60 дней (дефолт для СЕВЕР), и соседние справа.
             const fmt = (d) => `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}${String(d.getUTCDate()).padStart(2, '0')}`;
             const today = new Date();
-            const to = new Date(today.getTime() + 150 * 24 * 60 * 60 * 1000);
+            const to = new Date(today.getTime() + 180 * 24 * 60 * 60 * 1000);
             return `${getTradingViewLink(selectedTicker, extensionTicker ? extensionExchange : null)}&series_date_from=${fmt(today)}&series_date_to=${fmt(to)}&strikes_filter_condition=all`;
           })() : null}
           initialState={northState}
@@ -5068,9 +5068,10 @@ function UniversalOptionsCalculator() {
           stockClassification={null}
           ticker={selectedTicker}
           tradingViewUrl={selectedTicker && calculatorMode !== CALCULATOR_MODES.CRYPTO ? (() => {
+            // Окно дат для TV: сегодня → +180 дней (синхронно с фильтром "Next 6 months").
             const fmt = (d) => `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}${String(d.getUTCDate()).padStart(2, '0')}`;
             const today = new Date();
-            const to = new Date(today.getTime() + 150 * 24 * 60 * 60 * 1000);
+            const to = new Date(today.getTime() + 180 * 24 * 60 * 60 * 1000);
             return `${getTradingViewLink(selectedTicker, extensionTicker ? extensionExchange : null)}&series_date_from=${fmt(today)}&series_date_to=${fmt(to)}&strikes_filter_condition=all`;
           })() : null}
           initialState={northGptState}

@@ -6,8 +6,8 @@
  * 2. По команде разворачивает указанную группу экспирации (если свёрнута),
  *    ждёт появления строк и зовёт dumpFullChain() — это пишет полную цепочку
  *    в chrome.storage.local.tvc_full_chain, откуда её читает калькулятор.
- * 3. Перед раскрытием убеждается, что в фильтрах стоит "Next 90 days" и
- *    "All strikes" — без них в таблице может быть слишком мало дат/страйков.
+ * 3. Перед раскрытием убеждается, что в фильтрах стоит "Next 6 months" (≈180
+ *    дней) и "All strikes" — без них в таблице может быть слишком мало дат/страйков.
  */
 
 (function () {
@@ -244,19 +244,19 @@
   }
 
   /**
-   * Установить фильтр Expiration → Next 90 days, Strikes → All strikes.
+   * Установить фильтр Expiration → Next 6 months (≈180 дней), Strikes → All strikes.
    * Многократные эвристики, ничего не ломаем при неудаче.
    */
   async function ensureFilters() {
     try {
       await setOneFilter({
         chipKeywords: ['expiration'],
-        valueKeyword: 'next 90 days',
+        valueKeyword: 'next 6 months',
         menuMatchers: [
-          /^next\s+90\s+days$/i,
-          /^next\s+90\b/i,
-          /\bnext\s+90\s+days\b/i,
-          /^90\s+days$/i,
+          /^next\s+6\s+months$/i,
+          /^next\s+6\b/i,
+          /\bnext\s+6\s+months\b/i,
+          /^6\s+months$/i,
         ],
       });
       await setOneFilter({
