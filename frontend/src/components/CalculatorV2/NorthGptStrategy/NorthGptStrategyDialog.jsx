@@ -30,7 +30,12 @@ const EXPIRATIONS_KEY = 'tvc_expirations_list';
 const FULL_CHAIN_KEY = 'tvc_full_chain';
 const POLL_INTERVAL_MS = 600;
 const EXPIRATIONS_TIMEOUT_MS = 35_000;
-const CHAIN_TIMEOUT_MS = 35_000;
+// Ответа расширения на ОДИН разворот экспирации ждём до 20с (внутри расширения
+// разворот может занимать ~12–18с). Если не получилось — повторяем команду:
+// разворот таблицы TradingView идёт DOM-кликами и бывает флэки, особенно когда
+// первая группа уже развёрнута (сбор второй даты в двойном режиме).
+const EXPAND_ATTEMPT_MS = 20_000;
+const MAX_EXPAND_ATTEMPTS = 3;
 
 const readExpirationsList = () => {
   try {
@@ -264,21 +269,22 @@ function NorthGptStrategyDialog({
   };
 
   // Сбор цепочки ОДНОЙ экспирации через расширение. Резолвится массивом строк
-  // этой даты; реджектится с понятным сообщением (нет котировок / таймаут).
+  // этой даты (только с котировками ask>0). Если разворот не удался — повторяет
+  // команду до MAX_EXPAND_ATTEMPTS раз, затем реджектится понятным сообщением.
   const collectChainForExpiration = (targetIso) => new Promise((resolve, reject) => {
-    sendNorthExpandExpirationCommand({ expirationDate: targetIso, ticker, tradingViewUrl, market });
-    const startedAt = Date.now();
-    const interval = setInterval(() => {
-      const raw = readFullChainRaw();
-      if (raw && raw.timestamp && raw.timestamp > startedAt) {
-        const has = Array.isArray(raw.options) && raw.options.some((o) => o && o.date === targetIso);
-        if (!has && Date.now() - raw.timestamp > 2000) {
-          clearInterval(interval);
-          reject(new Error(noQuotesMessage));
-          return;
-        }
-      }
+    let attempt = 0;
+    let attemptStartedAt = 0;
 
+    const sendExpand = () => {
+      attempt += 1;
+      attemptStartedAt = Date.now();
+      sendNorthExpandExpirationCommand({ expirationDate: targetIso, ticker, tradingViewUrl, market });
+    };
+
+    sendExpand();
+
+    const interval = setInterval(() => {
+      // Успех: в цепочке есть целевая дата (расширение дампит только ask>0).
       const chain = readFullChain();
       if (chain && chainHasDate(chain, targetIso)) {
         clearInterval(interval);
@@ -286,13 +292,23 @@ function NorthGptStrategyDialog({
         return;
       }
 
-      if (Date.now() - startedAt > CHAIN_TIMEOUT_MS) {
+      // Свежий дамп без целевой даты (расширение отработало, но не развернуло
+      // её / нет котировок) ИЛИ вышло время попытки → повторяем разворот.
+      const raw = readFullChainRaw();
+      const freshWithoutTarget = raw && raw.timestamp && raw.timestamp > attemptStartedAt
+        && Date.now() - raw.timestamp > 2000
+        && !(Array.isArray(raw.options) && raw.options.some((o) => o && o.date === targetIso));
+      const attemptTimedOut = Date.now() - attemptStartedAt > EXPAND_ATTEMPT_MS;
+
+      if (freshWithoutTarget || attemptTimedOut) {
+        if (attempt < MAX_EXPAND_ATTEMPTS) {
+          sendExpand();
+          return;
+        }
         clearInterval(interval);
         const list = readExpirationsList();
-        const chainData = readFullChain();
         const hasExpList = !!list && Array.isArray(list.expirations) && list.expirations.length > 0;
-        const hasChain = !!chainData && Array.isArray(chainData.options) && chainData.options.length > 0;
-        reject(new Error(hasExpList && !hasChain
+        reject(new Error(hasExpList
           ? noQuotesMessage
           : `Не удалось получить опционы для экспирации ${targetIso}.`));
       }
@@ -312,26 +328,40 @@ function NorthGptStrategyDialog({
       ? `Разворачиваем 2 экспирации в ${sourceLabel} и читаем цепочки...`
       : `Разворачиваем экспирацию в ${sourceLabel} и читаем цепочку...`);
 
-    try {
-      // Цепочки собираем ПОСЛЕДОВАТЕЛЬНО: у расширения один слот команды и одна
-      // ячейка tvc_full_chain. Каждую дату предрасчитываем под её срок ДО объединения.
-      const primaryRows = await collectChainForExpiration(formParams.expirationDate);
-      const combined = precomputeChainPLs(primaryRows, { ...basePlCtx, expirationDate: formParams.expirationDate });
-
-      if (dual) {
-        const altRows = await collectChainForExpiration(formParams.alternativeExpirationDate);
-        const altPrecomputed = precomputeChainPLs(altRows, { ...basePlCtx, expirationDate: formParams.alternativeExpirationDate });
-        combined.push(...altPrecomputed);
-      }
-
-      chainRef.current = combined;
-      runGptSelect(combined, formParams);
-    } catch (err) {
+    const showCollectError = (message) => {
       setIsAnalyzing(false);
       setAnalyzeMessage('');
       setExpirationsStatus('error');
-      setExpirationsMessage(err?.message || 'Не удалось получить опционы.');
+      setExpirationsMessage(message);
+    };
+
+    // Цепочки собираем ПОСЛЕДОВАТЕЛЬНО: у расширения один слот команды и одна
+    // ячейка tvc_full_chain. Каждую дату предрасчитываем под её срок ДО объединения.
+    let combined;
+    try {
+      const primaryRows = await collectChainForExpiration(formParams.expirationDate);
+      combined = precomputeChainPLs(primaryRows, { ...basePlCtx, expirationDate: formParams.expirationDate });
+    } catch (err) {
+      showCollectError(err?.message || 'Не удалось получить опционы.');
+      return;
     }
+
+    if (dual) {
+      try {
+        const altRows = await collectChainForExpiration(formParams.alternativeExpirationDate);
+        combined.push(...precomputeChainPLs(altRows, { ...basePlCtx, expirationDate: formParams.alternativeExpirationDate }));
+      } catch (err) {
+        // Основная собралась, а альтернативная — нет: сообщаем явно про неё.
+        showCollectError(
+          `Не удалось получить котировки по альтернативной экспирации ${formParams.alternativeExpirationDate}. `
+          + 'Выберите другую альтернативную дату или снимите галочку «Посчитать двойную экспирацию».',
+        );
+        return;
+      }
+    }
+
+    chainRef.current = combined;
+    runGptSelect(combined, formParams);
   };
 
   // «Подобрать заново» — на уже собранной цепочке, без расширения.
