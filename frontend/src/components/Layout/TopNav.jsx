@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Bell, Bitcoin } from 'lucide-react';
+import { Bell, Coins } from 'lucide-react';
 import ThemeToggle from '../ThemeToggle';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import OptionsDataIndicator from '../OptionsDataIndicator';
 
 // Тикер крипто-актива для кнопки быстрого старта «+КРИПТО».
-// ЗАЧЕМ: на платформе крипта живёт как USDT-пара (BTCUSDT) — именно её
+// ЗАЧЕМ: на платформе крипта живёт как USDT-пара (ETHUSDT) — именно её
 // детектирует калькулятор как крипто-режим и открывает Binance Options.
-const CRYPTO_QUICKSTART_TICKER = 'BTCUSDT';
+const CRYPTO_QUICKSTART_TICKER = 'ETHUSDT';
 
 /**
  * Проверка, что Универсальный калькулятор сейчас пустой/сброшенный.
@@ -168,9 +168,9 @@ function TopNav() {
             onClick={handleAddCrypto}
             disabled={isStartingCrypto}
             className="h-8 shrink-0 hidden sm:inline-flex bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white font-medium transition-all duration-150 hover:scale-105 active:scale-95"
-            title="Открыть калькулятор в крипто-режиме (BTCUSDT)"
+            title="Открыть калькулятор в крипто-режиме (ETHUSDT)"
           >
-            <Bitcoin className="h-4 w-4 mr-1" />
+            <Coins className="h-4 w-4 mr-1" />
             {isStartingCrypto ? 'Загрузка…' : '+КРИПТО'}
           </Button>
         )}
