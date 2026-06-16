@@ -56,26 +56,44 @@ function Block({ title, block, levels, onApply }) {
 function NorthGptResultsView({ result, levels, onApply, onRequery, onCancel, onBack }) {
   // Служебный просмотр: открыть в новой вкладке полный текст запроса в GPT и сырой ответ.
   const openDebug = () => {
-    const dbg = result?.debug || {};
     const esc = (s) => String(s == null ? '' : s)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const messages = Array.isArray(dbg.messages)
+    const renderMessages = (dbg) => (Array.isArray(dbg?.messages)
       ? dbg.messages.map((m) => `=== ${String(m.role).toUpperCase()} ===\n${m.content}`).join('\n\n')
-      : '— нет данных запроса —';
-    const finalJson = JSON.stringify(
-      { withAsset: result?.withAsset, optionsOnly: result?.optionsOnly }, null, 2,
-    );
+      : '— нет данных запроса —');
+
+    let body;
+    if (result?.dual) {
+      // Двойной режим: по секции на каждую экспирацию (свой запрос/ответ/итог).
+      const section = (title, group, dbg) => (
+        '<h2>' + esc(title) + ' — модель: ' + esc(dbg?.model || '—') + '</h2>'
+        + '<h3>Запрос в GPT</h3><pre>' + esc(renderMessages(dbg)) + '</pre>'
+        + '<h3>Ответ GPT</h3><pre>' + esc(dbg?.rawResponse || '— нет ответа —') + '</pre>'
+        + '<h3>Итог после проверки</h3><pre>'
+        + esc(JSON.stringify({ withAsset: group?.withAsset, optionsOnly: group?.optionsOnly }, null, 2)) + '</pre>'
+      );
+      body = section(`Основная экспирация (${result?.primary?.expirationDate || '—'})`,
+        result?.primary, result?.debug?.primary)
+        + section(`Альтернативная экспирация (${result?.alternative?.expirationDate || '—'})`,
+          result?.alternative, result?.debug?.alternative);
+    } else {
+      const dbg = result?.debug || {};
+      body = '<p class="muted">Модель: ' + esc(dbg.model || '—') + '</p>'
+        + '<h2>1. Запрос в GPT (полностью)</h2><pre>' + esc(renderMessages(dbg)) + '</pre>'
+        + '<h2>2. Ответ GPT (как есть)</h2><pre>' + esc(dbg.rawResponse || '— нет ответа —') + '</pre>'
+        + '<h2>3. Итог после проверки по реальной цепочке</h2><pre>'
+        + esc(JSON.stringify({ withAsset: result?.withAsset, optionsOnly: result?.optionsOnly }, null, 2)) + '</pre>';
+    }
+
     const html = '<!doctype html><html lang="ru"><head><meta charset="utf-8">'
       + '<title>Север GPT — запрос и ответ</title>'
       + '<style>body{font-family:system-ui,Segoe UI,Roboto,sans-serif;margin:24px;background:#0b0b0f;color:#e5e7eb}'
       + 'h1{color:#c084fc;font-size:18px}h2{color:#a855f7;margin:20px 0 8px}'
+      + 'h3{color:#9333ea;margin:14px 0 6px;font-size:14px}'
       + 'pre{white-space:pre-wrap;word-break:break-word;background:#15151c;padding:12px;border-radius:8px;border:1px solid #2a2a35;font-size:12px;line-height:1.5}'
       + '.muted{color:#9ca3af;font-size:12px}</style></head><body>'
       + '<h1>Север GPT — отладка</h1>'
-      + '<p class="muted">Модель: ' + esc(dbg.model || '—') + '</p>'
-      + '<h2>1. Запрос в GPT (полностью)</h2><pre>' + esc(messages) + '</pre>'
-      + '<h2>2. Ответ GPT (как есть)</h2><pre>' + esc(dbg.rawResponse || '— нет ответа —') + '</pre>'
-      + '<h2>3. Итог после проверки по реальной цепочке</h2><pre>' + esc(finalJson) + '</pre>'
+      + body
       + '</body></html>';
     const w = window.open('', '_blank');
     if (w && w.document) {
@@ -84,8 +102,17 @@ function NorthGptResultsView({ result, levels, onApply, onRequery, onCancel, onB
     }
   };
 
+  // Пара блоков (с активом / без) для одной группы — используется и в одиночном,
+  // и в двойном режиме.
+  const renderPair = (group) => (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <Block title="Актив + опционы" block={group?.withAsset} levels={levels} onApply={onApply} />
+      <Block title="Только опционы" block={group?.optionsOnly} levels={levels} onApply={onApply} />
+    </div>
+  );
+
   // Полный провал запроса (обе комбинации не получены) — отдельный экран ошибки.
-  if (result?.error && !result?.withAsset && !result?.optionsOnly) {
+  if (result?.error && !result?.withAsset && !result?.optionsOnly && !result?.dual) {
     return (
       <div className="space-y-4 py-2">
         <div className="flex items-start gap-2 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800">
@@ -111,10 +138,25 @@ function NorthGptResultsView({ result, levels, onApply, onRequery, onCancel, onB
 
   return (
     <div className="space-y-4 max-h-[72vh] overflow-y-auto p-1">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Block title="Актив + опционы" block={result?.withAsset} levels={levels} onApply={onApply} />
-        <Block title="Только опционы" block={result?.optionsOnly} levels={levels} onApply={onApply} />
-      </div>
+      {result?.dual ? (
+        <div className="space-y-5">
+          <section className="space-y-2">
+            <div className="text-sm font-semibold border-b pb-1" style={{ color: '#7c3aed' }}>
+              Экспирация {result?.primary?.expirationDate}
+            </div>
+            {renderPair(result?.primary)}
+          </section>
+          <section className="space-y-2">
+            <div className="text-sm font-semibold border-b pb-1" style={{ color: '#7c3aed' }}>
+              Экспирация {result?.alternative?.expirationDate}
+              <span className="ml-1 font-normal text-muted-foreground">(альтернативная)</span>
+            </div>
+            {renderPair(result?.alternative)}
+          </section>
+        </div>
+      ) : (
+        renderPair(result)
+      )}
 
       <div className="flex flex-wrap items-center justify-end gap-2 border-t pt-3">
         {result?.debug && (

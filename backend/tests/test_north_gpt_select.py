@@ -136,6 +136,54 @@ def test_select_forwards_debug(monkeypatch):
     assert len(data["debug"]["messages"]) == 2
 
 
+def test_select_dual_expiration_returns_two_groups(monkeypatch):
+    """Двойная экспирация: две группы (primary/alternative), каждая со своими
+    реальными ценами из цепочки своей даты."""
+    # Цепочка с двумя датами; цены второй даты отличаются — так проверяем, что
+    # каждая группа собрана из строк именно своей экспирации.
+    payload = {
+        **PAYLOAD,
+        "params": {**PAYLOAD["params"], "alternativeExpirationDate": "2026-08-21"},
+        "chain": [
+            *PAYLOAD["chain"],
+            {"type": "CALL", "strike": 150.0, "date": "2026-08-21", "bid": 7.0, "ask": 7.2,
+             "impliedVolatility": 0.3, "delta": 0.5, "gamma": 0.02, "theta": -0.05, "vega": 0.1, "volume": 100},
+            {"type": "PUT", "strike": 140.0, "date": "2026-08-21", "bid": 6.0, "ask": 6.3,
+             "impliedVolatility": 0.32, "delta": -0.4, "gamma": 0.02, "theta": -0.04, "vega": 0.1, "volume": 80},
+        ],
+    }
+    seen = []
+
+    class PerExpirationClient(FakeClient):
+        def select_combinations(self, user_prompt, constraints, chain):
+            seen.append(constraints["expirationDate"])
+            return super().select_combinations(user_prompt, constraints, chain)
+
+    monkeypatch.setattr(ng, "get_openai_client", lambda: PerExpirationClient())
+    data = post_and_wait(payload)
+    assert data["status"] == "success"
+    assert data["dual"] is True
+    assert data["primary"]["expirationDate"] == "2026-07-17"
+    assert data["alternative"]["expirationDate"] == "2026-08-21"
+    # Каждая группа берёт цены из цепочки своей даты (ask 5.2 vs 7.2).
+    assert data["primary"]["withAsset"]["positions"][0]["premium"] == 5.2
+    assert data["alternative"]["withAsset"]["positions"][0]["premium"] == 7.2
+    # Модель вызвана по разу на каждую дату, каждый со своей expirationDate.
+    assert set(seen) == {"2026-07-17", "2026-08-21"}
+    # Отладка содержит обе ветки.
+    assert "primary" in data["debug"] and "alternative" in data["debug"]
+
+
+def test_select_single_mode_unchanged_when_alt_equals_main(monkeypatch):
+    """Альтернативная == основной → одиночный режим (прежняя форма ответа)."""
+    payload = {**PAYLOAD, "params": {**PAYLOAD["params"], "alternativeExpirationDate": "2026-07-17"}}
+    monkeypatch.setattr(ng, "get_openai_client", lambda: FakeClient())
+    data = post_and_wait(payload)
+    assert data["status"] == "success"
+    assert "dual" not in data
+    assert data["withAsset"]["positions"][0]["premium"] == 5.2
+
+
 def test_select_openai_failure_returns_friendly_error(monkeypatch):
     class BrokenClient:
         def select_combinations(self, *a, **k):

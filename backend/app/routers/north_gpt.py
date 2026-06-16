@@ -109,6 +109,9 @@ def touch_prompt(prompt_id: str, db: Session = Depends(get_db)):
 # ============ Pydantic: подбор комбинаций ============
 class NorthGptParams(BaseModel):
     expirationDate: Optional[str] = None
+    # Двойная экспирация: при непустом значении (и отличном от основной даты)
+    # подбор выполняется отдельно ещё и под эту дату — итого четыре варианта.
+    alternativeExpirationDate: Optional[str] = None
     calcDate: Optional[str] = None
     topPrice: Optional[float] = None
     bottomPrice: Optional[float] = None
@@ -293,18 +296,24 @@ def _prune_jobs():
             _JOBS.pop(k, None)
 
 
-def _do_select(req):
-    """Сама работа подбора (выполняется в фоновом потоке). Может бросить исключение."""
+def _select_for_expiration(req, expiration, ctx, ranges):
+    """
+    Подбор двух комбинаций (с активом / без) для ОДНОЙ экспирации.
+    Возвращает {withAsset, optionsOnly, debug}. Цепочка фильтруется по дате —
+    общий плоский список (в двойном режиме содержит обе экспирации) сужается до
+    нужной. Это позволяет переиспользовать логику для каждой даты без изменений.
+    """
     p = req.params
-    ranges = {"call": (p.callStrikeMin, p.callStrikeMax),
-              "put": (p.putStrikeMin, p.putStrikeMax)}
-    ctx = req.context.model_dump()
-    full_chain = _filter_chain(req.chain, p.expirationDate)
+    full_chain = _filter_chain(req.chain, expiration)
     idx = validator.build_chain_index(full_chain, ctx.get("entryPrice"))
     compact = _compact_chain(full_chain)
     # Позиционный контекст (вход, текущая цена, плечо) — иначе ИИ не посчитает
     # P&L всей позиции и размер акции. Тикер намеренно НЕ передаём (обезличенность).
     constraints = p.model_dump()
+    # Этот вызов подбирает строго под свою дату: фиксируем её и убираем
+    # альтернативную, чтобы плейсхолдер {экспирация} и сама модель не путались.
+    constraints["expirationDate"] = expiration
+    constraints.pop("alternativeExpirationDate", None)
     constraints["entryPrice"] = ctx.get("entryPrice")
     constraints["currentPrice"] = ctx.get("currentPrice")
     constraints["leverage"] = ctx.get("leverage")
@@ -316,6 +325,40 @@ def _do_select(req):
         "withAsset": _build_block(result.get("with_asset"), idx, ranges, ctx),
         "optionsOnly": _build_block(result.get("options_only"), idx, ranges, ctx),
         "debug": debug,  # точный запрос и сырой ответ для служебного просмотра
+    }
+
+
+def _do_select(req):
+    """Сама работа подбора (выполняется в фоновом потоке). Может бросить исключение."""
+    p = req.params
+    ranges = {"call": (p.callStrikeMin, p.callStrikeMax),
+              "put": (p.putStrikeMin, p.putStrikeMax)}
+    ctx = req.context.model_dump()
+
+    alt = p.alternativeExpirationDate
+    alt = alt.strip() if isinstance(alt, str) else alt
+    dual = bool(alt) and alt != p.expirationDate
+
+    # Одиночный режим — прежняя форма ответа {withAsset, optionsOnly, debug}.
+    if not dual:
+        return _select_for_expiration(req, p.expirationDate, ctx, ranges)
+
+    # Двойной режим: два независимых подбора (основная + альтернативная дата).
+    # Выполняем ПАРАЛЛЕЛЬНО — каждый вызов gpt-5.5 «думает» минуты, поэтому
+    # параллельность держит общее время на уровне одного подбора. Локальный пул
+    # не конкурирует с основным _EXECUTOR (вызовы сетевые/IO-bound).
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        fut_primary = pool.submit(_select_for_expiration, req, p.expirationDate, ctx, ranges)
+        fut_alt = pool.submit(_select_for_expiration, req, alt, ctx, ranges)
+        primary = fut_primary.result()
+        alternative = fut_alt.result()
+    return {
+        "dual": True,
+        "primary": {"expirationDate": p.expirationDate,
+                    "withAsset": primary["withAsset"], "optionsOnly": primary["optionsOnly"]},
+        "alternative": {"expirationDate": alt,
+                        "withAsset": alternative["withAsset"], "optionsOnly": alternative["optionsOnly"]},
+        "debug": {"primary": primary["debug"], "alternative": alternative["debug"]},
     }
 
 

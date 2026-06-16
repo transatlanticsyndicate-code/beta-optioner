@@ -2826,7 +2826,7 @@ function UniversalOptionsCalculator() {
 
   const handleReopenNorthGptResults = useCallback(() => {
     const cache = northGptState?.result;
-    const hasCache = !!cache && (cache.withAsset || cache.optionsOnly || cache.error);
+    const hasCache = !!cache && (cache.withAsset || cache.optionsOnly || cache.dual || cache.error);
     setNorthGptDialogStep(hasCache ? 'results' : 'params');
     setNorthGptDialogOpen(true);
   }, [northGptState]);

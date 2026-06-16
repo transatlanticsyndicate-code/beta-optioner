@@ -27,7 +27,8 @@ export const requestNorthGptCombination = async ({ params, prompt, chain, contex
     // ...и опрашиваем результат, пока не будет готов.
     const { jobId } = started;
     const POLL_MS = 3000;
-    const MAX_MS = 6 * 60 * 1000; // ждём до 6 минут
+    // Двойная экспирация = два подбора (на бэке параллельно), берём запас по времени.
+    const MAX_MS = 8 * 60 * 1000; // ждём до 8 минут
     const startedAt = Date.now();
     // eslint-disable-next-line no-constant-condition
     while (true) {

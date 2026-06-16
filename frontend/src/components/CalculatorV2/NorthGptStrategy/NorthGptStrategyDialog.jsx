@@ -131,7 +131,8 @@ function NorthGptStrategyDialog({
     if (initialState?.result) setResult(initialState.result);
 
     const hasCache = initialState?.result
-      && (initialState.result.withAsset || initialState.result.optionsOnly || initialState.result.error);
+      && (initialState.result.withAsset || initialState.result.optionsOnly
+        || initialState.result.dual || initialState.result.error);
     if (initialStep === 'results' && hasCache) {
       setExpirationsStatus('done');
       return undefined;
@@ -177,12 +178,27 @@ function NorthGptStrategyDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
-  // Запрос к ChatGPT по уже собранной цепочке.
-  const runGptSelect = async (chainOptions, formParams) => {
+  // Базовый контекст ценообразования (общий для обеих дат; expirationDate
+  // подставляется отдельно для каждой даты — от него зависит P&L опциона).
+  const buildBasePlCtx = (numericParams) => ({
+    entry: numericParams.entryPrice ?? entryPrice,
+    currentPrice,
+    topPrice: numericParams.topPrice,
+    bottomPrice: numericParams.bottomPrice,
+    calcDate: numericParams.calcDate,
+    ivSurface,
+    calculatorMode,
+    dividendYield,
+    stockClassification,
+  });
+
+  // Запрос к ChatGPT по уже собранной (и предрасчитанной) цепочке.
+  // chainForModel — плоский массив строк; в двойном режиме содержит обе экспирации,
+  // у каждой строки уже проставлены plTop/plBottom под её срок.
+  const runGptSelect = async (chainForModel, formParams) => {
     setIsAnalyzing(true);
     setAnalyzeMessage('ChatGPT анализирует цепочку и подбирает комбинацию… это может занять 1–3 минуты.');
     const { prompt, promptId, ...numericParams } = formParams;
-    // Точка входа из формы (пользователь мог переписать); иначе авто-значение.
     const effectiveEntry = numericParams.entryPrice ?? entryPrice;
     const context = {
       entryPrice: effectiveEntry,
@@ -193,22 +209,8 @@ function NorthGptStrategyDialog({
       dividendYield,
       ticker,
     };
-    // Контекст ценообразования: для предрасчёта P&L по страйкам и для итогового enrich.
-    const plCtx = {
-      entry: effectiveEntry,
-      currentPrice,
-      topPrice: numericParams.topPrice,
-      bottomPrice: numericParams.bottomPrice,
-      expirationDate: numericParams.expirationDate,
-      calcDate: numericParams.calcDate,
-      ivSurface,
-      calculatorMode,
-      dividendYield,
-      stockClassification,
-    };
+    const basePlCtx = buildBasePlCtx(numericParams);
     try {
-      // Кладём в цепочку готовые plTop/plBottom — чтобы модель не оценивала опционы сама.
-      const chainForModel = precomputeChainPLs(chainOptions, plCtx);
       const data = await requestNorthGptCombination({
         params: numericParams,
         prompt,
@@ -220,7 +222,26 @@ function NorthGptStrategyDialog({
       let nextResult;
       if (!data || data.status === 'error') {
         nextResult = { error: (data && data.error) || 'ChatGPT не вернул ответ' };
+      } else if (data.dual) {
+        // Двойной режим: обогащаем каждую группу своим plCtx (своя экспирация).
+        const primaryCtx = { ...basePlCtx, expirationDate: numericParams.expirationDate };
+        const altCtx = { ...basePlCtx, expirationDate: numericParams.alternativeExpirationDate };
+        nextResult = {
+          dual: true,
+          primary: {
+            expirationDate: data.primary?.expirationDate || numericParams.expirationDate,
+            withAsset: enrichNorthGptCombination(data.primary?.withAsset, primaryCtx),
+            optionsOnly: enrichNorthGptCombination(data.primary?.optionsOnly, primaryCtx),
+          },
+          alternative: {
+            expirationDate: data.alternative?.expirationDate || numericParams.alternativeExpirationDate,
+            withAsset: enrichNorthGptCombination(data.alternative?.withAsset, altCtx),
+            optionsOnly: enrichNorthGptCombination(data.alternative?.optionsOnly, altCtx),
+          },
+          debug: data.debug || null,
+        };
       } else {
+        const plCtx = { ...basePlCtx, expirationDate: numericParams.expirationDate };
         nextResult = {
           withAsset: enrichNorthGptCombination(data.withAsset, plCtx),
           optionsOnly: enrichNorthGptCombination(data.optionsOnly, plCtx),
@@ -242,15 +263,10 @@ function NorthGptStrategyDialog({
     }
   };
 
-  const handleAnalyze = (formParams) => {
-    setParams(formParams);
-    lastParamsRef.current = formParams;
-    setIsAnalyzing(true);
-    setAnalyzeMessage(`Разворачиваем экспирацию в ${sourceLabel} и читаем цепочку...`);
-
-    const targetIso = formParams.expirationDate;
+  // Сбор цепочки ОДНОЙ экспирации через расширение. Резолвится массивом строк
+  // этой даты; реджектится с понятным сообщением (нет котировок / таймаут).
+  const collectChainForExpiration = (targetIso) => new Promise((resolve, reject) => {
     sendNorthExpandExpirationCommand({ expirationDate: targetIso, ticker, tradingViewUrl, market });
-
     const startedAt = Date.now();
     const interval = setInterval(() => {
       const raw = readFullChainRaw();
@@ -258,10 +274,7 @@ function NorthGptStrategyDialog({
         const has = Array.isArray(raw.options) && raw.options.some((o) => o && o.date === targetIso);
         if (!has && Date.now() - raw.timestamp > 2000) {
           clearInterval(interval);
-          setIsAnalyzing(false);
-          setAnalyzeMessage('');
-          setExpirationsStatus('error');
-          setExpirationsMessage(noQuotesMessage);
+          reject(new Error(noQuotesMessage));
           return;
         }
       }
@@ -269,27 +282,56 @@ function NorthGptStrategyDialog({
       const chain = readFullChain();
       if (chain && chainHasDate(chain, targetIso)) {
         clearInterval(interval);
-        chainRef.current = chain.options;
-        runGptSelect(chain.options, formParams);
+        resolve(chain.options.filter((o) => o && o.date === targetIso));
         return;
       }
 
       if (Date.now() - startedAt > CHAIN_TIMEOUT_MS) {
         clearInterval(interval);
-        setIsAnalyzing(false);
-        setAnalyzeMessage('');
-        setExpirationsStatus('error');
         const list = readExpirationsList();
         const chainData = readFullChain();
         const hasExpList = !!list && Array.isArray(list.expirations) && list.expirations.length > 0;
         const hasChain = !!chainData && Array.isArray(chainData.options) && chainData.options.length > 0;
-        if (hasExpList && !hasChain) {
-          setExpirationsMessage(noQuotesMessage);
-        } else {
-          setExpirationsMessage(`Не удалось получить опционы для экспирации ${targetIso}.`);
-        }
+        reject(new Error(hasExpList && !hasChain
+          ? noQuotesMessage
+          : `Не удалось получить опционы для экспирации ${targetIso}.`));
       }
     }, POLL_INTERVAL_MS);
+  });
+
+  const handleAnalyze = async (formParams) => {
+    setParams(formParams);
+    lastParamsRef.current = formParams;
+    setIsAnalyzing(true);
+
+    const dual = !!formParams.useDoubleExpiration && !!formParams.alternativeExpirationDate
+      && formParams.alternativeExpirationDate !== formParams.expirationDate;
+    const basePlCtx = buildBasePlCtx(formParams);
+
+    setAnalyzeMessage(dual
+      ? `Разворачиваем 2 экспирации в ${sourceLabel} и читаем цепочки...`
+      : `Разворачиваем экспирацию в ${sourceLabel} и читаем цепочку...`);
+
+    try {
+      // Цепочки собираем ПОСЛЕДОВАТЕЛЬНО: у расширения один слот команды и одна
+      // ячейка tvc_full_chain. Каждую дату предрасчитываем под её срок ДО объединения.
+      const primaryRows = await collectChainForExpiration(formParams.expirationDate);
+      const combined = precomputeChainPLs(primaryRows, { ...basePlCtx, expirationDate: formParams.expirationDate });
+
+      if (dual) {
+        const altRows = await collectChainForExpiration(formParams.alternativeExpirationDate);
+        const altPrecomputed = precomputeChainPLs(altRows, { ...basePlCtx, expirationDate: formParams.alternativeExpirationDate });
+        combined.push(...altPrecomputed);
+      }
+
+      chainRef.current = combined;
+      runGptSelect(combined, formParams);
+    } catch (err) {
+      setIsAnalyzing(false);
+      setAnalyzeMessage('');
+      setExpirationsStatus('error');
+      setExpirationsMessage(err?.message || 'Не удалось получить опционы.');
+    }
   };
 
   // «Подобрать заново» — на уже собранной цепочке, без расширения.

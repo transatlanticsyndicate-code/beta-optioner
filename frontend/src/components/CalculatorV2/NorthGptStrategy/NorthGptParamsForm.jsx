@@ -45,6 +45,39 @@ const daysFromIsoDate = (iso) => {
   return Math.round((target - todayUtc) / 86400000);
 };
 
+// Окно из ~7 дат вокруг выбранной (±3 соседа): держим список коротким, но даём
+// шагнуть к соседним экспирациям. Используется и для основной, и для
+// альтернативной даты. Если value нет в списке — центрируем на ближайшей к 60 дням.
+const computeExpirationWindow = (availableExpirations, value) => {
+  const all = Array.isArray(availableExpirations) ? availableExpirations.slice().sort() : [];
+  if (all.length === 0) return [];
+  const NEIGHBORS = 3;
+  let idx = all.indexOf(value);
+  if (idx === -1) {
+    const target = new Date(isoFromOffsetDays(60)).getTime();
+    let bestIdx = 0;
+    let bestDiff = Math.abs(new Date(`${all[0]}T00:00:00Z`).getTime() - target);
+    for (let i = 1; i < all.length; i++) {
+      const diff = Math.abs(new Date(`${all[i]}T00:00:00Z`).getTime() - target);
+      if (diff < bestDiff) { bestIdx = i; bestDiff = diff; }
+    }
+    idx = bestIdx;
+  }
+  let start = Math.max(0, idx - NEIGHBORS);
+  let end = Math.min(all.length, idx + NEIGHBORS + 1);
+  if (idx - start < NEIGHBORS) end = Math.min(all.length, end + (NEIGHBORS - (idx - start)));
+  if (end - 1 - idx < NEIGHBORS) start = Math.max(0, start - (NEIGHBORS - (end - 1 - idx)));
+  return all.slice(start, end);
+};
+
+// Следующая экспирация после current в отсортированном списке ('' если нет).
+const getNextExpiration = (current, availableExpirations) => {
+  const all = Array.isArray(availableExpirations) ? availableExpirations.slice().sort() : [];
+  const idx = all.indexOf(current);
+  if (idx === -1 || idx >= all.length - 1) return '';
+  return all[idx + 1];
+};
+
 function NorthGptParamsForm({
   currentPrice,
   entryPrice,
@@ -91,6 +124,12 @@ function NorthGptParamsForm({
   const [top, setTop] = useState(defaults.topPrice);
   const [bottom, setBottom] = useState(defaults.bottomPrice);
   const [expirationDate, setExpirationDate] = useState(defaults.expirationDate);
+  // Двойная экспирация: чекбокс + альтернативная дата. По умолчанию выключено.
+  // altTouched — пользователь выбрал альтернативную вручную (тогда не
+  // подстраиваем её автоматически под основную).
+  const [useDoubleExpiration, setUseDoubleExpiration] = useState(initialValues?.useDoubleExpiration ?? false);
+  const [altExpirationDate, setAltExpirationDate] = useState(initialValues?.alternativeExpirationDate ?? '');
+  const [altTouched, setAltTouched] = useState(!!initialValues?.alternativeExpirationDate);
   const [calcDate, setCalcDate] = useState(defaults.calcDate);
   const [calcDays, setCalcDays] = useState(defaults.calcDays);
   const [callStrikeMin, setCallStrikeMin] = useState(defaults.callStrikeMin);
@@ -240,27 +279,26 @@ function NorthGptParamsForm({
     setExpirationDate(best);
   }, [availableExpirations, expirationDate]);
 
-  const dropdownExpirations = useMemo(() => {
-    const all = Array.isArray(availableExpirations) ? availableExpirations.slice().sort() : [];
-    if (all.length === 0) return [];
-    const NEIGHBORS = 3;
-    let idx = all.indexOf(expirationDate);
-    if (idx === -1) {
-      const target = new Date(isoFromOffsetDays(60)).getTime();
-      let bestIdx = 0;
-      let bestDiff = Math.abs(new Date(`${all[0]}T00:00:00Z`).getTime() - target);
-      for (let i = 1; i < all.length; i++) {
-        const diff = Math.abs(new Date(`${all[i]}T00:00:00Z`).getTime() - target);
-        if (diff < bestDiff) { bestIdx = i; bestDiff = diff; }
-      }
-      idx = bestIdx;
-    }
-    let start = Math.max(0, idx - NEIGHBORS);
-    let end = Math.min(all.length, idx + NEIGHBORS + 1);
-    if (idx - start < NEIGHBORS) end = Math.min(all.length, end + (NEIGHBORS - (idx - start)));
-    if (end - 1 - idx < NEIGHBORS) start = Math.max(0, start - (NEIGHBORS - (end - 1 - idx)));
-    return all.slice(start, end);
-  }, [availableExpirations, expirationDate]);
+  const dropdownExpirations = useMemo(
+    () => computeExpirationWindow(availableExpirations, expirationDate),
+    [availableExpirations, expirationDate],
+  );
+  const altDropdownExpirations = useMemo(
+    () => computeExpirationWindow(availableExpirations, altExpirationDate || expirationDate),
+    [availableExpirations, altExpirationDate, expirationDate],
+  );
+
+  // Альтернативная дата по умолчанию = следующая после основной. Подстраивается
+  // при смене основной, пока пользователь не выбрал альтернативную вручную.
+  useEffect(() => {
+    if (!useDoubleExpiration || altTouched) return;
+    setAltExpirationDate(getNextExpiration(expirationDate, availableExpirations));
+  }, [useDoubleExpiration, altTouched, expirationDate, availableExpirations]);
+
+  const handleAltChange = (v) => {
+    setAltExpirationDate(v);
+    setAltTouched(true);
+  };
 
   // Удобство: «верх» подтягивает верхнюю границу Call-страйков, «низ» — нижнюю Put.
   // Заодно на blur округляем денежное поле до 2 знаков.
@@ -292,6 +330,14 @@ function NorthGptParamsForm({
   if (toNum(top) <= toNum(entry)) errors.push('Верх должен быть выше точки входа');
   if (toNum(bottom) >= toNum(entry)) errors.push('Низ должен быть ниже точки входа');
   if (!expirationDate) errors.push('Выберите дату экспирации');
+  if (useDoubleExpiration) {
+    if (!altExpirationDate) errors.push('Выберите альтернативную дату экспирации');
+    else if (altExpirationDate === expirationDate) errors.push('Альтернативная дата должна отличаться от основной');
+    else if (Array.isArray(availableExpirations) && availableExpirations.length > 0
+      && !availableExpirations.includes(altExpirationDate)) {
+      errors.push('Альтернативная дата отсутствует в списке экспираций');
+    }
+  }
   if (!calcDate) errors.push('Выберите дату расчёта');
   if (toNum(callStrikeMin) >= toNum(callStrikeMax)) errors.push('Диапазон страйков Call задан некорректно');
   if (toNum(putStrikeMin) >= toNum(putStrikeMax)) errors.push('Диапазон страйков Put задан некорректно');
@@ -308,6 +354,8 @@ function NorthGptParamsForm({
       topPrice: round2(toNum(top)),
       bottomPrice: round2(toNum(bottom)),
       expirationDate,
+      useDoubleExpiration,
+      alternativeExpirationDate: useDoubleExpiration ? altExpirationDate : null,
       calcDate,
       callStrikeMin: round2(toNum(callStrikeMin)),
       callStrikeMax: round2(toNum(callStrikeMax)),
@@ -373,6 +421,30 @@ function NorthGptParamsForm({
                 <option key={d} value={d}>{d}</option>
               ))}
             </select>
+            <label className="mt-2 flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-input"
+                checked={useDoubleExpiration}
+                onChange={(e) => setUseDoubleExpiration(e.target.checked)}
+              />
+              <span className="text-xs">Посчитать двойную экспирацию</span>
+            </label>
+            {useDoubleExpiration && (
+              <div className="mt-2">
+                <Label className="text-xs">Альтернативная дата экспирации</Label>
+                <select
+                  className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
+                  value={altExpirationDate}
+                  onChange={(e) => handleAltChange(e.target.value)}
+                >
+                  <option value="">— выбрать —</option>
+                  {altDropdownExpirations.map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
           <div>
             <Label className="text-xs">Дата расчёта</Label>
