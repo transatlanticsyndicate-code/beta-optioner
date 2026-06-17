@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Trash2, Edit2, Check, X } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -12,33 +12,33 @@ import {
   TableRow,
 } from '../../components/ui/table';
 
-// ЗАЧЕМ: Полный список фьючерсов и его загрузка/сохранение берутся из единого
-// источника правды (frontend/src/utils/futuresSettings.js).
-// - loadFuturesSettings — миграция старых записей (если в localStorage нет
-//   новых полей, подмерживает из дефолтов).
-// - syncFuturesSettingsFromServer — подтягивает свежие значения с сервера
-//   (источник правды — backend). Вызывается на старте страницы, чтобы
-//   увидеть правки, которые внёс другой пользователь.
-// - pushFuturesSettingsToServer — пушит изменения на сервер после каждой
-//   правки таблицы, чтобы все остальные пользователи получили актуальные
-//   значения на следующей загрузке.
+// ЗАЧЕМ: список фьючерсов — общий для всех пользователей, источник правды — сервер.
+// Сохранение ПО-СТРОЧНОЕ: каждая правка/добавление/удаление трогает ровно одну
+// строку (ключ — ticker). Раньше любая правка слала всю таблицу целиком и клиент
+// со старым кэшем затирал чужие правки / воскрешал удалённые строки — теперь это
+// исключено. localStorage остаётся только кэшем для синхронных getPointValue и
+// обновляется ВНУТРИ per-row функций после подтверждённого ответа сервера.
 import {
-  DEFAULT_FUTURES,
   loadFuturesSettings,
   syncFuturesSettingsFromServer,
-  pushFuturesSettingsToServer,
+  createFuture,
+  updateFuture,
+  deleteFuture,
 } from '../../utils/futuresSettings';
 
 function SettingsFutures() {
   const [futures, setFutures] = useState(() => loadFuturesSettings());
-  const [editingId, setEditingId] = useState(null);
+  const [editingKey, setEditingKey] = useState(null); // _tmpKey (новая) или ticker (существующая)
   const [editData, setEditData] = useState({});
-  const [serverStatus, setServerStatus] = useState('idle'); // 'idle' | 'syncing' | 'saved' | 'error'
+  const [serverStatus, setServerStatus] = useState('idle'); // idle|syncing|saved|error|conflict
+  const [statusMsg, setStatusMsg] = useState('');
+  const tmpCounter = useRef(0);
+
+  // Стабильный ключ строки: для новой (несохранённой) — _tmpKey, для серверной — ticker.
+  const rowKey = (item) => item._tmpKey || item.ticker;
 
   // На входе на страницу — синхронизируемся с сервером, чтобы увидеть свежие
-  // значения от других пользователей. App.js делает это же при загрузке
-  // приложения, но повторный вызов недорогой и страхует от перехода с
-  // вкладки на вкладку через час бездействия.
+  // значения от других пользователей.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -49,54 +49,31 @@ function SettingsFutures() {
         setFutures(fresh);
         setServerStatus('saved');
       } else {
-        // Сервер недоступен — продолжаем с локальным состоянием
         setServerStatus('error');
+        setStatusMsg('сервер недоступен — показаны последние известные значения');
       }
     })();
     return () => { cancelled = true; };
   }, []);
 
-  // Любое изменение futures → синхронизируем оба хранилища:
-  //   1. localStorage — для синхронных getPointValue/getMarginPerContract
-  //   2. сервер — чтобы остальные пользователи увидели правку
-  // Сначала на каждый setFutures обновляем только localStorage; push на
-  // сервер делается ЯВНО в handleSave / handleDelete / handleAddFuture —
-  // только при пользовательских действиях, не при первоначальной
-  // подгрузке из localStorage или с сервера (иначе создаётся гонка).
-  useEffect(() => {
-    localStorage.setItem('futuresSettings', JSON.stringify(futures));
-  }, [futures]);
-
-  // Хелпер: применить новый массив futures и тут же запушить его на сервер.
-  // Возвращает promise — необязательно ждать, фоновый push не блокирует UI.
-  const applyAndPush = async (newFutures) => {
-    setFutures(newFutures);
-    setServerStatus('syncing');
-    const pushed = await pushFuturesSettingsToServer(newFutures);
-    setServerStatus(pushed ? 'saved' : 'error');
-  };
-
   const handleEdit = (item) => {
-    setEditingId(item.id);
-    setEditData({ ...item });
-  };
-
-  const handleSave = () => {
-    const newFutures = futures.map(item =>
-      item.id === editingId ? editData : item
-    );
-    setEditingId(null);
-    applyAndPush(newFutures);
+    setEditingKey(rowKey(item));
+    // _originalTicker нужен как путь для PUT (поддержка переименования);
+    // updatedAt — токен версии для оптимистичной блокировки.
+    setEditData({ ...item, _originalTicker: item.ticker });
   };
 
   const handleCancel = () => {
-    setEditingId(null);
+    // Отмена новой (несохранённой) строки — убрать черновик из таблицы.
+    if (editData._isNew) {
+      setFutures((prev) => prev.filter((f) => rowKey(f) !== editingKey));
+    }
+    setEditingKey(null);
     setEditData({});
-  };
-
-  const handleDelete = (id) => {
-    const newFutures = futures.filter(item => item.id !== id);
-    applyAndPush(newFutures);
+    if (serverStatus === 'error' || serverStatus === 'conflict') {
+      setServerStatus('idle');
+      setStatusMsg('');
+    }
   };
 
   const handleInputChange = (field, value) => {
@@ -109,22 +86,90 @@ function SettingsFutures() {
   };
 
   const handleAddFuture = () => {
-    const newId = Math.max(...futures.map(f => f.id), 0) + 1;
-    setFutures([...futures, {
-      id: newId,
+    const tmpKey = `tmp-${++tmpCounter.current}`;
+    const draft = {
+      _tmpKey: tmpKey,
+      _isNew: true,
       ticker: '',
       name: '',
       pointValue: 0,
-      marginPerContract: 0
-    }]);
-    setEditingId(newId);
-    setEditData({
-      id: newId,
-      ticker: '',
-      name: '',
-      pointValue: 0,
-      marginPerContract: 0
-    });
+      marginPerContract: 0,
+    };
+    setFutures((prev) => [...prev, draft]);
+    setEditingKey(tmpKey);
+    setEditData(draft);
+  };
+
+  const handleSave = async () => {
+    const ticker = (editData.ticker || '').trim().toUpperCase();
+    // Клиентская валидация — понятная ошибка вместо 422 с сервера, ввод сохраняется.
+    if (!ticker) {
+      setServerStatus('error'); setStatusMsg('Укажите тикер'); return;
+    }
+    if (!(Number(editData.pointValue) > 0)) {
+      setServerStatus('error'); setStatusMsg('Цена пункта должна быть больше 0'); return;
+    }
+    const dup = futures.some(
+      (f) => rowKey(f) !== editingKey && (f.ticker || '').toUpperCase() === ticker
+    );
+    if (dup) {
+      setServerStatus('error'); setStatusMsg(`Тикер ${ticker} уже есть в списке`); return;
+    }
+
+    setServerStatus('syncing'); setStatusMsg('');
+    const res = editData._isNew
+      ? await createFuture(editData)
+      : await updateFuture(editData._originalTicker, editData);
+
+    if (res.ok) {
+      setFutures(res.list);
+      setEditingKey(null);
+      setEditData({});
+      setServerStatus('saved');
+      setStatusMsg('');
+      return;
+    }
+
+    // Ошибка — ВВОД НЕ ТЕРЯЕМ: строка остаётся в режиме правки с editData.
+    if (res.kind === 'conflict') {
+      // Обновим остальную таблицу до актуального состояния (если сервер прислал),
+      // но строку оставим в правке. Для устаревшего токена — подставим свежий,
+      // чтобы повторное сохранение могло перезаписать осознанно.
+      if (res.list && !editData._isNew) {
+        setFutures(res.list);
+        const freshRow = res.list.find(
+          (f) => (f.ticker || '').toUpperCase() === (editData._originalTicker || '').toUpperCase()
+        );
+        if (freshRow) {
+          setEditData((prev) => ({ ...prev, updatedAt: freshRow.updatedAt }));
+        }
+      }
+      setServerStatus('conflict');
+      setStatusMsg(res.message || 'Запись изменена другим пользователем — проверьте и сохраните снова');
+    } else if (res.kind === 'offline') {
+      setServerStatus('error');
+      setStatusMsg('Сервер недоступен — изменения не сохранены, повторите попытку');
+    } else {
+      setServerStatus('error');
+      setStatusMsg(res.message || 'Не удалось сохранить');
+    }
+  };
+
+  const handleDelete = async (ticker) => {
+    setServerStatus('syncing'); setStatusMsg('');
+    const res = await deleteFuture(ticker);
+    if (res.ok) {
+      setFutures(res.list);
+      setServerStatus('saved');
+      setStatusMsg('');
+    } else if (res.kind === 'offline') {
+      setServerStatus('error');
+      setStatusMsg('Сервер недоступен — удаление не выполнено, повторите попытку');
+    } else {
+      if (res.list) setFutures(res.list);
+      setServerStatus('error');
+      setStatusMsg(res.message || 'Не удалось удалить');
+    }
   };
 
   return (
@@ -139,15 +184,18 @@ function SettingsFutures() {
           <div>
             <CardTitle>Список фьючерсов</CardTitle>
             <CardDescription>
-              Общая таблица для всех пользователей. Правки автоматически сохраняются на сервере.
+              Общая таблица для всех пользователей. Каждая правка сохраняется на сервере по отдельности.
               {serverStatus === 'syncing' && (
                 <span className="ml-2 text-xs text-muted-foreground">⟳ синхронизация…</span>
               )}
               {serverStatus === 'saved' && (
                 <span className="ml-2 text-xs text-green-600">✓ сохранено</span>
               )}
+              {serverStatus === 'conflict' && (
+                <span className="ml-2 text-xs text-amber-600">⚠ {statusMsg}</span>
+              )}
               {serverStatus === 'error' && (
-                <span className="ml-2 text-xs text-red-600">⚠ сервер недоступен — правка пока только локально</span>
+                <span className="ml-2 text-xs text-red-600">⚠ {statusMsg}</span>
               )}
             </CardDescription>
           </div>
@@ -171,9 +219,9 @@ function SettingsFutures() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {[...futures].sort((a, b) => a.ticker.localeCompare(b.ticker)).map((item) => (
-                  <TableRow key={item.id} className="hover:bg-muted/50">
-                    {editingId === item.id ? (
+                {[...futures].sort((a, b) => (a.ticker || '').localeCompare(b.ticker || '')).map((item) => (
+                  <TableRow key={rowKey(item)} className="hover:bg-muted/50">
+                    {editingKey === rowKey(item) ? (
                       <>
                         <TableCell>
                           <Input
@@ -212,6 +260,7 @@ function SettingsFutures() {
                               size="sm"
                               variant="ghost"
                               onClick={handleSave}
+                              disabled={serverStatus === 'syncing'}
                               className="h-8 w-8 p-0"
                               title="Сохранить"
                             >
@@ -253,7 +302,7 @@ function SettingsFutures() {
                             <Button
                               size="sm"
                               variant="ghost"
-                              onClick={() => handleDelete(item.id)}
+                              onClick={() => handleDelete(item.ticker)}
                               className="h-8 w-8 p-0"
                               title="Удалить"
                             >
@@ -268,7 +317,7 @@ function SettingsFutures() {
               </TableBody>
             </Table>
           </div>
-          
+
           {futures.length === 0 && (
             <div className="text-center py-8">
               <p className="text-sm text-muted-foreground">

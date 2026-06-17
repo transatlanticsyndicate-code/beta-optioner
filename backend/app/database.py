@@ -112,6 +112,28 @@ def init_db():
     except Exception as e:
         print(f"⚠️ ETF seeding skipped: {e}")
 
+    # ЗАЧЕМ: Сидинг таблицы futures_settings при первом запуске.
+    # Раньше дефолты фьючерсов жили только во фронте и сервер наполнялся «посевом»
+    # от первого пользователя. Теперь сервер — источник правды, поэтому сам сидит
+    # заводской набор. Идемпотентно: при непустой таблице сидинг пропускается.
+    try:
+        from app.models.futures_setting import FuturesSetting, DEFAULT_FUTURES_SEED
+        with SessionLocal() as db:
+            if db.query(FuturesSetting).count() == 0:
+                db.add_all([
+                    FuturesSetting(
+                        ticker=f["ticker"],
+                        name=f["name"],
+                        point_value=f["point_value"],
+                        margin_per_contract=None,
+                    )
+                    for f in DEFAULT_FUTURES_SEED
+                ])
+                db.commit()
+                print(f"✅ Futures settings seeded with {len(DEFAULT_FUTURES_SEED)} default tickers")
+    except Exception as e:
+        print(f"⚠️ Futures seeding skipped: {e}")
+
     # ЗАЧЕМ: Принудительный checkpoint при старте — сливаем все данные из WAL в основной .db файл
     # Защита от потери данных при внезапном перезапуске или деплое
     if DATABASE_URL and DATABASE_URL.startswith("sqlite"):

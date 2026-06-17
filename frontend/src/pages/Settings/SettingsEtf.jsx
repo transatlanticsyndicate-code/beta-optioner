@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Trash2, Edit2, Check, X } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -12,26 +12,29 @@ import {
   TableRow,
 } from '../../components/ui/table';
 
-// ЗАЧЕМ: Список ETF — общий источник правды для всех пользователей.
-// По наличию тикера в этом списке калькулятор отличает ETF от обычной акции
-// и применяет синий бейдж в шапке и в карточках сохранённых сделок.
-// Математика P&L у ETF идентична акциям — отличается только UI-маркер.
+// ЗАЧЕМ: список ETF — общий источник правды для всех пользователей, хранится на
+// сервере. Сохранение ПО-СТРОЧНОЕ (ключ — ticker): каждая правка трогает одну
+// строку, поэтому клиент со старым кэшем не затирает чужие правки и не воскрешает
+// удалённые строки. localStorage — только кэш для синхронного isEtfTicker,
+// обновляется внутри per-row функций после подтверждённого ответа сервера.
 import {
   loadEtfSettings,
   syncEtfSettingsFromServer,
-  pushEtfSettingsToServer,
+  createEtf,
+  updateEtf,
+  deleteEtf,
 } from '../../utils/etfSettings';
 
 function SettingsEtf() {
   const [etfs, setEtfs] = useState(() => loadEtfSettings());
-  const [editingId, setEditingId] = useState(null);
+  const [editingKey, setEditingKey] = useState(null);
   const [editData, setEditData] = useState({});
-  const [serverStatus, setServerStatus] = useState('idle'); // 'idle' | 'syncing' | 'saved' | 'error'
+  const [serverStatus, setServerStatus] = useState('idle'); // idle|syncing|saved|error|conflict
+  const [statusMsg, setStatusMsg] = useState('');
+  const tmpCounter = useRef(0);
 
-  // На входе на страницу — синхронизируемся с сервером, чтобы увидеть свежие
-  // значения от других пользователей. App.js делает это же при загрузке
-  // приложения, но повторный вызов недорогой и страхует от долгого ожидания
-  // между переходами.
+  const rowKey = (item) => item._tmpKey || item.ticker;
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -43,49 +46,27 @@ function SettingsEtf() {
         setServerStatus('saved');
       } else {
         setServerStatus('error');
+        setStatusMsg('сервер недоступен — показаны последние известные значения');
       }
     })();
     return () => { cancelled = true; };
   }, []);
 
-  // Любое изменение etfs → синхронизируем оба хранилища:
-  //   1. localStorage — для синхронного isEtfTicker
-  //   2. сервер — чтобы остальные пользователи увидели правку
-  // Push на сервер делается ЯВНО в handleSave / handleDelete / handleAddEtf —
-  // только при пользовательских действиях, не при первоначальной подгрузке.
-  useEffect(() => {
-    localStorage.setItem('etfSettings', JSON.stringify(etfs));
-  }, [etfs]);
-
-  // Хелпер: применить новый массив etfs и тут же запушить его на сервер.
-  const applyAndPush = async (newEtfs) => {
-    setEtfs(newEtfs);
-    setServerStatus('syncing');
-    const pushed = await pushEtfSettingsToServer(newEtfs);
-    setServerStatus(pushed ? 'saved' : 'error');
-  };
-
   const handleEdit = (item) => {
-    setEditingId(item.id);
-    setEditData({ ...item });
-  };
-
-  const handleSave = () => {
-    const newEtfs = etfs.map(item =>
-      item.id === editingId ? editData : item
-    );
-    setEditingId(null);
-    applyAndPush(newEtfs);
+    setEditingKey(rowKey(item));
+    setEditData({ ...item, _originalTicker: item.ticker });
   };
 
   const handleCancel = () => {
-    setEditingId(null);
+    if (editData._isNew) {
+      setEtfs((prev) => prev.filter((e) => rowKey(e) !== editingKey));
+    }
+    setEditingKey(null);
     setEditData({});
-  };
-
-  const handleDelete = (id) => {
-    const newEtfs = etfs.filter(item => item.id !== id);
-    applyAndPush(newEtfs);
+    if (serverStatus === 'error' || serverStatus === 'conflict') {
+      setServerStatus('idle');
+      setStatusMsg('');
+    }
   };
 
   const handleInputChange = (field, value) => {
@@ -93,10 +74,78 @@ function SettingsEtf() {
   };
 
   const handleAddEtf = () => {
-    const newId = Math.max(...etfs.map(f => f.id || 0), 0) + 1;
-    setEtfs([...etfs, { id: newId, ticker: '', name: '' }]);
-    setEditingId(newId);
-    setEditData({ id: newId, ticker: '', name: '' });
+    const tmpKey = `tmp-${++tmpCounter.current}`;
+    const draft = { _tmpKey: tmpKey, _isNew: true, ticker: '', name: '' };
+    setEtfs((prev) => [...prev, draft]);
+    setEditingKey(tmpKey);
+    setEditData(draft);
+  };
+
+  const handleSave = async () => {
+    const ticker = (editData.ticker || '').trim().toUpperCase();
+    if (!ticker) {
+      setServerStatus('error'); setStatusMsg('Укажите тикер'); return;
+    }
+    if (!(editData.name || '').trim()) {
+      setServerStatus('error'); setStatusMsg('Укажите название'); return;
+    }
+    const dup = etfs.some(
+      (e) => rowKey(e) !== editingKey && (e.ticker || '').toUpperCase() === ticker
+    );
+    if (dup) {
+      setServerStatus('error'); setStatusMsg(`Тикер ${ticker} уже есть в списке`); return;
+    }
+
+    setServerStatus('syncing'); setStatusMsg('');
+    const res = editData._isNew
+      ? await createEtf(editData)
+      : await updateEtf(editData._originalTicker, editData);
+
+    if (res.ok) {
+      setEtfs(res.list);
+      setEditingKey(null);
+      setEditData({});
+      setServerStatus('saved');
+      setStatusMsg('');
+      return;
+    }
+
+    if (res.kind === 'conflict') {
+      if (res.list && !editData._isNew) {
+        setEtfs(res.list);
+        const freshRow = res.list.find(
+          (e) => (e.ticker || '').toUpperCase() === (editData._originalTicker || '').toUpperCase()
+        );
+        if (freshRow) {
+          setEditData((prev) => ({ ...prev, updatedAt: freshRow.updatedAt }));
+        }
+      }
+      setServerStatus('conflict');
+      setStatusMsg(res.message || 'Запись изменена другим пользователем — проверьте и сохраните снова');
+    } else if (res.kind === 'offline') {
+      setServerStatus('error');
+      setStatusMsg('Сервер недоступен — изменения не сохранены, повторите попытку');
+    } else {
+      setServerStatus('error');
+      setStatusMsg(res.message || 'Не удалось сохранить');
+    }
+  };
+
+  const handleDelete = async (ticker) => {
+    setServerStatus('syncing'); setStatusMsg('');
+    const res = await deleteEtf(ticker);
+    if (res.ok) {
+      setEtfs(res.list);
+      setServerStatus('saved');
+      setStatusMsg('');
+    } else if (res.kind === 'offline') {
+      setServerStatus('error');
+      setStatusMsg('Сервер недоступен — удаление не выполнено, повторите попытку');
+    } else {
+      if (res.list) setEtfs(res.list);
+      setServerStatus('error');
+      setStatusMsg(res.message || 'Не удалось удалить');
+    }
   };
 
   return (
@@ -113,15 +162,18 @@ function SettingsEtf() {
             <CardDescription>
               Общая таблица для всех пользователей. Тикеры из этого списка
               автоматически определяются как ETF (синий бейдж в калькуляторе
-              и на странице сохранённых сделок). Правки сохраняются на сервере.
+              и на странице сохранённых сделок). Каждая правка сохраняется на сервере по отдельности.
               {serverStatus === 'syncing' && (
                 <span className="ml-2 text-xs text-muted-foreground">⟳ синхронизация…</span>
               )}
               {serverStatus === 'saved' && (
                 <span className="ml-2 text-xs text-green-600">✓ сохранено</span>
               )}
+              {serverStatus === 'conflict' && (
+                <span className="ml-2 text-xs text-amber-600">⚠ {statusMsg}</span>
+              )}
               {serverStatus === 'error' && (
-                <span className="ml-2 text-xs text-red-600">⚠ сервер недоступен — правка пока только локально</span>
+                <span className="ml-2 text-xs text-red-600">⚠ {statusMsg}</span>
               )}
             </CardDescription>
           </div>
@@ -144,8 +196,8 @@ function SettingsEtf() {
               </TableHeader>
               <TableBody>
                 {[...etfs].sort((a, b) => (a.ticker || '').localeCompare(b.ticker || '')).map((item) => (
-                  <TableRow key={item.id} className="hover:bg-muted/50">
-                    {editingId === item.id ? (
+                  <TableRow key={rowKey(item)} className="hover:bg-muted/50">
+                    {editingKey === rowKey(item) ? (
                       <>
                         <TableCell>
                           <Input
@@ -169,6 +221,7 @@ function SettingsEtf() {
                               size="sm"
                               variant="ghost"
                               onClick={handleSave}
+                              disabled={serverStatus === 'syncing'}
                               className="h-8 w-8 p-0"
                               title="Сохранить"
                             >
@@ -204,7 +257,7 @@ function SettingsEtf() {
                             <Button
                               size="sm"
                               variant="ghost"
-                              onClick={() => handleDelete(item.id)}
+                              onClick={() => handleDelete(item.ticker)}
                               className="h-8 w-8 p-0"
                               title="Удалить"
                             >

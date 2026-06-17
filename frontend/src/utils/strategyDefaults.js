@@ -17,6 +17,8 @@
  * «сегодня + N дней», поэтому всегда актуальна.
  */
 
+import { fetchWithTimeout, parseApiError } from './fetchWithTimeout';
+
 // Заводские значения (исторически зашитые в форме «Север GPT»).
 const FACTORY_BLOCK = {
   plTolerance: 200,
@@ -98,17 +100,19 @@ export const saveStrategyDefaults = (data) => {
  */
 export const syncStrategyDefaultsFromServer = async () => {
   try {
-    const resp = await fetch(SERVER_ENDPOINT, { method: 'GET' });
+    const resp = await fetchWithTimeout(SERVER_ENDPOINT, { method: 'GET' });
     if (!resp.ok) return null;
     const json = await resp.json();
     if (!json?.data || !json.data.stocks) {
+      // Документ не инициализирован — посеять текущим набором (первичный посев).
       const local = loadStrategyDefaults();
-      const pushed = await pushStrategyDefaultsToServer(local);
-      return pushed || local;
+      const pushed = await pushStrategyDefaultsToServer(local, null);
+      if (pushed?.ok) return { data: pushed.data, updatedAt: pushed.updatedAt };
+      return { data: local, updatedAt: null };
     }
     const data = normalizeAll(json.data);
     saveStrategyDefaults(data);
-    return data;
+    return { data, updatedAt: json.updatedAt ?? null };
   } catch (e) {
     console.warn('⚠️ syncStrategyDefaultsFromServer: сервер недоступен,', e.message);
     return null;
@@ -116,28 +120,42 @@ export const syncStrategyDefaultsFromServer = async () => {
 };
 
 /**
- * Залить значения на сервер (PUT, полная замена). При успехе кладёт ответ
- * сервера в localStorage. Возвращает сохранённый объект или null.
+ * Залить значения на сервер (PUT всего документа) с оптимистичной блокировкой.
+ * expectedUpdatedAt — токен версии, полученный при последней загрузке; сервер
+ * вернёт 409, если документ успели изменить другим сохранением.
+ *
+ * Возвращает:
+ *   { ok: true, data, updatedAt }
+ *   { ok: false, kind: 'conflict'|'error'|'offline', message, data?, updatedAt? }
+ * При конфликте data/updatedAt — свежие значения с сервера (для показа на экране).
  */
-export const pushStrategyDefaultsToServer = async (data) => {
+export const pushStrategyDefaultsToServer = async (data, expectedUpdatedAt = null) => {
   try {
-    const body = normalizeAll(data);
-    const resp = await fetch(SERVER_ENDPOINT, {
+    const body = { ...normalizeAll(data), expectedUpdatedAt };
+    const resp = await fetchWithTimeout(SERVER_ENDPOINT, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    if (!resp.ok) {
-      console.warn('⚠️ pushStrategyDefaultsToServer: сервер ответил', resp.status);
-      return null;
+    if (resp.ok) {
+      const json = await resp.json();
+      const saved = json?.data ? normalizeAll(json.data) : normalizeAll(data);
+      saveStrategyDefaults(saved);
+      return { ok: true, data: saved, updatedAt: json.updatedAt ?? null };
     }
-    const json = await resp.json();
-    const data2 = json?.data ? normalizeAll(json.data) : body;
-    saveStrategyDefaults(data2);
-    return data2;
+    const { code, message } = await parseApiError(resp);
+    if (resp.status === 409) {
+      // Подтянуть свежее состояние, чтобы экран показал актуальные значения.
+      const fresh = await syncStrategyDefaultsFromServer();
+      return {
+        ok: false, kind: 'conflict', code, message,
+        data: fresh?.data, updatedAt: fresh?.updatedAt ?? null,
+      };
+    }
+    return { ok: false, kind: 'error', code, message };
   } catch (e) {
     console.warn('⚠️ pushStrategyDefaultsToServer: сервер недоступен,', e.message);
-    return null;
+    return { ok: false, kind: 'offline', message: 'Сервер недоступен' };
   }
 };
 

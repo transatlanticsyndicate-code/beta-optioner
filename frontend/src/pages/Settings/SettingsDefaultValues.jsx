@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -20,16 +20,15 @@ const FIELDS = [
   { key: 'calcDays', label: 'Дата расчёта (дней)' },
 ];
 
-const STATUS_TEXT = {
-  idle: '',
-  syncing: 'Сохранение…',
-  saved: 'Сохранено',
-  error: 'Не сохранено — сервер недоступен',
-};
-
 function SettingsDefaultValues() {
   const [defaults, setDefaults] = useState(() => loadStrategyDefaults());
-  const [serverStatus, setServerStatus] = useState('idle');
+  const [serverStatus, setServerStatus] = useState('idle'); // idle|syncing|saved|error|conflict
+  const [statusMsg, setStatusMsg] = useState('');
+  // Токен версии документа (updated_at) — нужен для оптимистичной блокировки:
+  // отправляем его при сохранении, сервер вернёт 409, если кто-то сохранил раньше.
+  const [updatedAt, setUpdatedAt] = useState(null);
+  // Пользователь начал править? Тогда фоновая синхронизация не должна затирать ввод.
+  const dirtyRef = useRef(false);
 
   // На входе подтягиваем свежие значения с сервера (могли поменять с другого устройства).
   useEffect(() => {
@@ -39,10 +38,13 @@ function SettingsDefaultValues() {
       const fresh = await syncStrategyDefaultsFromServer();
       if (cancelled) return;
       if (fresh) {
-        setDefaults(fresh);
-        setServerStatus('saved');
+        // Не перетираем форму, если пользователь уже начал вводить значения.
+        if (!dirtyRef.current && fresh.data) setDefaults(fresh.data);
+        setUpdatedAt(fresh.updatedAt ?? null);
+        setServerStatus(dirtyRef.current ? 'idle' : 'saved');
       } else {
         setServerStatus('error');
+        setStatusMsg('Сервер недоступен — показаны последние известные значения');
       }
     })();
     return () => { cancelled = true; };
@@ -50,21 +52,36 @@ function SettingsDefaultValues() {
 
   // Обновить одно поле одного блока (значение храним как введено — нормализуем при сохранении).
   const setField = (block, key, value) => {
+    dirtyRef.current = true;
     setDefaults((prev) => ({
       ...prev,
       [block]: { ...prev[block], [key]: value },
     }));
-    if (serverStatus !== 'idle') setServerStatus('idle');
+    if (serverStatus !== 'idle') { setServerStatus('idle'); setStatusMsg(''); }
   };
 
   const handleSave = async () => {
-    setServerStatus('syncing');
-    const saved = await pushStrategyDefaultsToServer(defaults);
-    if (saved) {
-      setDefaults(saved);
+    setServerStatus('syncing'); setStatusMsg('');
+    const res = await pushStrategyDefaultsToServer(defaults, updatedAt);
+    if (res.ok) {
+      setDefaults(res.data);
+      setUpdatedAt(res.updatedAt ?? null);
+      dirtyRef.current = false;
       setServerStatus('saved');
+      setStatusMsg('');
+    } else if (res.kind === 'conflict') {
+      // Чужое сохранение опередило. Ввод НЕ теряем, но обновляем токен — повторное
+      // сохранение осознанно перезапишет. Свежие серверные значения не подставляем
+      // в форму, чтобы не стереть набранное; пользователь решает, что оставить.
+      setUpdatedAt(res.updatedAt ?? null);
+      setServerStatus('conflict');
+      setStatusMsg('Значения изменены другим пользователем — повторное сохранение перезапишет их вашими');
+    } else if (res.kind === 'offline') {
+      setServerStatus('error');
+      setStatusMsg('Сервер недоступен — не сохранено, повторите попытку');
     } else {
       setServerStatus('error');
+      setStatusMsg(res.message || 'Не удалось сохранить');
     }
   };
 
@@ -112,12 +129,17 @@ function SettingsDefaultValues() {
         <Button onClick={handleSave} disabled={serverStatus === 'syncing'}>
           Сохранить
         </Button>
-        {serverStatus !== 'idle' && (
-          <span
-            className={`text-sm ${serverStatus === 'error' ? 'text-red-600' : 'text-muted-foreground'}`}
-          >
-            {STATUS_TEXT[serverStatus]}
-          </span>
+        {serverStatus === 'syncing' && (
+          <span className="text-sm text-muted-foreground">Сохранение…</span>
+        )}
+        {serverStatus === 'saved' && (
+          <span className="text-sm text-green-600">Сохранено</span>
+        )}
+        {serverStatus === 'conflict' && (
+          <span className="text-sm text-amber-600">{statusMsg}</span>
+        )}
+        {serverStatus === 'error' && (
+          <span className="text-sm text-red-600">{statusMsg}</span>
         )}
       </div>
     </div>

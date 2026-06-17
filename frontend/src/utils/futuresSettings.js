@@ -4,6 +4,7 @@
  * Затрагивает: UniversalOptionsCalculator, расчёты P&L для фьючерсов
  */
 import { isEtfTicker } from './etfSettings';
+import { fetchWithTimeout, parseApiError } from './fetchWithTimeout';
 
 // Предустановленные фьючерсы по умолчанию
 // ЗАЧЕМ: Используются если пользователь не настроил свои параметры
@@ -63,62 +64,34 @@ const DEFAULT_FUTURES = [
 
 const STORAGE_KEY = 'futuresSettings';
 
-// Одноразовая чистка: если у пользователя в localStorage остались
-// «ориентировочные» значения marginPerContract, проставленные первой
-// версией этой колонки, — обнуляем их, чтобы он увидел предупреждение
-// и заполнил реальные цифры со своего брокерского счёта. Метка ставится
-// после первой чистки, чтобы при повторных открытиях не затирать уже
-// введённые пользователем значения.
-const MARGIN_WIPE_FLAG_KEY = 'futuresMarginsCleared_v1';
-
 /**
- * Загружает все настройки фьючерсов из localStorage
- * ЗАЧЕМ: Получение полного списка фьючерсов для выбора в калькуляторе
- * @returns {Array} Массив объектов фьючерсов
+ * Читает локальный КЭШ списка фьючерсов из localStorage.
+ *
+ * ВАЖНО: это только кэш для синхронных читателей (getPointValue,
+ * getMarginPerContract, isFuturesTicker), а НЕ источник правды. Источник правды —
+ * сервер; кэш наполняется ТОЛЬКО из подтверждённых ответов сервера
+ * (syncFuturesSettingsFromServer и per-row функции ниже).
+ *
+ * Никаких слияний с DEFAULT_FUTURES и одноразовых миграций здесь больше нет:
+ * раньше ре-мердж дефолтов воскрешал удалённые стандартные тикеры при каждой
+ * загрузке. DEFAULT_FUTURES используется ТОЛЬКО как холодный фолбэк, когда кэша
+ * ещё нет (свежий браузер до первой синхронизации). Сервер сам сидит этот набор.
+ *
+ * @returns {Array} Массив объектов фьючерсов (кэш или дефолты как фолбэк)
  */
 export const loadFuturesSettings = () => {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      // Проверяем валидность данных
       if (Array.isArray(parsed) && parsed.length > 0) {
-        let working = parsed;
-
-        // Одноразовая чистка: первая версия колонки «Маржин на 1 контракт»
-        // подсунула пользователям ориентировочные значения. Они могут быть
-        // вводить в заблуждение при расчёте риска, поэтому стираем всё разом
-        // и просим пользователя заполнить реальные цифры со своего брокера.
-        // Метка MARGIN_WIPE_FLAG_KEY гарантирует, что чистка случится один раз.
-        try {
-          const alreadyWiped = localStorage.getItem(MARGIN_WIPE_FLAG_KEY);
-          if (!alreadyWiped) {
-            working = working.map(f => ({ ...f, marginPerContract: null }));
-            localStorage.setItem(MARGIN_WIPE_FLAG_KEY, '1');
-            console.log('🧹 Маржин на 1 контракт обнулён у всех фьючерсов (одноразовая миграция)');
-          }
-        } catch (e) {
-          // Если localStorage недоступен — пропускаем, не блокируем загрузку
-        }
-
-        // ВАЖНО: Объединяем сохранённые настройки с новыми дефолтными
-        // Если в дефолтных появились новые тикеры (например NG, HG), добавляем их
-        const existingTickers = new Set(working.map(f => f.ticker));
-        const missingFutures = DEFAULT_FUTURES.filter(def => !existingTickers.has(def.ticker));
-
-        if (missingFutures.length > 0) {
-          console.log('🔄 Добавлены новые фьючерсы в настройки:', missingFutures.map(f => f.ticker));
-          return [...working, ...missingFutures];
-        }
-
-        return working;
+        return parsed;
       }
     }
   } catch (error) {
-    console.error('❌ Ошибка загрузки настроек фьючерсов:', error);
+    console.error('❌ Ошибка чтения кэша настроек фьючерсов:', error);
   }
-
-  // Возвращаем дефолтные значения если нет сохранённых
+  // Кэша нет — холодный фолбэк до первой синхронизации с сервером.
   return DEFAULT_FUTURES;
 };
 
@@ -392,7 +365,7 @@ const SERVER_ENDPOINT = '/api/futures-settings/';
  */
 export const syncFuturesSettingsFromServer = async () => {
   try {
-    const resp = await fetch(SERVER_ENDPOINT, { method: 'GET' });
+    const resp = await fetchWithTimeout(SERVER_ENDPOINT, { method: 'GET' });
     if (!resp.ok) return null;
     const json = await resp.json();
     const serverData = Array.isArray(json?.data) ? json.data : [];
@@ -426,17 +399,10 @@ export const syncFuturesSettingsFromServer = async () => {
  */
 export const pushFuturesSettingsToServer = async (futures) => {
   try {
-    const resp = await fetch(SERVER_ENDPOINT, {
+    const resp = await fetchWithTimeout(SERVER_ENDPOINT, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ futures: (futures || []).map(f => ({
-        ticker: f.ticker,
-        name: f.name,
-        pointValue: f.pointValue,
-        marginPerContract: (typeof f.marginPerContract === 'number' && f.marginPerContract > 0)
-          ? f.marginPerContract
-          : null,
-      })) }),
+      body: JSON.stringify({ futures: (futures || []).map(serializeFuture) }),
     });
     if (!resp.ok) {
       console.warn('⚠️ pushFuturesSettingsToServer: сервер ответил', resp.status);
@@ -449,6 +415,96 @@ export const pushFuturesSettingsToServer = async (futures) => {
   } catch (e) {
     console.warn('⚠️ pushFuturesSettingsToServer: сервер недоступен,', e.message);
     return null;
+  }
+};
+
+// =====================================================
+// Per-row операции (создать / обновить / удалить ОДНУ строку)
+// =====================================================
+// ЗАЧЕМ: раньше любая правка слала всю таблицу целиком — клиент со старым кэшем
+// затирал чужие правки и воскрешал удалённые строки. Теперь каждая правка трогает
+// ровно одну строку на сервере (ключ — ticker). Сервер отдаёт актуальную строку
+// и токен версии (updatedAt) для оптимистичной блокировки.
+//
+// Все функции возвращают единый результат:
+//   { ok: true, list }                              — успех, кэш уже обновлён
+//   { ok: false, kind: 'conflict'|'error'|'offline', code, message, list? }
+// list — свежий серверный список (для setState на странице).
+
+// Привести строку фьючерса к серверному формату.
+const serializeFuture = (f) => ({
+  ticker: (f.ticker || '').toString().trim().toUpperCase(),
+  name: (f.name || '').toString().trim(),
+  pointValue: Number(f.pointValue) || 0,
+  marginPerContract: (typeof f.marginPerContract === 'number' && f.marginPerContract > 0)
+    ? f.marginPerContract
+    : null,
+});
+
+// Перечитать список с сервера и обновить кэш. Возвращает массив или null.
+const refreshFuturesList = async () => {
+  try {
+    const resp = await fetchWithTimeout(SERVER_ENDPOINT, { method: 'GET' });
+    if (!resp.ok) return null;
+    const json = await resp.json();
+    const list = Array.isArray(json?.data) ? json.data : null;
+    if (list) saveFuturesSettings(list);
+    return list;
+  } catch (e) {
+    return null;
+  }
+};
+
+// Общий разбор ответа мутации: success → обновить кэш и вернуть свежий список;
+// 409 → конфликт (+ подтянуть свежий список, чтобы страница показала актуальное);
+// иначе → ошибка; исключение (сеть/таймаут) → offline.
+const handleMutationResponse = async (resp) => {
+  if (resp.ok) {
+    const list = await refreshFuturesList();
+    return { ok: true, list: list || loadFuturesSettings() };
+  }
+  const { code, message } = await parseApiError(resp);
+  if (resp.status === 409) {
+    const list = await refreshFuturesList();
+    return { ok: false, kind: 'conflict', code, message, list };
+  }
+  return { ok: false, kind: 'error', code, message };
+};
+
+export const createFuture = async (row) => {
+  try {
+    const resp = await fetchWithTimeout(SERVER_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(serializeFuture(row)),
+    });
+    return await handleMutationResponse(resp);
+  } catch (e) {
+    return { ok: false, kind: 'offline', message: 'Сервер недоступен' };
+  }
+};
+
+export const updateFuture = async (oldTicker, row) => {
+  try {
+    const path = SERVER_ENDPOINT + encodeURIComponent((oldTicker || '').toString().trim().toUpperCase());
+    const resp = await fetchWithTimeout(path, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...serializeFuture(row), expectedUpdatedAt: row.updatedAt ?? null }),
+    });
+    return await handleMutationResponse(resp);
+  } catch (e) {
+    return { ok: false, kind: 'offline', message: 'Сервер недоступен' };
+  }
+};
+
+export const deleteFuture = async (ticker) => {
+  try {
+    const path = SERVER_ENDPOINT + encodeURIComponent((ticker || '').toString().trim().toUpperCase());
+    const resp = await fetchWithTimeout(path, { method: 'DELETE' });
+    return await handleMutationResponse(resp);
+  } catch (e) {
+    return { ok: false, kind: 'offline', message: 'Сервер недоступен' };
   }
 };
 
