@@ -102,3 +102,33 @@ def test_compute_cost_crypto_stock_margin_share():
     assert c["stockMargin"] == 1 * 63000.0
     assert c["marginUsed"] == 63000.0 + 1000.0
     assert 0 < c["stockMarginPct"] < 1
+
+
+def test_compute_cost_futures_options_use_point_value():
+    # Фьючерсы: цена опциона умножается на стоимость пункта (например, ES = 50).
+    positions = [{"type": "CALL", "ask": 12.5, "quantity": 2}]
+    c = compute_cost(positions, qty_stock=0, entry_price=5000.0, leverage=1.0,
+                     contract_multiplier=50, mode="futures")
+    assert c["optionsCost"] == 12.5 * 50 * 2
+    assert c["marginUsed"] == 12.5 * 50 * 2
+
+
+def test_compute_cost_futures_asset_margin_per_contract():
+    # Фьючерс + опционы: залог под актив = кол-во контрактов × маржа за контракт,
+    # БЕЗ плеча и без «цена × кол-во» (иная математика, чем у акций/крипты).
+    positions = [{"type": "PUT", "ask": 10.0, "quantity": 1}]
+    c = compute_cost(positions, qty_stock=2, entry_price=5000.0, leverage=1.0,
+                     contract_multiplier=50, mode="futures", margin_per_contract=12000.0)
+    assert c["stockMargin"] == 2 * 12000.0
+    assert c["optionsCost"] == 10.0 * 50 * 1
+    assert c["marginUsed"] == 2 * 12000.0 + 10.0 * 50
+    assert 0 < c["stockMarginPct"] < 1
+
+
+def test_compute_cost_futures_missing_margin_means_zero_asset():
+    # Если маржа за контракт не задана — вклад актива в залог = 0 (фолбэк).
+    positions = [{"type": "CALL", "ask": 8.0, "quantity": 1}]
+    c = compute_cost(positions, qty_stock=3, entry_price=5000.0, leverage=1.0,
+                     contract_multiplier=50, mode="futures", margin_per_contract=None)
+    assert c["stockMargin"] == 0
+    assert c["marginUsed"] == 8.0 * 50

@@ -70,6 +70,9 @@ import {
   PriceAndTimeSettings
 } from '../components/CalculatorV2';
 import OptionsTableV3 from '../components/CalculatorV2/OptionsTableV3';
+// ⚠️ УСТАРЕЛО (DEPRECATED): NorthStrategyDialog — классический математический «Север»,
+// отключён и не используется (заменён на «Север GPT»). Оставлен только чтобы не ломать
+// импорт; кнопка скрыта (canShowNorthButton = false). Актуальное — NorthGptStrategyDialog.
 import NorthStrategyDialog from '../components/CalculatorV2/NorthStrategy/NorthStrategyDialog';
 import NorthGptStrategyDialog from '../components/CalculatorV2/NorthGptStrategy/NorthGptStrategyDialog';
 import FinancialControl from '../components/CalculatorV2/FinancialControl';
@@ -89,7 +92,7 @@ import { usePositionExitCalculator } from '../hooks/usePositionExitCalculator';
 
 // Импорт утилиты для работы с настройками фьючерсов
 // ЗАЧЕМ: Получение pointValue для расчётов P&L в режиме фьючерсов
-import { loadFuturesSettings, getPointValue, getFutureByTicker, isFuturesTicker, detectInstrumentTypeByPattern, isFuturesTickerByPattern } from '../utils/futuresSettings';
+import { loadFuturesSettings, getPointValue, getMarginPerContract, getFutureByTicker, isFuturesTicker, detectInstrumentTypeByPattern, isFuturesTickerByPattern } from '../utils/futuresSettings';
 
 // Импорт хука для работы с данными от Chrome Extension TradingView Parser
 // ЗАЧЕМ: Получение опционов, тикера и цены из localStorage и URL параметров
@@ -2692,9 +2695,10 @@ function UniversalOptionsCalculator() {
 
   const northActive = useMemo(() => options.some(o => o.fromNorthStrategy), [options]);
 
-  // Классическая (математическая) стратегия «Север» выведена из использования —
-  // её кнопка скрыта (нужен только «Север GPT»). Флаг оставлен = false, чтобы не
-  // показывать кнопку; сам код стратегии не удаляем.
+  // ⚠️ УСТАРЕЛО (DEPRECATED). Классическая (математическая) стратегия «Север» больше
+  // НЕ используется — заменена на «Север GPT». Код не удалён, а отключён: кнопка скрыта
+  // флагом ниже (canShowNorthButton = false). Не «чинить», не возвращать и не развивать
+  // без явной просьбы. Актуальная стратегия — NorthGptStrategyDialog ниже.
   const canShowNorthButton = false;
 
   // Список экспираций и сама цепочка опционов теперь запрашиваются внутри
@@ -2813,7 +2817,8 @@ function UniversalOptionsCalculator() {
   const canShowNorthGptButton = useMemo(() => (
     (calculatorMode === CALCULATOR_MODES.STOCKS ||
       calculatorMode === CALCULATOR_MODES.ETF ||
-      calculatorMode === CALCULATOR_MODES.CRYPTO) &&
+      calculatorMode === CALCULATOR_MODES.CRYPTO ||
+      calculatorMode === CALCULATOR_MODES.FUTURES) &&
     !!longPositionsEntry &&
     options.filter(o => o.visible !== false).length === 0 &&
     Number(currentPrice) > 0
@@ -5024,7 +5029,11 @@ function UniversalOptionsCalculator() {
           />
         )}
 
-        {/* Поп-ап "Стратегия СЕВЕР" — подбор пары Buy Call + Buy Put.
+        {/* ⚠️ УСТАРЕЛО (DEPRECATED): классический «Север» отключён и НЕ используется
+            (заменён на «Север GPT» ниже). Диалог никогда не открывается —
+            canShowNorthButton = false. Оставлен только чтобы не удалять код.
+
+            Поп-ап "Стратегия СЕВЕР" — подбор пары Buy Call + Buy Put.
             Список экспираций мгновенно читается из tvc_expirations_list (расширение
             пишет по DTE-бейджам), полная цепочка опционов — после выбора экспирации
             (расширение раскрывает группу в TV и дампит в tvc_full_chain). Если
@@ -5067,6 +5076,8 @@ function UniversalOptionsCalculator() {
           dividendYield={useDividends ? dividendYield : 0}
           stockClassification={null}
           ticker={selectedTicker}
+          pointValue={selectedFuture?.pointValue ?? null}
+          marginPerContract={selectedFuture?.marginPerContract ?? null}
           tradingViewUrl={selectedTicker && calculatorMode !== CALCULATOR_MODES.CRYPTO ? (() => {
             // Окно дат для TV: сегодня → +180 дней (синхронно с фильтром "Next 6 months").
             const fmt = (d) => `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}${String(d.getUTCDate()).padStart(2, '0')}`;

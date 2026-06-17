@@ -97,14 +97,15 @@ function SettingsDefaultValues() {
         <h2 className="text-2xl font-bold tracking-tight">Значения по умолчанию</h2>
         <p className="text-muted-foreground mt-1">
           Эти значения подставляются в поля при открытии экрана подбора стратегии
-          «Север GPT» — отдельно для акций и для крипты. Дата расчёта задаётся числом
-          дней: на экране она считается как «сегодня + N дней».
+          «Север GPT» — отдельно для акций, крипты и фьючерсов. Дата расчёта задаётся
+          числом дней: на экране она считается как «сегодня + N дней».
         </p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-3">
         {renderBlock('stocks', 'Север GPT — Акции', 'Значения по умолчанию для подбора «Север GPT» по акциям.')}
         {renderBlock('crypto', 'Север GPT — Крипта', 'Значения по умолчанию для подбора «Север GPT» по крипте.')}
+        {renderBlock('futures', 'Север GPT — Фьючерсы', 'Значения по умолчанию для подбора «Север GPT» по фьючерсам.')}
       </div>
 
       <div className="flex items-center gap-3">

@@ -8,6 +8,8 @@ API роутер для общих «значений по умолчанию» 
 
 Auth: сейчас отключён глобально, кто знает ссылку — тот пишет.
 """
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
@@ -23,7 +25,7 @@ _DOC_ID = "global"
 # ===== Pydantic-модели =====
 
 class StrategyDefaults(BaseModel):
-    """Пять полей экрана подбора «Север GPT» (один набор: акции или крипта)."""
+    """Пять полей экрана подбора «Север GPT» (один набор: акции, крипта или фьючерсы)."""
     plTolerance: float = Field(..., ge=0)
     margin: float = Field(..., ge=0)
     marginTolerance: float = Field(..., ge=0)
@@ -31,13 +33,27 @@ class StrategyDefaults(BaseModel):
     calcDays: int = Field(..., ge=0)
 
 
+# Заводской набор — фолбэк для блока, отсутствующего в присланном документе
+# (старые клиенты слали только stocks+crypto; futures появился позже).
+_FACTORY_BLOCK = {
+    "plTolerance": 200,
+    "margin": 4000,
+    "marginTolerance": 500,
+    "minStockMarginPct": 40,
+    "calcDays": 30,
+}
+
+
 class StrategyDefaultsReplaceIn(BaseModel):
     """Полный документ — заменяет содержимое целиком (last-write-wins).
 
-    Два независимых набора «Севера GPT»: для акций и для крипты.
+    Три независимых набора «Севера GPT»: для акций, для крипты и для фьючерсов.
+    futures — необязательный: старые клиенты могут прислать только stocks+crypto,
+    тогда подставляется заводской набор (обратная совместимость).
     """
     stocks: StrategyDefaults
     crypto: StrategyDefaults
+    futures: Optional[StrategyDefaults] = Field(default_factory=lambda: StrategyDefaults(**_FACTORY_BLOCK))
 
 
 # ===== Эндпойнты =====

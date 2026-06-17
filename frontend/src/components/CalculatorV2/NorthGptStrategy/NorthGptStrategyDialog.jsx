@@ -92,6 +92,8 @@ function NorthGptStrategyDialog({
   stockClassification,
   ticker,
   tradingViewUrl,
+  pointValue,
+  marginPerContract,
   initialState,
   onClose,
   onApply,
@@ -100,8 +102,17 @@ function NorthGptStrategyDialog({
   // Источник данных опционов зависит от режима калькулятора: крипта → Binance
   // (расширение Options Bridge), иначе → TradingView (Options CP Buttons). От этого
   // зависят маршрутизация команды (market) и тексты, которые видит пользователь.
+  // Фьючерсы читаются через TradingView, как акции — отличие чисто в математике.
   const isCrypto = calculatorMode === 'crypto';
+  const isFutures = calculatorMode === 'futures';
   const market = isCrypto ? 'crypto' : 'equity';
+
+  // Жёсткая блокировка: у фьючерсов расчёт невозможен без «стоимости пункта» и
+  // «маржи за контракт» (раздел Настройки → Фьючерсы). Пока они не заданы для
+  // тикера — не пускаем в подбор, чтобы не считать по неверной математике.
+  const missingPointValue = isFutures && !(Number(pointValue) > 0);
+  const missingMargin = isFutures && !(Number(marginPerContract) > 0);
+  const futuresBlocked = isFutures && (missingPointValue || missingMargin);
   const sourceLabel = isCrypto ? 'Binance' : 'TradingView';
   const extLabel = isCrypto ? 'Options Bridge' : 'Options CP Buttons';
   // У крипты нет премаркета/выходных — биржа 24/7, поэтому формулировка иная.
@@ -127,6 +138,8 @@ function NorthGptStrategyDialog({
 
   useEffect(() => {
     if (!isOpen) return undefined;
+    // Фьючерс без настроек: не дёргаем расширение, показываем экран-блокировку.
+    if (futuresBlocked) return undefined;
 
     setStep(initialStep);
     if (initialState?.params) {
@@ -195,6 +208,9 @@ function NorthGptStrategyDialog({
     calculatorMode,
     dividendYield,
     stockClassification,
+    // Стоимость пункта — для P&L опционов и актива по фьючерсам (у остальных режимов
+    // движок её игнорирует).
+    pointValue: Number(pointValue) > 0 ? Number(pointValue) : 1,
   });
 
   // Запрос к ChatGPT по уже собранной (и предрасчитанной) цепочке.
@@ -213,6 +229,9 @@ function NorthGptStrategyDialog({
       calculatorMode,
       dividendYield,
       ticker,
+      // Фьючерсы: множитель опционов = стоимость пункта, залог под актив = маржа за контракт.
+      pointValue: Number(pointValue) > 0 ? Number(pointValue) : undefined,
+      marginPerContract: Number(marginPerContract) > 0 ? Number(marginPerContract) : undefined,
     };
     const basePlCtx = buildBasePlCtx(numericParams);
     try {
@@ -419,8 +438,8 @@ function NorthGptStrategyDialog({
   };
 
   const needsExpirations = step === 'params';
-  const showLoader = isAnalyzing || (needsExpirations && expirationsStatus === 'loading');
-  const showFetchError = needsExpirations && expirationsStatus === 'error';
+  const showLoader = !futuresBlocked && (isAnalyzing || (needsExpirations && expirationsStatus === 'loading'));
+  const showFetchError = !futuresBlocked && needsExpirations && expirationsStatus === 'error';
 
   const levels = { top: Number(params?.topPrice), bottom: Number(params?.bottomPrice) };
 
@@ -439,6 +458,42 @@ function NorthGptStrategyDialog({
             ИИ-подбор через ChatGPT. На экране результатов — две комбинации: «актив + опционы» и «только опционы».
           </DialogDescription>
         </DialogHeader>
+
+        {futuresBlocked && (
+          <div className="space-y-3 py-4">
+            <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+              <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+              <div>
+                <div className="font-medium">
+                  {`Не заданы настройки фьючерса${ticker ? ` ${String(ticker).toUpperCase()}` : ''}`}
+                </div>
+                <div className="text-xs mt-1">
+                  Для подбора по фьючерсам нужны точные значения, иначе расчёт P&L и залога
+                  будет неверным. Не заполнено:
+                  <ul className="list-disc ml-5 mt-1 space-y-0.5">
+                    {missingPointValue && <li>Стоимость пункта (множитель контракта)</li>}
+                    {missingMargin && <li>Маржа за контракт</li>}
+                  </ul>
+                </div>
+                <div className="text-xs mt-2">
+                  Откройте <strong>Настройки → Фьючерсы</strong> и заполните эти поля для тикера,
+                  затем вернитесь и запустите подбор заново.
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={onClose}>Закрыть</Button>
+              <Button
+                size="sm"
+                onClick={() => { window.location.href = '/settings?section=futures'; }}
+                className="text-white border-0"
+                style={{ background: 'linear-gradient(135deg, #c084fc 0%, #a855f7 50%, #7c3aed 100%)' }}
+              >
+                Открыть настройки фьючерсов
+              </Button>
+            </div>
+          </div>
+        )}
 
         {showLoader && (
           <div className="flex flex-col items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
@@ -477,7 +532,7 @@ function NorthGptStrategyDialog({
           </div>
         )}
 
-        {!showLoader && !showFetchError && step === 'params' && (
+        {!futuresBlocked && !showLoader && !showFetchError && step === 'params' && (
           <NorthGptParamsForm
             currentPrice={currentPrice}
             entryPrice={entryPrice}
@@ -490,7 +545,7 @@ function NorthGptStrategyDialog({
           />
         )}
 
-        {!showLoader && !showFetchError && step === 'results' && (
+        {!futuresBlocked && !showLoader && !showFetchError && step === 'results' && (
           <NorthGptResultsView
             result={result}
             levels={levels}

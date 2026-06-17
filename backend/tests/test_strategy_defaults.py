@@ -46,3 +46,25 @@ def test_put_rejects_pct_over_100():
 def test_put_rejects_missing_block():
     r = client.put("/api/strategy-defaults/", json={"stocks": dict(BLOCK)})
     assert r.status_code == 422
+
+
+def test_put_then_get_roundtrip_with_futures():
+    payload = {
+        "stocks": {**BLOCK, "margin": 1111},
+        "crypto": {**BLOCK, "margin": 2222},
+        "futures": {**BLOCK, "margin": 3333},
+    }
+    r = client.put("/api/strategy-defaults/", json=payload)
+    assert r.status_code == 200
+    data = r.json()["data"]
+    assert data["futures"]["margin"] == 3333
+    r2 = client.get("/api/strategy-defaults/")
+    assert r2.json()["data"]["futures"]["margin"] == 3333
+
+
+def test_put_without_futures_is_backward_compatible():
+    # Старый клиент шлёт только stocks+crypto — принимается, futures получает заводской блок.
+    payload = {"stocks": dict(BLOCK), "crypto": dict(BLOCK)}
+    r = client.put("/api/strategy-defaults/", json=payload)
+    assert r.status_code == 200
+    assert r.json()["data"]["futures"] is not None

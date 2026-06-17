@@ -113,16 +113,26 @@ def validate_combination(legs, stock_quantity, chain_index, ranges):
             "qtyStock": qty_stock, "errors": errors}
 
 
-def compute_cost(positions, qty_stock, entry_price, leverage, contract_multiplier=100):
+def compute_cost(positions, qty_stock, entry_price, leverage, contract_multiplier=100,
+                 mode=None, margin_per_contract=None):
     """
     Стоимость/маржин комбинации (как в «Севере»: опционы по ask * множитель контракта).
     ЗАЧЕМ contract_multiplier: для акций/ETF контракт = 100 единиц базового актива,
-    для крипты (Binance) = 1. Без этого стоимость опционов и доля актива в марже
-    считались бы для крипты в 100 раз неверно. Дефолт 100 — обратная совместимость.
+    для крипты (Binance) = 1, для фьючерсов = стоимость пункта (pointValue). Без этого
+    стоимость опционов и доля актива в марже считались бы неверно. Дефолт 100 — обр. совм.
+
+    ЗАЧЕМ mode/margin_per_contract: у фьючерсов залог под базовый актив — это биржевая
+    «маржа за контракт» (кол-во × margin_per_contract), а НЕ «цена × кол-во / плечо», как
+    у акций/крипты. Плечо к фьючерсной марже не применяется.
     """
     options_cost = sum(float(p["ask"]) * contract_multiplier * int(p["quantity"]) for p in positions)
-    lev = leverage if leverage and leverage > 0 else 1.0
-    stock_margin = (qty_stock * entry_price) / lev if qty_stock and entry_price else 0
+    if (mode or "").lower() == "futures":
+        # Фьючерс: залог = кол-во контрактов × маржа за контракт (если задана, иначе 0).
+        mpc = float(margin_per_contract) if margin_per_contract else 0
+        stock_margin = qty_stock * mpc if qty_stock else 0
+    else:
+        lev = leverage if leverage and leverage > 0 else 1.0
+        stock_margin = (qty_stock * entry_price) / lev if qty_stock and entry_price else 0
     margin_used = stock_margin + options_cost
     pct = (stock_margin / margin_used) if margin_used > 0 else 0
     return {

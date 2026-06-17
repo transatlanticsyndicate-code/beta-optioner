@@ -43,6 +43,7 @@ const computeOptionPL = ({
   calculatorMode,
   dividendYield,
   stockClassification,
+  pointValue,
 }) => {
   const iv = getOptionVolatility(
     option,
@@ -54,12 +55,14 @@ const computeOptionPL = ({
     null,
     todayDaysToExp,
   );
+  // pointValue нужен для фьючерсов (Black-76 × стоимость пункта); у акций/крипты
+  // calculateOptionPLValue его игнорирует, поэтому передаём всегда (по умолч. 1).
   let pl = calculateOptionPLValue(
     option,
     targetPrice,
     currentPrice,
     daysRemainingAtCalcDate,
-    { mode: calculatorMode, overrideVolatility: iv, dividendYield },
+    { mode: calculatorMode, overrideVolatility: iv, dividendYield, pointValue },
   );
   if (isStockLikeMode(calculatorMode) && stockClassification) {
     pl = adjustPLByStockGroup(pl, stockClassification);
@@ -88,6 +91,7 @@ export const enrichNorthGptCombination = (combination, ctx) => {
     calculatorMode = CALCULATOR_MODES.STOCKS,
     dividendYield = 0,
     stockClassification = null,
+    pointValue = 1,
   } = ctx || {};
 
   const withStock = combination.kind === NORTH_KINDS.WITH_STOCK;
@@ -115,6 +119,7 @@ export const enrichNorthGptCombination = (combination, ctx) => {
       calculatorMode,
       dividendYield,
       stockClassification,
+      pointValue,
     };
     for (const option of positions) {
       optionsPLTop += safe(computeOptionPL({ option, targetPrice: topPrice, ...common }));
@@ -130,10 +135,13 @@ export const enrichNorthGptCombination = (combination, ctx) => {
     optionsPLB = 0;
   }
 
-  const assetPLTop = withStock ? (topPrice - entry) * qtyStock : 0;
-  const assetPLBottom = withStock ? (bottomPrice - entry) * qtyStock : 0;
-  const assetPLA = withStock ? (levelA - entry) * qtyStock : 0;
-  const assetPLB = withStock ? (levelB - entry) * qtyStock : 0;
+  // P&L базового актива: у фьючерсов 1 контракт = (изменение цены) × стоимость пункта;
+  // у акций/крипты множитель = 1 (контракт актива = 1 единица по цене).
+  const assetMult = calculatorMode === CALCULATOR_MODES.FUTURES ? (Number(pointValue) || 1) : 1;
+  const assetPLTop = withStock ? (topPrice - entry) * qtyStock * assetMult : 0;
+  const assetPLBottom = withStock ? (bottomPrice - entry) * qtyStock * assetMult : 0;
+  const assetPLA = withStock ? (levelA - entry) * qtyStock * assetMult : 0;
+  const assetPLB = withStock ? (levelB - entry) * qtyStock * assetMult : 0;
 
   const totalPLTop = optionsPLTop + assetPLTop;
   const bottomMetric = withStock ? optionsPLBottom + assetPLBottom : optionsPLBottom;
@@ -184,6 +192,7 @@ export const precomputeChainPLs = (chain, ctx) => {
     calculatorMode = CALCULATOR_MODES.STOCKS,
     dividendYield = 0,
     stockClassification = null,
+    pointValue = 1,
   } = ctx || {};
 
   const today = todayIso();
@@ -197,6 +206,7 @@ export const precomputeChainPLs = (chain, ctx) => {
     calculatorMode,
     dividendYield,
     stockClassification,
+    pointValue,
   };
 
   return chain.map((row) => {

@@ -6,8 +6,8 @@
  * задаются в настройках сайта (/settings?section=defaults) и хранятся на
  * сервере единым документом — одинаково на всех устройствах.
  *
- * Два независимых набора: для АКЦИЙ и для КРИПТЫ. Нужный набор выбирается по
- * режиму калькулятора при открытии формы «Север GPT».
+ * Три независимых набора: для АКЦИЙ, КРИПТЫ и ФЬЮЧЕРСОВ. Нужный набор выбирается
+ * по режиму калькулятора при открытии формы «Север GPT».
  *
  * Источник правды — backend. Фронт держит локальный кэш (localStorage) для
  * СИНХРОННОГО чтения при открытии формы (getNorthGptDefaults) и обновляет его
@@ -29,6 +29,7 @@ const FACTORY_BLOCK = {
 export const FACTORY_STRATEGY_DEFAULTS = {
   stocks: { ...FACTORY_BLOCK },
   crypto: { ...FACTORY_BLOCK },
+  futures: { ...FACTORY_BLOCK },
 };
 
 const STORAGE_KEY = 'strategyDefaults';
@@ -50,6 +51,7 @@ const normalizeBlock = (block) => {
 const normalizeAll = (data) => ({
   stocks: normalizeBlock(data?.stocks),
   crypto: normalizeBlock(data?.crypto),
+  futures: normalizeBlock(data?.futures),
 });
 
 /**
@@ -69,11 +71,14 @@ export const loadStrategyDefaults = () => {
 
 /**
  * Дефолты «Севера GPT» для текущего режима калькулятора (5 полей).
- * @param {string} calculatorMode - 'crypto' → крипто-набор, иначе → набор для акций.
+ * @param {string} calculatorMode - 'crypto' → крипто-набор, 'futures' → фьючерсный набор,
+ *   иначе → набор для акций.
  */
 export const getNorthGptDefaults = (calculatorMode) => {
   const all = loadStrategyDefaults();
-  return calculatorMode === 'crypto' ? all.crypto : all.stocks;
+  if (calculatorMode === 'crypto') return all.crypto;
+  if (calculatorMode === 'futures') return all.futures;
+  return all.stocks;
 };
 
 /** Записать значения по умолчанию в localStorage-кэш. */

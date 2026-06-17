@@ -136,6 +136,9 @@ class NorthGptContext(BaseModel):
     calculatorMode: Optional[str] = None
     dividendYield: Optional[float] = None
     ticker: Optional[str] = None
+    # Фьючерсы: стоимость пункта (множитель контракта) и маржа за контракт.
+    pointValue: Optional[float] = None
+    marginPerContract: Optional[float] = None
 
     class Config:
         extra = "allow"
@@ -251,11 +254,22 @@ def _fill_prompt_placeholders(prompt, c):
 
 def _contract_multiplier(context):
     """
-    Множитель контракта по режиму калькулятора: крипта (Binance) = 1, иначе = 100.
-    ЗАЧЕМ: опционы на акции/ETF — это 100 единиц базового актива, крипто-опционы Binance — 1.
+    Множитель контракта по режиму калькулятора: крипта (Binance) = 1, фьючерсы =
+    стоимость пункта (pointValue), иначе (акции/ETF) = 100.
+    ЗАЧЕМ: опционы на акции/ETF — это 100 единиц базового актива, крипто-опционы Binance — 1,
+    у фьючерсов цена опциона умножается на стоимость пункта контракта.
     """
     mode = (context.get("calculatorMode") or "").lower()
-    return 1 if mode == "crypto" else 100
+    if mode == "crypto":
+        return 1
+    if mode == "futures":
+        pv = context.get("pointValue")
+        try:
+            pv = float(pv)
+        except (TypeError, ValueError):
+            pv = 0
+        return pv if pv > 0 else 1  # фолбэк 1, если стоимость пункта не передана
+    return 100
 
 
 def _build_block(combo, chain_index, ranges, context):
@@ -272,7 +286,9 @@ def _build_block(combo, chain_index, ranges, context):
     cost = validator.compute_cost(
         res["positions"], res["qtyStock"],
         context.get("entryPrice"), context.get("leverage", 1.0),
-        _contract_multiplier(context))
+        _contract_multiplier(context),
+        mode=context.get("calculatorMode"),
+        margin_per_contract=context.get("marginPerContract"))
     kind = "withStock" if res["qtyStock"] > 0 else "optionsOnly"
     return {"kind": kind, "positions": res["positions"], "calls": res["calls"],
             "puts": res["puts"], "qtyStock": res["qtyStock"], "cost": cost,
