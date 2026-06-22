@@ -79,8 +79,39 @@ def test_select_returns_two_validated_blocks(monkeypatch):
     assert captured["constraints"]["leverage"] == 1.0
     # Тикер НЕ уходит в модель (ни в constraints, ни в компактной цепочке).
     assert "ticker" not in captured["constraints"]
-    # Цепочка для модели — сжатые поля + готовые plTop/plBottom.
-    assert set(captured["chain"][0].keys()) == {"type", "strike", "bid", "ask", "iv", "delta", "plTop", "plBottom"}
+    # Цепочка для модели — сжатые поля + готовые plTop/plBottom + cost.
+    assert set(captured["chain"][0].keys()) == {"type", "strike", "bid", "ask", "iv", "delta", "plTop", "plBottom", "cost"}
+    # Стоимость 1 контракта = ask × множитель (акции = 100).
+    assert captured["chain"][0]["cost"] == round(5.2 * 100)
+    # Базис маржи актива для акций: цена/плечо и множитель P&L = 1.
+    assert captured["constraints"]["assetMarginPerUnit"] == 145.0 / 1.0
+    assert captured["constraints"]["assetPlMultiplier"] == 1
+
+
+def test_select_futures_margin_basis_passed_to_model(monkeypatch):
+    """Фьючерсы: модель получает ГОТОВУЮ стоимость контракта (ask × стоимость пункта)
+    и базис залога актива (маржа за контракт), иначе угадывает множитель и промахивается."""
+    captured = {}
+
+    class CapturingClient(FakeClient):
+        def select_combinations(self, user_prompt, constraints, chain):
+            captured["constraints"] = constraints
+            captured["chain"] = chain
+            return super().select_combinations(user_prompt, constraints, chain)
+
+    payload = {
+        **PAYLOAD,
+        "context": {**PAYLOAD["context"], "calculatorMode": "futures",
+                    "pointValue": 50, "marginPerContract": 12000, "ticker": "ES"},
+    }
+    monkeypatch.setattr(ng, "get_openai_client", lambda: CapturingClient())
+    data = post_and_wait(payload)
+    assert data["status"] == "success"
+    # cost = ask × стоимость пункта (50), а не × 100.
+    assert captured["chain"][0]["cost"] == round(5.2 * 50)
+    # Залог под 1 контракт актива = маржа за контракт; P&L актива × стоимость пункта.
+    assert captured["constraints"]["assetMarginPerUnit"] == 12000
+    assert captured["constraints"]["assetPlMultiplier"] == 50
 
 
 def test_select_hallucinated_strike_becomes_block_error(monkeypatch):

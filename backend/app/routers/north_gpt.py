@@ -182,10 +182,20 @@ def _filter_chain(chain, expiration):
     return out
 
 
-def _compact_chain(chain):
-    """Компактная цепочка для промпта (меньше токенов): модели не нужны греки кроме delta."""
+def _compact_chain(chain, multiplier):
+    """Компактная цепочка для промпта (меньше токенов): модели не нужны греки кроме delta.
+
+    multiplier — множитель контракта (100 акции / 1 крипта / стоимость пункта фьючерс):
+    нужен, чтобы отдать модели ГОТОВУЮ стоимость 1 контракта (cost), иначе модель
+    угадывает множитель — для фьючерсов неверно.
+    """
     compact = []
     for row in chain:
+        ask = row.get("ask")
+        try:
+            cost = round(float(ask) * multiplier) if ask else None
+        except (TypeError, ValueError):
+            cost = None
         compact.append({
             "type": (row.get("type") or "").upper(),
             "strike": row.get("strike"),
@@ -197,6 +207,9 @@ def _compact_chain(chain):
             # (считается фронтендом тем же движком, что и экран). Модель их складывает.
             "plTop": row.get("plTop"),
             "plBottom": row.get("plBottom"),
+            # Готовая стоимость/маржа 1 купленного контракта в долларах (ask × множитель) —
+            # тот же базис, что и compute_cost. Модель суммирует для маржи сделки.
+            "cost": cost,
         })
     return compact
 
@@ -322,7 +335,9 @@ def _select_for_expiration(req, expiration, ctx, ranges):
     p = req.params
     full_chain = _filter_chain(req.chain, expiration)
     idx = validator.build_chain_index(full_chain, ctx.get("entryPrice"))
-    compact = _compact_chain(full_chain)
+    # Множитель контракта (100/1/стоимость пункта) — тот же, что в compute_cost.
+    mult = _contract_multiplier(ctx)
+    compact = _compact_chain(full_chain, mult)
     # Позиционный контекст (вход, текущая цена, плечо) — иначе ИИ не посчитает
     # P&L всей позиции и размер акции. Тикер намеренно НЕ передаём (обезличенность).
     constraints = p.model_dump()
@@ -333,6 +348,19 @@ def _select_for_expiration(req, expiration, ctx, ranges):
     constraints["entryPrice"] = ctx.get("entryPrice")
     constraints["currentPrice"] = ctx.get("currentPrice")
     constraints["leverage"] = ctx.get("leverage")
+    # Базис расчёта маржи и P&L актива для модели (совпадает с compute_cost):
+    # без него модель угадывает множитель и для фьючерсов промахивается по марже.
+    mode = (ctx.get("calculatorMode") or "").lower()
+    if mode == "futures":
+        # Залог под 1 контракт фьючерса = маржа за контракт; P&L актива × стоимость пункта.
+        constraints["assetMarginPerUnit"] = ctx.get("marginPerContract") or 0
+        constraints["assetPlMultiplier"] = mult
+    else:
+        # Акции/крипта: залог под 1 единицу = цена / плечо; P&L актива без множителя.
+        lev = ctx.get("leverage") or 1.0
+        entry = ctx.get("entryPrice") or 0
+        constraints["assetMarginPerUnit"] = (entry / lev) if lev else entry
+        constraints["assetPlMultiplier"] = 1
     # Подстановка реальных чисел вместо плейсхолдеров ({вход}, {цель_верх}, ...).
     filled_prompt = _fill_prompt_placeholders(req.prompt, constraints)
     out = get_openai_client().select_combinations(filled_prompt, constraints, compact)
