@@ -320,6 +320,31 @@
   }
 
   /**
+   * Свернуть все ПРОЧИЕ раскрытые экспирации (кроме целевой).
+   * ЗАЧЕМ: TradingView ненадёжно раскрывает вторую группу, когда первая уже
+   * раскрыта — из-за этого ломался сбор второй (альтернативной) даты в режиме
+   * двойной экспирации. Сворачивание возвращает таблицу в «чистое» состояние,
+   * и раскрытие целевой группы работает так же надёжно, как одиночное.
+   * Свёрнутость определяем по наличию строк даты в DOM (надёжнее aria-атрибута).
+   */
+  async function collapseOtherExpirations(targetIso) {
+    const headers = findExpirationHeaders();
+    for (const h of headers) {
+      if (h.date === targetIso) continue;
+      const ymd = h.date.replace(/-/g, '').slice(2);
+      const sel = `td[data-cell-id*="${ymd}C"], td[data-cell-id*="${ymd}P"]`;
+      if (!document.querySelector(sel)) continue; // уже свёрнута
+      LOG('Сворачиваю прочую экспирацию перед раскрытием цели:', h.date);
+      reactClick(h.header);
+      const start = Date.now();
+      while (Date.now() - start < 2500) {
+        if (!document.querySelector(sel)) break;
+        await sleep(150);
+      }
+    }
+  }
+
+  /**
    * Развернуть группу указанной экспирации (если свёрнута). Перебираем
    * кандидаты для клика и после каждого ждём появления строк — кто первым
    * сработал, того и оставили.
@@ -336,6 +361,11 @@
 
       await ensureFilters();
       await sleep(400);
+
+      // Чистое состояние: сворачиваем прочие раскрытые экспирации, иначе вторую
+      // группу TradingView раскрывает ненадёжно (ломался сбор альтернативной даты).
+      await collapseOtherExpirations(targetIso);
+      await sleep(300);
 
       const headers = findExpirationHeaders();
       LOG('Найдено заголовков:', headers.length, headers.map(h => `${h.date}(${h.isExpanded === true ? '▼' : h.isExpanded === false ? '▶' : '?'})`));
