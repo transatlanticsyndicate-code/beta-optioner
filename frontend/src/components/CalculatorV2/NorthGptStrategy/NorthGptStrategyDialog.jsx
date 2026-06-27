@@ -23,7 +23,7 @@ import { Sparkles, Loader2, AlertTriangle } from 'lucide-react';
 import NorthGptParamsForm from './NorthGptParamsForm';
 import NorthGptResultsView from './NorthGptResultsView';
 import { requestNorthGptCombination } from '../../../services/northGptApi';
-import { enrichNorthGptCombination, precomputeChainPLs } from '../../../utils/northGptStrategy/enrich';
+import { enrichNorthGptCombination, precomputeChainPLs, gateByBottomTolerance } from '../../../utils/northGptStrategy/enrich';
 import { sendNorthExpandExpirationCommand, sendNorthInitCommand } from '../../../hooks/useExtensionData';
 
 const EXPIRATIONS_KEY = 'tvc_expirations_list';
@@ -243,6 +243,12 @@ function NorthGptStrategyDialog({
         promptId,
       });
 
+      // Обогащаем P&L-метриками и сразу отсекаем комбинации, не уложившиеся в
+      // допуск по низу (показываем «нет подходящей комбинации» вместо слабого варианта).
+      const enrichGated = (block, plCtx) => gateByBottomTolerance(
+        enrichNorthGptCombination(block, plCtx), numericParams.plTolerance,
+      );
+
       let nextResult;
       if (!data || data.status === 'error') {
         nextResult = { error: (data && data.error) || 'ChatGPT не вернул ответ' };
@@ -254,21 +260,21 @@ function NorthGptStrategyDialog({
           dual: true,
           primary: {
             expirationDate: data.primary?.expirationDate || numericParams.expirationDate,
-            withAsset: enrichNorthGptCombination(data.primary?.withAsset, primaryCtx),
-            optionsOnly: enrichNorthGptCombination(data.primary?.optionsOnly, primaryCtx),
+            withAsset: enrichGated(data.primary?.withAsset, primaryCtx),
+            optionsOnly: enrichGated(data.primary?.optionsOnly, primaryCtx),
           },
           alternative: {
             expirationDate: data.alternative?.expirationDate || numericParams.alternativeExpirationDate,
-            withAsset: enrichNorthGptCombination(data.alternative?.withAsset, altCtx),
-            optionsOnly: enrichNorthGptCombination(data.alternative?.optionsOnly, altCtx),
+            withAsset: enrichGated(data.alternative?.withAsset, altCtx),
+            optionsOnly: enrichGated(data.alternative?.optionsOnly, altCtx),
           },
           debug: data.debug || null,
         };
       } else {
         const plCtx = { ...basePlCtx, expirationDate: numericParams.expirationDate };
         nextResult = {
-          withAsset: enrichNorthGptCombination(data.withAsset, plCtx),
-          optionsOnly: enrichNorthGptCombination(data.optionsOnly, plCtx),
+          withAsset: enrichGated(data.withAsset, plCtx),
+          optionsOnly: enrichGated(data.optionsOnly, plCtx),
           debug: data.debug || null,
         };
       }

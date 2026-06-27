@@ -169,6 +169,30 @@ export const enrichNorthGptCombination = (combination, ctx) => {
 };
 
 /**
+ * Шлюз по допуску P&L на низу. Стратегия требует, чтобы на нижней цене позиция
+ * закрывалась около нуля (|P&L по низу| ≤ допуск). Если комбинация в допуск не
+ * укладывается — заменяем её на блок-ошибку «нет подходящей комбинации», чтобы
+ * не показывать заведомо слабый вариант. Пояснение ИИ сохраняем.
+ * Без заданного допуска (нет/≤0) — не фильтруем.
+ *
+ * @param {object} combination — обогащённый блок (после enrichNorthGptCombination)
+ * @param {number} plTolerance — допустимый диапазон P&L по низу ± ($)
+ */
+export const gateByBottomTolerance = (combination, plTolerance) => {
+  if (!combination || combination.error || !Array.isArray(combination.positions)) return combination;
+  const tol = Number(plTolerance);
+  if (!Number.isFinite(tol) || tol <= 0) return combination;
+  const bottom = Number(combination?.criteria?.bottomMetric);
+  if (Number.isFinite(bottom) && Math.abs(bottom) > tol) {
+    return {
+      error: `Нет подходящей комбинации: P&L по низу выходит за допуск ±$${tol}.`,
+      rationale: combination.rationale,
+    };
+  }
+  return combination;
+};
+
+/**
  * Посчитать для КАЖДОГО опциона цепочки прогнозный P&L одного купленного
  * контракта на дату расчёта при цене актива topPrice и bottomPrice.
  *
