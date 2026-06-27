@@ -45,31 +45,6 @@ const daysFromIsoDate = (iso) => {
   return Math.round((target - todayUtc) / 86400000);
 };
 
-// Окно из ~7 дат вокруг выбранной (±3 соседа): держим список коротким, но даём
-// шагнуть к соседним экспирациям. Используется и для основной, и для
-// альтернативной даты. Если value нет в списке — центрируем на ближайшей к 60 дням.
-const computeExpirationWindow = (availableExpirations, value) => {
-  const all = Array.isArray(availableExpirations) ? availableExpirations.slice().sort() : [];
-  if (all.length === 0) return [];
-  const NEIGHBORS = 3;
-  let idx = all.indexOf(value);
-  if (idx === -1) {
-    const target = new Date(isoFromOffsetDays(60)).getTime();
-    let bestIdx = 0;
-    let bestDiff = Math.abs(new Date(`${all[0]}T00:00:00Z`).getTime() - target);
-    for (let i = 1; i < all.length; i++) {
-      const diff = Math.abs(new Date(`${all[i]}T00:00:00Z`).getTime() - target);
-      if (diff < bestDiff) { bestIdx = i; bestDiff = diff; }
-    }
-    idx = bestIdx;
-  }
-  let start = Math.max(0, idx - NEIGHBORS);
-  let end = Math.min(all.length, idx + NEIGHBORS + 1);
-  if (idx - start < NEIGHBORS) end = Math.min(all.length, end + (NEIGHBORS - (idx - start)));
-  if (end - 1 - idx < NEIGHBORS) start = Math.max(0, start - (NEIGHBORS - (end - 1 - idx)));
-  return all.slice(start, end);
-};
-
 // Следующая экспирация после current в отсортированном списке ('' если нет).
 const getNextExpiration = (current, availableExpirations) => {
   const all = Array.isArray(availableExpirations) ? availableExpirations.slice().sort() : [];
@@ -279,13 +254,11 @@ function NorthGptParamsForm({
     setExpirationDate(best);
   }, [availableExpirations, expirationDate]);
 
-  const dropdownExpirations = useMemo(
-    () => computeExpirationWindow(availableExpirations, expirationDate),
-    [availableExpirations, expirationDate],
-  );
-  const altDropdownExpirations = useMemo(
-    () => computeExpirationWindow(availableExpirations, altExpirationDate || expirationDate),
-    [availableExpirations, altExpirationDate, expirationDate],
+  // Полный список доступных экспираций (по возрастанию) — показываем все даты,
+  // и в основном, и в альтернативном поле, без «окна» ближайших.
+  const allExpirations = useMemo(
+    () => (Array.isArray(availableExpirations) ? [...new Set(availableExpirations)].sort() : []),
+    [availableExpirations],
   );
 
   // Альтернативная дата по умолчанию = следующая после основной. Подстраивается
@@ -417,7 +390,7 @@ function NorthGptParamsForm({
               onChange={(e) => setExpirationDate(e.target.value)}
             >
               <option value="">— выбрать —</option>
-              {dropdownExpirations.map((d) => (
+              {allExpirations.map((d) => (
                 <option key={d} value={d}>{d}</option>
               ))}
             </select>
@@ -439,7 +412,7 @@ function NorthGptParamsForm({
                   onChange={(e) => handleAltChange(e.target.value)}
                 >
                   <option value="">— выбрать —</option>
-                  {altDropdownExpirations.map((d) => (
+                  {allExpirations.map((d) => (
                     <option key={d} value={d}>{d}</option>
                   ))}
                 </select>
