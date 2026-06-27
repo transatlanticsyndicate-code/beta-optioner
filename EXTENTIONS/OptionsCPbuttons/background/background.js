@@ -113,7 +113,10 @@ function handleNorthExpandAndDump(message, sendResponse) {
     }
 
     if (tab) {
-      const needNav = !urlHasNorthFilters(tab.url) && !!targetUrl;
+      // Не уводим таб назад на диапазонный URL, если он уже сфокусирован на дате
+      // (series=...): runNorthOnTab сам перейдёт на нужную series. Иначе лишняя
+      // навигация роняет таблицу в дефолт и срывает сбор второй (альтернативной) даты.
+      const needNav = !urlHasNorthFilters(tab.url) && !urlHasSeries(tab.url) && !!targetUrl;
       console.log('[ext2/north/bg] expand → existing tab', tab.id, 'needNav:', needNav);
       if (needNav) {
         chrome.tabs.update(tab.id, { url: targetUrl, active: true }, () => {
@@ -176,6 +179,22 @@ function urlHasNorthFilters(url) {
     const from = u.searchParams.get('series_date_from');
     const to = u.searchParams.get('series_date_to');
     return !!(from && to);
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * Сфокусирован ли URL на конкретной экспирации (есть series=YYYYMMDD).
+ * ЗАЧЕМ: после раскрытия одной даты таб остаётся на series=... . Для раскрытия
+ * СЛЕДУЮЩЕЙ даты (двойная экспирация) не нужно уводить таб назад на диапазонный
+ * URL — runNorthOnTab сам навигирует прямо на новую series. Лишняя промежуточная
+ * навигация роняла таблицу в дефолт (ближайшая экспирация) и срывала сбор.
+ */
+function urlHasSeries(url) {
+  if (!url) return false;
+  try {
+    return !!new URL(url).searchParams.get('series');
   } catch (e) {
     return false;
   }
