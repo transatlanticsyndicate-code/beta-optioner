@@ -131,7 +131,7 @@ async function executePendingRefresh(calcTabId, configData, dbConfigId) {
     console.log('[TVC Pending] Запуск автообновления pending:', configData.ticker,
       configData.options.length, 'опц.');
 
-    const tvUrl = buildTvOptionsUrl(configData.ticker, configData.options);
+    const tvUrl = await buildTvOptionsUrl(configData.ticker, configData.options);
     if (!tvUrl) {
       await writeStatusToCalculator(calcTabId, 'error', 0,
         'Не удалось обновить котировки с TradingView');

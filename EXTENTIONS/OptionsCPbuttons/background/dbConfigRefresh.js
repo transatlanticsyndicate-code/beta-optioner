@@ -46,9 +46,73 @@ const DB_TICKER_EXCHANGE_MAP = {
   'MSFT': 'NASDAQ', 'AMZN': 'NASDAQ', 'GOOGL': 'NASDAQ', 'META': 'NASDAQ',
   'AMD': 'NASDAQ', 'INTC': 'NASDAQ', 'NFLX': 'NASDAQ', 'PYPL': 'NASDAQ',
   'SPY': 'AMEX', 'IWM': 'AMEX', 'DIA': 'AMEX',
-  'SPOT': 'NYSE', 'HUBS': 'NYSE',
+  'SPOT': 'NYSE', 'HUBS': 'NYSE', 'SAP': 'NYSE',
   'NIFTY': 'NSE', 'BANKNIFTY': 'NSE'
 };
+
+// Кэш бирж, определённых через поиск TradingView (тикер → биржа).
+// ЗАЧЕМ: не дёргать поиск повторно в течение жизни service worker.
+const _resolvedExchangeCache = new Map();
+
+/**
+ * Определить биржу для тикера.
+ * ЗАЧЕМ: раньше для тикеров не из встроенного списка в адрес уходил «голый»
+ * символ (?symbol=SAP). TradingView в нашем регионе (Панама) разрешает голый
+ * символ на европейский листинг (напр. XETR:SAP), где опционов нет → пустая
+ * доска / страница 404. Мы торгуем только на американских биржах, поэтому для
+ * незнакомого тикера спрашиваем у поиска TradingView американский листинг и
+ * берём его биржу.
+ * @returns {Promise<string|null>} биржа (NYSE/NASDAQ/…) или null, если не нашли
+ */
+async function resolveTickerExchange(ticker) {
+  if (!ticker) return null;
+
+  // 1. Быстрый путь: встроенная таблица известных тикеров
+  if (DB_TICKER_EXCHANGE_MAP[ticker]) return DB_TICKER_EXCHANGE_MAP[ticker];
+
+  // 2. Фьючерсные паттерны (тоже американские биржи)
+  for (const { pattern, exchange } of DB_TICKER_PATTERNS) {
+    if (pattern.test(ticker)) return exchange;
+  }
+
+  // 3. Ранее разрешённое в этой сессии
+  if (_resolvedExchangeCache.has(ticker)) return _resolvedExchangeCache.get(ticker);
+
+  // 4. Спрашиваем у поиска TradingView американский листинг
+  try {
+    const url = 'https://symbol-search.tradingview.com/symbol_search/v3/?text='
+      + encodeURIComponent(ticker) + '&hl=0&exchange=&lang=en&search_type=undefined&domain=production';
+    const resp = await fetch(url);
+    if (resp.ok) {
+      const data = await resp.json();
+      const list = Array.isArray(data.symbols) ? data.symbols : [];
+      const cleaned = list.map(s => ({
+        sym: String(s.symbol || '').replace(/<[^>]+>/g, '').toUpperCase(),
+        // ЗАЧЕМ: код биржи для URL — это prefix/source_id (напр. "AMEX"), а НЕ отображаемое
+        // имя exchange (напр. "NYSE Arca" с пробелом — в адресе оно не работает).
+        code: s.prefix || s.source_id || s.exchange,
+        country: s.country,
+        type: s.type
+      }));
+      // Берём только американский листинг обычной акции / ADR / фонда (ETF).
+      // ЗАЧЕМ: индексные и CFD-фиды (напр. SPCFD для SPX) для доски опционов не годятся —
+      // если подходящего листинга нет, лучше вернуть null (голый символ), чем открыть не то.
+      const preferred = cleaned.find(s =>
+        s.sym === ticker.toUpperCase() && s.country === 'US' && s.code
+        && ['stock', 'dr', 'fund'].includes(s.type));
+      if (preferred && preferred.code) {
+        _resolvedExchangeCache.set(ticker, preferred.code);
+        console.log('[TVC DbConfig] Биржа для', ticker, '→', preferred.code);
+        return preferred.code;
+      }
+    }
+  } catch (e) {
+    console.warn('[TVC DbConfig] Не удалось определить биржу для', ticker, e);
+  }
+
+  // 5. Не нашли — последний резерв: голый символ (пусть TradingView решает сам)
+  return null;
+}
 
 const DB_TICKER_PATTERNS = [
   { pattern: /^6[ABCEJMNRS][A-Z]\d+$/, exchange: 'CME' },
@@ -65,19 +129,16 @@ const DB_TICKER_PATTERNS = [
 
 /**
  * Построить URL TradingView для тикера (background-версия)
- * @returns {string|null} URL или null если тикер пустой
+ * @returns {Promise<string|null>} URL или null если тикер пустой
  */
-function buildTvOptionsUrl(ticker, options = []) {
+async function buildTvOptionsUrl(ticker, options = []) {
   if (!ticker) return null;
 
   // ЗАЧЕМ: Всегда query-based URL (?symbol=EXCHANGE:TICKER).
   // Path-формат (/chain/EXCHANGE-TICKER/) редиректит и теряет query-параметры.
-  let exchange = DB_TICKER_EXCHANGE_MAP[ticker] || null;
-  if (!exchange) {
-    for (const { pattern, exchange: ex } of DB_TICKER_PATTERNS) {
-      if (pattern.test(ticker)) { exchange = ex; break; }
-    }
-  }
+  // Биржу определяем через resolveTickerExchange: встроенный список → фьючерсные
+  // паттерны → поиск американского листинга у TradingView.
+  const exchange = await resolveTickerExchange(ticker);
 
   const symbol = exchange ? `${exchange}%3A${ticker}` : ticker;
   let baseUrl = `https://www.tradingview.com/options/chain/?symbol=${symbol}`;
@@ -723,7 +784,7 @@ async function executeDbConfigRefresh(calcTabId, configData) {
 
     // ЗАЧЕМ: Передаём полный массив опционов, чтобы вычислить точные экспирации
     // и диапазон страйков — TradingView виртуализирует таблицу, нужны точные параметры.
-    const tvUrl = buildTvOptionsUrl(configData.ticker, configData.options);
+    const tvUrl = await buildTvOptionsUrl(configData.ticker, configData.options);
     if (!tvUrl) {
       await writeStatusToCalculator(calcTabId, 'error', 0, 'Не удалось определить URL TradingView');
       return;
