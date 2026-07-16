@@ -115,6 +115,8 @@ function NorthGptParamsForm({
   const [margin, setMargin] = useState(defaults.margin);
   const [marginTolerance, setMarginTolerance] = useState(defaults.marginTolerance);
   const [minStockMarginPct, setMinStockMarginPct] = useState(defaults.minStockMarginPct);
+  // Вариант «актив + опционы»: по умолчанию ВЫКЛЮЧЕН (считаем только «только опционы»).
+  const [withAssetEnabled, setWithAssetEnabled] = useState(initialValues?.withAssetEnabled ?? false);
 
   // ===== Промпты =====
   const [prompts, setPrompts] = useState([]);
@@ -338,6 +340,7 @@ function NorthGptParamsForm({
       margin: toNum(margin),
       marginTolerance: toNum(marginTolerance),
       minStockMarginPct: toNum(minStockMarginPct),
+      withAssetEnabled,
       prompt: promptText,
       promptId: selectedPromptId || null,
     });
@@ -359,6 +362,17 @@ function NorthGptParamsForm({
           Текущая цена: ${(currentPrice || 0).toFixed(2)}. Точка входа может отличаться — поправьте при необходимости.
         </div>
       </div>
+
+      <label className="flex items-center gap-2 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          className="h-4 w-4 rounded border-input"
+          checked={withAssetEnabled}
+          onChange={(e) => setWithAssetEnabled(e.target.checked)}
+        />
+        <span className="text-xs">Считать вариант «актив + опционы»</span>
+        <span className="text-[11px] text-muted-foreground">— по умолчанию считается только «только опционы»</span>
+      </label>
 
       <div className="grid grid-cols-[1fr_1px_1fr] gap-4">
         <div className="space-y-3">
@@ -484,16 +498,18 @@ function NorthGptParamsForm({
               onChange={(e) => setMarginTolerance(e.target.value)} />
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <Label className="text-xs">Мин. доля акции (%)</Label>
-            <Input type="number" step="5" min="0" max="100" value={minStockMarginPct}
-              onChange={(e) => setMinStockMarginPct(e.target.value)} />
+        {withAssetEnabled && (
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs">Мин. доля акции (%)</Label>
+              <Input type="number" step="5" min="0" max="100" value={minStockMarginPct}
+                onChange={(e) => setMinStockMarginPct(e.target.value)} />
+            </div>
+            <div className="flex items-end text-[11px] text-muted-foreground pb-2">
+              Только для вида «актив + опционы».
+            </div>
           </div>
-          <div className="flex items-end text-[11px] text-muted-foreground pb-2">
-            Только для вида «актив + опционы».
-          </div>
-        </div>
+        )}
         <div className="text-[11px] text-muted-foreground">
           Плечо БА: <strong>×{Number(leverage) > 0 ? Number(leverage) : 1}</strong>
           <span className="ml-1">— меняется в блоке настроек калькулятора.</span>

@@ -248,6 +248,9 @@ function NorthGptStrategyDialog({
       const enrichGated = (block, plCtx) => gateByBottomTolerance(
         enrichNorthGptCombination(block, plCtx), numericParams.plTolerance,
       );
+      // Вариант «актив + опционы» по умолчанию выключен — тогда его не показываем.
+      const withAssetOn = !!numericParams.withAssetEnabled;
+      const enrichWithAsset = (block, plCtx) => (withAssetOn ? enrichGated(block, plCtx) : null);
 
       let nextResult;
       if (!data || data.status === 'error') {
@@ -258,14 +261,15 @@ function NorthGptStrategyDialog({
         const altCtx = { ...basePlCtx, expirationDate: numericParams.alternativeExpirationDate };
         nextResult = {
           dual: true,
+          withAssetEnabled: withAssetOn,
           primary: {
             expirationDate: data.primary?.expirationDate || numericParams.expirationDate,
-            withAsset: enrichGated(data.primary?.withAsset, primaryCtx),
+            withAsset: enrichWithAsset(data.primary?.withAsset, primaryCtx),
             optionsOnly: enrichGated(data.primary?.optionsOnly, primaryCtx),
           },
           alternative: {
             expirationDate: data.alternative?.expirationDate || numericParams.alternativeExpirationDate,
-            withAsset: enrichGated(data.alternative?.withAsset, altCtx),
+            withAsset: enrichWithAsset(data.alternative?.withAsset, altCtx),
             optionsOnly: enrichGated(data.alternative?.optionsOnly, altCtx),
           },
           debug: data.debug || null,
@@ -273,7 +277,8 @@ function NorthGptStrategyDialog({
       } else {
         const plCtx = { ...basePlCtx, expirationDate: numericParams.expirationDate };
         nextResult = {
-          withAsset: enrichGated(data.withAsset, plCtx),
+          withAssetEnabled: withAssetOn,
+          withAsset: enrichWithAsset(data.withAsset, plCtx),
           optionsOnly: enrichGated(data.optionsOnly, plCtx),
           debug: data.debug || null,
         };

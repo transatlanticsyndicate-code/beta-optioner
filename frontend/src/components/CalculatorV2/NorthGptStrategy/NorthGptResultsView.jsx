@@ -102,13 +102,24 @@ function NorthGptResultsView({ result, levels, onApply, onRequery, onCancel, onB
     }
   };
 
-  // Пара блоков (с активом / без) для одной группы — используется и в одиночном,
-  // и в двойном режиме.
+  // Вариант «актив + опционы» скрывается, если он выключен в настройках
+  // (result.withAssetEnabled === false). Для старых результатов без флага —
+  // показываем как раньше (undefined !== false).
+  const showWithAsset = result?.withAssetEnabled !== false;
+
+  // Блоки для одной группы — в одиночном и в двойном режиме. Если «актив +
+  // опционы» выключен, показываем только «только опционы» (в узкой колонке).
   const renderPair = (group) => (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <Block title="Актив + опционы" block={group?.withAsset} levels={levels} onApply={onApply} />
-      <Block title="Только опционы" block={group?.optionsOnly} levels={levels} onApply={onApply} />
-    </div>
+    showWithAsset ? (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Block title="Актив + опционы" block={group?.withAsset} levels={levels} onApply={onApply} />
+        <Block title="Только опционы" block={group?.optionsOnly} levels={levels} onApply={onApply} />
+      </div>
+    ) : (
+      <div className="max-w-xl">
+        <Block title="Только опционы" block={group?.optionsOnly} levels={levels} onApply={onApply} />
+      </div>
+    )
   );
 
   // Полный провал запроса (обе комбинации не получены) — отдельный экран ошибки.
