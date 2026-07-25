@@ -1,5 +1,6 @@
 import { Asset, Config, State, GlobalStats, ScenarioConfig, SortOrder } from './types';
 import Decimal from 'decimal.js';
+import { FinancialService } from './FinancialService';
 
 /**
  * Класс PositionService инкапсулирует всю бизнес-логику расчетов приложения.
@@ -99,7 +100,9 @@ export class PositionService {
             new Decimal(0)
         );
 
-        const deposit = new Decimal(state.deposit);
+        // Депозит = ввод минус вывод средств (тот же расчёт, что в карточке "Депозит"),
+        // а не отдельное поле state.deposit — оно нигде не обновляется и со временем расходится с реальностью.
+        const deposit = new Decimal(FinancialService.calculateDeposit(state.financial));
         const percentUsed = deposit.isZero() ? new Decimal(0) : totalRemaining.div(deposit).times(100);
 
         const scenarioCounts: Record<number, number> = {};
