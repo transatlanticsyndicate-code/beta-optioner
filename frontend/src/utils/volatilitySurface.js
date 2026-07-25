@@ -216,12 +216,13 @@ export const getProjectedIV = (option, currentDaysToExpiration, simulatedDaysToE
     return clampedIV * 100;
   }
 
-  // FALLBACK: нет калибровочных данных — консервативная модель роста IV при приближении к экспирации
-  // ЗАЧЕМ: Восстанавливаем старую логику — IV плавно растёт при уменьшении времени до экспирации
-  // Формула: 1 + 0.5 * (1 - 1/sqrt(timeRatio)), даёт рост от 1.0 до макс 1.5
-  const timeRatio = currentDaysToExpiration / Math.max(simulatedDaysToExpiration, 1);
-  const growthFactor = 1 + 0.5 * (1 - 1 / Math.sqrt(timeRatio));
-  return Math.min(baseIVDecimal * growthFactor, 3.0) * 100;
+  // FALLBACK: нет калибровочных данных — IV остаётся равной базовой (плоская модель)
+  // ЗАЧЕМ: старая эвристика роста IV при приближении к экспирации систематически завышала
+  // прогнозную стоимость купленных опционов. На реальной сделке ADBE эвристика давала
+  // прогноз Start P&L −$2 259 против факта −$3 224, а с плоской IV прогноз −$3 061 —
+  // почти совпадает с рынком. Без калибровочных данных под конкретный тикер честнее
+  // держать IV постоянной, чем угадывать направление и силу изменения.
+  return baseIVDecimal * 100;
 };
 
 /**
