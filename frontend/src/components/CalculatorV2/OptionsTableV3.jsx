@@ -217,7 +217,11 @@ function OptionsTableV3({
           pl = adjustPLByStockGroup(pl, stockClassification);
         }
 
-        if (opt.actualPL !== null && opt.actualPL !== undefined && opt.actualPLDate) {
+        // ВАЖНО: на дату экспирации (optDaysRemaining <= 0) якорь НЕ применяется —
+        // там P&L определяется чистой формулой intrinsic_value − entry_price,
+        // и любая корректировка через якорь искажает математически точное значение.
+        // (та же защита, что в блоке расчёта P&L строки, см. optionDaysRemaining > 0 ниже по файлу)
+        if (optDaysRemaining > 0 && opt.actualPL !== null && opt.actualPL !== undefined && opt.actualPLDate) {
           const anchorDateObj = new Date(opt.actualPLDate + 'T00:00:00Z');
           const oldestEntryDateObj = oldestEntry || new Date();
           const anchorDaysPassed = Math.round((anchorDateObj - oldestEntryDateObj) / (1000 * 60 * 60 * 24));
@@ -711,7 +715,7 @@ function OptionsTableV3({
           {/* ЗАЧЕМ: Клик по заголовку сортирует таблицу по этой колонке */}
           <div className="grid items-center text-xs font-medium text-muted-foreground px-2" style={{
             display: 'grid',
-            gridTemplateColumns: `30px minmax(0,1.0fr) minmax(0,0.75fr) minmax(0,0.5fr) minmax(0,0.75fr) ${hideColumns.includes('premium') ? '' : 'minmax(0,0.8fr) '}minmax(0,0.55fr) minmax(0,0.55fr) ${hideColumns.includes('oi') ? '' : 'minmax(0,0.6fr) '}minmax(0,0.5fr) minmax(0,0.6fr) minmax(0,0.55fr) minmax(0,0.75fr) minmax(0,0.65fr) minmax(0,0.85fr) minmax(0,1.1fr) minmax(0,0.65fr) minmax(0,0.6fr) 40px`.replace(/\s+/g, ' ').trim(),
+            gridTemplateColumns: `30px minmax(0,1.0fr) minmax(0,0.75fr) minmax(0,0.5fr) minmax(0,0.75fr) ${hideColumns.includes('premium') ? '' : 'minmax(0,0.8fr) '}minmax(0,0.55fr) minmax(0,0.55fr) ${hideColumns.includes('oi') ? '' : 'minmax(0,0.6fr) '}minmax(0,0.5fr) minmax(0,0.6fr) minmax(0,0.55fr) minmax(0,0.55fr) minmax(0,0.75fr) minmax(0,0.65fr) minmax(0,0.85fr) minmax(0,1.1fr) minmax(0,0.65fr) minmax(0,0.6fr) 40px`.replace(/\s+/g, ' ').trim(),
             gap: '6px'
           }}>
             <div></div>
@@ -750,6 +754,19 @@ function OptionsTableV3({
             <div className="text-center" style={{ fontSize: '0.7rem' }}>VOL</div>
             <div className="text-center" style={{ fontSize: '0.7rem' }}>IV</div>
             <div className="text-center" style={{ fontSize: '0.7rem' }}>Fact IV</div>
+            <div className="text-center flex items-center justify-center gap-0.5" style={{ fontSize: '0.7rem' }}>
+              Start IV
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="w-3 h-3 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Волатильность из снимка на момент входа в сделку.<br/>Дельта — изменение относительно текущей Fact IV.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
             <div
               className="text-center cursor-pointer hover:text-foreground select-none flex items-center justify-center gap-1"
               onClick={() => handleSort('entry')}
@@ -813,7 +830,7 @@ function OptionsTableV3({
                   }`}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: `30px minmax(0,1.0fr) minmax(0,0.75fr) minmax(0,0.5fr) minmax(0,0.75fr) ${hideColumns.includes('premium') ? '' : 'minmax(0,0.8fr) '}minmax(0,0.55fr) minmax(0,0.55fr) ${hideColumns.includes('oi') ? '' : 'minmax(0,0.6fr) '}minmax(0,0.5fr) minmax(0,0.6fr) minmax(0,0.55fr) minmax(0,0.75fr) minmax(0,0.65fr) minmax(0,0.85fr) minmax(0,1.1fr) minmax(0,0.65fr) minmax(0,0.6fr) 40px`.replace(/\s+/g, ' ').trim(),
+                  gridTemplateColumns: `30px minmax(0,1.0fr) minmax(0,0.75fr) minmax(0,0.5fr) minmax(0,0.75fr) ${hideColumns.includes('premium') ? '' : 'minmax(0,0.8fr) '}minmax(0,0.55fr) minmax(0,0.55fr) ${hideColumns.includes('oi') ? '' : 'minmax(0,0.6fr) '}minmax(0,0.5fr) minmax(0,0.6fr) minmax(0,0.55fr) minmax(0,0.55fr) minmax(0,0.75fr) minmax(0,0.65fr) minmax(0,0.85fr) minmax(0,1.1fr) minmax(0,0.65fr) minmax(0,0.6fr) 40px`.replace(/\s+/g, ' ').trim(),
                   gap: '6px'
                 }}
               >
@@ -1113,6 +1130,58 @@ function OptionsTableV3({
                     backgroundColor: option.ivUpdatedFromExtension ? '#dcfce7' : (option.manualIvOverride ? '#fef3c7' : 'transparent')
                   }}
                 />
+
+                {/* Start IV — волатильность, зафиксированная в снимке на момент входа в сделку
+                    (option.startSnapshot). ЗАЧЕМ: заказчик фиксирует реальную IV из терминала
+                    брокера при входе в позицию — колонка показывает эту точку отсчёта и то,
+                    как волатильность изменилась к текущему моменту (дельта к Fact IV).
+                    Только отображение — в расчёты P&L не участвует. */}
+                <div className="flex flex-col items-end justify-center leading-tight" style={{ fontSize: '0.7rem' }}>
+                  {(() => {
+                    const snapshot = option.startSnapshot;
+                    let startIv = null;
+                    if (snapshot) {
+                      if (snapshot.manualIvOverride !== null && snapshot.manualIvOverride !== undefined) {
+                        // Ручная IV из снимка уже хранится в процентах (44.82 = 44.82%)
+                        startIv = snapshot.manualIvOverride;
+                      } else if (snapshot.impliedVolatility !== null && snapshot.impliedVolatility !== undefined && snapshot.impliedVolatility > 0) {
+                        // Рыночная IV из снимка может быть в долях (0.4482) — приводим к процентам
+                        startIv = snapshot.impliedVolatility < 1 ? snapshot.impliedVolatility * 100 : snapshot.impliedVolatility;
+                      }
+                    }
+
+                    if (startIv === null || startIv === undefined || Number.isNaN(startIv)) {
+                      return <span className="text-muted-foreground">—</span>;
+                    }
+
+                    // Дельта к текущей Fact IV ноги — только если обе величины есть
+                    let deltaNode = null;
+                    const factIv = option.manualIvOverride;
+                    if (factIv !== null && factIv !== undefined && factIv !== '') {
+                      const delta = Number(factIv) - startIv;
+                      if (!Number.isNaN(delta)) {
+                        // Выгода по направлению ноги: для Buy рост IV — в плюс (зелёный),
+                        // для Sell — наоборот (рост IV — в минус, красный)
+                        const isBuy = option.action === 'Buy';
+                        const isFavorable = delta === 0 ? null : (isBuy ? delta > 0 : delta < 0);
+                        const deltaColor = isFavorable === null ? 'text-muted-foreground' : (isFavorable ? 'text-green-600' : 'text-red-600');
+                        const sign = delta > 0 ? '+' : (delta < 0 ? '−' : '');
+                        deltaNode = (
+                          <span className={deltaColor} style={{ fontSize: '0.62rem' }}>
+                            {sign}{Math.abs(delta).toFixed(1)}
+                          </span>
+                        );
+                      }
+                    }
+
+                    return (
+                      <>
+                        <span className="text-muted-foreground font-medium">{startIv.toFixed(2)}%</span>
+                        {deltaNode}
+                      </>
+                    );
+                  })()}
+                </div>
 
                 {/* Дата входа в позицию */}
                 <span
@@ -1603,7 +1672,7 @@ function OptionsTableV3({
           })}
 
           {/* Итоговая строка */}
-          <div className="items-center text-sm border-t-2 border-cyan-500 bg-cyan-50/50 rounded-md p-2 font-bold" style={{ display: 'grid', gridTemplateColumns: `30px minmax(0,1.0fr) minmax(0,0.75fr) minmax(0,0.5fr) minmax(0,0.75fr) ${hideColumns.includes('premium') ? '' : 'minmax(0,0.8fr) '}minmax(0,0.55fr) minmax(0,0.55fr) ${hideColumns.includes('oi') ? '' : 'minmax(0,0.6fr) '}minmax(0,0.5fr) minmax(0,0.6fr) minmax(0,0.55fr) minmax(0,0.75fr) minmax(0,0.65fr) minmax(0,0.85fr) minmax(0,1.1fr) minmax(0,0.65fr) minmax(0,0.6fr) 40px`.replace(/\s+/g, ' ').trim(), gap: '6px' }}>
+          <div className="items-center text-sm border-t-2 border-cyan-500 bg-cyan-50/50 rounded-md p-2 font-bold" style={{ display: 'grid', gridTemplateColumns: `30px minmax(0,1.0fr) minmax(0,0.75fr) minmax(0,0.5fr) minmax(0,0.75fr) ${hideColumns.includes('premium') ? '' : 'minmax(0,0.8fr) '}minmax(0,0.55fr) minmax(0,0.55fr) ${hideColumns.includes('oi') ? '' : 'minmax(0,0.6fr) '}minmax(0,0.5fr) minmax(0,0.6fr) minmax(0,0.55fr) minmax(0,0.55fr) minmax(0,0.75fr) minmax(0,0.65fr) minmax(0,0.85fr) minmax(0,1.1fr) minmax(0,0.65fr) minmax(0,0.6fr) 40px`.replace(/\s+/g, ' ').trim(), gap: '6px' }}>
             <div></div>
             <div className="text-left">ИТОГО:</div>
             <div></div>
@@ -1613,6 +1682,7 @@ function OptionsTableV3({
             <div></div>
             <div></div>
             {!hideColumns.includes('oi') && <div></div>}
+            <div></div>
             <div></div>
             <div></div>
             <div></div>
