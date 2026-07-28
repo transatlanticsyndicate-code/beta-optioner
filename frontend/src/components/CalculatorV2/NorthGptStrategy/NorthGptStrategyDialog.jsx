@@ -338,17 +338,9 @@ function NorthGptStrategyDialog({
         clearInterval(interval);
         const list = readExpirationsList();
         const hasExpList = !!list && Array.isArray(list.expirations) && list.expirations.length > 0;
-        // Диагностика: какие даты реально оказались в цепочке к моменту сбоя —
-        // показывает, развернулась ли целевая группа в таблице TradingView.
-        const lastRaw = readFullChainRaw();
-        const datesSeen = lastRaw && Array.isArray(lastRaw.options)
-          ? [...new Set(lastRaw.options.map((o) => o && o.date).filter(Boolean))].sort()
-          : [];
-        const err = new Error(hasExpList
+        reject(new Error(hasExpList
           ? noQuotesMessage
-          : `Не удалось получить опционы для экспирации ${targetIso}.`);
-        err.datesSeen = datesSeen;
-        reject(err);
+          : `Не удалось получить опционы для экспирации ${targetIso}.`));
       }
     }, POLL_INTERVAL_MS);
   });
@@ -390,13 +382,9 @@ function NorthGptStrategyDialog({
         combined.push(...precomputeChainPLs(altRows, { ...basePlCtx, expirationDate: formParams.alternativeExpirationDate }));
       } catch (err) {
         // Основная собралась, а альтернативная — нет: сообщаем явно про неё.
-        const seen = Array.isArray(err?.datesSeen) && err.datesSeen.length
-          ? err.datesSeen.join(', ')
-          : 'нет';
         showCollectError(
           `Не удалось получить котировки по альтернативной экспирации ${formParams.alternativeExpirationDate}. `
-          + 'Выберите другую альтернативную дату или снимите галочку «Посчитать двойную экспирацию». '
-          + `(Тех.данные для разработчика: даты в таблице — ${seen})`,
+          + 'Выберите другую альтернативную дату или снимите галочку «Посчитать двойную экспирацию».',
         );
         return;
       }

@@ -107,6 +107,9 @@ export const enrichNorthGptCombination = (combination, ctx) => {
   let optionsPLBottom = 0;
   let optionsPLA = 0;
   let optionsPLB = 0;
+  // Признак несостоявшегося расчёта: нули из catch нельзя принимать за настоящий
+  // P&L — иначе шлюз по допуску пропустит сломанную комбинацию как идеальную.
+  let plComputeFailed = false;
   try {
     const today = todayIso();
     const todayDaysToExp = daysBetween(today, expirationDate);
@@ -133,6 +136,7 @@ export const enrichNorthGptCombination = (combination, ctx) => {
     optionsPLBottom = 0;
     optionsPLA = 0;
     optionsPLB = 0;
+    plComputeFailed = true;
   }
 
   // P&L базового актива: у фьючерсов 1 контракт = (изменение цены) × стоимость пункта;
@@ -148,6 +152,7 @@ export const enrichNorthGptCombination = (combination, ctx) => {
 
   return {
     ...combination,
+    plComputeFailed,
     criteria: {
       bottomMetric,
       topOptions: optionsPLTop,
@@ -182,8 +187,22 @@ export const gateByBottomTolerance = (combination, plTolerance) => {
   if (!combination || combination.error || !Array.isArray(combination.positions)) return combination;
   const tol = Number(plTolerance);
   if (!Number.isFinite(tol) || tol <= 0) return combination;
+  // Расчёт P&L не состоялся: нули — не «идеальный ноль», а отсутствие данных.
+  // Пропустить такую комбинацию через допуск значило бы выдать сбой за успех.
+  if (combination.plComputeFailed) {
+    return {
+      error: 'Не удалось рассчитать P&L для этой комбинации — проверить нельзя. Попробуйте подобрать заново.',
+      rationale: combination.rationale,
+    };
+  }
   const bottom = Number(combination?.criteria?.bottomMetric);
-  if (Number.isFinite(bottom) && Math.abs(bottom) > tol) {
+  if (!Number.isFinite(bottom)) {
+    return {
+      error: 'Не удалось рассчитать P&L по низу для этой комбинации. Попробуйте подобрать заново.',
+      rationale: combination.rationale,
+    };
+  }
+  if (Math.abs(bottom) > tol) {
     return {
       error: `Нет подходящей комбинации: P&L по низу выходит за допуск ±$${tol}.`,
       rationale: combination.rationale,
