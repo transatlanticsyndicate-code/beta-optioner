@@ -56,14 +56,25 @@ export const buildPrecheckRequest = (block, ctx, formParams, chain, meta = {}) =
   const chainForExpiration = Array.isArray(chain)
     ? chain.filter((row) => !ctx?.expirationDate || row.date === ctx.expirationDate)
     : [];
-  const compactChain = chainForExpiration.slice(0, MAX_CHAIN).map((row) => ({
-    type: (row.type || '').toUpperCase(),
-    strike: finiteOrUndefined(row.strike),
-    bid: finiteOrUndefined(row.bid),
-    ask: finiteOrUndefined(row.ask),
-    iv: finiteOrUndefined(row.impliedVolatility ?? row.iv),
-    delta: finiteOrUndefined(row.delta),
-  }));
+  const compactChain = chainForExpiration.slice(0, MAX_CHAIN).map((row) => {
+    const expiration = row.date || ctx?.expirationDate || null;
+    return {
+      // Сервис проверяет ряды chain по той же строгой схеме, что и legs —
+      // все поля обязательны (проверено вживую: 422 без dte/volume/gamma/theta/vega).
+      option_type: (row.type || '').toUpperCase(),
+      strike: finiteOrUndefined(row.strike),
+      expiration,
+      dte: daysBetween(today, expiration),
+      bid: finiteOrUndefined(row.bid),
+      ask: finiteOrUndefined(row.ask),
+      volume: finiteOrUndefined(row.volume) ?? 0,
+      iv: finiteOrUndefined(row.impliedVolatility ?? row.iv),
+      delta: finiteOrUndefined(row.delta),
+      gamma: finiteOrUndefined(row.gamma) ?? 0,
+      theta: finiteOrUndefined(row.theta) ?? 0,
+      vega: finiteOrUndefined(row.vega) ?? 0,
+    };
+  });
 
   const payload = {
     ticker: String(meta.ticker || '').toUpperCase().slice(0, 10),
