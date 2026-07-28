@@ -278,6 +278,8 @@ function NorthGptStrategyDialog({
         const plCtx = { ...basePlCtx, expirationDate: numericParams.expirationDate };
         nextResult = {
           withAssetEnabled: withAssetOn,
+          // Дата экспирации подобранных опционов — показывается над карточками.
+          expirationDate: numericParams.expirationDate,
           withAsset: enrichWithAsset(data.withAsset, plCtx),
           optionsOnly: enrichGated(data.optionsOnly, plCtx),
           debug: data.debug || null,

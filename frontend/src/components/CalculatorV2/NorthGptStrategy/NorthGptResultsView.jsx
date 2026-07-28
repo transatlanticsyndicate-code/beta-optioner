@@ -166,7 +166,16 @@ function NorthGptResultsView({ result, levels, onApply, onRequery, onCancel, onB
           </section>
         </div>
       ) : (
-        renderPair(result)
+        <section className="space-y-2">
+          {/* Дата экспирации подобранных опционов. У старых сохранённых
+              результатов её нет — тогда заголовок не показываем. */}
+          {result?.expirationDate && (
+            <div className="text-sm font-semibold border-b pb-1" style={{ color: '#7c3aed' }}>
+              Экспирация {result.expirationDate}
+            </div>
+          )}
+          {renderPair(result)}
+        </section>
       )}
 
       <div className="flex flex-wrap items-center justify-end gap-2 border-t pt-3">
