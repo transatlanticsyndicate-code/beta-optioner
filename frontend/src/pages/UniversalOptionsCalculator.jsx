@@ -5076,6 +5076,7 @@ function UniversalOptionsCalculator() {
           dividendYield={useDividends ? dividendYield : 0}
           stockClassification={null}
           ticker={selectedTicker}
+          exchange={extensionTicker ? extensionExchange : null}
           pointValue={selectedFuture?.pointValue ?? null}
           marginPerContract={selectedFuture?.marginPerContract ?? null}
           tradingViewUrl={selectedTicker && calculatorMode !== CALCULATOR_MODES.CRYPTO ? (() => {

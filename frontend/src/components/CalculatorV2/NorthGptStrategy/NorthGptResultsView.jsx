@@ -12,6 +12,7 @@ import React from 'react';
 import { Button } from '../../ui/button';
 import { RotateCcw, X, ArrowLeft, AlertTriangle, FileSearch } from 'lucide-react';
 import ResultCard from '../NorthStrategy/ResultCard';
+import DealPrecheckPanel from './DealPrecheckPanel';
 
 function Rationale({ text }) {
   if (!text) return null;
@@ -48,6 +49,7 @@ function Block({ title, block, levels, onApply }) {
         levels={levels}
         onPick={() => onApply(block, block.kind)}
       />
+      <DealPrecheckPanel precheck={block.precheck} status={block.precheckStatus} />
       <Rationale text={block.rationale} />
     </div>
   );

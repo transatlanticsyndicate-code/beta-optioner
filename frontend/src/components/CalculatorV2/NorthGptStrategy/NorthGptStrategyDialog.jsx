@@ -23,8 +23,20 @@ import { Sparkles, Loader2, AlertTriangle } from 'lucide-react';
 import NorthGptParamsForm from './NorthGptParamsForm';
 import NorthGptResultsView from './NorthGptResultsView';
 import { requestNorthGptCombination } from '../../../services/northGptApi';
+import { requestDealPrecheck } from '../../../services/dealPrecheckApi';
 import { enrichNorthGptCombination, precomputeChainPLs, gateByBottomTolerance } from '../../../utils/northGptStrategy/enrich';
+import { buildPrecheckRequest } from '../../../utils/northGptStrategy/buildPrecheckRequest';
 import { sendNorthExpandExpirationCommand, sendNorthInitCommand } from '../../../hooks/useExtensionData';
+
+// Иммутабельно прочитать/записать значение по пути (['primary','optionsOnly'] и т.п.) —
+// блоки результата «Север GPT» лежат на разной глубине (одиночный/двойной режим).
+const getIn = (obj, path) => path.reduce((acc, key) => (acc ? acc[key] : undefined), obj);
+const setInPath = (root, path, updater) => {
+  if (path.length === 0) return updater(root);
+  const [key, ...rest] = path;
+  if (!root || !(key in root)) return root;
+  return { ...root, [key]: setInPath(root[key], rest, updater) };
+};
 
 const EXPIRATIONS_KEY = 'tvc_expirations_list';
 const FULL_CHAIN_KEY = 'tvc_full_chain';
@@ -91,6 +103,7 @@ function NorthGptStrategyDialog({
   dividendYield,
   stockClassification,
   ticker,
+  exchange,
   tradingViewUrl,
   pointValue,
   marginPerContract,
@@ -213,6 +226,45 @@ function NorthGptStrategyDialog({
     pointValue: Number(pointValue) > 0 ? Number(pointValue) : 1,
   });
 
+  // Проверка сделки (precheck): информационный вызов внешнего сервиса, запускается
+  // автоматически на фоне сразу после подбора, не блокируя показ карточек. Каждый
+  // валидный блок (withAsset/optionsOnly, в двойном режиме — по каждой дате отдельно)
+  // проверяется независимо; результат появляется на карточке, когда придёт ответ.
+  const schedulePrechecks = (nextResult, entries, formParams, chainForModel) => {
+    const validEntries = entries.filter(({ path }) => {
+      const block = getIn(nextResult, path);
+      return block && !block.error && Array.isArray(block.positions) && block.positions.length > 0;
+    });
+    if (validEntries.length === 0) return;
+
+    setResult((prev) => {
+      if (!prev) return prev;
+      let updated = prev;
+      validEntries.forEach(({ path }) => {
+        updated = setInPath(updated, path, (block) => ({ ...block, precheckStatus: 'loading' }));
+      });
+      if (onStateChange) onStateChange({ params: lastParamsRef.current, result: updated });
+      return updated;
+    });
+
+    validEntries.forEach(({ path, ctx }) => {
+      const block = getIn(nextResult, path);
+      const payload = buildPrecheckRequest(block, ctx, formParams, chainForModel, { ticker, exchange });
+      requestDealPrecheck(payload).then((data) => {
+        setResult((prev) => {
+          if (!prev || !getIn(prev, path)) return prev;
+          const updated = setInPath(prev, path, (b) => ({
+            ...b,
+            precheck: data,
+            precheckStatus: data?.status === 'ok' ? 'done' : 'error',
+          }));
+          if (onStateChange) onStateChange({ params: lastParamsRef.current, result: updated });
+          return updated;
+        });
+      });
+    });
+  };
+
   // Запрос к ChatGPT по уже собранной (и предрасчитанной) цепочке.
   // chainForModel — плоский массив строк; в двойном режиме содержит обе экспирации,
   // у каждой строки уже проставлены plTop/plBottom под её срок.
@@ -289,6 +341,22 @@ function NorthGptStrategyDialog({
       setResult(nextResult);
       setStep('results');
       if (onStateChange) onStateChange({ params: formParams, result: nextResult });
+
+      // Проверка сделки — запускается фоном, не блокируя уже показанные карточки.
+      if (nextResult.dual) {
+        schedulePrechecks(nextResult, [
+          { path: ['primary', 'withAsset'], ctx: { ...basePlCtx, expirationDate: numericParams.expirationDate } },
+          { path: ['primary', 'optionsOnly'], ctx: { ...basePlCtx, expirationDate: numericParams.expirationDate } },
+          { path: ['alternative', 'withAsset'], ctx: { ...basePlCtx, expirationDate: numericParams.alternativeExpirationDate } },
+          { path: ['alternative', 'optionsOnly'], ctx: { ...basePlCtx, expirationDate: numericParams.alternativeExpirationDate } },
+        ], numericParams, chainForModel);
+      } else {
+        const plCtx = { ...basePlCtx, expirationDate: numericParams.expirationDate };
+        schedulePrechecks(nextResult, [
+          { path: ['withAsset'], ctx: plCtx },
+          { path: ['optionsOnly'], ctx: plCtx },
+        ], numericParams, chainForModel);
+      }
     } catch (err) {
       const nextResult = { error: 'Не удалось связаться с сервером. Попробуйте ещё раз.' };
       setResult(nextResult);
