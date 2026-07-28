@@ -112,6 +112,10 @@ class NorthGptParams(BaseModel):
     # Двойная экспирация: при непустом значении (и отличном от основной даты)
     # подбор выполняется отдельно ещё и под эту дату — итого четыре варианта.
     alternativeExpirationDate: Optional[str] = None
+    # Считать ли вариант «актив + опционы». False — модель собирает только
+    # опционную конструкцию и не тратит токены на вариант с активом.
+    # По умолчанию True — обратная совместимость со старым фронтендом.
+    withAssetEnabled: Optional[bool] = True
     calcDate: Optional[str] = None
     topPrice: Optional[float] = None
     bottomPrice: Optional[float] = None
@@ -325,12 +329,16 @@ def _prune_jobs():
             _JOBS.pop(k, None)
 
 
-def _select_for_expiration(req, expiration, ctx, ranges):
+def _select_for_expiration(req, expiration, ctx, ranges, with_asset=True):
     """
-    Подбор двух комбинаций (с активом / без) для ОДНОЙ экспирации.
+    Подбор комбинаций для ОДНОЙ экспирации.
     Возвращает {withAsset, optionsOnly, debug}. Цепочка фильтруется по дате —
     общий плоский список (в двойном режиме содержит обе экспирации) сужается до
     нужной. Это позволяет переиспользовать логику для каждой даты без изменений.
+
+    with_asset=False — вариант «актив + опционы» выключен пользователем: модель
+    просят собрать ТОЛЬКО опционную конструкцию (см. select_combinations), поэтому
+    токены на ненужный вариант не тратятся, а withAsset в ответе = None.
     """
     p = req.params
     full_chain = _filter_chain(req.chain, expiration)
@@ -345,6 +353,12 @@ def _select_for_expiration(req, expiration, ctx, ranges):
     # альтернативную, чтобы плейсхолдер {экспирация} и сама модель не путались.
     constraints["expirationDate"] = expiration
     constraints.pop("alternativeExpirationDate", None)
+    # Флаг «считать вариант с активом» — служебный, модели он не нужен.
+    constraints.pop("withAssetEnabled", None)
+    if not with_asset:
+        # Порог доли акции относится только к варианту «актив + опционы» —
+        # при выключенном варианте не занимаем им внимание модели.
+        constraints.pop("minStockMarginPct", None)
     constraints["entryPrice"] = ctx.get("entryPrice")
     constraints["currentPrice"] = ctx.get("currentPrice")
     constraints["leverage"] = ctx.get("leverage")
@@ -363,10 +377,12 @@ def _select_for_expiration(req, expiration, ctx, ranges):
         constraints["assetPlMultiplier"] = 1
     # Подстановка реальных чисел вместо плейсхолдеров ({вход}, {цель_верх}, ...).
     filled_prompt = _fill_prompt_placeholders(req.prompt, constraints)
-    out = get_openai_client().select_combinations(filled_prompt, constraints, compact)
+    out = get_openai_client().select_combinations(
+        filled_prompt, constraints, compact, with_asset=with_asset)
     result, debug = out if isinstance(out, tuple) else (out, {})
     return {
-        "withAsset": _build_block(result.get("with_asset"), idx, ranges, ctx),
+        # Вариант с активом не запрашивали — блок не собираем (модель его и не присылала).
+        "withAsset": _build_block(result.get("with_asset"), idx, ranges, ctx) if with_asset else None,
         "optionsOnly": _build_block(result.get("options_only"), idx, ranges, ctx),
         "debug": debug,  # точный запрос и сырой ответ для служебного просмотра
     }
@@ -382,18 +398,21 @@ def _do_select(req):
     alt = p.alternativeExpirationDate
     alt = alt.strip() if isinstance(alt, str) else alt
     dual = bool(alt) and alt != p.expirationDate
+    # Выключенный вариант «актив + опционы» — не просим его у модели вовсе.
+    # None (старый фронтенд без флага) трактуем как «считать оба».
+    with_asset = p.withAssetEnabled is not False
 
     # Одиночный режим — прежняя форма ответа {withAsset, optionsOnly, debug}.
     if not dual:
-        return _select_for_expiration(req, p.expirationDate, ctx, ranges)
+        return _select_for_expiration(req, p.expirationDate, ctx, ranges, with_asset)
 
     # Двойной режим: два независимых подбора (основная + альтернативная дата).
     # Выполняем ПАРАЛЛЕЛЬНО — каждый вызов gpt-5.5 «думает» минуты, поэтому
     # параллельность держит общее время на уровне одного подбора. Локальный пул
     # не конкурирует с основным _EXECUTOR (вызовы сетевые/IO-bound).
     with ThreadPoolExecutor(max_workers=2) as pool:
-        fut_primary = pool.submit(_select_for_expiration, req, p.expirationDate, ctx, ranges)
-        fut_alt = pool.submit(_select_for_expiration, req, alt, ctx, ranges)
+        fut_primary = pool.submit(_select_for_expiration, req, p.expirationDate, ctx, ranges, with_asset)
+        fut_alt = pool.submit(_select_for_expiration, req, alt, ctx, ranges, with_asset)
         primary = fut_primary.result()
         alternative = fut_alt.result()
     return {
