@@ -9,6 +9,7 @@
 должен показать конструкцию как обычно, просто без риск-блока.
 """
 import os
+import time
 import requests
 
 
@@ -36,8 +37,11 @@ class DealPrecheckClient:
 
     def precheck(self, payload: dict) -> dict:
         """Отправить сделку на проверку. Никогда не бросает исключение."""
+        ticker = payload.get("ticker", "?")
         if not self.configured:
+            print("⚠️  [DealPrecheck] Нет ключа DEAL_PRECHECK_API_KEY — проверка пропущена")
             return {"status": "unavailable", "message": "Проверка сделки не настроена: нет ключа API"}
+        started = time.monotonic()
         try:
             resp = requests.post(
                 f"{self.base_url}/api/deal/precheck",
@@ -46,12 +50,20 @@ class DealPrecheckClient:
                     "Content-Type": "application/json",
                 },
                 json=payload,
-                timeout=28,
+                # ЗАЧЕМ 40с: собственный ответ сервиса «обычно ~25с, худший случай
+                # около 25с», но на практике даже пустой прогон с новостями занимал
+                # ~20с — берём заметный запас, чтобы не резать легитимно долгие ответы.
+                timeout=40,
             )
         except requests.exceptions.Timeout:
+            elapsed = time.monotonic() - started
+            print(f"⚠️  [DealPrecheck] {ticker}: таймаут после {elapsed:.1f}с")
             return {"status": "unavailable", "message": "Проверка сделки не ответила вовремя"}
         except requests.exceptions.RequestException as e:
+            print(f"⚠️  [DealPrecheck] {ticker}: ошибка сети — {e}")
             return {"status": "unavailable", "message": f"Проверка сделки недоступна: {e}"}
+
+        elapsed = time.monotonic() - started
 
         if not resp.ok:
             detail = ""
@@ -59,11 +71,14 @@ class DealPrecheckClient:
                 detail = str(resp.json())[:300]
             except ValueError:
                 detail = resp.text[:300]
+            print(f"⚠️  [DealPrecheck] {ticker}: HTTP {resp.status_code} за {elapsed:.1f}с — {detail}")
             return {"status": "unavailable", "message": _friendly_error(resp.status_code, detail)}
 
         try:
             data = resp.json()
         except ValueError:
+            print(f"⚠️  [DealPrecheck] {ticker}: нечитаемый ответ за {elapsed:.1f}с")
             return {"status": "unavailable", "message": "Проверка сделки вернула нечитаемый ответ"}
 
+        print(f"✅ [DealPrecheck] {ticker}: {data.get('final_status', '?')} за {elapsed:.1f}с")
         return {"status": "ok", **data}

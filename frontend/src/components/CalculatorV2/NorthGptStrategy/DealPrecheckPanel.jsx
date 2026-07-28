@@ -16,7 +16,7 @@
 
 import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Loader2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Loader2, ChevronDown, ChevronRight, Info } from 'lucide-react';
 
 const STATUS_STYLE = {
   GOOD: { bg: '#f0fdf4', border: '#86efac', text: '#166534', label: 'Проверка сделки: всё сходится' },
@@ -65,8 +65,8 @@ function DealPrecheckPanel({ precheck, status }) {
 
   if (status === 'loading') {
     return (
-      <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
-        <Loader2 className="h-3 w-3 animate-spin" />
+      <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground py-1.5 px-2 rounded-md bg-gray-50 dark:bg-gray-800/50">
+        <Loader2 className="h-3.5 w-3.5 animate-spin flex-shrink-0" />
         Проверяем сделку…
       </div>
     );
@@ -74,8 +74,12 @@ function DealPrecheckPanel({ precheck, status }) {
 
   if (status === 'error' || precheck?.status !== 'ok') {
     return (
-      <div className="text-xs text-muted-foreground py-1" title={precheck?.message || ''}>
-        Проверка сделки недоступна
+      <div
+        className="mt-2 flex items-center gap-2 text-xs text-muted-foreground py-1.5 px-2 rounded-md bg-gray-50 dark:bg-gray-800/50"
+        title={precheck?.message || ''}
+      >
+        <Info className="h-3.5 w-3.5 flex-shrink-0" />
+        Проверка сделки недоступна{precheck?.message ? `: ${precheck.message}` : ''}
       </div>
     );
   }

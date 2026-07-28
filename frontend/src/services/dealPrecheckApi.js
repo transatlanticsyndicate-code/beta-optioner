@@ -10,8 +10,8 @@
 const API_BASE_URL = process.env.REACT_APP_API_URL
   || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:8000' : '');
 
-// Бэкенд сам ждёт внешний сервис до 28с — берём запас на сетевые накладные расходы.
-const TIMEOUT_MS = 35_000;
+// Бэкенд сам ждёт внешний сервис до 40с — берём запас на сетевые накладные расходы.
+const TIMEOUT_MS = 48_000;
 
 /**
  * Запросить проверку риска по собранной конструкции.
