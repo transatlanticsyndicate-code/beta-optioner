@@ -14,7 +14,7 @@ import {
   calculateFuturesOptionPLValue,
   calculateFuturesOptionExpirationPLValue,
 } from '../../utils/futuresPricing';
-import { calculateDaysRemainingUTC, hasRemainingDaysUTC, getOldestEntryDate, isOptionActiveAtDay } from '../../utils/dateUtils';
+import { calculateDaysRemainingUTC, hasRemainingDaysUTC, getOldestEntryDate, isOptionActiveAtDay, calculateDaysToExpirationFromToday } from '../../utils/dateUtils';
 import { getOptionVolatility } from '../../utils/volatilitySurface';
 import { isStockLikeMode } from '../../utils/calculatorModes';
 
@@ -239,7 +239,10 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
       // currentDays = daysRemaining без daysPassed, simulatedDays = с учётом daysPassed
       // ivSurface используется для точной интерполяции IV между датами экспирации
       const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0, 30, oldestEntryDate);
-      let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface, 'simple');
+      // ЗАЧЕМ: передаём manualIvOverride (ручная Fact IV) и todaySimDaysForOpt — иначе кривая
+      // графика игнорирует ручную волатильность, введённую заказчиком, и расходится с таблицей
+      const todaySimDaysForOpt = calculateDaysToExpirationFromToday(option);
+      let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface, 'simple', null, option.manualIvOverride, todaySimDaysForOpt);
 
       // Используем AI волатильность если доступна
       if (isAIEnabled && aiVolatilityMap && selectedTicker && targetPrice) {
@@ -312,15 +315,20 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
       // ВАЖНО: Используем UTC для консистентности между часовыми поясами
       const optionPLArrays = visibleOptions.map(option => {
         // ВАЖНО: При ручной премии обнуляем ask/bid, чтобы getEntryPrice() использовал premium
+        // ЗАЧЕМ: учитываем ручные правки bid/ask (isAskModified/isBidModified), как в основной кривой —
+        // иначе точка схождения считается по другим bid/ask, чем сама кривая
         const tempOption = {
           ...option,
           premium: option.isPremiumModified ? option.customPremium : option.premium,
-          ask: option.isPremiumModified ? 0 : option.ask,
-          bid: option.isPremiumModified ? 0 : option.bid
+          ask: option.isPremiumModified ? 0 : (option.isAskModified ? option.customAsk : option.ask),
+          bid: option.isPremiumModified ? 0 : (option.isBidModified ? option.customBid : option.bid),
         };
         const optionDaysRemaining = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntryDate);
         const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0, 30, oldestEntryDate);
-        let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface, 'simple');
+        // ЗАЧЕМ: те же недостающие аргументы (manualIvOverride, todayDaysToExpiration), что и в основной кривой —
+        // иначе точка схождения считается по другой волатильности, чем сама кривая
+        const todaySimDaysForOpt = calculateDaysToExpirationFromToday(option);
+        let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface, 'simple', null, option.manualIvOverride, todaySimDaysForOpt);
 
         // Используем AI волатильность если доступна
         if (isAIEnabled && aiVolatilityMap && options.length > 0 && targetPrice) {
@@ -410,11 +418,13 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
       // Затем добавляем P&L от опционов на экспирации
       visibleOptions.forEach((option) => {
         // ВАЖНО: При ручной премии обнуляем ask/bid, чтобы getEntryPrice() использовал premium
+        // ЗАЧЕМ: учитываем ручные правки bid/ask (isAskModified/isBidModified), как в основной кривой —
+        // иначе пунктир экспирации отличается от кривой на величину ручной правки bid/ask
         const tempOption = {
           ...option,
           premium: option.isPremiumModified ? option.customPremium : option.premium,
-          ask: option.isPremiumModified ? 0 : option.ask,
-          bid: option.isPremiumModified ? 0 : option.bid
+          ask: option.isPremiumModified ? 0 : (option.isAskModified ? option.customAsk : option.ask),
+          bid: option.isPremiumModified ? 0 : (option.isBidModified ? option.customBid : option.bid),
         };
         prices.forEach((price, i) => {
           const pl = calculateOptionExpirationPLValue(tempOption, price);
@@ -840,24 +850,32 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
   };
 
   return (
-    <div className="w-full h-[600px]">
-      <Plot
-        data={traces}
-        layout={{
-          ...layout,
-          autosize: true,
-          margin: {
-            l: 100,
-            r: 40,
-            t: 80,
-            b: 70
-          }
-        }}
-        config={config}
-        style={{ width: '100%', height: '100%' }}
-        useResizeHandler={true}
-        onRelayout={handleRelayout}
-      />
+    <div className="w-full">
+      <div className="w-full h-[600px]">
+        <Plot
+          data={traces}
+          layout={{
+            ...layout,
+            autosize: true,
+            margin: {
+              l: 100,
+              r: 40,
+              t: 80,
+              b: 70
+            }
+          }}
+          config={config}
+          style={{ width: '100%', height: '100%' }}
+          useResizeHandler={true}
+          onRelayout={handleRelayout}
+        />
+      </div>
+      {/* ЗАЧЕМ: кривая — чистая теория (BSM/Black-76), она не учитывает ручную поправку Fact P&L,
+          которую заказчик вводит из брокера — эту поправку применяет только таблица. Без подписи
+          точка кривой при текущей цене могла молча разойтись с колонкой P&L и вызвать недоверие к графику. */}
+      <p className="w-full text-center text-[11px] text-muted-foreground/60 mt-1">
+        График — теоретический расчёт по модели, без учёта ручной поправки Fact P&L
+      </p>
     </div>
   );
 }
@@ -957,7 +975,10 @@ export function calculatePLDataForMetrics(options = [], currentPrice = 0, positi
     // Получаем IV из API через единую функцию (как в usePositionExitCalculator)
     // ivSurface используется для точной интерполяции IV между датами экспирации
     const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0, 30, oldestEntryDate);
-    let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface, 'simple');
+    // ЗАЧЕМ: метрики (MAX прибыль/убыток, Break-even) должны учитывать ручную Fact IV,
+    // как и таблица — иначе метрики расходятся с колонкой Fact IV в таблице
+    const todaySimDaysForOpt = calculateDaysToExpirationFromToday(option);
+    let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface, 'simple', null, option.manualIvOverride, todaySimDaysForOpt);
 
     // Используем AI волатильность если доступна
     if (isAIEnabled && aiVolatilityMap && selectedTicker && targetPrice) {
