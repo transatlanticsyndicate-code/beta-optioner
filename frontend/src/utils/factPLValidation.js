@@ -99,20 +99,13 @@ export function validateFactPL({ value, option, contractMultiplier }) {
     };
   }
 
-  // WARN — якорная цена актива сильно разошлась с ценой входа (>20%).
-  // ЗАЧЕМ: обычно сигнал, что якорь привязан не к рыночной цене на момент ввода,
-  // а к какому-то другому значению (например, к цене из симуляции — см. handleActualPLChange).
-  const anchorPrice = Number(option?.actualPLPrice);
-  const entryAssetPrice = Number(option?.assetPriceAtEntry);
-  if (Number.isFinite(anchorPrice) && Number.isFinite(entryAssetPrice) && entryAssetPrice > 0) {
-    const diff = Math.abs(anchorPrice - entryAssetPrice) / entryAssetPrice;
-    if (diff > 0.2) {
-      return {
-        level: 'warn',
-        message: `Якорная цена актива ($${anchorPrice.toFixed(2)}) расходится с ценой входа ($${entryAssetPrice.toFixed(2)}) более чем на 20%`,
-      };
-    }
-  }
+  // Намеренно НЕТ проверки «якорная цена актива сильно разошлась с ценой входа»:
+  // якорь ставится в момент, когда пользователь вводит фактический P&L от брокера —
+  // то есть СЕГОДНЯ, а не на дату входа в сделку. Поэтому расхождение якорной цены
+  // с ценой входа — это движение рынка за время жизни позиции, а не ошибка ввода
+  // (для выросших акций расхождение >20% — норма). Достоверно проверить, соответствовала
+  // ли якорная цена рынку именно на дату ввода, нельзя — для этого нужна история
+  // котировок, которой в системе нет.
 
   return { level: 'ok', message: '' };
 }

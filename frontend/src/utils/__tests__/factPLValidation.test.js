@@ -105,15 +105,24 @@ describe('validateFactPL — предупреждения (warn)', () => {
     expect(result.level).toBe('ok');
   });
 
-  test('якорная цена расходится с ценой входа актива больше чем на 20% → warn', () => {
-    const legWithPriceDrift = {
-      ...MKTX_CALL_LEG,
-      actualPLDate: '2026-07-15', // не день входа — чтобы сработал именно ценовой warn
-      actualPLPrice: 150,
-      assetPriceAtEntry: 100, // расхождение 50% > 20%
+  // Регрессия: якорная цена актива сильно (>20%) разошлась с ценой входа, но это
+  // не ошибка — рынок просто вырос за время жизни позиции. Раньше здесь ложно
+  // срабатывал warn (см. историю файла); правило удалено, проверка это фиксирует.
+  // Реальный кейс JKHY: вход 125.96 → якорь 150.58 (+19.5%), якорь поставлен не в
+  // день входа, остальные параметры физически корректны.
+  test('якорная цена сильно отличается от цены входа актива, но всё остальное в порядке (кейс JKHY) → ok', () => {
+    const jkhyPutLeg = {
+      action: 'Buy',
+      ask: 2.6,
+      quantity: 4,
+      entryDate: '2026-06-17',
+      actualPLDate: '2026-07-25',
+      actualPLPrice: 150.58,
+      assetPriceAtEntry: 125.96,
     };
-    const result = validateFactPL({ value: -200, option: legWithPriceDrift, contractMultiplier: 100 });
-    expect(result.level).toBe('warn');
+    // Стоимость ноги: 4 × 2.60 × 100 = 1040. Fact P&L -1038 — физически возможен (не блок).
+    const result = validateFactPL({ value: -1038, option: jkhyPutLeg, contractMultiplier: 100 });
+    expect(result.level).toBe('ok');
   });
 });
 
