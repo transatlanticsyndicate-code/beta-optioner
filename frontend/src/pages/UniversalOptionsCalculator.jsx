@@ -98,6 +98,20 @@ import { loadFuturesSettings, getPointValue, getMarginPerContract, getFutureByTi
 // ЗАЧЕМ: Получение опционов, тикера и цены из localStorage и URL параметров
 import { useExtensionData, useExtensionRefreshCommand, writeRefreshResult } from '../hooks/useExtensionData';
 
+// Импорт политики применения обновлений от расширения к рыночной IV
+// ЗАЧЕМ: Изолирует правило «рыночная IV → только impliedVolatility, Fact IV не трогаем»
+// в чистых функциях, чтобы его можно было покрыть unit-тестами отдельно от эффекта
+import { buildIvPatch, shouldPersistExtensionRefresh } from '../utils/extensionRefreshPolicy';
+
+// Импорт построителя ключа опциона для хранилища ручных правок (с учётом тикера)
+// ЗАЧЕМ: Ключ без тикера приводил к "перетеканию" правок между разными инструментами
+import { buildOptionKey } from '../utils/optionKey';
+
+// Импорт чистого резолвера множителя контракта
+// ЗАЧЕМ: Изолирует правило «нет настроек фьючерса → null, а не акционные 100» в чистой
+// функции, покрытой unit-тестами отдельно от useMemo в компоненте
+import { resolveContractMultiplier } from '../utils/contractMultiplier';
+
 // УБРАНО: AI модель не используется в универсальном калькуляторе
 // const AI_SUPPORTED_TICKERS = [...];
 
@@ -114,6 +128,14 @@ const CALCULATOR_MODES = {
 
 // Крипто-тикеры — для них не показываем группы акций и не запрашиваем классификацию
 const CRYPTO_TICKERS = ['BTCUSDT', 'ETHUSDT'];
+
+// Ключ хранилища ручных правок опционов (quantity/customPremium/Fact P&L/Fact IV и т.д.).
+// ЗАЧЕМ v2: старый ключ 'optioner_user_overrides' строился БЕЗ тикера — правки одного
+// инструмента "перетекали" в другой с тем же страйком/типом/датой (см. utils/optionKey.js).
+// Старый ключ НЕ читаем и не мигрируем (записи неоднозначны — неизвестно, какому тикеру
+// они принадлежали), только чистим при полном сбросе калькулятора, чтобы не копился мусор.
+const OPTIONER_USER_OVERRIDES_KEY = 'optioner_user_overrides_v2';
+const OPTIONER_USER_OVERRIDES_LEGACY_KEY = 'optioner_user_overrides';
 
 // Демо-данные для опционов (вынесены за пределы компонента для оптимизации)
 const demoOptions = [
@@ -203,18 +225,6 @@ function UniversalOptionsCalculator() {
   // ЗАЧЕМ: Хранит pointValue и название фьючерса для расчётов
   const [selectedFuture, setSelectedFuture] = useState(null);
 
-  // Множитель контракта (100 для акций, 1 для крипто, pointValue для фьючерсов)
-  // ЗАЧЕМ: Используется в расчётах P&L
-  const contractMultiplier = useMemo(() => {
-    if (calculatorMode === CALCULATOR_MODES.FUTURES && selectedFuture) {
-      return selectedFuture.pointValue || 1;
-    }
-    if (calculatorMode === CALCULATOR_MODES.CRYPTO) {
-      return 1; // Крипто-опционы не умножаются на 100
-    }
-    return 100; // Стандартный множитель для акций
-  }, [calculatorMode, selectedFuture]);
-
   // Статус подключения к TradingView Extension
   // ЗАЧЕМ: Отображение статуса в UI
   const [tradingViewConnected, setTradingViewConnected] = useState(false);
@@ -249,6 +259,58 @@ function UniversalOptionsCalculator() {
 
   // State для выбранного тикера
   const [selectedTicker, setSelectedTicker] = useState("");
+
+  // Множитель контракта (100 для акций, 1 для крипто, pointValue для фьючерсов)
+  // ЗАЧЕМ: Используется в расчётах P&L. Раньше режим FUTURES без selectedFuture
+  // тихо откатывался на акционный множитель 100 — P&L завышался/занижался в разы.
+  // Теперь при отсутствии настроек фьючерса явно возвращаем null («нет данных»):
+  // isFuturesMissingSettings блокирует суммирование ИТОГО, а отображение точечных
+  // мест показывает прочерк вместо неверного числа.
+  const contractMultiplier = useMemo(() => {
+    const fallbackTicker = selectedTicker || extensionTicker || contractCode;
+    // selectedFuture ещё не подтянулся (например, гонка с syncFuturesSettingsFromServer) —
+    // подстраховываемся прямой проверкой настроек по тикеру ДО вызова чистого резолвера.
+    // getPointValue сама вернёт 1 с console.warn, если не найдёт — поэтому сначала
+    // проверяем существование через getFutureByTicker, а не вызываем getPointValue вслепую.
+    if (calculatorMode === CALCULATOR_MODES.FUTURES && !selectedFuture?.pointValue && fallbackTicker) {
+      const knownFuture = getFutureByTicker(fallbackTicker);
+      if (knownFuture) return getPointValue(fallbackTicker);
+    }
+    return resolveContractMultiplier(calculatorMode, selectedFuture, fallbackTicker);
+  }, [calculatorMode, selectedFuture, selectedTicker, extensionTicker, contractCode]);
+
+  // Переустановка selectedFuture, когда серверные настройки фьючерсов приезжают с задержкой.
+  // ЗАЧЕМ: App.js вызывает syncFuturesSettingsFromServer() без await — если ответ сервера
+  // приходит ПОСЛЕ того, как калькулятор уже пытался найти фьючерс и получил null,
+  // selectedFuture так и останется null до перезагрузки страницы. НЕ трогаем App.js (чужой
+  // файл) — вместо этого сами перепроверяем localStorage-кэш настроек фьючерсов здесь.
+  // 'storage' событие не сработает в той же вкладке, где произошла запись (спецификация
+  // браузера — событие видят только ДРУГИЕ вкладки), поэтому основной механизм — короткие
+  // повторные попытки; 'storage' добавлен дополнительно на случай синхронизации из другой вкладки.
+  useEffect(() => {
+    if (calculatorMode !== CALCULATOR_MODES.FUTURES || selectedFuture) return;
+    const fallbackTicker = selectedTicker || extensionTicker || contractCode;
+    if (!fallbackTicker) return;
+
+    const tryResolveFuture = () => {
+      const found = getFutureByTicker(fallbackTicker);
+      if (found) {
+        console.info('🔁 [FuturesSettings] Настройки фьючерса подъехали с задержкой, переустанавливаем selectedFuture:', found);
+        setSelectedFuture(found);
+      }
+    };
+
+    const onStorage = (e) => {
+      if (!e || e.key === null || e.key === 'futuresSettings') tryResolveFuture();
+    };
+    window.addEventListener('storage', onStorage);
+    const retryTimers = [500, 2000].map(delay => setTimeout(tryResolveFuture, delay));
+
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      retryTimers.forEach(clearTimeout);
+    };
+  }, [calculatorMode, selectedFuture, selectedTicker, extensionTicker, contractCode]);
 
   // State для данных волатильности (barchart.com)
   const [volatilityData, setVolatilityData] = useState(null);
@@ -362,6 +424,16 @@ function UniversalOptionsCalculator() {
   // ЗАЧЕМ: Определить, какую функцию сохранения использовать
   const [configSource, setConfigSource] = useState(null); // 'db' или 'localStorage'
 
+  // Ref-зеркала isLocked/isEditMode — для эффекта пересохранения после обновления
+  // от расширения (needExtRefreshSaveRef). ЗАЧЕМ: эффект намеренно не зависит от
+  // isLocked/isEditMode (deps: [options, currentPrice, loadedConfigId]), чтобы не
+  // перезапускаться при каждой смене этих флагов — читаем их актуальное значение
+  // через ref в момент срабатывания.
+  const isLockedRef = useRef(isLocked);
+  const isEditModeRef = useRef(isEditMode);
+  useEffect(() => { isLockedRef.current = isLocked; }, [isLocked]);
+  useEffect(() => { isEditModeRef.current = isEditMode; }, [isEditMode]);
+
   // State для настроек калькулятора
   // IMPORTANT: daysPassed - прошедшие дни от сегодня (новая логика для корректной работы с разными сроками экспирации)
   // Каждый опцион имеет свой initialDaysToExpiration, а actualDaysRemaining = max(0, initialDaysToExpiration - daysPassed)
@@ -399,46 +471,52 @@ function UniversalOptionsCalculator() {
   // Ref для хранения ручных изменений опционов
   // ЗАЧЕМ: Расширение перезаписывает localStorage.calculatorState при добавлении новых опционов,
   // теряя ручные изменения (quantity, customPremium, entryDate). Храним их отдельно.
-  // Ключ: optionKey (strike-type-date), значение: {quantity, customPremium, entryDate, ...}
+  // Ключ: optionKey (TICKER|strike-type-date, см. utils/optionKey.js), значение:
+  // {quantity, customPremium, entryDate, ...}
   const userOptionOverridesRef = useRef((() => {
     try {
-      const saved = localStorage.getItem('optioner_user_overrides');
+      const saved = localStorage.getItem(OPTIONER_USER_OVERRIDES_KEY);
       return saved ? JSON.parse(saved) : {};
     } catch {
       return {};
     }
   })());
-  
-  // Функция для создания ключа опциона (для идентификации)
-  const getOptionKey = useCallback((option) => {
-    const strike = option.strike || 0;
-    const type = (option.type || '').toUpperCase();
-    const date = (option.date || '').split('T')[0];
-    return `${strike}-${type}-${date}`;
+
+  // Функция для создания ключа опциона (для идентификации). Тикер передаётся ЯВНО
+  // вызывающим кодом — на путях восстановления конфигурации React state selectedTicker
+  // может быть ещё пустым, поэтому источник тикера у каждого вызова свой (см. места вызова).
+  const getOptionKey = useCallback((ticker, option) => {
+    const key = buildOptionKey(ticker, option);
+    if (!key) {
+      console.warn('⚠️ [UserOverrides] Пустой тикер — ключ не построен, запись пропущена:', { option });
+    }
+    return key;
   }, []);
-  
+
   // Функция для сохранения ручных изменений опциона
-  const saveUserOverride = useCallback((option, field, value) => {
-    const key = getOptionKey(option);
+  const saveUserOverride = useCallback((ticker, option, field, value) => {
+    const key = getOptionKey(ticker, option);
+    if (!key) return; // Пустой тикер — не сохраняем, чтобы не создавать неоднозначную запись
     const overrides = userOptionOverridesRef.current;
     if (!overrides[key]) {
       overrides[key] = {};
     }
     overrides[key][field] = value;
     userOptionOverridesRef.current = overrides;
-    
+
     // Сохраняем в localStorage
     try {
-      localStorage.setItem('optioner_user_overrides', JSON.stringify(overrides));
+      localStorage.setItem(OPTIONER_USER_OVERRIDES_KEY, JSON.stringify(overrides));
       console.log('💾 [UserOverrides] Сохранено:', { key, field, value });
     } catch (error) {
       console.error('❌ [UserOverrides] Ошибка сохранения:', error);
     }
   }, [getOptionKey]);
-  
+
   // Функция для получения ручных изменений опциона
-  const getUserOverride = useCallback((option) => {
-    const key = getOptionKey(option);
+  const getUserOverride = useCallback((ticker, option) => {
+    const key = getOptionKey(ticker, option);
+    if (!key) return {};
     return userOptionOverridesRef.current[key] || {};
   }, [getOptionKey]);
 
@@ -759,7 +837,7 @@ function UniversalOptionsCalculator() {
         const qty = Number(opt.quantity) > 0 ? Number(opt.quantity) : 1;
         // Также сохраняем в overrides, чтобы миграция не повторялась при перезагрузке
         try {
-          saveUserOverride(opt, 'actualPLQuantity', qty);
+          saveUserOverride(selectedTicker, opt, 'actualPLQuantity', qty);
         } catch (e) { /* мягкий fallback на случай отсутствия saveUserOverride в момент монтажа */ }
         return { ...opt, actualPLQuantity: qty };
       }
@@ -828,7 +906,11 @@ function UniversalOptionsCalculator() {
             targetPrice,
             selectedTicker,
             calculatorMode,
-            contractMultiplier
+            // calculatePLMetrics (чужой файл) не знает про isFuturesMissingSettings —
+            // null тихо стал бы 0 в арифметике (JS: number * null === 0), а снимок уходит
+            // во внешний localStorage-ключ для сторонних потребителей. ?? 1 — нейтральный
+            // фолбэк, НЕ 100 как раньше.
+            contractMultiplier ?? 1
           )
         : { maxLoss: 0, maxProfit: 0, breakevens: [], riskReward: '—' };
 
@@ -979,9 +1061,6 @@ function UniversalOptionsCalculator() {
 
       if (refreshedOptions && refreshedOptions.length > 0) {
         const now = new Date();
-        const todayISO = now.toISOString().split('T')[0];
-        const todayDisplay = now.toLocaleDateString('ru-RU') + ' ' +
-          now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 
         const updatedOptions = options.map(opt => {
           const match = refreshedOptions.find(ref => {
@@ -1001,16 +1080,19 @@ function UniversalOptionsCalculator() {
           let next = opt;
           let touched = false;
 
-          // IV — обновляем в обоих режимах (pending и standard).
+          // Рыночная IV идёт ТОЛЬКО в колонку IV (impliedVolatility) — обновляем
+          // в обоих режимах (pending и standard). Fact IV (manualIvOverride*) —
+          // ручные данные из терминала брокера, расширение их не трогает никогда.
           if (match.newIV != null && !isNaN(match.newIV)) {
-            next = {
-              ...next,
-              manualIvOverride: match.newIV,
-              manualIvOverrideDate: todayISO,
-              manualIvOverrideDisplayDate: todayDisplay,
-              ivUpdatedFromExtension: true
-            };
-            touched = true;
+            const ivPatch = buildIvPatch(opt, match.newIV, now.toISOString());
+            if (ivPatch) {
+              next = { ...next, ...ivPatch };
+              touched = true;
+            } else {
+              console.warn('⚠️ [ExtRefresh] Некорректная IV от расширения, пропуск:', {
+                ticker: selectedTicker, strike: opt.strike, type: opt.type, rawIv: match.newIV
+              });
+            }
           }
 
           // bid/ask/volume/assetPriceAtEntry — только в режиме pending.
@@ -1078,6 +1160,23 @@ function UniversalOptionsCalculator() {
   useEffect(() => {
     if (!needExtRefreshSaveRef.current || !loadedConfigId) return;
     needExtRefreshSaveRef.current = false;
+
+    // Гейт: гасим намерение сохранить (а не откладываем) для зафиксированных
+    // позиций и режима редактирования — накрывает обе ветки ниже (БД и
+    // localStorage). ЗАЧЕМ: зафиксированная сделка не должна автоматически
+    // переписываться обновлением от расширения; в режиме редактирования
+    // сохранение делает пользователь явной кнопкой «Сохранить изменения»
+    // (см. handleSaveEditedConfiguration) — тот путь этим гейтом не затронут.
+    if (!shouldPersistExtensionRefresh({
+      hasPendingFlag: true,
+      loadedConfigId,
+      isLocked: isLockedRef.current,
+      isEditMode: isEditModeRef.current,
+    })) {
+      console.info('⏭️ [ExtRefresh] Пересохранение пропущено:',
+        isLockedRef.current ? 'сделка зафиксирована' : 'режим редактирования');
+      return;
+    }
 
     if (configSource === 'db') {
       (async () => {
@@ -1181,11 +1280,13 @@ function UniversalOptionsCalculator() {
     localStorage.removeItem('calculatorState');
     console.log('🧹 [Universal] localStorage.calculatorState очищен');
     
-    // ВАЖНО: Очищаем сохраненные ручные изменения опционов
-    // ЗАЧЕМ: После полного сброса калькулятора старые изменения не должны применяться
-    localStorage.removeItem('optioner_user_overrides');
+    // ВАЖНО: Очищаем сохраненные ручные изменения опционов (текущий v2-ключ и legacy)
+    // ЗАЧЕМ: После полного сброса калькулятора старые изменения не должны применяться.
+    // Legacy-ключ чистим тоже, чтобы не копился мусор, но НЕ читаем его (см. buildOptionKey).
+    localStorage.removeItem(OPTIONER_USER_OVERRIDES_KEY);
+    localStorage.removeItem(OPTIONER_USER_OVERRIDES_LEGACY_KEY);
     userOptionOverridesRef.current = {};
-    console.log('🧹 [Universal] optioner_user_overrides очищен');
+    console.log('🧹 [Universal] optioner_user_overrides (v2 + legacy) очищен');
 
     // ВАЖНО: Очищаем сохранённые данные сделки и настроек вкладки «Сделка»
     // ЗАЧЕМ: После полного сброса ни сделка, ни настройки (включая exitPlanSteps)
@@ -1393,18 +1494,20 @@ function UniversalOptionsCalculator() {
               // ЗАЧЕМ: Новые опционы должны получать сегодняшнюю дату, старые — дату конфигурации
               if (!opt.entryDate) {
                 const todayDateInit = new Date().toISOString().split('T')[0];
-                console.log('📅 [Init] Опцион без entryDate, ставим сегодняшнюю дату:', { 
-                  optionKey: getOptionKey(opt), 
-                  date: todayDateInit 
+                console.log('📅 [Init] Опцион без entryDate, ставим сегодняшнюю дату:', {
+                  optionKey: getOptionKey(ticker, opt),
+                  date: todayDateInit
                 });
                 return { ...opt, entryDate: todayDateInit };
               }
               return opt;
             });
-            
+
             // Сохраняем исходный список опционов из конфигурации
             // ЗАЧЕМ: Для последующих проверок при применении savedOverrides
-            const originalOptionKeys = new Set(optionsToSet.map(opt => getOptionKey(opt)));
+            // Источник тикера — config.state.selectedTicker (переменная ticker выше), а НЕ
+            // React-состояние selectedTicker: оно на этот момент может быть ещё пустым.
+            const originalOptionKeys = new Set(optionsToSet.map(opt => getOptionKey(ticker, opt)));
             
             // Для зафиксированных позиций вычисляем daysPassed и initialDaysToExpiration
             if (configIsLocked && configEntryDate) {
@@ -1443,14 +1546,14 @@ function UniversalOptionsCalculator() {
             // ЗАЧЕМ: При перезагрузке расширением ручные изменения (actualPL, manualIvOverride, customAsk) терялись
             const todayDateRestore = new Date().toISOString().split('T')[0];
             optionsToSet = optionsToSet.map(opt => {
-              const optionKey = getOptionKey(opt);
+              const optionKey = getOptionKey(ticker, opt);
               const savedOverrides = userOptionOverridesRef.current[optionKey] || {};
-              
+
               // Исключаем entryDate из savedOverrides
               // ЗАЧЕМ: entryDate не должен перезаписываться из savedOverrides, только из конфигурации
               const { entryDate: _, ...overridesWithoutEntryDate } = savedOverrides;
               const hasSavedOverrides = Object.keys(overridesWithoutEntryDate).length > 0;
-              
+
               if (hasSavedOverrides) {
                 console.log('🔄 [Restore] Применяем savedOverrides:', { optionKey, savedOverrides: overridesWithoutEntryDate });
                 return { ...opt, ...overridesWithoutEntryDate };
@@ -1733,9 +1836,11 @@ function UniversalOptionsCalculator() {
 
           // Восстанавливаем опционы с применением savedOverrides
           // ЗАЧЕМ: При перезагрузке ручные изменения (actualPL, manualIvOverride и др.) могут отсутствовать в localStorage
+          // Источник тикера — восстанавливаемое state.selectedTicker, а не React-состояние
+          // selectedTicker (оно ещё не успело обновиться из setSelectedTicker выше).
           const restoredOptions = (state.options || []).map(opt => {
             const base = { ...opt, entryDate: opt.entryDate || new Date().toISOString().split('T')[0] };
-            const optionKey = getOptionKey(base);
+            const optionKey = getOptionKey(state.selectedTicker || '', base);
             const savedOverrides = userOptionOverridesRef.current[optionKey] || {};
             if (Object.keys(savedOverrides).length > 0) {
               return { ...base, ...savedOverrides };
@@ -1825,8 +1930,9 @@ function UniversalOptionsCalculator() {
       setHasChanges(false);
       setDealInfo(null);
       setActiveCalculatorTab('calculator');
-      // Очищаем ручные изменения опционов (от старого тикера)
-      localStorage.removeItem('optioner_user_overrides');
+      // Очищаем ручные изменения опционов (от старого тикера) — v2-ключ и legacy
+      localStorage.removeItem(OPTIONER_USER_OVERRIDES_KEY);
+      localStorage.removeItem(OPTIONER_USER_OVERRIDES_LEGACY_KEY);
       userOptionOverridesRef.current = {};
       // Очищаем сохранённый loadedConfigId (если был)
       localStorage.removeItem('universalCalc_loadedConfigId');
@@ -1890,7 +1996,7 @@ function UniversalOptionsCalculator() {
           // Применяем savedOverrides к существующим опционам
           // ЗАЧЕМ: Сохраняем actualPL, manualIvOverride и другие ручные изменения
           const updatedPrevOptions = prevOptions.map(prevOpt => {
-            const optionKey = getOptionKey(prevOpt);
+            const optionKey = getOptionKey(selectedTicker, prevOpt);
             const savedOverrides = userOptionOverridesRef.current[optionKey] || {};
             
             if (Object.keys(savedOverrides).length > 0) {
@@ -2002,7 +2108,7 @@ function UniversalOptionsCalculator() {
         // Сливаем данные: берем свежие данные от расширения, но применяем сохраненные ручные изменения
         const mergedOptions = extensionOptions.map(extOption => {
           // Получаем сохраненные ручные изменения для этого опциона
-          const optionKey = getOptionKey(extOption);
+          const optionKey = getOptionKey(selectedTicker, extOption);
           const savedOverrides = userOptionOverridesRef.current[optionKey] || {};
           
           // Ищем соответствующий опцион в текущих данных с более гибким сравнением
@@ -2396,7 +2502,7 @@ function UniversalOptionsCalculator() {
       // Поля, которые нужно сохранять: quantity, customPremium, customBid, customAsk, entryDate, actualPL, actualPLDate, actualPLPrice, actualPLQuantity, manualIvOverride, manualIvOverrideDate
       const fieldsToOverride = ['quantity', 'customPremium', 'customBid', 'customAsk', 'entryDate', 'isPremiumModified', 'isBidModified', 'isAskModified', 'actualPL', 'actualPLDate', 'actualPLPrice', 'actualPLQuantity', 'manualIvOverride', 'manualIvOverrideDate', 'assetPriceAtEntry', 'isAssetPriceModified'];
       if (targetOption && fieldsToOverride.includes(field)) {
-        saveUserOverride(targetOption, field, value);
+        saveUserOverride(selectedTicker, targetOption, field, value);
       }
       
       const updated = prevOptions.map((opt) => {
@@ -2431,7 +2537,7 @@ function UniversalOptionsCalculator() {
       
       return updated;
     });
-  }, [saveUserOverride]);
+  }, [saveUserOverride, selectedTicker]);
 
   const updatePosition = useCallback((id, field, value) => {
     setPositions(prevPositions => prevPositions.map((pos) =>
@@ -3321,7 +3427,9 @@ function UniversalOptionsCalculator() {
           
           // Сохраняем исходный список опционов из конфигурации
           // ЗАЧЕМ: Отличить "новый опцион от расширения" от "старого сохраненного опциона"
-          const originalOptionKeys = new Set(optionsToSet.map(opt => getOptionKey(opt)));
+          // Источник тикера — ticker (= config.state.selectedTicker), а НЕ React-состояние
+          // selectedTicker: оно на этот момент может быть ещё пустым.
+          const originalOptionKeys = new Set(optionsToSet.map(opt => getOptionKey(ticker, opt)));
 
           // Дата для fallback entryDate (дата создания конфигурации в формате YYYY-MM-DD)
           // ЗАЧЕМ: Для старых конфигураций без entryDate используем дату создания
@@ -3340,7 +3448,7 @@ function UniversalOptionsCalculator() {
               
               // Если у опциона нет entryDate — проверяем, новый ли это опцион
               if (!optionEntryDate) {
-                const optionKey = getOptionKey(opt);
+                const optionKey = getOptionKey(ticker, opt);
                 const isNewOption = !originalOptionKeys.has(optionKey);
                 
                 if (isNewOption) {
@@ -3390,9 +3498,9 @@ function UniversalOptionsCalculator() {
               const originalEntryDate = opt.entryDate;
               const finalEntryDate = opt.entryDate || fallbackEntryDate;
               if (!originalEntryDate) {
-                console.log('⚠️ [LoadConfig] Опцион без entryDate, используем fallback:', { 
-                  optionKey: getOptionKey(opt), 
-                  fallbackEntryDate 
+                console.log('⚠️ [LoadConfig] Опцион без entryDate, используем fallback:', {
+                  optionKey: getOptionKey(ticker, opt),
+                  fallbackEntryDate
                 });
               }
               return {
@@ -3406,7 +3514,7 @@ function UniversalOptionsCalculator() {
           // ручные изменения (actualPL, manualIvOverride, customAsk и др.) терялись
           const todayDate = new Date().toISOString().split('T')[0];
           optionsToSet = optionsToSet.map(opt => {
-            const optionKey = getOptionKey(opt);
+            const optionKey = getOptionKey(ticker, opt);
             const savedOverrides = userOptionOverridesRef.current[optionKey] || {};
             
             // Исключаем entryDate из savedOverrides
@@ -3998,6 +4106,11 @@ function UniversalOptionsCalculator() {
         currentPrice,
         ivSurface,
         dividendYield: useDividends ? dividendYield : 0,
+        // Замораживаем множитель контракта и режим калькулятора на момент сохранения —
+        // более поздняя правка настроек фьючерса (стоимость пункта) задним числом
+        // не должна менять уже сохранённый Start P&L (см. utils/startPLSnapshot.js).
+        contractMultiplier,
+        calculatorMode,
       };
       let optionsToSave = options.map(opt => {
         const { startPL: _legacyStartPL, ...cleaned } = opt;
@@ -4082,6 +4195,10 @@ function UniversalOptionsCalculator() {
         currentPrice,
         ivSurface,
         dividendYield: useDividends ? dividendYield : 0,
+        // Замораживаем множитель контракта и режим калькулятора на момент сохранения —
+        // см. utils/startPLSnapshot.js
+        contractMultiplier,
+        calculatorMode,
       };
       const cleanedOptions = options.map(opt => {
         const { startPL: _legacyStartPL, ...cleaned } = opt;
@@ -4188,6 +4305,10 @@ function UniversalOptionsCalculator() {
         currentPrice,
         ivSurface,
         dividendYield: useDividends ? dividendYield : 0,
+        // Замораживаем множитель контракта и режим калькулятора на момент сохранения —
+        // см. utils/startPLSnapshot.js
+        contractMultiplier,
+        calculatorMode,
       };
       const optionsWithSnapshot = options.map(opt => {
         const { startPL: _legacyStartPL, ...cleaned } = opt;
@@ -4263,6 +4384,10 @@ function UniversalOptionsCalculator() {
           currentPrice,
           ivSurface,
           dividendYield: useDividends ? dividendYield : 0,
+          // Замораживаем множитель контракта и режим калькулятора на момент сохранения —
+          // см. utils/startPLSnapshot.js
+          contractMultiplier,
+          calculatorMode,
         };
         const processed = configState.options.map(opt => {
           const { startPL: _legacyStartPL, ...cleaned } = opt;
@@ -4342,7 +4467,11 @@ function UniversalOptionsCalculator() {
     aiVolatilityMap: {},
     selectedTicker: selectedTicker,
     calculatorMode: calculatorMode,
-    contractMultiplier: contractMultiplier,
+    // usePositionExitCalculator (чужой файл) не знает про isFuturesMissingSettings
+    // и просто умножает на contractMultiplier — при null это тихо превратилось бы
+    // в 0 (JS: number * null === 0), а не в "нет данных". ?? 1 — нейтральный
+    // фолбэк ТОЛЬКО для этого отображения (блок "Закрыть всё"), НЕ 100 как раньше.
+    contractMultiplier: contractMultiplier ?? 1,
     stockClassification: null
   });
 
@@ -4673,7 +4802,10 @@ function UniversalOptionsCalculator() {
                         fetchAIVolatility={fetchAIVolatility}
                         targetPrice={targetPrice}
                         calculatorMode={calculatorMode}
-                        contractMultiplier={contractMultiplier}
+                        // PositionFinancialControl (чужой файл) не проверяет isFuturesMissingSettings —
+                        // null тихо стал бы 0 в арифметике (JS: number * null === 0).
+                        // ?? 1 — нейтральный фолбэк отображения, НЕ 100 как раньше.
+                        contractMultiplier={contractMultiplier ?? 1}
                         leverage={baseAssetLeverage}
                         stockClassification={null}
                         optionsTotalPL={optionsTableTotalPL}
@@ -4950,7 +5082,11 @@ function UniversalOptionsCalculator() {
                 ivSurface={ivSurface}
                 dividendYield={useDividends ? dividendYield : 0}
                 calculatorMode={calculatorMode}
-                contractMultiplier={contractMultiplier}
+                // CalculatorDealTabs гейтит isFuturesMissingSettings только вокруг блока метрик/графика,
+                // но пробрасывает contractMultiplier дальше и в OptionSelectionResult, и в ExitPlanTable
+                // (таб «Сделка») без такой проверки — там null тихо стал бы 0 (JS: number * null === 0).
+                // ?? 1 — нейтральный фолбэк отображения, НЕ 100 как раньше.
+                contractMultiplier={contractMultiplier ?? 1}
                 stockClassification={null}
                 shouldShowBlock={shouldShowBlock}
                 isFuturesMissingSettings={isFuturesMissingSettings}
