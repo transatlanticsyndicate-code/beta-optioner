@@ -1629,6 +1629,30 @@ function OptionsTableV3({
                           }}
                         />
                       )}
+                      {/* 2D: сброс подозрительного якоря Fact P&L — только для warn/block по СОХРАНЁННОМУ
+                          значению (currentValidation), а не по blockMessage (тот — про ещё не сохранённый
+                          черновик). Диагностика по 50 сделкам нашла 8 ног с ошибочными якорями — раньше
+                          их приходилось стирать вручную, не видя, какие именно проблемные. */}
+                      {(currentValidation.level === 'warn' || currentValidation.level === 'block') && (
+                        <button
+                          type="button"
+                          title="Сбросить якорь Fact P&L"
+                          onClick={() => {
+                            // Необратимо для пользователя (якорь и все связанные с ним поля удаляются
+                            // безвозвратно) — подтверждение перед сбросом.
+                            const confirmed = window.confirm(
+                              'Сбросить якорь Fact P&L? Введённое значение и дата/цена якоря будут удалены, P&L вернётся к теоретическому расчёту.'
+                            );
+                            if (confirmed) {
+                              handleActualPLChange(option.id, '');
+                            }
+                          }}
+                          className="absolute text-muted-foreground hover:text-destructive"
+                          style={{ bottom: '1px', right: '2px', lineHeight: 0 }}
+                        >
+                          <RotateCcw className="h-2.5 w-2.5" />
+                        </button>
+                      )}
                     </div>
                   );
                 })()}

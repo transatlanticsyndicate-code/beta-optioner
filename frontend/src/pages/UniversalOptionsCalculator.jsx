@@ -890,7 +890,10 @@ function UniversalOptionsCalculator() {
       });
 
       const greeks = completeOptions.length > 0
-        ? calculateTotalGreeks(completeOptions)
+        // ЗАЧЕМ: передаём множитель контракта вторым аргументом — снимок калькулятора
+        // читает расширение, и без множителя греки в снимке расходятся с греками
+        // в остальной части калькулятора (contractMultiplier учитывается везде, кроме этого вызова).
+        ? calculateTotalGreeks(completeOptions, contractMultiplier ?? 1)
         : { delta: 0, gamma: 0, theta: 0, vega: 0 };
 
       const plMetrics = completeOptions.length > 0
@@ -900,7 +903,10 @@ function UniversalOptionsCalculator() {
             positions,
             daysPassed,
             ivSurface,
-            dividendYield,
+            // ЗАЧЕМ: раньше сюда шёл сырой dividendYield в обход тумблера «Учитывать дивиденды» —
+            // снимок мог учитывать дивиденды, даже когда пользователь их выключил.
+            // Приводим к тому же виду, что и во всех остальных местах файла.
+            useDividends ? dividendYield : 0,
             isAIEnabled,
             aiVolatilityMap,
             targetPrice,
