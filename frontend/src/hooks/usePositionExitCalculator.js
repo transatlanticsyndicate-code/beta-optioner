@@ -481,8 +481,15 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
         const anchorDaysToExp = calculateDaysToExpirationForOption(option, anchorDaysPassed, oldestEntryDate);
 
         // IV на момент якоря: используем manualIvOverride если задан, иначе marketIV
+        // ВАЖНО: manualIvOverride хранится в ПРОЦЕНТАХ (150 = 150%) — передаём как есть,
+        // без деления на 100. Нормализацию делает сам calculateOptionTheoreticalPrice
+        // (optionPricing.js: значение >1 трактуется как проценты и делится там).
+        // Лишнее деление здесь превращало 150% в 1.5%, обнуляя временную стоимость —
+        // на акциях дефект был незаметен (IV обычно <100%), на крипте/фьючерсах давал
+        // расхождение до $1900 на ногу. Синхронизировано с ExitPlanTable.jsx:566-568,
+        // OptionsTableV3.jsx:1415-1417, startPLSnapshot.js:220-222 — там деления нет.
         const anchorIV = option.manualIvOverride !== null && option.manualIvOverride !== undefined
-          ? (option.manualIvOverride / 100)
+          ? option.manualIvOverride
           : optionVolatility;
 
         // ВАЖНО: plAtAnchor считается при ЦЕНЕ АКТИВА НА МОМЕНТ ВВОДА якоря (actualPLPrice)
@@ -679,8 +686,10 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
         const anchorDaysToExp = calculateDaysToExpirationForOption(option, anchorDaysPassed, oldestEntryDate);
 
         // IV на момент якоря: используем manualIvOverride если задан, иначе marketIV
+        // ВАЖНО: manualIvOverride хранится в ПРОЦЕНТАХ (150 = 150%) — передаём как есть,
+        // без деления на 100 (см. подробное объяснение у аналогичного блока Сценария 2 выше).
         const anchorIV = option.manualIvOverride !== null && option.manualIvOverride !== undefined
-          ? (option.manualIvOverride / 100)
+          ? option.manualIvOverride
           : optionVolatility;
 
         // ВАЖНО: plAtAnchor считается при ЦЕНЕ АКТИВА НА МОМЕНТ ВВОДА якоря (actualPLPrice)

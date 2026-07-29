@@ -3,6 +3,7 @@ import { Card, CardContent } from '../../ui/card';
 import { calculateOptionPLValue, adjustPLByStockGroup } from '../../../utils/optionPricing';
 import { calculateFuturesOptionPLValue } from '../../../utils/futuresPricing';
 import { CALCULATOR_MODES } from '../../../utils/universalPricing';
+import { isStockLikeMode } from '../../../utils/calculatorModes';
 import { getOptionVolatility } from '../../../utils/volatilitySurface';
 import { calculateDaysToExpirationFromToday, calculateDaysRemainingUTC, getOldestEntryDate } from '../../../utils/dateUtils';
 
@@ -466,7 +467,7 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
   };
 
   // Расчёт P&L для конкретного шага на дату выхода
-  // ЗАЧЕМ: Формула якоря синхронизирована с таблицей опционов (OptionsTableV3.jsx:1108-1157),
+  // ЗАЧЕМ: Формула якоря синхронизирована с таблицей опционов (OptionsTableV3.jsx:1400-1456),
   // чтобы P/L на шаге совпадала с тем, что показывает таблица опционов при
   // daysPassed = дни от oldestEntry до step.exitDate и targetPrice = step.dollars.
   const calculateStepPL = (step) => {
@@ -529,6 +530,10 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
     // Цена актива на момент входа в опцион — для BSM-расчёта
     const optionAssetPrice = option.assetPriceAtEntry || currentPrice;
 
+    // Безрисковая ставка: для крипто (Binance) = 0, для акций/фьючерсов — из FRED (null)
+    // ЗАЧЕМ: синхронизировано с эталоном OptionsTableV3.jsx (rfrOpt/rfrSum)
+    const rfrOpt = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
+
     let pl = 0;
     if (calculatorMode === CALCULATOR_MODES.FUTURES) {
       pl = calculateFuturesOptionPLValue(
@@ -539,22 +544,31 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
         optionVolatility
       );
     } else {
+      // ВАЖНО: передаём contractMultiplier — без него calculateOptionPLValue берёт
+      // фолбэк option.contractSize || 100, что для крипто (реальный множитель 1)
+      // завышает P&L плана выхода до 100 раз. Синхронизировано с OptionsTableV3.jsx.
       pl = calculateOptionPLValue(
         tempOpt,
         targetAssetPrice,
         optionAssetPrice,
         optionDaysRemaining,
         optionVolatility,
-        dividendYield
+        dividendYield,
+        contractMultiplier,
+        rfrOpt
       );
     }
 
-    if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
+    if (isStockLikeMode(calculatorMode) && stockClassification) {
       pl = adjustPLByStockGroup(pl, stockClassification);
     }
 
-    // Якорная формула: полностью идентична таблице опционов (OptionsTableV3.jsx:1108-1157)
-    if (option.actualPL !== null && option.actualPL !== undefined && option.actualPLDate) {
+    // Якорная формула: полностью идентична таблице опционов (OptionsTableV3.jsx:1400-1456)
+    // ВАЖНО: на дату экспирации (optionDaysRemaining <= 0) якорь НЕ применяется —
+    // там P&L определяется чистой формулой intrinsic_value − премия, и любая
+    // корректировка через якорь искажает математически точное значение
+    // (см. optionDaysRemaining > 0 в эталоне, OptionsTableV3.jsx:1397-1399).
+    if (optionDaysRemaining > 0 && option.actualPL !== null && option.actualPL !== undefined && option.actualPLDate) {
       const anchorDateObj = new Date(option.actualPLDate + 'T00:00:00Z');
       const anchorDaysPassed = Math.round((anchorDateObj - oldestEntry) / MS_IN_DAY);
 
@@ -569,11 +583,13 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
 
         const anchorPrice = option.actualPLPrice || currentPrice;
 
+        // Тот же аудит множителя и ставки, что и в основном расчёте pl выше —
+        // без contractMultiplier якорная P&L для крипто тоже была бы завышена до 100 раз
         let plAtAnchor = calculatorMode === CALCULATOR_MODES.FUTURES
           ? calculateFuturesOptionPLValue(tempOpt, anchorPrice, anchorDaysToExp, contractMultiplier, anchorIV)
-          : calculateOptionPLValue(tempOpt, anchorPrice, optionAssetPrice, anchorDaysToExp, anchorIV, dividendYield);
+          : calculateOptionPLValue(tempOpt, anchorPrice, optionAssetPrice, anchorDaysToExp, anchorIV, dividendYield, contractMultiplier, rfrOpt);
 
-        if (calculatorMode === CALCULATOR_MODES.STOCKS && stockClassification) {
+        if (isStockLikeMode(calculatorMode) && stockClassification) {
           plAtAnchor = adjustPLByStockGroup(plAtAnchor, stockClassification);
         }
 
