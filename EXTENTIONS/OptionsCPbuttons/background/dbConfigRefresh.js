@@ -41,18 +41,85 @@ function clearDbConfigOverlayDedupe(calcTabId) {
 // Маппинг тикеров на exchanges (дублирует panel.js для background контекста)
 // ЗАЧЕМ: panel.js — content script, недоступен в background. При добавлении
 // новых тикеров в panel.js нужно обновлять и здесь.
+// Список — тикеры из реальных сделок заказчика (см. tasks/fix-exchange-resolver/).
+// Значения бирж сверены точным запросом к TradingView symbol-search с корректным
+// Origin. При появлении новых тикеров заказчика их нужно дописывать сюда —
+// иначе сработает медленный путь через resolveTickerExchange() (см. ниже), который
+// требует открытой вкладки TradingView и не гарантирован.
 const DB_TICKER_EXCHANGE_MAP = {
-  'TSLA': 'NASDAQ', 'NVDA': 'NASDAQ', 'QQQ': 'NASDAQ', 'AAPL': 'NASDAQ',
-  'MSFT': 'NASDAQ', 'AMZN': 'NASDAQ', 'GOOGL': 'NASDAQ', 'META': 'NASDAQ',
-  'AMD': 'NASDAQ', 'INTC': 'NASDAQ', 'NFLX': 'NASDAQ', 'PYPL': 'NASDAQ',
-  'SPY': 'AMEX', 'IWM': 'AMEX', 'DIA': 'AMEX',
-  'SPOT': 'NYSE', 'HUBS': 'NYSE', 'SAP': 'NYSE',
-  'NIFTY': 'NSE', 'BANKNIFTY': 'NSE'
+  // NASDAQ
+  'AAPL': 'NASDAQ', 'ADBE': 'NASDAQ', 'ADSK': 'NASDAQ', 'AMD': 'NASDAQ',
+  'AMSC': 'NASDAQ', 'AMZN': 'NASDAQ', 'CG': 'NASDAQ', 'CMCSA': 'NASDAQ',
+  'CPRT': 'NASDAQ', 'CRNX': 'NASDAQ', 'GOOGL': 'NASDAQ', 'INTC': 'NASDAQ',
+  'ISRG': 'NASDAQ', 'JKHY': 'NASDAQ', 'META': 'NASDAQ', 'MKTX': 'NASDAQ',
+  'MSFT': 'NASDAQ', 'MSTR': 'NASDAQ', 'NFLX': 'NASDAQ', 'NVDA': 'NASDAQ',
+  'PDD': 'NASDAQ', 'PLTR': 'NASDAQ', 'PYPL': 'NASDAQ', 'QQQ': 'NASDAQ',
+  'TCOM': 'NASDAQ', 'TSCO': 'NASDAQ', 'TSLA': 'NASDAQ', 'TTD': 'NASDAQ',
+  'TW': 'NASDAQ', 'WYNN': 'NASDAQ', 'XP': 'NASDAQ', 'ZG': 'NASDAQ',
+
+  // NYSE
+  'AA': 'NYSE', 'ACN': 'NYSE', 'AEM': 'NYSE', 'B': 'NYSE', 'BJ': 'NYSE',
+  'BR': 'NYSE', 'BSX': 'NYSE', 'CCI': 'NYSE', 'CCL': 'NYSE', 'CRK': 'NYSE',
+  'CRM': 'NYSE', 'EFX': 'NYSE', 'EQT': 'NYSE', 'HUBS': 'NYSE', 'IBM': 'NYSE',
+  'ICE': 'NYSE', 'NKE': 'NYSE', 'OKLO': 'NYSE', 'ORCL': 'NYSE', 'PNR': 'NYSE',
+  'ROL': 'NYSE', 'SAP': 'NYSE', 'SPOT': 'NYSE', 'STM': 'NYSE', 'STWD': 'NYSE',
+  'T': 'NYSE', 'VEEV': 'NYSE', 'VICI': 'NYSE',
+
+  // AMEX
+  'DIA': 'AMEX', 'IWM': 'AMEX', 'SPY': 'AMEX',
+
+  // NSE
+  'BANKNIFTY': 'NSE', 'NIFTY': 'NSE'
 };
 
-// Кэш бирж, определённых через поиск TradingView (тикер → биржа).
+// Кэш бирж, определённых через поиск TradingView (тикер → биржа|null).
 // ЗАЧЕМ: не дёргать поиск повторно в течение жизни service worker.
+// ВАЖНО: кэшируем только ОПРЕДЕЛЁННЫЙ ответ TradingView (нашли/не нашли подходящий
+// листинг). Случай «нет открытой вкладки TV» НЕ кэшируем намеренно — иначе если
+// пользователь откроет TradingView позже в той же сессии, резолв так и останется
+// заблокирован кэшем null до перезапуска service worker.
 const _resolvedExchangeCache = new Map();
+
+// Таймаут на сетевой запрос поиска биржи (внутри вкладки TradingView).
+const _EXCHANGE_LOOKUP_TIMEOUT_MS = 4000;
+
+/**
+ * Выполнить поиск биржи для тикера в контексте открытой вкладки TradingView.
+ * ЗАЧЕМ: symbol-search.tradingview.com отдаёт данные только с заголовком
+ * Origin: https://www.tradingview.com. Из service worker расширения уходит
+ * Origin: chrome-extension://… (это запрещённый заголовок, подменить нельзя
+ * из fetch) → 403. Страница TradingView шлёт fetch с правильным Origin сама,
+ * поэтому запрос инжектится через chrome.scripting.executeScript в её контекст.
+ *
+ * @returns {Promise<{ok:true,data:any}|{ok:false,status?:number,error?:string}>}
+ */
+async function _fetchExchangeViaTvTab(tvTabId, ticker) {
+  const url = 'https://symbol-search.tradingview.com/symbol_search/v3/?text='
+    + encodeURIComponent(ticker) + '&hl=0&exchange=&lang=en&search_type=undefined&domain=production';
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tvTabId },
+      func: async (fetchUrl, timeoutMs) => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          const resp = await fetch(fetchUrl, { signal: controller.signal });
+          clearTimeout(timeoutId);
+          if (!resp.ok) return { ok: false, status: resp.status };
+          const data = await resp.json();
+          return { ok: true, data };
+        } catch (e) {
+          clearTimeout(timeoutId);
+          return { ok: false, error: e.name === 'AbortError' ? 'timeout' : (e.message || String(e)) };
+        }
+      },
+      args: [url, _EXCHANGE_LOOKUP_TIMEOUT_MS]
+    });
+    return results?.[0]?.result || { ok: false, error: 'нет результата executeScript' };
+  } catch (e) {
+    return { ok: false, error: e.message || String(e) };
+  }
+}
 
 /**
  * Определить биржу для тикера.
@@ -75,42 +142,58 @@ async function resolveTickerExchange(ticker) {
     if (pattern.test(ticker)) return exchange;
   }
 
-  // 3. Ранее разрешённое в этой сессии
+  // 3. Ранее разрешённое (или определённо не найденное) в этой сессии
   if (_resolvedExchangeCache.has(ticker)) return _resolvedExchangeCache.get(ticker);
 
-  // 4. Спрашиваем у поиска TradingView американский листинг
-  try {
-    const url = 'https://symbol-search.tradingview.com/symbol_search/v3/?text='
-      + encodeURIComponent(ticker) + '&hl=0&exchange=&lang=en&search_type=undefined&domain=production';
-    const resp = await fetch(url);
-    if (resp.ok) {
-      const data = await resp.json();
-      const list = Array.isArray(data.symbols) ? data.symbols : [];
-      const cleaned = list.map(s => ({
-        sym: String(s.symbol || '').replace(/<[^>]+>/g, '').toUpperCase(),
-        // ЗАЧЕМ: код биржи для URL — это prefix/source_id (напр. "AMEX"), а НЕ отображаемое
-        // имя exchange (напр. "NYSE Arca" с пробелом — в адресе оно не работает).
-        code: s.prefix || s.source_id || s.exchange,
-        country: s.country,
-        type: s.type
-      }));
-      // Берём только американский листинг обычной акции / ADR / фонда (ETF).
-      // ЗАЧЕМ: индексные и CFD-фиды (напр. SPCFD для SPX) для доски опционов не годятся —
-      // если подходящего листинга нет, лучше вернуть null (голый символ), чем открыть не то.
-      const preferred = cleaned.find(s =>
-        s.sym === ticker.toUpperCase() && s.country === 'US' && s.code
-        && ['stock', 'dr', 'fund'].includes(s.type));
-      if (preferred && preferred.code) {
-        _resolvedExchangeCache.set(ticker, preferred.code);
-        console.log('[TVC DbConfig] Биржа для', ticker, '→', preferred.code);
-        return preferred.code;
-      }
-    }
-  } catch (e) {
-    console.warn('[TVC DbConfig] Не удалось определить биржу для', ticker, e);
+  // 4. Ищем открытую вкладку TradingView — запрос делаем в её контексте (см. _fetchExchangeViaTvTab).
+  // ЗАЧЕМ НЕ открываем вкладку специально: это замедлит поток обновления и может
+  // перехватить фокус у пользователя. Если вкладки нет — просто отдаём null,
+  // как раньше, и явно логируем причину.
+  const tvTabs = await chrome.tabs.query({ url: '*://*.tradingview.com/options/*' }).catch(() => []);
+  if (!tvTabs || tvTabs.length === 0) {
+    console.log('[TVC DbConfig] Биржа для', ticker, '— нет открытой вкладки TradingView, резолв пропущен (голый символ)');
+    return null;
   }
 
-  // 5. Не нашли — последний резерв: голый символ (пусть TradingView решает сам)
+  const result = await _fetchExchangeViaTvTab(tvTabs[0].id, ticker);
+
+  if (!result.ok) {
+    // Временная проблема (сеть/таймаут/статус) — НЕ кэшируем, пробуем заново в следующий раз.
+    if (typeof result.status === 'number') {
+      console.warn('[TVC DbConfig] Поиск биржи для', ticker, 'вернул статус', result.status);
+    } else if (result.error === 'timeout') {
+      console.warn('[TVC DbConfig] Таймаут поиска биржи для', ticker, `(${_EXCHANGE_LOOKUP_TIMEOUT_MS}мс)`);
+    } else {
+      console.warn('[TVC DbConfig] Не удалось определить биржу для', ticker, ':', result.error);
+    }
+    return null;
+  }
+
+  const list = Array.isArray(result.data?.symbols) ? result.data.symbols : [];
+  const cleaned = list.map(s => ({
+    sym: String(s.symbol || '').replace(/<[^>]+>/g, '').toUpperCase(),
+    // ЗАЧЕМ: код биржи для URL — это prefix/source_id (напр. "AMEX"), а НЕ отображаемое
+    // имя exchange (напр. "NYSE Arca" с пробелом — в адресе оно не работает).
+    code: s.prefix || s.source_id || s.exchange,
+    country: s.country,
+    type: s.type
+  }));
+  // Берём только американский листинг обычной акции / ADR / фонда (ETF).
+  // ЗАЧЕМ: индексные и CFD-фиды (напр. SPCFD для SPX) для доски опционов не годятся —
+  // если подходящего листинга нет, лучше вернуть null (голый символ), чем открыть не то.
+  const preferred = cleaned.find(s =>
+    s.sym === ticker.toUpperCase() && s.country === 'US' && s.code
+    && ['stock', 'dr', 'fund'].includes(s.type));
+
+  if (preferred && preferred.code) {
+    _resolvedExchangeCache.set(ticker, preferred.code);
+    console.log('[TVC DbConfig] Биржа для', ticker, '→', preferred.code);
+    return preferred.code;
+  }
+
+  // Определённый ответ TradingView: подходящего US-листинга нет — кэшируем null.
+  _resolvedExchangeCache.set(ticker, null);
+  console.log('[TVC DbConfig] Подходящий американский листинг для', ticker, 'не найден среди', list.length, 'результатов');
   return null;
 }
 
@@ -764,14 +847,28 @@ async function _autoRefreshDbConfigInner(calcTabId, url, dbConfigId, tabKey, att
  * ЗАЧЕМ: Вынесено из _autoRefreshDbConfigInner — вызывается асинхронно по команде
  * из localStorage (оверлей записывает tvc_dbconfig_refresh_<id> при клике «Да»)
  */
+// Порог, после которого мьютекс executeDbConfigRefresh считается зависшим.
+// ЗАЧЕМ: без AbortController на сетевых вызовах повисший fetch/executeScript раньше
+// держал _inProgress=true навсегда, и все последующие refresh молча гасились
+// сообщением «Refresh уже выполняется, пропускаем». Полный цикл сбора (открытие TV,
+// до 3 попыток дождаться таблицы по 15-30с, парсинг каждой строки опциона до 8 тиков
+// по ~600мс) в реалистичном худшем случае укладывается в 1.5-2 минуты — берём запас.
+const _REFRESH_MUTEX_STALE_MS = 3 * 60 * 1000; // 3 минуты
+
 async function executeDbConfigRefresh(calcTabId, configData) {
   // ЗАЧЕМ: Мьютекс — только один refresh за раз, иначе два калькулятора
   // конкурируют за одну TV-вкладку и данные перемешиваются
   if (executeDbConfigRefresh._inProgress) {
-    console.log('[TVC DbConfig] Refresh уже выполняется, пропускаем');
-    return;
+    const elapsedMs = Date.now() - (executeDbConfigRefresh._startedAt || 0);
+    if (elapsedMs < _REFRESH_MUTEX_STALE_MS) {
+      console.log('[TVC DbConfig] Refresh уже выполняется, пропускаем');
+      return;
+    }
+    console.warn('[TVC DbConfig] Мьютекс завис на', Math.round(elapsedMs / 1000),
+      'с — считаем предыдущую попытку потерянной и разрешаем новую');
   }
   executeDbConfigRefresh._inProgress = true;
+  executeDbConfigRefresh._startedAt = Date.now();
 
   try {
     console.log('[TVC DbConfig] Пользователь подтвердил обновление:', configData.ticker);
@@ -1198,9 +1295,11 @@ async function executeDbConfigRefresh(calcTabId, configData) {
     } catch (_) {}
   } finally {
     executeDbConfigRefresh._inProgress = false;
+    executeDbConfigRefresh._startedAt = 0;
   }
 }
 executeDbConfigRefresh._inProgress = false;
+executeDbConfigRefresh._startedAt = 0;
 
 /**
  * Проверить команды от оверлеев (записанные пользователем через «Да, обновить»)
