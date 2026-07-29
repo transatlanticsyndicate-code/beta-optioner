@@ -7,6 +7,7 @@ import {
   calculateTotalPremium,
   calculateRequiredCapital,
   calculateTotalGreeks,
+  calculateLiveGreeks,
   calculatePLMetrics,
   formatCurrency,
   formatGreek,
@@ -72,14 +73,53 @@ function OptionsMetrics({ options = [], currentPrice = 0, positions = [], daysPa
 
     const plMetrics = calculatePLMetrics(completeOptions, currentPrice, positions, daysPassed, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap, targetPrice, selectedTicker, calculatorMode, contractMultiplier);
 
+    // ЗАЧЕМ (2A-3): греки должны реагировать на ползунок дней/цены и на ручную Fact IV ноги,
+    // а не быть заморожены на дату импорта котировок. calculateLiveGreeks пересчитывает их
+    // через Black-Scholes/Black-76 с той же волатильностью/днями, что использует P&L график.
+    // Если live-расчёт по какой-то причине даёт некорректный результат (NaN/исключение) —
+    // подстраховываемся статическим расчётом по полям ноги (calculateTotalGreeks, фикс 2A-1),
+    // чтобы карточки не сломались и не показали пустоту/NaN.
+    let greeks;
+    let greeksAreLive = true;
+    try {
+      greeks = calculateLiveGreeks(
+        completeOptions,
+        currentPrice,
+        daysPassed,
+        contractMultiplier,
+        calculatorMode,
+        ivSurface,
+        dividendYield,
+        isAIEnabled,
+        aiVolatilityMap,
+        targetPrice,
+        selectedTicker
+      );
+      const isValid = greeks && ['delta', 'gamma', 'theta', 'vega'].every(k => Number.isFinite(greeks[k]));
+      if (!isValid) {
+        throw new Error('calculateLiveGreeks вернул некорректное значение');
+      }
+    } catch (e) {
+      greeks = calculateTotalGreeks(completeOptions, contractMultiplier);
+      greeksAreLive = false;
+    }
+
     return {
       premium: calculateTotalPremium(completeOptions, contractMultiplier),
       requiredCapital: calculateRequiredCapital(completeOptions, currentPrice, positions, contractMultiplier),
-      greeks: calculateTotalGreeks(completeOptions),
+      greeks,
+      greeksAreLive,
       plMetrics: plMetrics,
       hasCompleteOptions: true
     };
   }, [options, currentPrice, positions, daysPassed, ivSurface, dividendYield, isAIEnabled, aiVolatilityMap, targetPrice, selectedTicker, calculatorMode, contractMultiplier]);
+
+  // ЗАЧЕМ (2A-3, фолбэк): если calculateLiveGreeks не смог посчитать «живые» греки и сработал
+  // fallback на статический расчёт по полям ноги — явно помечаем это в тултипах, чтобы
+  // пользователь не думал, что значения реагируют на ползунки дней/цены.
+  const greeksStaleNote = calculatedMetrics.greeksAreLive === false
+    ? ' ВНИМАНИЕ: показаны греки на дату входа в позицию (не пересчитаны на текущую симуляцию).'
+    : '';
 
   // Метрики с приоритетами согласно ТЗ
   const metrics = useMemo(() => [
@@ -115,7 +155,12 @@ function OptionsMetrics({ options = [], currentPrice = 0, positions = [], daysPa
     },
     {
       priority: 1,
-      label: 'Точка безубытка',
+      // ЗАЧЕМ (фикс 2A-4.3): точка безубытка теперь считается НА ДАТУ ЭКСПИРАЦИИ (страйк ± премия),
+      // а не на текущую/симулируемую дату (та «плавала» вместе с ползунком дней). Дата экспирации
+      // добавлена в подпись, чтобы было явно видно, к какому моменту относится число.
+      label: calculatedMetrics.plMetrics?.expirationDateLabel
+        ? `Точка безубытка (${calculatedMetrics.plMetrics.expirationDateLabel})`
+        : 'Точка безубытка',
       value: calculatedMetrics.hasCompleteOptions && calculatedMetrics.plMetrics.breakevens.length > 0
         ? calculatedMetrics.plMetrics.breakevens.length === 1
           ? `$${calculatedMetrics.plMetrics.breakevens[0].toFixed(2)}`
@@ -125,8 +170,8 @@ function OptionsMetrics({ options = [], currentPrice = 0, positions = [], daysPa
         : '—',
       color: 'orange',
       tooltip: calculatedMetrics.plMetrics?.breakevens?.length > 1
-        ? `Множественные точки безубыточности: ${calculatedMetrics.plMetrics.breakevens.map(be => `$${be.toFixed(2)}`).join(', ')}`
-        : 'Цена актива, при которой стратегия не приносит ни прибыли, ни убытка (P&L = 0).'
+        ? `Множественные точки безубыточности НА ДАТУ ЭКСПИРАЦИИ${calculatedMetrics.plMetrics.expirationDateLabel ? ` (${calculatedMetrics.plMetrics.expirationDateLabel})` : ''}: ${calculatedMetrics.plMetrics.breakevens.map(be => `$${be.toFixed(2)}`).join(', ')}`
+        : `Цена актива, при которой стратегия не приносит ни прибыли, ни убытка (P&L = 0) НА ДАТУ ЭКСПИРАЦИИ${calculatedMetrics.plMetrics?.expirationDateLabel ? ` (${calculatedMetrics.plMetrics.expirationDateLabel})` : ''}.`
     },
     {
       priority: 1,
@@ -158,30 +203,35 @@ function OptionsMetrics({ options = [], currentPrice = 0, positions = [], daysPa
       label: 'Дельта',
       value: options.length > 0 ? `Δ ${formatGreek(calculatedMetrics.greeks.delta)}` : '—',
       color: getValueColor(calculatedMetrics.greeks.delta),
-      tooltip: 'Направленность позиции. Положительная дельта = прибыль при росте цены, отрицательная = при падении.'
+      // ЗАЧЕМ (2A-2): дельта позиции — это эквивалент в акциях/единицах базового актива
+      // (уже умножена на contractMultiplier и количество контрактов), т.е. одновременно
+      // и «сколько акций», и «$ прибыли/убытка на $1 движения цены».
+      tooltip: `Эквивалент позиции в акциях (или другой единице) базового актива. Показывает, на сколько долларов изменится P&L всей позиции при движении цены базового актива на $1.${greeksStaleNote}`
     },
     {
       priority: 3,
       label: 'Гамма',
       value: options.length > 0 ? `Γ ${formatGreek(calculatedMetrics.greeks.gamma)}` : '—',
       color: 'purple',
-      tooltip: 'Ускорение дельты при изменении цены актива. Показывает, как быстро меняется дельта.'
+      tooltip: `Скорость изменения дельты позиции при движении цены базового актива на $1. Чем выше гамма, тем быстрее «плывёт» дельта.${greeksStaleNote}`
     },
     {
       priority: 3,
       label: 'Тета',
       value: options.length > 0 ? `Θ ${formatGreek(calculatedMetrics.greeks.theta)}` : '—',
       color: 'cyan',
-      tooltip: 'Временной распад в долларах за день. Отрицательная тета = позиция теряет стоимость со временем.'
+      // ЗАЧЕМ (2A-2): тета — доллары в день НА ВСЮ ПОЗИЦИЮ (contractMultiplier и quantity уже учтены).
+      tooltip: `Временной распад позиции: сколько долларов в день теряет (или зарабатывает) вся позиция при прочих равных. Отрицательная тета = позиция теряет стоимость со временем.${greeksStaleNote}`
     },
     {
       priority: 3,
       label: 'Вега',
       value: options.length > 0 ? `ν ${formatGreek(calculatedMetrics.greeks.vega)}` : '—',
       color: getValueColor(calculatedMetrics.greeks.vega),
-      tooltip: 'Чувствительность к изменению волатильности. Положительная вега = прибыль при росте волатильности.'
+      // ЗАЧЕМ (2A-2): вега — доллары на 1 процентный пункт изменения IV НА ВСЮ ПОЗИЦИЮ.
+      tooltip: `Чувствительность всей позиции к изменению волатильности: $ на 1 процентный пункт изменения implied volatility (IV). Положительная вега = прибыль при росте волатильности.${greeksStaleNote}`
     }
-  ], [options, calculatedMetrics]);
+  ], [options, calculatedMetrics, greeksStaleNote]);
 
   return (
     <div className="metrics-scroll-container relative p-4">
