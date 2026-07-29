@@ -23,6 +23,7 @@ import { getOptionVolatility } from '../../utils/volatilitySurface';
 import { assessLiquidity, getLiquidityColor, formatLiquidityTooltip, LIQUIDITY_LEVELS } from '../../utils/liquidityCheck';
 import { calculateDaysRemainingUTC, getOldestEntryDate, isOptionActiveAtDay, isOptionExpiredAtDay, calculateDaysToExpirationFromToday } from '../../utils/dateUtils';
 import { computeStartPL } from '../../utils/startPLSnapshot';
+import { getLegCost, validateFactPL, describeAnchorResidual } from '../../utils/factPLValidation';
 import LockIcon from './LockIcon';
 import { isStockLikeMode } from '../../utils/calculatorModes';
 
@@ -151,6 +152,11 @@ function OptionsTableV3({
   // в этот момент возвращает пустую строку, и обработчик сбрасывает значение в null.
   // Используем type="text" + локальный черновик, чтобы пользователь мог ввести отрицательное.
   const [actualPLDraft, setActualPLDraft] = React.useState({});
+  // Сообщение блокировки Fact P&L по optionId (1B-2). Sonner в проекте есть в
+  // package.json, но нигде не подключён (нет Toaster в дереве) — заводить его
+  // ради одной подсказки было бы новой зависимостью для рендера. Показываем
+  // блокировку локально: иконка у поля + title с текстом.
+  const [factPLBlockMessage, setFactPLBlockMessage] = React.useState({});
   const [isRefreshingAll, setIsRefreshingAll] = React.useState(false); // Состояние обновления всех опционов
   const scrolledToAtm = React.useRef(new Set()); // Отслеживаем, для каких опционов уже был скролл
 
@@ -452,27 +458,63 @@ function OptionsTableV3({
   // ВАЖНО: Сохраняет дату ввода (actualPLDate) для корректной проекции на будущие дни
   const handleActualPLChange = React.useCallback((optionId, value) => {
     const numValue = value ? parseFloat(value) : null;
-    
-    // Сохраняем actualPL, actualPLDate (сегодня), actualPLPrice (цена актива в момент ввода) и actualPLQuantity (количество в момент ввода)
+
+    // Сохраняем actualPL, actualPLDate (сегодня), actualPLPrice (РЕАЛЬНАЯ рыночная цена
+    // актива на момент ввода, currentPrice) и actualPLQuantity (количество в момент ввода)
     // ЗАЧЕМ: actualPLPrice нужна для корректного расчёта якорной P&L при изменении цены актива
     // ЗАЧЕМ: actualPLQuantity нужно, чтобы при изменении количества контрактов P&L масштабировалась пропорционально
-    // ВАЖНО: Берём targetPrice (поле "Цена базового актива" в блоке "Симуляция"), fallback на currentPrice
+    // ВАЖНО (1B-1): якорь всегда фиксируется по currentPrice (реальная цена из шапки),
+    // а не по targetPrice (ползунок сценарной цены в блоке "Симуляция"). Раньше брали
+    // targetPrice — если пользователь вводил Fact P&L при сдвинутом ползунке, якорь
+    // навсегда привязывался к несуществующей цене (реальный кейс: фьючерсная нога
+    // стоимостью $44 получила якорь +$587).
+    const opt = options.find(o => o.id === optionId);
+
     if (numValue !== null) {
       const today = new Date().toISOString().split('T')[0]; // ISO формат: YYYY-MM-DD
-      const opt = options.find(o => o.id === optionId);
+
+      // Валидация (1B-2): проверяем ПРОСПЕКТИВНОЕ состояние ноги — с датой/ценой,
+      // которые будут записаны прямо сейчас (actualPLDate=сегодня, actualPLPrice=
+      // currentPrice), иначе ценовой warn сравнивался бы со старым, ещё не
+      // перезаписанным якорем.
+      const prospectiveOption = { ...opt, actualPLDate: today, actualPLPrice: currentPrice };
+      const validation = validateFactPL({ value: numValue, option: prospectiveOption, contractMultiplier });
+
+      if (validation.level === 'block') {
+        // Физически невозможное значение (например, убыток больше уплаченной премии) —
+        // НЕ записываем в state, показываем сообщение у поля через локальный state.
+        setFactPLBlockMessage(prev => ({ ...prev, [optionId]: validation.message }));
+        return;
+      }
+      // Значение прошло проверку — снимаем возможное старое сообщение блокировки.
+      setFactPLBlockMessage(prev => {
+        if (!(optionId in prev)) return prev;
+        const next = { ...prev };
+        delete next[optionId];
+        return next;
+      });
+
       const qtyAtAnchor = Number(opt?.quantity) || 1;
       handleFieldChange(optionId, 'actualPL', numValue);
       handleFieldChange(optionId, 'actualPLDate', today);
-      handleFieldChange(optionId, 'actualPLPrice', targetPrice || currentPrice); // targetPrice = цена из блока "Симуляция"
+      handleFieldChange(optionId, 'actualPLPrice', currentPrice);
+      handleFieldChange(optionId, 'actualPLPriceSource', 'market'); // маркер: якорь корректный (по рыночной цене), а не старый (возможно, по targetPrice)
       handleFieldChange(optionId, 'actualPLQuantity', qtyAtAnchor);
     } else {
-      // Если поле очищено — удаляем все якорные значения
+      // Если поле очищено — удаляем все якорные значения и сообщение блокировки
+      setFactPLBlockMessage(prev => {
+        if (!(optionId in prev)) return prev;
+        const next = { ...prev };
+        delete next[optionId];
+        return next;
+      });
       handleFieldChange(optionId, 'actualPL', null);
       handleFieldChange(optionId, 'actualPLDate', null);
       handleFieldChange(optionId, 'actualPLPrice', null);
+      handleFieldChange(optionId, 'actualPLPriceSource', null);
       handleFieldChange(optionId, 'actualPLQuantity', null);
     }
-  }, [targetPrice, currentPrice, options]);
+  }, [currentPrice, options, contractMultiplier]);
 
   // Обработчик обновления всех незалоченных опционов
   // ЗАЧЕМ: Позволяет пользователю быстро обновить рыночные данные для всех позиций
@@ -822,6 +864,13 @@ function OptionsTableV3({
             // Определяем, нужно ли применять серый цвет ко всей строке
             // ЗАЧЕМ: Скрытые или истёкшие опционы отображаются серым
             const isGrayedOut = !option.visible || isExpired;
+
+            // Теоретическая P&L на момент якоря Fact P&L (plAtAnchor) — считается
+            // внутри IIFE колонки «P&L» (см. ниже, якорный блок). Поднимаем сюда,
+            // в область видимости строки, чтобы подсказка у поля «Fact P&L» могла
+            // показать размер поправки через describeAnchorResidual, НЕ дублируя
+            // расчёт ценообразования (calculateFuturesOptionPLValue/calculateStockOptionPLValue).
+            let rowPlAtAnchor = null;
 
             return (
               <div
@@ -1427,7 +1476,12 @@ function OptionsTableV3({
                         if (isStockLikeMode(calculatorMode) && stockClassification) {
                           plAtAnchor = adjustPLByStockGroup(plAtAnchor, stockClassification);
                         }
-                        
+
+                        // Поднимаем plAtAnchor в область видимости строки (см. объявление
+                        // rowPlAtAnchor выше) — подсказка у поля «Fact P&L» использует его
+                        // через describeAnchorResidual вместо повторного расчёта цены.
+                        rowPlAtAnchor = plAtAnchor;
+
                         const plBeforeAnchor = pl;
                         // Итоговая P&L = actualPL × ratio + (текущая теор. P&L − теор. P&L на якоре)
                         // ratio = текущее количество / количество в момент ввода Fact P&L
@@ -1469,58 +1523,115 @@ function OptionsTableV3({
                 {/* ЗАЧЕМ: Позволяет пользователю зафиксировать реальную P&L и использовать её как якорь для проекций */}
                 {/* Тип text + черновик в локальном state, чтобы можно было ввести отрицательное значение
                     (type="number" в controlled-инпуте теряет промежуточный «-»). */}
-                <Input
-                  type="text"
-                  inputMode="decimal"
-                  value={
-                    actualPLDraft[option.id] !== undefined
-                      ? actualPLDraft[option.id]
-                      : (option.actualPL !== null && option.actualPL !== undefined ? String(option.actualPL) : '')
+                {(() => {
+                  // 1B-2: валидация ТЕКУЩЕГО сохранённого значения (для оранжевого warn-бейджа)
+                  // и подсказка с размером поправки якоря (describeAnchorResidual использует
+                  // rowPlAtAnchor, поднятый из якорного блока колонки «P&L» выше по строке —
+                  // без повторного вызова моделей ценообразования).
+                  const factPLLegCost = getLegCost(option, contractMultiplier);
+                  const hasActualPL = option.actualPL !== null && option.actualPL !== undefined;
+                  const currentValidation = hasActualPL
+                    ? validateFactPL({ value: option.actualPL, option, contractMultiplier })
+                    : { level: 'ok', message: '' };
+                  const anchorResidualText = hasActualPL && rowPlAtAnchor !== null
+                    ? describeAnchorResidual({ actualPL: option.actualPL, plAtAnchor: rowPlAtAnchor, legCost: factPLLegCost })
+                    : '';
+                  const blockMessage = factPLBlockMessage[option.id];
+
+                  // Приоритет подсказки: активная блокировка (только что введено
+                  // недопустимое значение) > warn > просто размер поправки якоря.
+                  let fieldTitle = '';
+                  if (blockMessage) {
+                    fieldTitle = `Заблокировано: ${blockMessage}`;
+                  } else if (currentValidation.level === 'warn') {
+                    fieldTitle = anchorResidualText
+                      ? `${currentValidation.message}. ${anchorResidualText}`
+                      : currentValidation.message;
+                  } else if (anchorResidualText) {
+                    fieldTitle = anchorResidualText;
                   }
-                  onChange={(e) => {
-                    const raw = e.target.value;
-                    // Разрешаем пусто, «-», целые и дробные числа с опциональным минусом.
-                    if (raw === '' || /^-?\d*\.?\d*$/.test(raw)) {
-                      setActualPLDraft(prev => ({ ...prev, [option.id]: raw }));
-                    }
-                  }}
-                  onBlur={(e) => {
-                    const raw = e.target.value;
-                    // Фиксируем значение через тот же обработчик. «-» и пусто трактуются как null.
-                    const isValidNumber = raw !== '' && raw !== '-' && !Number.isNaN(parseFloat(raw));
-                    handleActualPLChange(option.id, isValidNumber ? raw : '');
-                    setActualPLDraft(prev => {
-                      const next = { ...prev };
-                      delete next[option.id];
-                      return next;
-                    });
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.target.blur();
-                    }
-                    if (e.key === 'Escape') {
-                      setActualPLDraft(prev => {
-                        const next = { ...prev };
-                        delete next[option.id];
-                        return next;
-                      });
-                      e.target.blur();
-                    }
-                  }}
-                  placeholder={(() => {
-                    // Placeholder = текущий теоретический P&L
-                    const hasPremium = option.isPremiumModified ? (option.customPremium !== null && option.customPremium !== undefined) : (option.premium !== null && option.premium !== undefined);
-                    if (!hasPremium || !option.strike || !currentPrice) return '—';
-                    return '0';
-                  })()}
-                  disabled={option.isLockedPosition}
-                  className="w-full px-1 text-right text-xs border rounded"
-                  style={{
-                    fontSize: '0.7rem',
-                    backgroundColor: (option.actualPL !== null && option.actualPL !== undefined) ? '#fef3c7' : 'transparent'
-                  }}
-                />
+
+                  return (
+                    <div className="relative w-full">
+                      <Input
+                        type="text"
+                        inputMode="decimal"
+                        value={
+                          actualPLDraft[option.id] !== undefined
+                            ? actualPLDraft[option.id]
+                            : (option.actualPL !== null && option.actualPL !== undefined ? String(option.actualPL) : '')
+                        }
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          // Разрешаем пусто, «-», целые и дробные числа с опциональным минусом.
+                          if (raw === '' || /^-?\d*\.?\d*$/.test(raw)) {
+                            setActualPLDraft(prev => ({ ...prev, [option.id]: raw }));
+                          }
+                        }}
+                        onFocus={() => {
+                          // Снимаем сообщение о прошлой блокировке при новой попытке ввода.
+                          if (factPLBlockMessage[option.id]) {
+                            setFactPLBlockMessage(prev => {
+                              const next = { ...prev };
+                              delete next[option.id];
+                              return next;
+                            });
+                          }
+                        }}
+                        onBlur={(e) => {
+                          const raw = e.target.value;
+                          // Фиксируем значение через тот же обработчик. «-» и пусто трактуются как null.
+                          const isValidNumber = raw !== '' && raw !== '-' && !Number.isNaN(parseFloat(raw));
+                          handleActualPLChange(option.id, isValidNumber ? raw : '');
+                          setActualPLDraft(prev => {
+                            const next = { ...prev };
+                            delete next[option.id];
+                            return next;
+                          });
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.target.blur();
+                          }
+                          if (e.key === 'Escape') {
+                            setActualPLDraft(prev => {
+                              const next = { ...prev };
+                              delete next[option.id];
+                              return next;
+                            });
+                            e.target.blur();
+                          }
+                        }}
+                        placeholder={(() => {
+                          // Placeholder = текущий теоретический P&L
+                          const hasPremium = option.isPremiumModified ? (option.customPremium !== null && option.customPremium !== undefined) : (option.premium !== null && option.premium !== undefined);
+                          if (!hasPremium || !option.strike || !currentPrice) return '—';
+                          return '0';
+                        })()}
+                        title={fieldTitle}
+                        disabled={option.isLockedPosition}
+                        className="w-full px-1 text-right text-xs border rounded"
+                        style={{
+                          fontSize: '0.7rem',
+                          backgroundColor: blockMessage
+                            ? '#fee2e2'
+                            : ((option.actualPL !== null && option.actualPL !== undefined) ? '#fef3c7' : 'transparent'),
+                          borderColor: blockMessage ? '#ef4444' : (currentValidation.level === 'warn' ? '#f59e0b' : undefined)
+                        }}
+                      />
+                      {(blockMessage || currentValidation.level === 'warn') && (
+                        <AlertTriangle
+                          className="h-3 w-3 absolute pointer-events-none"
+                          style={{
+                            top: '2px',
+                            right: '2px',
+                            color: blockMessage ? '#dc2626' : '#f59e0b'
+                          }}
+                        />
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* Close Price - теоретическая цена опциона на выход */}
                 {/* ЗАЧЕМ: Показывает цену опциона, соответствующую отображаемому P&L (с учётом калибровки и якоря) */}
