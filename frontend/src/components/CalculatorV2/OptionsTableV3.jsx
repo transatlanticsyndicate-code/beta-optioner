@@ -20,6 +20,7 @@ import { calculateOptionPLValue as calculateStockOptionPLValue, adjustPLByStockG
 // Импорт из нового модуля для режима "Фьючерсы"
 import { calculateFuturesOptionPLValue, calculateFuturesOptionTheoreticalPrice } from '../../utils/futuresPricing';
 import { getOptionVolatility } from '../../utils/volatilitySurface';
+import { normalizeMarketIv } from '../../utils/extensionRefreshPolicy';
 import { assessLiquidity, getLiquidityColor, formatLiquidityTooltip, LIQUIDITY_LEVELS } from '../../utils/liquidityCheck';
 import { calculateDaysRemainingUTC, getOldestEntryDate, isOptionActiveAtDay, isOptionExpiredAtDay, calculateDaysToExpirationFromToday } from '../../utils/dateUtils';
 import { computeStartPL } from '../../utils/startPLSnapshot';
@@ -802,12 +803,24 @@ function OptionsTableV3({
                     <Info className="w-3 h-3 text-muted-foreground cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>Волатильность из снимка на момент входа в сделку.<br/>Дельта — изменение относительно текущей Fact IV.</p>
+                    <p>Волатильность из снимка на момент входа в сделку.<br/>Дельта — изменение относительно текущей рыночной IV (колонка «IV»).</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             </div>
-            <div className="text-center" style={{ fontSize: '0.7rem' }}>IV</div>
+            <div className="text-center flex items-center justify-center gap-0.5" style={{ fontSize: '0.7rem' }}>
+              IV
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="w-3 h-3 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Рыночная волатильность из TradingView, обновляется расширением.<br/>В расчёте P&amp;L используется Fact IV, если она заполнена.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
             <div className="text-center" style={{ fontSize: '0.7rem' }}>Fact IV</div>
             <div
               className="text-center cursor-pointer hover:text-foreground select-none flex items-center justify-center gap-1"
@@ -1163,24 +1176,19 @@ function OptionsTableV3({
                   })()}
                 </span>
 
-                {/* IV (Implied Volatility) - результирующая волатильность с учётом времени */}
-                {/* ЗАЧЕМ: Отображаем IV с одним знаком после запятой для точности */}
-                {/* При покупке используется askIV, при продаже — bidIV (логика в adaptOption) */}
-                {/* Дельта под значением: текущая Fact IV минус Start IV, цвет по выгоде для ноги Buy/Sell */}
+                {/* IV (Implied Volatility) — РЫНОЧНАЯ волатильность (option.impliedVolatility),
+                    обновляется расширением из TradingView. НЕ путать с расчётной IV, которую
+                    используют P&L/якоря (getOptionVolatility — там приоритет у Fact IV,
+                    см. места вызова ниже по файлу и optVolatility выше). Эта колонка — чисто
+                    отображение факта «что видит расширение сейчас».
+                    Дельта под значением: рыночная IV (эта колонка) минус Start IV, цвет по
+                    выгоде для ноги Buy/Sell. */}
                 <div className="flex flex-col items-end justify-center leading-tight" style={{ fontSize: '0.7rem' }}>
                   {(() => {
-                    const optIV = option.impliedVolatility || option.implied_volatility;
-                    if (!optIV || optIV <= 0) return <span className="text-muted-foreground">—</span>;
-                    // Вычисляем результирующую IV с учётом симуляции времени
-                    // ВАЖНО: Передаём oldestEntryDate для корректного расчёта actualDaysPassed
-                    const oldestEntry = getOldestEntryDate(options);
-                    const currentDays = calculateDaysRemainingUTC(option, 0, 30, oldestEntry);
-                    const simulatedDays = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntry);
-                    const todaySimDays = calculateDaysToExpirationFromToday(option);
-                    // Используем manualIvOverride из самого опциона
-                    const resultIV = getOptionVolatility(option, currentDays, simulatedDays, ivSurface, 'simple', null, option.manualIvOverride, todaySimDays);
+                    const marketIv = normalizeMarketIv(option.impliedVolatility ?? option.implied_volatility);
+                    if (marketIv === null) return <span className="text-muted-foreground">—</span>;
 
-                    // Дельта к Start IV из снимка — только если есть снимок и текущая Fact IV ноги
+                    // Дельта к Start IV из снимка — только если есть снимок
                     let deltaNode = null;
                     const snapshot = option.startSnapshot;
                     let startIv = null;
@@ -1191,9 +1199,8 @@ function OptionsTableV3({
                         startIv = snapshot.impliedVolatility < 1 ? snapshot.impliedVolatility * 100 : snapshot.impliedVolatility;
                       }
                     }
-                    const factIv = option.manualIvOverride;
-                    if (startIv !== null && startIv !== undefined && !Number.isNaN(startIv) && factIv !== null && factIv !== undefined && factIv !== '') {
-                      const delta = Number(factIv) - startIv;
+                    if (startIv !== null && startIv !== undefined && !Number.isNaN(startIv)) {
+                      const delta = marketIv - startIv;
                       if (!Number.isNaN(delta)) {
                         // Выгода по направлению ноги: для Buy рост IV — в плюс (зелёный),
                         // для Sell — наоборот (рост IV — в минус, красный)
@@ -1209,9 +1216,14 @@ function OptionsTableV3({
                       }
                     }
 
+                    // Тултип значения: когда расширение последний раз обновило рыночную IV
+                    const updatedTitle = option.ivUpdatedAt
+                      ? `обновлено ${new Date(option.ivUpdatedAt).toLocaleDateString('ru-RU')} ${new Date(option.ivUpdatedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`
+                      : undefined;
+
                     return (
                       <>
-                        <span className="text-muted-foreground font-medium">{resultIV.toFixed(2)}%</span>
+                        <span className="text-muted-foreground font-medium" title={updatedTitle}>{marketIv.toFixed(2)}%</span>
                         {deltaNode}
                       </>
                     );

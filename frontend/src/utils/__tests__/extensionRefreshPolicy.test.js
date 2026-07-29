@@ -35,6 +35,21 @@ describe('normalizeMarketIv', () => {
   test('0.004 (после *100 = 0.4%, вне коридора [1,500]) → null', () => {
     expect(normalizeMarketIv(0.004)).toBeNull();
   });
+
+  // Кейсы из колонки «IV» в OptionsTableV3.jsx — та же функция переиспользована
+  // для отображения (не только для приёма обновлений от расширения), чтобы
+  // единицы (доли vs проценты) трактовались одинаково везде.
+  test('0.4922 (доля) → 49.22', () => {
+    expect(normalizeMarketIv(0.4922)).toBeCloseTo(49.22);
+  });
+
+  test('49.22 (уже проценты) → 49.22 без изменений', () => {
+    expect(normalizeMarketIv(49.22)).toBeCloseTo(49.22);
+  });
+
+  test('undefined (нет данных) → null (в колонке рендерится как «—»)', () => {
+    expect(normalizeMarketIv(undefined)).toBeNull();
+  });
 });
 
 describe('buildIvPatch', () => {

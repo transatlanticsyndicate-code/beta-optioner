@@ -68,24 +68,105 @@ export function buildIvPatch(option, rawIv, nowIso) {
 }
 
 /**
- * Решает, нужно ли пересохранять конфигурацию после обновления от расширения.
+ * Решает, В КАКОМ РЕЖИМЕ (если вообще) пересохранять конфигурацию после
+ * обновления от расширения.
  *
  * ЗАЧЕМ: вынесено в чистую функцию, чтобы гейты (зафиксированная позиция,
  * режим редактирования) можно было покрыть тестами без рендера компонента.
  * Побочный эффект (сохранение в БД/localStorage) остаётся в эффекте калькулятора —
- * здесь только решение "можно/нельзя".
+ * здесь только решение о режиме.
+ *
+ * ВАЖНО: раньше зафиксированные (isLocked) сделки не сохранялись ВООБЩЕ — из-за
+ * этого обновлённая расширением рыночная IV/цена БА не переживала перезагрузку
+ * страницы (у заказчика зафиксированы все 50 сделок). Теперь для них разрешено
+ * узкое сохранение ('market-only') — см. pickPersistablePatch/applyPersistablePatch.
  *
  * @param {object} params
  * @param {boolean} params.hasPendingFlag — взведён ли флаг "нужно пересохранить"
  * @param {string|null} params.loadedConfigId — id загруженной конфигурации
  * @param {boolean} params.isLocked — позиция зафиксирована (неизменяема)
  * @param {boolean} params.isEditMode — идёт ручное редактирование конфигурации
- * @returns {boolean}
+ * @returns {'full'|'market-only'|'skip'}
  */
 export function shouldPersistExtensionRefresh({ hasPendingFlag, loadedConfigId, isLocked, isEditMode }) {
-  if (!hasPendingFlag) return false;
-  if (!loadedConfigId) return false;
-  if (isLocked) return false;
-  if (isEditMode) return false;
-  return true;
+  if (!hasPendingFlag) return 'skip';
+  if (!loadedConfigId) return 'skip';
+  // Режим редактирования — пользователь сохраняет явной кнопкой «Сохранить
+  // изменения» (handleSaveEditedConfiguration), автосейв тут не нужен и опасен.
+  if (isEditMode) return 'skip';
+  if (isLocked) return 'market-only';
+  return 'full';
+}
+
+/**
+ * Поля ноги, которые расширению разрешено писать при узком ('market-only')
+ * сохранении зафиксированной сделки.
+ */
+const MARKET_ONLY_LEG_FIELDS = ['impliedVolatility', 'ivUpdatedFromExtension', 'ivUpdatedAt'];
+
+/**
+ * Отбирает из текущего состояния формы только те поля, которые разрешено
+ * сохранять в выбранном режиме.
+ *
+ * ЗАЧЕМ: для зафиксированной сделки ('market-only') нельзя доверять состоянию
+ * формы целиком — окно между применением обновления от расширения и записью в
+ * БД/localStorage не должно протащить в БД ничего, кроме рыночных полей. Эта
+ * функция строит "узкий" патч (только разрешённые поля + id ноги для сшивки);
+ * реальное слияние с состоянием, уже лежащим в хранилище, делает
+ * applyPersistablePatch.
+ *
+ * @param {object} params
+ * @param {'full'|'market-only'} params.mode
+ * @param {number} params.currentPrice — текущая (живая) цена базового актива
+ * @param {object[]} params.options — текущие ноги из состояния формы
+ * @returns {{currentPrice: number, options: object[]}}
+ */
+export function pickPersistablePatch({ mode, currentPrice, options }) {
+  const safeOptions = Array.isArray(options) ? options : [];
+
+  if (mode !== 'market-only') {
+    return { currentPrice, options: safeOptions };
+  }
+
+  return {
+    currentPrice,
+    options: safeOptions.map((opt) => {
+      const legPatch = { id: opt.id };
+      for (const field of MARKET_ONLY_LEG_FIELDS) {
+        legPatch[field] = opt[field];
+      }
+      return legPatch;
+    }),
+  };
+}
+
+/**
+ * Накладывает узкий патч (см. pickPersistablePatch) на состояние, уже лежащее
+ * в БД/localStorage — итог готов к записи обратно как полное состояние.
+ *
+ * ЗАЧЕМ: узкое сохранение обязано опираться на актуальное сохранённое
+ * состояние (baseState), а не на снимок формы — иначе поля, которые форма
+ * могла не успеть получить/синхронизировать (manualIvOverride*, customAsk/Bid,
+ * actualPL*, startSnapshot, количество, страйк, дата), рискуют быть тихо
+ * перезаписаны значениями формы. Ноги match'атся по id; ноги из baseState,
+ * отсутствующие в патче, остаются нетронутыми.
+ *
+ * @param {object} baseState — состояние, актуально хранящееся в БД/localStorage
+ * @param {{currentPrice: number, options: object[]}} patch — результат pickPersistablePatch
+ * @returns {object} полное состояние, готовое для сохранения
+ */
+export function applyPersistablePatch(baseState, patch) {
+  const baseOptions = Array.isArray(baseState?.options) ? baseState.options : [];
+  const patchOptionsById = new Map((patch?.options || []).map((o) => [o.id, o]));
+
+  const mergedOptions = baseOptions.map((baseOpt) => {
+    const legPatch = patchOptionsById.get(baseOpt.id);
+    return legPatch ? { ...baseOpt, ...legPatch } : baseOpt;
+  });
+
+  return {
+    ...baseState,
+    currentPrice: patch?.currentPrice ?? baseState?.currentPrice,
+    options: mergedOptions,
+  };
 }

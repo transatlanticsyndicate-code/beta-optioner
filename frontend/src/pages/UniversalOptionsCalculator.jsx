@@ -101,7 +101,7 @@ import { useExtensionData, useExtensionRefreshCommand, writeRefreshResult } from
 // Импорт политики применения обновлений от расширения к рыночной IV
 // ЗАЧЕМ: Изолирует правило «рыночная IV → только impliedVolatility, Fact IV не трогаем»
 // в чистых функциях, чтобы его можно было покрыть unit-тестами отдельно от эффекта
-import { buildIvPatch, shouldPersistExtensionRefresh } from '../utils/extensionRefreshPolicy';
+import { buildIvPatch, shouldPersistExtensionRefresh, pickPersistablePatch, applyPersistablePatch } from '../utils/extensionRefreshPolicy';
 
 // Импорт построителя ключа опциона для хранилища ручных правок (с учётом тикера)
 // ЗАЧЕМ: Ключ без тикера приводил к "перетеканию" правок между разными инструментами
@@ -1167,22 +1167,26 @@ function UniversalOptionsCalculator() {
     if (!needExtRefreshSaveRef.current || !loadedConfigId) return;
     needExtRefreshSaveRef.current = false;
 
-    // Гейт: гасим намерение сохранить (а не откладываем) для зафиксированных
-    // позиций и режима редактирования — накрывает обе ветки ниже (БД и
-    // localStorage). ЗАЧЕМ: зафиксированная сделка не должна автоматически
-    // переписываться обновлением от расширения; в режиме редактирования
-    // сохранение делает пользователь явной кнопкой «Сохранить изменения»
-    // (см. handleSaveEditedConfiguration) — тот путь этим гейтом не затронут.
-    if (!shouldPersistExtensionRefresh({
+    // Режим: 'full' (обычная сделка — сохраняем как раньше), 'market-only'
+    // (сделка зафиксирована — сохраняем ТОЛЬКО поля, разрешённые расширению:
+    // currentPrice + impliedVolatility/ivUpdatedFromExtension/ivUpdatedAt на
+    // ноге, наложенные на состояние, уже лежащее в БД/localStorage) или
+    // 'skip' (нет флага/id, либо идёт ручное редактирование — там сохраняет
+    // явная кнопка «Сохранить изменения», см. handleSaveEditedConfiguration).
+    const saveMode = shouldPersistExtensionRefresh({
       hasPendingFlag: true,
       loadedConfigId,
       isLocked: isLockedRef.current,
       isEditMode: isEditModeRef.current,
-    })) {
+    });
+
+    if (saveMode === 'skip') {
       console.info('⏭️ [ExtRefresh] Пересохранение пропущено:',
-        isLockedRef.current ? 'сделка зафиксирована' : 'режим редактирования');
+        isEditModeRef.current ? 'режим редактирования' : 'нет флага/id конфигурации');
       return;
     }
+
+    console.info(`💾 [ExtRefresh] Режим сохранения: ${saveMode}`);
 
     if (configSource === 'db') {
       (async () => {
@@ -1192,14 +1196,29 @@ function UniversalOptionsCalculator() {
             const { data: { session } } = await supabase.auth.getSession();
             if (session?.user) userId = session.user.id;
           }
-          await updateConfiguration(loadedConfigId, {
-            state: {
-              selectedTicker, currentPrice, priceChange, options, positions,
-              selectedExpirationDate, daysPassed, showOptionLines, showProbabilityZones,
-              chartDisplayMode, calculatorMode,
-            },
-          }, userId);
-          console.log('💾 [ExtRefresh] Конфигурация пересохранена в БД:', loadedConfigId);
+
+          if (saveMode === 'market-only') {
+            // Зафиксированная сделка: читаем свежее состояние из БД и
+            // накладываем на него только разрешённый узкий патч — снимку
+            // формы для остальных полей доверять нельзя (см. diagnose.md).
+            const fresh = await getConfiguration(loadedConfigId);
+            if (fresh?.status !== 'success' || !fresh.data?.state) {
+              console.error('❌ [ExtRefresh] Не удалось прочитать текущее состояние для узкого сохранения');
+              return;
+            }
+            const patch = pickPersistablePatch({ mode: saveMode, currentPrice, options });
+            const mergedState = applyPersistablePatch(fresh.data.state, patch);
+            await updateConfiguration(loadedConfigId, { state: mergedState }, userId);
+          } else {
+            await updateConfiguration(loadedConfigId, {
+              state: {
+                selectedTicker, currentPrice, priceChange, options, positions,
+                selectedExpirationDate, daysPassed, showOptionLines, showProbabilityZones,
+                chartDisplayMode, calculatorMode,
+              },
+            }, userId);
+          }
+          console.log('💾 [ExtRefresh] Конфигурация пересохранена в БД:', loadedConfigId, `(${saveMode})`);
         } catch (error) {
           console.error('❌ [ExtRefresh] Ошибка пересохранения в БД:', error);
         }
@@ -1211,7 +1230,13 @@ function UniversalOptionsCalculator() {
         const configurations = JSON.parse(saved);
         const idx = configurations.findIndex(c => c.id === loadedConfigId);
         if (idx === -1) return;
-        configurations[idx].state = { ...configurations[idx].state, options, currentPrice };
+
+        if (saveMode === 'market-only') {
+          const patch = pickPersistablePatch({ mode: saveMode, currentPrice, options });
+          configurations[idx].state = applyPersistablePatch(configurations[idx].state, patch);
+        } else {
+          configurations[idx].state = { ...configurations[idx].state, options, currentPrice };
+        }
         localStorage.setItem('universalCalculatorConfigurations', JSON.stringify(configurations));
       } catch (error) {
         console.error('❌ [ExtRefresh] Ошибка пересохранения в localStorage:', error);
