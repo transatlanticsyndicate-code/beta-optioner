@@ -23,7 +23,15 @@
 //   - AI-волатильность, обновление котировок расширением, ручная смена
 //     IV/премии/Fact P&L ПОСЛЕ сохранения.
 //   - IV-поверхность (текущая, для проекции IV по дням).
-//   - dividendYield/contractMultiplier — берутся текущие в момент расчёта.
+//
+// Что ЗАМОРАЖИВАЕТСЯ (кладётся в снимок и не зависит от текущих настроек):
+//   - dividendYield — фиксируется на момент сохранения (см. buildStartSnapshot
+//     ниже и использование в computeStartPL).
+//   - contractMultiplier/calculatorMode — фиксируются на момент сохранения,
+//     чтобы более поздняя правка настроек фьючерса (стоимость пункта) задним
+//     числом не меняла Start P&L уже сохранённых сделок. Для снимков старого
+//     формата (без этих полей) — мягкая миграция: расчёт берёт текущие
+//     значения из ctx.
 
 import { calculateOptionPLValue as calculateStockOptionPLValue } from './optionPricing';
 import { calculateFuturesOptionPLValue } from './futuresPricing';
@@ -43,10 +51,12 @@ import { CALCULATOR_MODES } from './calculatorModes';
  * @param {object} ctx
  * @param {number} ctx.currentPrice — текущая цена БА (fallback для assetPriceAtEntry)
  * @param {number} ctx.dividendYield — дивдоходность с учётом useDividends-флага (уже домноженная)
+ * @param {number} ctx.contractMultiplier — множитель контракта на момент сохранения (замораживается)
+ * @param {string} ctx.calculatorMode — режим калькулятора на момент сохранения (замораживается)
  * @returns {object} snapshot — объект, который кладётся в option.startSnapshot
  */
 export function buildStartSnapshot(option, ctx) {
-  const { currentPrice, dividendYield } = ctx;
+  const { currentPrice, dividendYield, contractMultiplier, calculatorMode } = ctx;
 
   // Effective premium / bid / ask с учётом ручных правок пользователя на момент сохранения.
   const premium = option.isPremiumModified ? option.customPremium : option.premium;
@@ -85,6 +95,8 @@ export function buildStartSnapshot(option, ctx) {
     assetPrice: assetPrice ?? null,
     quantity: quantity ?? null,
     dividendYield: dividendYield ?? 0,
+    contractMultiplier: contractMultiplier ?? null,
+    calculatorMode: calculatorMode ?? null,
     actualPL,
     actualPLDate,
     actualPLPrice,
@@ -102,8 +114,10 @@ export function buildStartSnapshot(option, ctx) {
  * @param {number} ctx.currentPrice — текущая цена БА (fallback)
  * @param {number} ctx.targetPrice — симуляционная целевая цена
  * @param {number} ctx.daysPassed — сдвиг по дням симуляции
- * @param {string} ctx.calculatorMode — режим: stocks/etf/crypto/futures
- * @param {number} ctx.contractMultiplier — множитель контракта
+ * @param {string} ctx.calculatorMode — режим: stocks/etf/crypto/futures (fallback,
+ *   если в snapshot.calculatorMode нет значения — снимок старого формата)
+ * @param {number} ctx.contractMultiplier — множитель контракта (fallback,
+ *   если в snapshot.contractMultiplier нет значения — снимок старого формата)
  * @param {object|null} ctx.ivSurface — текущая IV-поверхность для разрешения волатильности
  * @returns {number|null} — Start P&L в долларах, либо null если посчитать нельзя
  */
@@ -114,10 +128,16 @@ export function computeStartPL(snapshot, option, ctx) {
     currentPrice,
     targetPrice,
     daysPassed,
-    calculatorMode,
-    contractMultiplier,
+    calculatorMode: ctxCalculatorMode,
+    contractMultiplier: ctxContractMultiplier,
     ivSurface,
   } = ctx;
+
+  // Множитель контракта и режим калькулятора берём из снимка (заморожены на
+  // момент сохранения). Для снимков старого формата (поле отсутствует) —
+  // мягкая миграция на текущие значения из ctx.
+  const calculatorMode = snapshot.calculatorMode ?? ctxCalculatorMode;
+  const contractMultiplier = snapshot.contractMultiplier ?? ctxContractMultiplier;
 
   if (!option.strike) return null;
   // Без премии (ни в снимке, ни в bid/ask) посчитать невозможно.
