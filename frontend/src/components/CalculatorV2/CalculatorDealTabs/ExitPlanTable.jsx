@@ -5,7 +5,7 @@ import { calculateFuturesOptionPLValue } from '../../../utils/futuresPricing';
 import { CALCULATOR_MODES } from '../../../utils/universalPricing';
 import { isStockLikeMode } from '../../../utils/calculatorModes';
 import { getOptionVolatility } from '../../../utils/volatilitySurface';
-import { calculateDaysToExpirationFromToday, calculateDaysRemainingUTC, getOldestEntryDate } from '../../../utils/dateUtils';
+import { calculateDaysRemainingUTC, getOldestEntryDate, calculateDaysRemainingPreciseET, calculateDaysToExpirationFromTodayPreciseET } from '../../../utils/dateUtils';
 import { applyFactPLAnchor } from '../../../utils/factPLAnchor';
 
 /**
@@ -488,11 +488,16 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
 
     // currentDaysToExpiration — дни от входа (daysPassed=0) до экспирации
     // optionDaysRemaining — дни от даты выхода до экспирации (аналог daysRemaining в OptionsTableV3)
-    const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0, 30, oldestEntry);
-    const optionDaysRemaining = calculateDaysRemainingUTC(option, stepSimDays, 30, oldestEntry);
+    // Точная (ET, дробная) версия — эти значения идут прямо в ценообразование
+    // (calculateOptionPLValue/calculateFuturesOptionPLValue ниже) и в IV-интерполяцию.
+    const currentDaysToExpiration = calculateDaysRemainingPreciseET(option, 0, 30, oldestEntry);
+    const optionDaysRemaining = calculateDaysRemainingPreciseET(option, stepSimDays, 30, oldestEntry);
+    // Целочисленная версия — ТОЛЬКО для гарда applyFactPLAnchor (targetDaysRemaining ниже):
+    // гард «<= 0 → экспирация, якорь не применяем» должен остаться на целых календарных днях.
+    const optionDaysRemainingForAnchor = calculateDaysRemainingUTC(option, stepSimDays, 30, oldestEntry);
 
     // todayDaysToExpiration — дни от реального сегодня до экспирации (для manualIvOverride)
-    const todaySimDays = calculateDaysToExpirationFromToday(option);
+    const todaySimDays = calculateDaysToExpirationFromTodayPreciseET(option);
 
     // Волатильность через ту же getOptionVolatility, что и таблица опционов
     const optionVolatility = getOptionVolatility(
@@ -572,7 +577,7 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
       const anchorResultExit = applyFactPLAnchor({
         option,
         theoreticalPL: pl,
-        targetDaysRemaining: optionDaysRemaining,
+        targetDaysRemaining: optionDaysRemainingForAnchor,
         // Условие аналогично `daysPassed >= anchorDaysPassed` в таблице опционов,
         // но своя «текущая точка» — stepSimDays (день выхода шага), а не daysPassed симуляции.
         targetDaysPassed: stepSimDays,

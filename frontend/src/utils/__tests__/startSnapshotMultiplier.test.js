@@ -20,7 +20,8 @@ jest.mock('../dateUtils', () => ({
   calculateDaysRemainingUTC: jest.fn(),
   getOldestEntryDate: jest.fn(),
   isOptionActiveAtDay: jest.fn(),
-  calculateDaysToExpirationFromToday: jest.fn(),
+  calculateDaysRemainingPreciseET: jest.fn(),
+  calculateDaysToExpirationFromTodayPreciseET: jest.fn(),
 }));
 
 jest.mock('../volatilitySurface', () => ({
@@ -40,7 +41,8 @@ import {
   calculateDaysRemainingUTC,
   getOldestEntryDate,
   isOptionActiveAtDay,
-  calculateDaysToExpirationFromToday,
+  calculateDaysRemainingPreciseET,
+  calculateDaysToExpirationFromTodayPreciseET,
 } from '../dateUtils';
 import { getOptionVolatility } from '../volatilitySurface';
 import { calculateOptionPLValue } from '../optionPricing';
@@ -99,7 +101,8 @@ beforeEach(() => {
   calculateDaysRemainingUTC.mockReturnValue(10);
   getOldestEntryDate.mockReturnValue(new Date('2026-01-01T00:00:00Z'));
   isOptionActiveAtDay.mockReturnValue(true);
-  calculateDaysToExpirationFromToday.mockReturnValue(10);
+  calculateDaysRemainingPreciseET.mockReturnValue(10);
+  calculateDaysToExpirationFromTodayPreciseET.mockReturnValue(10);
   getOptionVolatility.mockReturnValue(0.3);
   calculateOptionPLValue.mockReturnValue(100);
   calculateFuturesOptionPLValue.mockReturnValue(200);

@@ -7,7 +7,7 @@
 import { calculateOptionTheoreticalPrice as calculateStockOptionTheoreticalPrice } from '../../../utils/optionPricing';
 import { calculateFuturesOptionTheoreticalPrice } from '../../../utils/futuresPricing';
 import { getOptionVolatility } from '../../../utils/volatilitySurface';
-import { calculateDaysRemainingUTC, getOldestEntryDate } from '../../../utils/dateUtils';
+import { getOldestEntryDate, calculateDaysRemainingPreciseET } from '../../../utils/dateUtils';
 import { CALCULATOR_MODES } from '../../../utils/universalPricing';
 
 /**
@@ -67,9 +67,11 @@ export function calculateExitPlan({
   }
 
   // Подготовка общих параметров для расчёта теоретической цены
+  // Точная (ET, дробная) версия — оба значения идут прямо в ценообразование
+  // (calcTheoPrice ниже и IV-интерполяция в getOptionVolatility), гардов здесь нет.
   const oldestEntryDate = firstOption ? getOldestEntryDate(filteredOptions) : null;
-  const currentDaysToExpiration = firstOption ? calculateDaysRemainingUTC(firstOption, 0, 30, oldestEntryDate) : 0;
-  const simulatedDaysToExpiration = firstOption ? calculateDaysRemainingUTC(firstOption, daysPassed, 30, oldestEntryDate) : 0;
+  const currentDaysToExpiration = firstOption ? calculateDaysRemainingPreciseET(firstOption, 0, 30, oldestEntryDate) : 0;
+  const simulatedDaysToExpiration = firstOption ? calculateDaysRemainingPreciseET(firstOption, daysPassed, 30, oldestEntryDate) : 0;
   const optionVolatility = firstOption ? getOptionVolatility(
     firstOption, currentDaysToExpiration, simulatedDaysToExpiration, ivSurface, 'simple'
   ) : 0;

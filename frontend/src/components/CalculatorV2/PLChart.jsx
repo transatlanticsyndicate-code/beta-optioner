@@ -14,7 +14,7 @@ import {
   calculateFuturesOptionPLValue,
   calculateFuturesOptionExpirationPLValue,
 } from '../../utils/futuresPricing';
-import { calculateDaysRemainingUTC, hasRemainingDaysUTC, getOldestEntryDate, isOptionActiveAtDay, calculateDaysToExpirationFromToday } from '../../utils/dateUtils';
+import { hasRemainingDaysUTC, getOldestEntryDate, isOptionActiveAtDay, calculateDaysRemainingPreciseET, calculateDaysToExpirationFromTodayPreciseET } from '../../utils/dateUtils';
 import { getOptionVolatility } from '../../utils/volatilitySurface';
 import { isStockLikeMode } from '../../utils/calculatorModes';
 
@@ -233,15 +233,17 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
 
       // Вычисляем индивидуальный daysRemaining для каждого опциона
       // ВАЖНО: Передаём oldestEntryDate для корректного расчёта actualDaysPassed
-      const optionDaysRemaining = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntryDate);
+      // Точная (ET, дробная) версия — значение идёт прямо в ценообразование (calculateOptionPLValue
+      // ниже) и в IV-интерполяцию (getOptionVolatility), гардов на этом значении в блоке нет.
+      const optionDaysRemaining = calculateDaysRemainingPreciseET(option, daysPassed, 30, oldestEntryDate);
 
       // Получаем IV из API через единую функцию (как в usePositionExitCalculator)
       // currentDays = daysRemaining без daysPassed, simulatedDays = с учётом daysPassed
       // ivSurface используется для точной интерполяции IV между датами экспирации
-      const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0, 30, oldestEntryDate);
+      const currentDaysToExpiration = calculateDaysRemainingPreciseET(option, 0, 30, oldestEntryDate);
       // ЗАЧЕМ: передаём manualIvOverride (ручная Fact IV) и todaySimDaysForOpt — иначе кривая
       // графика игнорирует ручную волатильность, введённую заказчиком, и расходится с таблицей
-      const todaySimDaysForOpt = calculateDaysToExpirationFromToday(option);
+      const todaySimDaysForOpt = calculateDaysToExpirationFromTodayPreciseET(option);
       let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface, 'simple', null, option.manualIvOverride, todaySimDaysForOpt);
 
       // Используем AI волатильность если доступна
@@ -323,11 +325,13 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
           ask: option.isPremiumModified ? 0 : (option.isAskModified ? option.customAsk : option.ask),
           bid: option.isPremiumModified ? 0 : (option.isBidModified ? option.customBid : option.bid),
         };
-        const optionDaysRemaining = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntryDate);
-        const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0, 30, oldestEntryDate);
+        // Точная (ET, дробная) версия — те же дни, что использует основная кривая выше
+        // (значение идёт прямо в ценообразование и IV-интерполяцию, гардов здесь нет).
+        const optionDaysRemaining = calculateDaysRemainingPreciseET(option, daysPassed, 30, oldestEntryDate);
+        const currentDaysToExpiration = calculateDaysRemainingPreciseET(option, 0, 30, oldestEntryDate);
         // ЗАЧЕМ: те же недостающие аргументы (manualIvOverride, todayDaysToExpiration), что и в основной кривой —
         // иначе точка схождения считается по другой волатильности, чем сама кривая
-        const todaySimDaysForOpt = calculateDaysToExpirationFromToday(option);
+        const todaySimDaysForOpt = calculateDaysToExpirationFromTodayPreciseET(option);
         let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface, 'simple', null, option.manualIvOverride, todaySimDaysForOpt);
 
         // Используем AI волатильность если доступна
@@ -969,15 +973,18 @@ export function calculatePLDataForMetrics(options = [], currentPrice = 0, positi
       return; // Пропускаем неактивные опционы
     }
 
-    // Вычисляем индивидуальный daysRemaining для этого опциона (UTC)
+    // Вычисляем индивидуальный daysRemaining для этого опциона
     // ВАЖНО: Передаём oldestEntryDate для корректного расчёта actualDaysPassed
-    const optionDaysRemaining = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntryDate);
+    // Точная (ET, дробная) версия — значение идёт прямо в ценообразование (calculateOptionPLValue/
+    // calculateFuturesOptionPLValue ниже) и в IV-интерполяцию, гардов на этом значении в блоке нет
+    // (активность ноги уже проверена выше через isOptionActiveAtDay — целочисленную функцию).
+    const optionDaysRemaining = calculateDaysRemainingPreciseET(option, daysPassed, 30, oldestEntryDate);
     // Получаем IV из API через единую функцию (как в usePositionExitCalculator)
     // ivSurface используется для точной интерполяции IV между датами экспирации
-    const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0, 30, oldestEntryDate);
+    const currentDaysToExpiration = calculateDaysRemainingPreciseET(option, 0, 30, oldestEntryDate);
     // ЗАЧЕМ: метрики (MAX прибыль/убыток, Break-even) должны учитывать ручную Fact IV,
     // как и таблица — иначе метрики расходятся с колонкой Fact IV в таблице
-    const todaySimDaysForOpt = calculateDaysToExpirationFromToday(option);
+    const todaySimDaysForOpt = calculateDaysToExpirationFromTodayPreciseET(option);
     let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, optionDaysRemaining, ivSurface, 'simple', null, option.manualIvOverride, todaySimDaysForOpt);
 
     // Используем AI волатильность если доступна

@@ -14,7 +14,7 @@ import { getAllStrategies } from '../../config/optionsStrategies';
 import { calculateOptionPLValue, adjustPLByStockGroup } from '../../utils/optionPricing';
 import { getOptionVolatility } from '../../utils/volatilitySurface';
 import { assessLiquidity, getLiquidityColor, formatLiquidityTooltip, LIQUIDITY_LEVELS } from '../../utils/liquidityCheck';
-import { calculateDaysRemainingUTC, getOldestEntryDate, isOptionActiveAtDay, isOptionExpiredAtDay, calculateDaysToExpirationFromToday } from '../../utils/dateUtils';
+import { getOldestEntryDate, isOptionActiveAtDay, isOptionExpiredAtDay, calculateDaysRemainingPreciseET, calculateDaysToExpirationFromTodayPreciseET } from '../../utils/dateUtils';
 import LockIcon from './LockIcon';
 
 // Helper: format ISO date (YYYY-MM-DD) to display format (DD.MM.YY)
@@ -964,9 +964,11 @@ function OptionsTable({
                     // Вычисляем результирующую IV с учётом симуляции времени
                     // ВАЖНО: Передаём oldestEntryDate для корректного расчёта actualDaysPassed
                     const oldestEntry = getOldestEntryDate(options);
-                    const currentDays = calculateDaysRemainingUTC(option, 0, 30, oldestEntry);
-                    const simulatedDays = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntry);
-                    const todaySimDays = calculateDaysToExpirationFromToday(option);
+                    // Точные (дробные) дни до 16:00 ET — идут в IV-интерполяцию getOptionVolatility
+                    // (этот блок только показывает результирующую IV, не «дни» — см. заголовок dateUtils.js).
+                    const currentDays = calculateDaysRemainingPreciseET(option, 0, 30, oldestEntry);
+                    const simulatedDays = calculateDaysRemainingPreciseET(option, daysPassed, 30, oldestEntry);
+                    const todaySimDays = calculateDaysToExpirationFromTodayPreciseET(option);
                     // manualIvOverride только для первого опциона в таблице
                     const ivOverrideForOption = optionIndex === 0 ? manualIvOverride : null;
                     const resultIV = getOptionVolatility(option, currentDays, simulatedDays, ivSurface, null, null, ivOverrideForOption, todaySimDays);
@@ -1060,12 +1062,15 @@ function OptionsTable({
                       return <span className="text-muted-foreground">—</span>;
                     }
                     
-                    const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0, 30, oldestEntry);
-                    const optionDaysRemaining = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntry);
+                    // Точные (дробные) дни до 16:00 ET — идут ПРЯМО в ценообразование
+                    // (calculateOptionPLValue ниже) и в IV-интерполяцию getOptionVolatility.
+                    // Fact P&L якоря в этом (legacy) компоненте нет — гарда не требуется.
+                    const currentDaysToExpiration = calculateDaysRemainingPreciseET(option, 0, 30, oldestEntry);
+                    const optionDaysRemaining = calculateDaysRemainingPreciseET(option, daysPassed, 30, oldestEntry);
 
                     // Определяем волатильность для этого опциона
                     // ЗАЧЕМ: Используем единую функцию getOptionVolatility с IV Surface для точной интерполяции
-                    const todaySimDays = calculateDaysToExpirationFromToday(option);
+                    const todaySimDays = calculateDaysToExpirationFromTodayPreciseET(option);
                     // manualIvOverride только для первого опциона в таблице
                     const ivOverrideForOption = optionIndex === 0 ? manualIvOverride : null;
                     let optionVolatility = getOptionVolatility(
@@ -1224,8 +1229,11 @@ function OptionsTable({
                       return sum; // Пропускаем неактивные опционы
                     }
                     
-                    const currentDaysToExp = calculateDaysRemainingUTC(opt, 0, 30, oldestEntry);
-                    const optDaysRemaining = calculateDaysRemainingUTC(opt, daysPassed, 30, oldestEntry);
+                    // Точные (дробные) дни до 16:00 ET — идут ПРЯМО в ценообразование
+                    // (calculateOptionPLValue ниже) и в IV-интерполяцию getOptionVolatility.
+                    // Fact P&L якоря в этом (legacy) компоненте нет — гарда не требуется.
+                    const currentDaysToExp = calculateDaysRemainingPreciseET(opt, 0, 30, oldestEntry);
+                    const optDaysRemaining = calculateDaysRemainingPreciseET(opt, daysPassed, 30, oldestEntry);
 
                     // Определяем волатильность для этого опциона
                     // ЗАЧЕМ: Используем единую функцию getOptionVolatility с IV Surface для точной интерполяции

@@ -40,7 +40,8 @@ import {
   calculateDaysRemainingUTC,
   getOldestEntryDate,
   isOptionActiveAtDay,
-  calculateDaysToExpirationFromToday,
+  calculateDaysRemainingPreciseET,
+  calculateDaysToExpirationFromTodayPreciseET,
 } from './dateUtils';
 import { CALCULATOR_MODES } from './calculatorModes';
 import { applyFactPLAnchor } from './factPLAnchor';
@@ -159,9 +160,14 @@ export function computeStartPL(snapshot, option, ctx) {
   const oldestEntry = getOldestEntryDate(allOptions || []);
   if (!isOptionActiveAtDay(option, daysPassed, oldestEntry)) return null;
 
-  const currentDaysToExp = calculateDaysRemainingUTC(option, 0, 30, oldestEntry);
-  const optionDaysRemaining = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntry);
-  const todaySimDays = calculateDaysToExpirationFromToday(option);
+  // Точные (дробные) дни до 16:00 ET — идут ПРЯМО в ценообразование (BSM/Black-76
+  // ниже и IV-интерполяция getOptionVolatility).
+  const currentDaysToExp = calculateDaysRemainingPreciseET(option, 0, 30, oldestEntry);
+  const optionDaysRemaining = calculateDaysRemainingPreciseET(option, daysPassed, 30, oldestEntry);
+  const todaySimDays = calculateDaysToExpirationFromTodayPreciseET(option);
+  // Целочисленная версия — ТОЛЬКО для гарда applyFactPLAnchor (targetDaysRemaining ниже):
+  // гард «<= 0 → экспирация, якорь не применяем» должен остаться на целых календарных днях.
+  const optionDaysRemainingForAnchor = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntry);
 
   // tempOpt: подменяем входы на снимочные значения, гасим флаги ручных правок,
   // фиксируем количество из снимка и подкладываем замороженные IV-входы вместо
@@ -220,7 +226,7 @@ export function computeStartPL(snapshot, option, ctx) {
   // момент сохранения; последующие правки игнорирует. Поэтому в applyFactPLAnchor
   // передаём не «сырой» option, а гибрид: {...option (для strike/date/type — нужны
   // calculateDaysRemainingUTC), actualPL*/quantity — из snapshot}.
-  // На дату экспирации (optionDaysRemaining <= 0) якорь не применяем — гард внутри функции.
+  // На дату экспирации (optionDaysRemainingForAnchor <= 0) якорь не применяем — гард внутри функции.
   // «Текущее» количество для коэффициента — тоже снапшотное (Start P&L не реагирует
   // на изменение quantity после сохранения; и якорное, и «текущее» qty — из снапшота,
   // поэтому коэффициент почти всегда = 1).
@@ -233,7 +239,7 @@ export function computeStartPL(snapshot, option, ctx) {
       quantity: snapshot.quantity,
     },
     theoreticalPL: pl,
-    targetDaysRemaining: optionDaysRemaining,
+    targetDaysRemaining: optionDaysRemainingForAnchor,
     targetDaysPassed: daysPassed,
     oldestEntry,
     // IV в момент якоря — снапшотный manualIvOverride если задан,

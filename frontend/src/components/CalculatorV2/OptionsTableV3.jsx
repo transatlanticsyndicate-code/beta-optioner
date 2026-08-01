@@ -22,7 +22,7 @@ import { calculateFuturesOptionPLValue, calculateFuturesOptionTheoreticalPrice }
 import { getOptionVolatility } from '../../utils/volatilitySurface';
 import { normalizeMarketIv } from '../../utils/extensionRefreshPolicy';
 import { assessLiquidity, getLiquidityColor, formatLiquidityTooltip, LIQUIDITY_LEVELS } from '../../utils/liquidityCheck';
-import { calculateDaysRemainingUTC, getOldestEntryDate, isOptionActiveAtDay, isOptionExpiredAtDay, calculateDaysToExpirationFromToday, getTodayDateStringET } from '../../utils/dateUtils';
+import { calculateDaysRemainingUTC, getOldestEntryDate, isOptionActiveAtDay, isOptionExpiredAtDay, getTodayDateStringET, calculateDaysRemainingPreciseET, calculateDaysToExpirationFromTodayPreciseET } from '../../utils/dateUtils';
 import { computeStartPL } from '../../utils/startPLSnapshot';
 import { getLegCost, validateFactPL, describeAnchorResidual } from '../../utils/factPLValidation';
 import { applyFactPLAnchor } from '../../utils/factPLAnchor';
@@ -186,9 +186,15 @@ function OptionsTableV3({
         if (!isOptionActiveAtDay(opt, daysPassed, oldestEntry)) return sum;
         if (isFuturesMissingSettings) return sum;
 
-        const currentDaysToExp = calculateDaysRemainingUTC(opt, 0, 30, oldestEntry);
-        const optDaysRemaining = calculateDaysRemainingUTC(opt, daysPassed, 30, oldestEntry);
-        const todaySimDaysForOpt = calculateDaysToExpirationFromToday(opt);
+        // Точные (дробные) дни до 16:00 ET экспирации — идут ПРЯМО в ценообразование
+        // (Black-Scholes/Black-76 ниже и IV-интерполяция в getOptionVolatility).
+        const currentDaysToExp = calculateDaysRemainingPreciseET(opt, 0, 30, oldestEntry);
+        const optDaysRemaining = calculateDaysRemainingPreciseET(opt, daysPassed, 30, oldestEntry);
+        const todaySimDaysForOpt = calculateDaysToExpirationFromTodayPreciseET(opt);
+        // Целочисленная версия — ТОЛЬКО для гарда applyFactPLAnchor (targetDaysRemaining).
+        // ЗАЧЕМ: внутри applyFactPLAnchor гард «<= 0 → экспирация, якорь не применяем»
+        // должен остаться на целых календарных днях, а не сдвигаться на дробную ET-поправку.
+        const optDaysRemainingForAnchor = calculateDaysRemainingUTC(opt, daysPassed, 30, oldestEntry);
 
         let optVolatility = getOptionVolatility(
           opt,
@@ -230,7 +236,7 @@ function OptionsTableV3({
         const anchorResultSum = applyFactPLAnchor({
           option: opt,
           theoreticalPL: pl,
-          targetDaysRemaining: optDaysRemaining,
+          targetDaysRemaining: optDaysRemainingForAnchor,
           targetDaysPassed: daysPassed,
           oldestEntry,
           anchorVolatility: opt.manualIvOverride !== null && opt.manualIvOverride !== undefined
@@ -1359,12 +1365,18 @@ function OptionsTableV3({
                       return <span className="text-muted-foreground">—</span>;
                     }
 
-                    const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0, 30, oldestEntry);
-                    const optionDaysRemaining = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntry);
+                    // Точные (дробные) дни до 16:00 ET экспирации — идут ПРЯМО в ценообразование
+                    // (Black-Scholes/Black-76 ниже и IV-интерполяция в getOptionVolatility).
+                    const currentDaysToExpiration = calculateDaysRemainingPreciseET(option, 0, 30, oldestEntry);
+                    const optionDaysRemaining = calculateDaysRemainingPreciseET(option, daysPassed, 30, oldestEntry);
+                    // Целочисленная версия — ТОЛЬКО для гарда applyFactPLAnchor (targetDaysRemaining).
+                    // ЗАЧЕМ: гард «<= 0 → экспирация, якорь не применяем» должен остаться на целых
+                    // календарных днях, а не сдвигаться на дробную ET-поправку.
+                    const optionDaysRemainingForAnchor = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntry);
 
                     // Определяем волатильность для этого опциона
                     // ЗАЧЕМ: Используем единую функцию getOptionVolatility с IV Surface для точной интерполяции
-                    const todaySimDays = calculateDaysToExpirationFromToday(option);
+                    const todaySimDays = calculateDaysToExpirationFromTodayPreciseET(option);
                     // Используем manualIvOverride из самого опциона
                     let optionVolatility = getOptionVolatility(
                       option,
@@ -1464,7 +1476,7 @@ function OptionsTableV3({
                       const anchorResult = applyFactPLAnchor({
                         option,
                         theoreticalPL: pl,
-                        targetDaysRemaining: optionDaysRemaining,
+                        targetDaysRemaining: optionDaysRemainingForAnchor,
                         targetDaysPassed: daysPassed,
                         oldestEntry,
                         anchorVolatility: option.manualIvOverride !== null && option.manualIvOverride !== undefined
@@ -1673,9 +1685,13 @@ function OptionsTableV3({
                     }
 
                     // === Расчёт той же adjusted P&L что и в колонке P&L ===
-                    const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0, 30, oldestEntry);
-                    const optionDaysRemaining = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntry);
-                    const todaySimDays = calculateDaysToExpirationFromToday(option);
+                    // Точные (дробные) дни до 16:00 ET экспирации — идут ПРЯМО в ценообразование.
+                    const currentDaysToExpiration = calculateDaysRemainingPreciseET(option, 0, 30, oldestEntry);
+                    const optionDaysRemaining = calculateDaysRemainingPreciseET(option, daysPassed, 30, oldestEntry);
+                    const todaySimDays = calculateDaysToExpirationFromTodayPreciseET(option);
+                    // Целочисленная версия — ТОЛЬКО для гарда applyFactPLAnchor (targetDaysRemaining),
+                    // см. комментарий в колонке «P&L» выше по файлу.
+                    const optionDaysRemainingForAnchor = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntry);
 
                     // Определяем волатильность
                     let optionVolatility = getOptionVolatility(
@@ -1750,7 +1766,7 @@ function OptionsTableV3({
                       const anchorResultClose = applyFactPLAnchor({
                         option,
                         theoreticalPL: pl,
-                        targetDaysRemaining: optionDaysRemaining,
+                        targetDaysRemaining: optionDaysRemainingForAnchor,
                         targetDaysPassed: daysPassed,
                         oldestEntry,
                         anchorVolatility: option.manualIvOverride !== null && option.manualIvOverride !== undefined

@@ -17,7 +17,7 @@ import { calculateIntrinsicValueBlack76 } from '../utils/black76';
 import { getOptionVolatility } from '../utils/volatilitySurface';
 import { assessLiquidity, LIQUIDITY_LEVELS } from '../utils/liquidityCheck';
 import { assessAllGreeks } from '../utils/greeksCheck';
-import { calculateDaysRemainingUTC, getOldestEntryDate, calculateDaysToExpirationFromToday } from '../utils/dateUtils';
+import { calculateDaysRemainingUTC, getOldestEntryDate, calculateDaysRemainingPreciseET, calculateDaysToExpirationFromTodayPreciseET } from '../utils/dateUtils';
 import { applyFactPLAnchor } from '../utils/factPLAnchor';
 
 // Режимы калькулятора
@@ -63,7 +63,22 @@ const formatOptionDate = (dateStr) => {
 const calculateDaysToExpirationForOption = (option, daysPassed, oldestEntryDate = null) => {
   // Используем UTC-функцию для единообразного расчёта во всех часовых поясах
   // ВАЖНО: Передаём oldestEntryDate для корректного расчёта actualDaysPassed
+  // ВАЖНО: целочисленная (календарная) версия — используется ТОЛЬКО там, где нужен
+  // гард (targetDaysRemaining в applyFactPLAnchor). Для ценообразования см.
+  // calculateDaysToExpirationForOptionPrecise ниже.
   return calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntryDate);
+};
+
+/**
+ * Точная (ET, дробная) версия calculateDaysToExpirationForOption — дни до 16:00
+ * America/New_York дня экспирации, а не до полуночи UTC.
+ * ЗАЧЕМ: используется там, где значение идёт прямо в ценообразование (Black-Scholes/
+ * Black-76 и IV-интерполяция getOptionVolatility) — см. заголовок dateUtils.js.
+ * НЕ использовать для гардов (targetDaysRemaining в applyFactPLAnchor) — там нужна
+ * целочисленная calculateDaysToExpirationForOption.
+ */
+const calculateDaysToExpirationForOptionPrecise = (option, daysPassed, oldestEntryDate = null) => {
+  return calculateDaysRemainingPreciseET(option, daysPassed, 30, oldestEntryDate);
 };
 
 /**
@@ -422,9 +437,14 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
     // simulatedDays - дни до экспирации с учётом симуляции (daysPassed)
     // todayDays - дни от РЕАЛЬНОГО СЕГОДНЯ до экспирации (для manualIvOverride)
     // ВАЖНО: Передаём oldestEntryDate для корректного расчёта actualDaysPassed
-    const currentDaysToExpiration = calculateDaysToExpirationForOption(option, 0, oldestEntryDate);
-    const simulatedDaysToExpiration = calculateDaysToExpirationForOption(option, daysPassed, oldestEntryDate);
-    const todayDaysToExpiration = calculateDaysToExpirationFromToday(option);
+    // Точные (дробные) дни до 16:00 ET — идут ПРЯМО в ценообразование (Black-Scholes/
+    // Black-76 ниже и IV-интерполяция getOptionVolatility).
+    const currentDaysToExpiration = calculateDaysToExpirationForOptionPrecise(option, 0, oldestEntryDate);
+    const simulatedDaysToExpiration = calculateDaysToExpirationForOptionPrecise(option, daysPassed, oldestEntryDate);
+    const todayDaysToExpiration = calculateDaysToExpirationFromTodayPreciseET(option);
+    // Целочисленная версия — ТОЛЬКО для гарда applyFactPLAnchor (targetDaysRemaining ниже):
+    // гард «<= 0 → экспирация, якорь не применяем» должен остаться на целых календарных днях.
+    const simulatedDaysToExpirationForAnchor = calculateDaysToExpirationForOption(option, daysPassed, oldestEntryDate);
 
     // Получаем прогнозируемую IV с учётом временной структуры (Volatility Surface)
     // ВАЖНО: ouParams передаёт параметры OU-модели для mean reversion прогноза IV
@@ -468,12 +488,12 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
 
     // Логика якорной P&L — единая функция applyFactPLAnchor (frontend/src/utils/factPLAnchor.js).
     // ЗАЧЕМ: Позволяет пользователю зафиксировать реальную P&L и проецировать от неё
-    // ВАЖНО: на дату экспирации (simulatedDaysToExpiration <= 0) якорь НЕ применяется — гард внутри функции.
+    // ВАЖНО: на дату экспирации (simulatedDaysToExpirationForAnchor <= 0) якорь НЕ применяется — гард внутри функции.
     {
       const anchorResultS2 = applyFactPLAnchor({
         option,
         theoreticalPL: pl,
-        targetDaysRemaining: simulatedDaysToExpiration,
+        targetDaysRemaining: simulatedDaysToExpirationForAnchor,
         targetDaysPassed: daysPassed,
         oldestEntry: oldestEntryDate,
         // ВАЖНО: manualIvOverride хранится в ПРОЦЕНТАХ (150 = 150%) — передаём как есть,
@@ -617,9 +637,14 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
     // simulatedDays - дни до экспирации с учётом симуляции (daysPassed)
     // todayDays - дни от РЕАЛЬНОГО СЕГОДНЯ до экспирации (для manualIvOverride)
     // ВАЖНО: Передаём oldestEntryDate для корректного расчёта actualDaysPassed
-    const currentDaysToExpiration = calculateDaysToExpirationForOption(option, 0, oldestEntryDate);
-    const simulatedDaysToExpiration = calculateDaysToExpirationForOption(option, daysPassed, oldestEntryDate);
-    const todayDaysToExpiration = calculateDaysToExpirationFromToday(option);
+    // Точные (дробные) дни до 16:00 ET — идут ПРЯМО в ценообразование (Black-Scholes/
+    // Black-76 ниже и IV-интерполяция getOptionVolatility).
+    const currentDaysToExpiration = calculateDaysToExpirationForOptionPrecise(option, 0, oldestEntryDate);
+    const simulatedDaysToExpiration = calculateDaysToExpirationForOptionPrecise(option, daysPassed, oldestEntryDate);
+    const todayDaysToExpiration = calculateDaysToExpirationFromTodayPreciseET(option);
+    // Целочисленная версия — ТОЛЬКО для гарда applyFactPLAnchor (targetDaysRemaining ниже):
+    // гард «<= 0 → экспирация, якорь не применяем» должен остаться на целых календарных днях.
+    const simulatedDaysToExpirationForAnchor = calculateDaysToExpirationForOption(option, daysPassed, oldestEntryDate);
 
     // Получаем прогнозируемую IV с учётом временной структуры (Volatility Surface)
     // ВАЖНО: ouParams передаёт параметры OU-модели для mean reversion прогноза IV
@@ -663,12 +688,12 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
 
     // Логика якорной P&L — единая функция applyFactPLAnchor (см. аналогичный блок Сценария 2 выше).
     // ЗАЧЕМ: Позволяет пользователю зафиксировать реальную P&L и проецировать от неё
-    // ВАЖНО: на дату экспирации (simulatedDaysToExpiration <= 0) якорь НЕ применяется — гард внутри функции.
+    // ВАЖНО: на дату экспирации (simulatedDaysToExpirationForAnchor <= 0) якорь НЕ применяется — гард внутри функции.
     {
       const anchorResultS3 = applyFactPLAnchor({
         option,
         theoreticalPL: pl,
-        targetDaysRemaining: simulatedDaysToExpiration,
+        targetDaysRemaining: simulatedDaysToExpirationForAnchor,
         targetDaysPassed: daysPassed,
         oldestEntry: oldestEntryDate,
         // ВАЖНО: manualIvOverride хранится в ПРОЦЕНТАХ — без деления на 100
