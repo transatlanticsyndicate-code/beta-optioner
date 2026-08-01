@@ -16,7 +16,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { flushSync } from 'react-dom';
-import { Calculator, ChevronUp, ChevronDown, Save, RotateCcw, TrendingUp, Activity, BarChart3, Target, Bitcoin, LineChart, Layers } from 'lucide-react';
+import { Calculator, ChevronUp, ChevronDown, Save, RotateCcw, TrendingUp, Activity, BarChart3, Target, Bitcoin, LineChart, Layers, AlertTriangle } from 'lucide-react';
 // УБРАНО: NewTikerFinder не используется — данные приходят от расширения
 // import NewTikerFinder from '../components/NewTikerFinder';
 import { useLocation, useNavigate, useBeforeUnload } from 'react-router-dom';
@@ -111,6 +111,11 @@ import { buildOptionKey } from '../utils/optionKey';
 // ЗАЧЕМ: Изолирует правило «нет настроек фьючерса → null, а не акционные 100» в чистой
 // функции, покрытой unit-тестами отдельно от useMemo в компоненте
 import { resolveContractMultiplier } from '../utils/contractMultiplier';
+
+// Импорт чистого правила применения тумблера «Учитывать дивиденды» к дивидендной доходности
+// ЗАЧЕМ: Изолирует правило «тумблер выключен → 0, мусор/отрицательное → 0» в чистой функции,
+// покрытой unit-тестами, и гарантирует одинаковое поведение во всех точках калькулятора
+import { resolveDividendYield, shouldWarnDividendsIgnored } from '../utils/dividendPolicy';
 
 // УБРАНО: AI модель не используется в универсальном калькуляторе
 // const AI_SUPPORTED_TICKERS = [...];
@@ -459,6 +464,10 @@ function UniversalOptionsCalculator() {
   });
   const [dividendYield, setDividendYield] = useState(0); // Дивидендная доходность в десятичном формате
   const [dividendLoading, setDividendLoading] = useState(false);
+  // ЗАЧЕМ: отличаем «дивидендов реально нет» (dividendYield=0, ошибки нет) от «доходность
+  // не загрузилась» (запрос упал/ответил не-ок) — оба случая раньше схлопывались в один и тот же
+  // dividendYield=0, и пользователь с включённым тумблером не мог понять, что данные не пришли.
+  const [dividendYieldError, setDividendYieldError] = useState(false);
 
   // ЗАЧЕМ: на брокерском счёте акции покупаются с плечом, реально блокируется notional/leverage.
   // Применяется к строке «Стоимость позиций» в блоке БА, к «Итого» и к проверке лимита на инструмент.
@@ -642,22 +651,29 @@ function UniversalOptionsCalculator() {
     const fetchDividendYield = async () => {
       if (!selectedTicker) {
         setDividendYield(0);
+        setDividendYieldError(false);
         return;
       }
 
       setDividendLoading(true);
+      setDividendYieldError(false);
       try {
         const response = await fetch(`/api/polygon/dividend-yield/${selectedTicker}`);
         if (response.ok) {
           const data = await response.json();
-          setDividendYield(data.dividend_yield || 0);
+          // resolveDividendYield/sanitize ниже в местах применения уже отсекут мусор
+          // (NaN/отрицательное), здесь просто не пускаем явный not-a-number в state как есть
+          const raw = data.dividend_yield;
+          setDividendYield(typeof raw === 'number' && Number.isFinite(raw) ? raw : 0);
           console.log(`📊 Dividend yield для ${selectedTicker}: ${(data.dividend_yield * 100).toFixed(2)}%`);
         } else {
           setDividendYield(0);
+          setDividendYieldError(true);
         }
       } catch (error) {
         console.error('Ошибка загрузки dividend yield:', error);
         setDividendYield(0);
+        setDividendYieldError(true);
       } finally {
         setDividendLoading(false);
       }
@@ -906,7 +922,7 @@ function UniversalOptionsCalculator() {
             // ЗАЧЕМ: раньше сюда шёл сырой dividendYield в обход тумблера «Учитывать дивиденды» —
             // снимок мог учитывать дивиденды, даже когда пользователь их выключил.
             // Приводим к тому же виду, что и во всех остальных местах файла.
-            useDividends ? dividendYield : 0,
+            resolveDividendYield(useDividends, dividendYield),
             isAIEnabled,
             aiVolatilityMap,
             targetPrice,
@@ -946,6 +962,7 @@ function UniversalOptionsCalculator() {
     daysPassed,
     ivSurface,
     dividendYield,
+    useDividends,
     isAIEnabled,
     aiVolatilityMap,
     targetPrice,
@@ -4136,7 +4153,7 @@ function UniversalOptionsCalculator() {
         allOptions: options,
         currentPrice,
         ivSurface,
-        dividendYield: useDividends ? dividendYield : 0,
+        dividendYield: resolveDividendYield(useDividends, dividendYield),
         // Замораживаем множитель контракта и режим калькулятора на момент сохранения —
         // более поздняя правка настроек фьючерса (стоимость пункта) задним числом
         // не должна менять уже сохранённый Start P&L (см. utils/startPLSnapshot.js).
@@ -4225,7 +4242,7 @@ function UniversalOptionsCalculator() {
         allOptions: options,
         currentPrice,
         ivSurface,
-        dividendYield: useDividends ? dividendYield : 0,
+        dividendYield: resolveDividendYield(useDividends, dividendYield),
         // Замораживаем множитель контракта и режим калькулятора на момент сохранения —
         // см. utils/startPLSnapshot.js
         contractMultiplier,
@@ -4335,7 +4352,7 @@ function UniversalOptionsCalculator() {
         allOptions: options,
         currentPrice,
         ivSurface,
-        dividendYield: useDividends ? dividendYield : 0,
+        dividendYield: resolveDividendYield(useDividends, dividendYield),
         // Замораживаем множитель контракта и режим калькулятора на момент сохранения —
         // см. utils/startPLSnapshot.js
         contractMultiplier,
@@ -4414,7 +4431,7 @@ function UniversalOptionsCalculator() {
           allOptions: configState.options,
           currentPrice,
           ivSurface,
-          dividendYield: useDividends ? dividendYield : 0,
+          dividendYield: resolveDividendYield(useDividends, dividendYield),
           // Замораживаем множитель контракта и режим калькулятора на момент сохранения —
           // см. utils/startPLSnapshot.js
           contractMultiplier,
@@ -4493,7 +4510,7 @@ function UniversalOptionsCalculator() {
     positions: positions,
     currentPrice: currentPrice,
     ivSurface: ivSurface,
-    dividendYield: useDividends ? dividendYield : 0,
+    dividendYield: resolveDividendYield(useDividends, dividendYield),
     isAIEnabled: false,
     aiVolatilityMap: {},
     selectedTicker: selectedTicker,
@@ -4934,6 +4951,34 @@ function UniversalOptionsCalculator() {
                 </Card>
               )}
 
+              {/* Предупреждение рядом с тумблером «Учитывать дивиденды»: тумблер выключен,
+                  но у актива реально есть ненулевая дивидендная доходность — расчёт систематически
+                  смещён (BSM: рост q снижает цену колла и повышает цену пута). Не блокирует выбор
+                  пользователя, только показывает последствие — заказчик вправе считать без дивидендов. */}
+              {shouldShowBlock('calculator-settings') && !dividendLoading
+                && shouldWarnDividendsIgnored(useDividends, dividendYield) && (
+                <div className="flex items-start gap-2 px-4 py-2 border border-amber-400 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 text-xs">
+                  <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
+                  <span>
+                    Дивиденды не учитываются, хотя у {selectedTicker || 'актива'} доходность{' '}
+                    {(dividendYield * 100).toFixed(2)}%. Это завышает расчётную цену коллов и занижает цену путов.
+                  </span>
+                </div>
+              )}
+
+              {/* Предупреждение: тумблер включён, но дивидендная доходность не загрузилась
+                  (ошибка запроса к /api/polygon/dividend-yield) — в модель уходит 0, как будто
+                  дивидендов нет, хотя это может быть не так */}
+              {shouldShowBlock('calculator-settings') && !dividendLoading
+                && useDividends && dividendYieldError && (
+                <div className="flex items-start gap-2 px-4 py-2 border border-amber-400 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 text-xs">
+                  <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
+                  <span>
+                    Дивидендная доходность не загрузилась — расчёт временно ведётся так, будто у актива дивидендов нет.
+                  </span>
+                </div>
+              )}
+
               {/* Финансовый контроль */}
               <FinancialControl selectedTicker={selectedTicker} />
             </div>
@@ -4972,7 +5017,7 @@ function UniversalOptionsCalculator() {
                       isLocked={isLocked}
                       selectedExpirationDate={selectedExpirationDate}
                       ivSurface={ivSurface}
-                      dividendYield={useDividends ? dividendYield : 0}
+                      dividendYield={resolveDividendYield(useDividends, dividendYield)}
                       isEditMode={isEditMode}
                       hasChanges={hasChanges}
                       onSaveEditedConfiguration={handleSaveEditedConfiguration}
@@ -5111,7 +5156,7 @@ function UniversalOptionsCalculator() {
                 targetPrice={targetPrice}
                 setTargetPrice={setTargetPrice}
                 ivSurface={ivSurface}
-                dividendYield={useDividends ? dividendYield : 0}
+                dividendYield={resolveDividendYield(useDividends, dividendYield)}
                 calculatorMode={calculatorMode}
                 // CalculatorDealTabs гейтит isFuturesMissingSettings только вокруг блока метрик/графика,
                 // но пробрасывает contractMultiplier дальше и в OptionSelectionResult, и в ExitPlanTable
@@ -5214,7 +5259,7 @@ function UniversalOptionsCalculator() {
           leverage={baseAssetLeverage}
           ivSurface={ivSurface}
           calculatorMode={calculatorMode}
-          dividendYield={useDividends ? dividendYield : 0}
+          dividendYield={resolveDividendYield(useDividends, dividendYield)}
           stockClassification={null}
           ticker={selectedTicker}
           tradingViewUrl={selectedTicker ? (() => {
@@ -5240,7 +5285,7 @@ function UniversalOptionsCalculator() {
           leverage={baseAssetLeverage}
           ivSurface={ivSurface}
           calculatorMode={calculatorMode}
-          dividendYield={useDividends ? dividendYield : 0}
+          dividendYield={resolveDividendYield(useDividends, dividendYield)}
           stockClassification={null}
           ticker={selectedTicker}
           exchange={extensionTicker ? extensionExchange : null}
