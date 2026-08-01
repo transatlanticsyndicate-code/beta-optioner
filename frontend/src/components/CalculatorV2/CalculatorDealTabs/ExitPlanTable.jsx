@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Card, CardContent } from '../../ui/card';
-import { calculateOptionPLValue, adjustPLByStockGroup } from '../../../utils/optionPricing';
-import { calculateFuturesOptionPLValue } from '../../../utils/futuresPricing';
+import { calculateOptionPLValue, calculateOptionTheoreticalPrice, adjustPLByStockGroup } from '../../../utils/optionPricing';
+import { calculateFuturesOptionPLValue, calculateFuturesOptionTheoreticalPrice } from '../../../utils/futuresPricing';
 import { CALCULATOR_MODES } from '../../../utils/universalPricing';
 import { isStockLikeMode } from '../../../utils/calculatorModes';
 import { getOptionVolatility } from '../../../utils/volatilitySurface';
@@ -522,6 +522,13 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
       quantity: step.quantity
     };
 
+    // Цена входа за контракт (ASK для Buy, BID для Sell) — нужна калибровке якоря
+    // Fact P&L (applyFactPLAnchor ниже), см. getFactAnchorEntryPrice в OptionsTableV3.jsx.
+    const isBuyStep = (option.action || 'Buy').toLowerCase() === 'buy';
+    const stepEntryPrice = isBuyStep
+      ? (option.isAskModified && option.customAsk !== undefined ? option.customAsk : (option.ask || effectivePremium || 0))
+      : (option.isBidModified && option.customBid !== undefined ? option.customBid : (option.bid || effectivePremium || 0));
+
     console.log(`[План выхода] 💰 P/L расчёт ${option.type} Strike $${option.strike}:`, {
       targetPrice: targetAssetPrice,
       stepSimDays,
@@ -580,6 +587,7 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
         option,
         theoreticalPL: pl,
         targetDaysRemaining: optionDaysRemainingForAnchor,
+        targetDaysRemainingPrecise: optionDaysRemaining,
         // Условие аналогично `daysPassed >= anchorDaysPassed` в таблице опционов,
         // но своя «текущая точка» — stepSimDays (день выхода шага), а не daysPassed симуляции.
         targetDaysPassed: stepSimDays,
@@ -589,6 +597,9 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
           ? option.manualIvOverride
           : optionVolatility,
         anchorPrice: option.actualPLPrice || currentPrice,
+        targetPrice: targetAssetPrice,
+        entryPrice: stepEntryPrice,
+        contractMultiplier,
         // Масштабируем якорь по количеству ШАГА (не всей ноги): actualPL соответствует
         // actualPLQuantity (вся позиция в момент ввода), а текущий шаг закрывает
         // step.quantity контрактов — числитель коэффициента = step.quantity.
@@ -597,17 +608,15 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
         // о доле позиции не должен получать чужой actualPL целиком — отличие от
         // остальных мест (там фолбэк 1), сохранено намеренно.
         ratioFallback: 0,
-        computeTheoreticalPL: (price, days, vol) => {
+        computeTheoreticalPrice: (price, days, vol) => (
           // Тот же аудит множителя и ставки, что и в основном расчёте pl выше —
-          // без contractMultiplier якорная P&L для крипто тоже была бы завышена до 100 раз
-          let v = calculatorMode === CALCULATOR_MODES.FUTURES
-            ? calculateFuturesOptionPLValue(tempOpt, price, days, contractMultiplier, vol)
-            : calculateOptionPLValue(tempOpt, price, optionAssetPrice, days, vol, dividendYield, contractMultiplier, rfrOpt);
-          if (isStockLikeMode(calculatorMode) && stockClassification) {
-            v = adjustPLByStockGroup(v, stockClassification);
-          }
-          return v;
-        },
+          // без contractMultiplier якорная P&L для крипто тоже была бы завышена до 100 раз.
+          // Сырая цена (без adjustPLByStockGroup) — см. заголовок factPLAnchor.js про
+          // несовместимость групповой корректировки с калибровкой.
+          calculatorMode === CALCULATOR_MODES.FUTURES
+            ? calculateFuturesOptionTheoreticalPrice(tempOpt, price, days, vol)
+            : calculateOptionTheoreticalPrice(tempOpt, price, days, vol, dividendYield, rfrOpt)
+        ),
       });
       pl = anchorResultExit.pl;
 

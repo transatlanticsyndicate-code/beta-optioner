@@ -24,7 +24,7 @@ import { normalizeMarketIv } from '../../utils/extensionRefreshPolicy';
 import { assessLiquidity, getLiquidityColor, formatLiquidityTooltip, LIQUIDITY_LEVELS } from '../../utils/liquidityCheck';
 import { calculateDaysRemainingUTC, getOldestEntryDate, isOptionActiveAtDay, isOptionExpiredAtDay, getTodayDateStringET, calculateDaysRemainingPreciseET, calculateDaysToExpirationFromTodayPreciseET } from '../../utils/dateUtils';
 import { computeStartPL } from '../../utils/startPLSnapshot';
-import { getLegCost, validateFactPL, describeAnchorResidual } from '../../utils/factPLValidation';
+import { getLegCost, validateFactPL, describeAnchorResidual, describeAnchorCalibration } from '../../utils/factPLValidation';
 import { applyFactPLAnchor } from '../../utils/factPLAnchor';
 import LockIcon from './LockIcon';
 import { isStockLikeMode } from '../../utils/calculatorModes';
@@ -55,6 +55,20 @@ const formatPLValue = (value) => {
   const formatted = absValue.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' '); // Добавляем пробелы
   const sign = value >= 0 ? '+' : '-';
   return `${sign}$ ${formatted}`;
+};
+
+// Helper: цена входа за контракт (ASK для Buy, BID для Sell, с учётом ручных правок).
+// ЗАЧЕМ: калибровка якоря Fact P&L (applyFactPLAnchor, режим 'calibrated'/'fallback')
+// переводит factPL обратно в цену опциона по формуле «цена входа + факт/(кол-во×множитель)» —
+// ей нужна ТА ЖЕ цена входа, что использует ценовой движок (getEntryPrice в optionPricing.js/
+// futuresPricing.js, приватная там). Дублируем её здесь один раз для всех вызовов якоря
+// в этом файле — раньше вычислялась только в блоке «Close Price» (см. ниже по файлу).
+const getFactAnchorEntryPrice = (option, effectivePremium) => {
+  const isBuy = (option.action || 'Buy').toLowerCase() === 'buy';
+  if (isBuy) {
+    return option.isAskModified && option.customAsk !== undefined ? option.customAsk : (option.ask || effectivePremium || 0);
+  }
+  return option.isBidModified && option.customBid !== undefined ? option.customBid : (option.bid || effectivePremium || 0);
 };
 
 function OptionsTableV3({
@@ -234,26 +248,29 @@ function OptionsTableV3({
 
         // Якорная поправка Fact P&L — единая функция applyFactPLAnchor (frontend/src/utils/factPLAnchor.js).
         // ВАЖНО: гард экспирации (targetDaysRemaining <= 0 → якорь не применяется) — ВНУТРИ функции.
+        // Режим калибровки волатильности (не аддитивная поправка) — калибровка и фолбэк
+        // работают с СЫРОЙ ценой опциона (computeTheoreticalPrice), без groupAdjust —
+        // см. обоснование в заголовке factPLAnchor.js.
         const anchorResultSum = applyFactPLAnchor({
           option: opt,
           theoreticalPL: pl,
           targetDaysRemaining: optDaysRemainingForAnchor,
+          targetDaysRemainingPrecise: optDaysRemaining,
           targetDaysPassed: daysPassed,
           oldestEntry,
           anchorVolatility: opt.manualIvOverride !== null && opt.manualIvOverride !== undefined
             ? opt.manualIvOverride
             : optVolatility,
           anchorPrice: opt.actualPLPrice || currentPrice,
+          targetPrice: targetPrice || currentPrice,
+          entryPrice: getFactAnchorEntryPrice(opt, effectivePremium),
+          contractMultiplier,
           currentQuantity: opt.quantity,
-          computeTheoreticalPL: (price, days, vol) => {
+          computeTheoreticalPrice: (price, days, vol) => {
             const rfrAnchor = calculatorMode === CALCULATOR_MODES.CRYPTO ? getCryptoBasisRate() : null;
-            let v = calculatorMode === CALCULATOR_MODES.FUTURES
-              ? calculateFuturesOptionPLValue(tempOpt, price, days, contractMultiplier, vol)
-              : calculateStockOptionPLValue(tempOpt, price, optAssetPrice, days, vol, dividendYield, contractMultiplier, rfrAnchor);
-            if (isStockLikeMode(calculatorMode) && stockClassification) {
-              v = adjustPLByStockGroup(v, stockClassification);
-            }
-            return v;
+            return calculatorMode === CALCULATOR_MODES.FUTURES
+              ? calculateFuturesOptionTheoreticalPrice(tempOpt, price, days, vol)
+              : calculateOptionTheoreticalPrice(tempOpt, price, days, vol, dividendYield, rfrAnchor);
           },
         });
         pl = anchorResultSum.pl;
@@ -893,6 +910,10 @@ function OptionsTableV3({
             // показать размер поправки через describeAnchorResidual, НЕ дублируя
             // расчёт ценообразования (calculateFuturesOptionPLValue/calculateStockOptionPLValue).
             let rowPlAtAnchor = null;
+            // Результат калибровки волатильности (mode/calibratedVolatility/reason) —
+            // та же логика подъёма из якорного блока, для подсказки «волатильность
+            // подобрана под факт X% вместо введённых Y%» у поля «Fact P&L».
+            let rowAnchorCalibration = null;
 
             return (
               <div
@@ -1478,6 +1499,7 @@ function OptionsTableV3({
                         option,
                         theoreticalPL: pl,
                         targetDaysRemaining: optionDaysRemainingForAnchor,
+                        targetDaysRemainingPrecise: optionDaysRemaining,
                         targetDaysPassed: daysPassed,
                         oldestEntry,
                         anchorVolatility: option.manualIvOverride !== null && option.manualIvOverride !== undefined
@@ -1486,25 +1508,33 @@ function OptionsTableV3({
                         // ВАЖНО: plAtAnchor считается при ЦЕНЕ АКТИВА НА МОМЕНТ ВВОДА якоря (actualPLPrice)
                         // ЗАЧЕМ: Якорь фиксирует P&L при конкретной цене, дельта должна учитывать изменение цены
                         anchorPrice: option.actualPLPrice || currentPrice,
+                        targetPrice: targetPrice || currentPrice,
+                        entryPrice: getFactAnchorEntryPrice(option, effectivePremium),
+                        contractMultiplier,
                         currentQuantity: option.quantity,
-                        computeTheoreticalPL: (price, days, vol) => {
+                        computeTheoreticalPrice: (price, days, vol) => {
                           const rfrAnchor = calculatorMode === CALCULATOR_MODES.CRYPTO ? getCryptoBasisRate() : null;
-                          let v = calculatorMode === CALCULATOR_MODES.FUTURES
-                            ? calculateFuturesOptionPLValue(tempOpt, price, days, contractMultiplier, vol)
-                            : calculateStockOptionPLValue(tempOpt, price, optionAssetPrice, days, vol, dividendYield, contractMultiplier, rfrAnchor);
-                          if (isStockLikeMode(calculatorMode) && stockClassification) {
-                            v = adjustPLByStockGroup(v, stockClassification);
-                          }
-                          return v;
+                          return calculatorMode === CALCULATOR_MODES.FUTURES
+                            ? calculateFuturesOptionTheoreticalPrice(tempOpt, price, days, vol)
+                            : calculateOptionTheoreticalPrice(tempOpt, price, days, vol, dividendYield, rfrAnchor);
                         },
                       });
                       pl = anchorResult.pl;
 
-                      // Поднимаем plAtAnchor в область видимости строки (см. объявление
-                      // rowPlAtAnchor выше) — подсказка у поля «Fact P&L» использует его
-                      // через describeAnchorResidual вместо повторного расчёта цены.
+                      // Поднимаем plAtAnchor и результат калибровки в область видимости строки
+                      // (см. объявление rowPlAtAnchor/rowAnchorCalibration выше) — подсказка у поля
+                      // «Fact P&L» использует их через describeAnchorResidual/describeAnchorCalibration
+                      // вместо повторного расчёта цены.
                       if (anchorResult.applied) {
                         rowPlAtAnchor = anchorResult.plAtAnchor;
+                        rowAnchorCalibration = {
+                          mode: anchorResult.mode,
+                          calibratedVolatility: anchorResult.calibratedVolatility,
+                          reason: anchorResult.reason,
+                          anchorVolatility: option.manualIvOverride !== null && option.manualIvOverride !== undefined
+                            ? option.manualIvOverride
+                            : optionVolatility,
+                        };
 
                         console.log(`🎯 [Якорь] ${option.type} Strike ${option.strike}:`, {
                           actualPL: option.actualPL,
@@ -1548,19 +1578,25 @@ function OptionsTableV3({
                   const anchorResidualText = hasActualPL && rowPlAtAnchor !== null
                     ? describeAnchorResidual({ actualPL: option.actualPL, plAtAnchor: rowPlAtAnchor, legCost: factPLLegCost })
                     : '';
+                  // Текст про калиброванную волатильность (режим 'calibrated') или про
+                  // недостижимость факта (режим 'fallback') — рядом с текстом про поправку.
+                  const anchorCalibrationText = hasActualPL && rowAnchorCalibration
+                    ? describeAnchorCalibration(rowAnchorCalibration)
+                    : '';
                   const blockMessage = factPLBlockMessage[option.id];
 
                   // Приоритет подсказки: активная блокировка (только что введено
-                  // недопустимое значение) > warn > просто размер поправки якоря.
+                  // недопустимое значение) > warn > поправка якоря + калибровка волатильности.
+                  const anchorText = [anchorResidualText, anchorCalibrationText].filter(Boolean).join('. ');
                   let fieldTitle = '';
                   if (blockMessage) {
                     fieldTitle = `Заблокировано: ${blockMessage}`;
                   } else if (currentValidation.level === 'warn') {
-                    fieldTitle = anchorResidualText
-                      ? `${currentValidation.message}. ${anchorResidualText}`
+                    fieldTitle = anchorText
+                      ? `${currentValidation.message}. ${anchorText}`
                       : currentValidation.message;
-                  } else if (anchorResidualText) {
-                    fieldTitle = anchorResidualText;
+                  } else if (anchorText) {
+                    fieldTitle = anchorText;
                   }
 
                   return (
@@ -1768,22 +1804,22 @@ function OptionsTableV3({
                         option,
                         theoreticalPL: pl,
                         targetDaysRemaining: optionDaysRemainingForAnchor,
+                        targetDaysRemainingPrecise: optionDaysRemaining,
                         targetDaysPassed: daysPassed,
                         oldestEntry,
                         anchorVolatility: option.manualIvOverride !== null && option.manualIvOverride !== undefined
                           ? option.manualIvOverride
                           : optionVolatility,
                         anchorPrice: option.actualPLPrice || currentPrice,
+                        targetPrice: targetPrice || currentPrice,
+                        entryPrice,
+                        contractMultiplier,
                         currentQuantity: option.quantity,
-                        computeTheoreticalPL: (price, days, vol) => {
+                        computeTheoreticalPrice: (price, days, vol) => {
                           const rfrAnchor = calculatorMode === CALCULATOR_MODES.CRYPTO ? getCryptoBasisRate() : null;
-                          let v = calculatorMode === CALCULATOR_MODES.FUTURES
-                            ? calculateFuturesOptionPLValue(tempOpt, price, days, contractMultiplier, vol)
-                            : calculateStockOptionPLValue(tempOpt, price, optionAssetPrice, days, vol, dividendYield, contractMultiplier, rfrAnchor);
-                          if (isStockLikeMode(calculatorMode) && stockClassification) {
-                            v = adjustPLByStockGroup(v, stockClassification);
-                          }
-                          return v;
+                          return calculatorMode === CALCULATOR_MODES.FUTURES
+                            ? calculateFuturesOptionTheoreticalPrice(tempOpt, price, days, vol)
+                            : calculateOptionTheoreticalPrice(tempOpt, price, days, vol, dividendYield, rfrAnchor);
                         },
                       });
                       pl = anchorResultClose.pl;

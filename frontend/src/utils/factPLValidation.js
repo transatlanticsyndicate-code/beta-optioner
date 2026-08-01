@@ -141,3 +141,45 @@ export function describeAnchorResidual({ actualPL, plAtAnchor, legCost }) {
   }
   return text;
 }
+
+/**
+ * Человекочитаемое описание результата КАЛИБРОВКИ волатильности якоря Fact P&L —
+ * для той же подсказки у поля «Fact P&L», рядом с describeAnchorResidual выше.
+ *
+ * ЗАЧЕМ: с перехода на калибровку (frontend/src/utils/factPLAnchor.js, applyFactPLAnchor)
+ * поправка больше не «постоянная добавка», а подобранная волатильность — пользователю
+ * (не программисту) полезно видеть, на что модель подстроилась, а не только сумму
+ * расхождения. Для 2 ног из 132 в аудите заказчика (scratchpad/anchor_decay/README.md,
+ * §5) введённый факт физически недостижим (подразумеваемая цена опциона отрицательна) —
+ * для них вместо волатильности показываем понятное объяснение фолбэка.
+ *
+ * @param {object} params
+ * @param {'calibrated'|'fallback'|'none'} params.mode — результат applyFactPLAnchor.mode.
+ * @param {number|null} params.calibratedVolatility — applyFactPLAnchor.calibratedVolatility, %.
+ * @param {number|null} params.anchorVolatility — введённая пользователем Fact IV (или
+ *   интерполированная волатильность, если Fact IV не задавалась), %, — то, «вместо чего».
+ * @param {string|null} [params.reason] — applyFactPLAnchor.reason для режима 'fallback'
+ *   ('below-intrinsic' | 'above-max-volatility') — не показывается пользователю напрямую,
+ *   только определяет, что факт «невозможен» (обе причины по сути об одном и том же).
+ * @returns {string} — например «Модель подобрана под ваш факт: волатильность 46.2% вместо
+ *   введённой 46.5%», либо предупреждение о недостижимости факта, либо '' если нечего показать.
+ */
+export function describeAnchorCalibration({ mode, calibratedVolatility, anchorVolatility, reason } = {}) {
+  if (mode === 'calibrated' && calibratedVolatility !== null && calibratedVolatility !== undefined) {
+    const calibratedStr = calibratedVolatility.toFixed(1);
+    const anchorStr = Number.isFinite(anchorVolatility) ? anchorVolatility.toFixed(1) : null;
+    if (anchorStr !== null && Math.abs(calibratedVolatility - anchorVolatility) >= 0.05) {
+      return `Модель подобрана под ваш факт: волатильность ${calibratedStr}% вместо введённой ${anchorStr}%`;
+    }
+    return `Модель подобрана под ваш факт: волатильность ${calibratedStr}%`;
+  }
+
+  if (mode === 'fallback') {
+    // below-intrinsic / above-max-volatility — обе причины сводятся к одному для
+    // пользователя: введённое число невозможно объяснить движением волатильности.
+    void reason; // причина используется только для отладки, не выводится в UI
+    return 'Введённый факт недостижим для этого опциона (убыток/прибыль больше уплаченной премии) — расчёт ограничен физическим пределом';
+  }
+
+  return '';
+}

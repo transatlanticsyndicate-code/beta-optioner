@@ -6,6 +6,16 @@
  * тесты фиксируют инварианты, отсутствие которых и было причиной багов, поверх
  * РЕАЛЬНОГО движка ценообразования (calculateOptionPLValue/calculateOptionTheoreticalPrice),
  * а не его копии.
+ *
+ * ОБНОВЛЕНО (2026-08, переход на калибровку волатильности): тесты 3–5 ниже проверяли
+ * АДДИТИВНУЮ формулу (pl = actualPL×ratio + (теор.цель − теор.якорь)), которая больше
+ * не является поведением applyFactPLAnchor — теперь функция подбирает волатильность,
+ * при которой модель сама даёт факт (см. заголовок factPLAnchor.js и
+ * frontend/src/utils/__tests__/factPLAnchorCalibration.test.js для полного набора
+ * инвариантов калибровки). Тесты 3–5 переписаны под новый контракт (computeTheoreticalPrice/
+ * entryPrice/contractMultiplier/targetPrice вместо computeTheoreticalPL), а не удалены —
+ * они по-прежнему полезны как регрессия конкретно для этих MKTX/PUT-данных. Тесты 1–2
+ * (гард экспирации) поведение не меняют и оставлены как есть.
  */
 
 import { applyFactPLAnchor } from '../factPLAnchor';
@@ -51,6 +61,17 @@ const OLDEST_ENTRY = new Date('2026-01-01T00:00:00Z');
 function makeComputeTheoreticalPL(leg) {
   return (price, days, vol) => calculateOptionPLValue(leg, price, price, days, vol);
 }
+
+/**
+ * Строит computeTheoreticalPrice-колбэк (сырая цена опциона, без P&L-конвертации) —
+ * то, что теперь требует applyFactPLAnchor для калибровки волатильности.
+ */
+function makeComputeTheoreticalPrice(leg) {
+  return (price, days, vol) => calculateOptionTheoreticalPrice(leg, price, days, vol);
+}
+
+const PUT_ENTRY_PRICE = PUT_LEG.ask; // 8.02 — Buy → вход по ASK
+const PUT_MULT = PUT_LEG.contractSize; // 100
 
 describe('applyFactPLAnchor — инварианты', () => {
   it('1) на дату экспирации (targetDaysRemaining <= 0) якорь НЕ применяется', () => {
@@ -112,7 +133,7 @@ describe('applyFactPLAnchor — инварианты', () => {
     expect(Math.abs(total)).toBeLessThanOrEqual(TOTAL_PREMIUM + 1e-6);
   });
 
-  it('3) в точке якоря (targetDaysPassed == anchorDaysPassed, целевая точка == точка якоря) результат равен ровно actualPL × коэффициент количества', () => {
+  it('3) в точке якоря (targetDaysPassed == anchorDaysPassed, целевая точка == точка якоря) результат равен ровно actualPL × коэффициент количества (калибровка)', () => {
     const anchorDaysPassed = 150; // дней от OLDEST_ENTRY до actualPLDate ниже
     const anchorDateStr = new Date(OLDEST_ENTRY.getTime() + anchorDaysPassed * 86400000)
       .toISOString()
@@ -124,12 +145,7 @@ describe('applyFactPLAnchor — инварианты', () => {
     // этому же значению, иначе точки физически не совпадают.
     const targetDaysRemaining = calculateDaysRemainingUTC(PUT_LEG, anchorDaysPassed, 30, OLDEST_ENTRY);
     const anchorPrice = 118;
-    const anchorVolatility = 47.84;
-
-    // Теоретическая P&L «в целевой точке» здесь численно равна теоретической P&L
-    // «в точке якоря» — целевая точка совпадает с точкой ввода якоря (тот же
-    // price/days/vol), поэтому (theoreticalPL - plAtAnchor) == 0 по построению.
-    const theoreticalPLAtAnchorPoint = calculateOptionPLValue(PUT_LEG, anchorPrice, anchorPrice, targetDaysRemaining, anchorVolatility);
+    const anchorVolatility = 47.84; // Fact IV — используется как база для plAtAnchor/фолбэка, не как результат
 
     const actualPL = -415;
     const actualPLQuantity = 2;
@@ -137,103 +153,129 @@ describe('applyFactPLAnchor — инварианты', () => {
 
     const result = applyFactPLAnchor({
       option: { ...PUT_LEG, actualPL, actualPLDate: anchorDateStr, actualPLQuantity, quantity: currentQuantity },
-      theoreticalPL: theoreticalPLAtAnchorPoint,
+      theoreticalPL: 0, // не используется в калиброванном режиме
       targetDaysRemaining,
       targetDaysPassed: anchorDaysPassed, // === anchorDaysPassed → «точка якоря»
       oldestEntry: OLDEST_ENTRY,
+      computeTheoreticalPrice: makeComputeTheoreticalPrice(PUT_LEG),
       anchorVolatility,
       anchorPrice,
+      targetPrice: anchorPrice, // целевая точка совпадает с точкой якоря
+      entryPrice: PUT_ENTRY_PRICE,
+      contractMultiplier: PUT_MULT,
       currentQuantity,
-      computeTheoreticalPL: makeComputeTheoreticalPL(PUT_LEG),
     });
 
     expect(result.applied).toBe(true);
+    expect(result.mode).toBe('calibrated');
     const ratio = currentQuantity / actualPLQuantity;
-    expect(result.pl).toBeCloseTo(actualPL * ratio, 6);
+    // Точность ограничена tolerance бисекции (1e-4 по цене контракта), умноженным на
+    // qty×mult (4×100=400) — итоговый допуск в P&L порядка нескольких центов.
+    expect(result.pl).toBeCloseTo(actualPL * ratio, 1);
   });
 
-  it('4) при равных количествах коэффициент = 1 и результат = actualPL + (теор.цель − теор.якорь)', () => {
-    const targetPrice = 122;
+  it('4) вдали от точки якоря результат совпадает с теоретической ценой по КАЛИБРОВАННОЙ волатильности (не по Fact IV)', () => {
+    const targetPriceAsset = 122;
     const targetDaysRemaining = 45;
     const anchorPrice = 118;
     const anchorDaysPassed = 100;
-    const anchorVolatility = 43.37;
+    const anchorVolatility = 43.37; // Fact IV, введённая пользователем — НЕ равна калиброванной σ*
     const actualPL = -880;
     const quantity = 2;
-
-    const theoreticalPL = calculateOptionPLValue(PUT_LEG, targetPrice, targetPrice, targetDaysRemaining, anchorVolatility);
 
     const anchorDateStr = new Date(OLDEST_ENTRY.getTime() + anchorDaysPassed * 86400000)
       .toISOString()
       .slice(0, 10);
 
-    // Независимый расчёт «дней на якоре» той же утилитой, что использует сама
-    // applyFactPLAnchor — чтобы проверка plAtAnchor не была тавтологией.
-    const anchorDaysToExp = calculateDaysRemainingUTC(PUT_LEG, anchorDaysPassed, 30, OLDEST_ENTRY);
-    const expectedPlAtAnchor = calculateOptionPLValue(PUT_LEG, anchorPrice, anchorPrice, anchorDaysToExp, anchorVolatility);
-
     const result = applyFactPLAnchor({
       option: { ...PUT_LEG, actualPL, actualPLDate: anchorDateStr, actualPLQuantity: quantity, quantity },
-      theoreticalPL,
+      theoreticalPL: 0,
       targetDaysRemaining,
       targetDaysPassed: anchorDaysPassed + 30, // позже даты якоря
       oldestEntry: OLDEST_ENTRY,
+      computeTheoreticalPrice: makeComputeTheoreticalPrice(PUT_LEG),
       anchorVolatility,
       anchorPrice,
+      targetPrice: targetPriceAsset,
+      entryPrice: PUT_ENTRY_PRICE,
+      contractMultiplier: PUT_MULT,
       currentQuantity: quantity,
-      computeTheoreticalPL: makeComputeTheoreticalPL(PUT_LEG),
     });
 
     expect(result.applied).toBe(true);
-    expect(result.plAtAnchor).toBeCloseTo(expectedPlAtAnchor, 6);
-    expect(result.pl).toBeCloseTo(actualPL + (theoreticalPL - result.plAtAnchor), 6);
+    expect(result.mode).toBe('calibrated');
+    expect(result.calibratedVolatility).not.toBeNull();
+    // Калиброванная волатильность НЕ обязана совпадать с введённой Fact IV — именно
+    // в этом смысл калибровки (модель подстраивается под факт, а не наоборот).
+    expect(result.calibratedVolatility).not.toBeCloseTo(anchorVolatility, 1);
+
+    // Итоговая P&L обязана в точности совпадать с прямым пересчётом по калиброванной
+    // волатильности — то есть applyFactPLAnchor не подмешивает ничего сверху.
+    const expectedPrice = calculateOptionTheoreticalPrice(PUT_LEG, targetPriceAsset, targetDaysRemaining, result.calibratedVolatility);
+    const expectedPL = (expectedPrice - PUT_ENTRY_PRICE) * quantity * PUT_MULT; // Buy, ratio=1 (currentQuantity===actualPLQuantity)
+    expect(result.pl).toBeCloseTo(expectedPL, 6);
   });
 
-  it('5) волатильность 150 (проценты) даёт цену дороже, чем 50 — единицы не теряются внутри функции', () => {
+  it('5) волатильность 150 (проценты) передаётся в computeTheoreticalPrice БЕЗ трансформаций — единицы не теряются внутри функции', () => {
     const price = 100;
-    const days = 30;
 
-    // (а) computeTheoreticalPL получает anchorVolatility БЕЗ каких-либо трансформаций —
-    // проверяем прямым перехватом аргумента (если бы функция случайно делила ещё раз
-    // на 100, сюда пришло бы не 150, а 1.5).
+    // computeTheoreticalPrice получает anchorVolatility БЕЗ каких-либо трансформаций при
+    // расчёте «теоретической цены на якоре по Fact IV» (первый вызов в каждом сценарии) —
+    // если бы функция случайно делила ещё раз на 100, сюда пришло бы не 150, а 1.5.
     const receivedVolatilities = [];
-    const spyComputeTheoreticalPL = (p, d, vol) => {
+    const spyComputeTheoreticalPrice = (p, d, vol) => {
       receivedVolatilities.push(vol);
-      return calculateOptionPLValue(PUT_LEG, p, p, d, vol);
+      return calculateOptionTheoreticalPrice(PUT_LEG, p, d, vol);
     };
 
-    const baseOption = { ...PUT_LEG, actualPL: -100, actualPLDate: '2026-01-15', actualPLQuantity: 2, quantity: 2 };
-
+    // Fact P&L ниже уплаченного в разы (для PUT купленной ноги) — заведомо недостижимо
+    // ни при какой волатильности (below-intrinsic либо far below theo), поэтому подбор
+    // уходит в фолбэк — а фолбэк-ветка тоже обязана читать anchorVolatility как есть
+    // (используется и для расчёта интринсика/теории на якоре по Fact IV, и в фолбэке
+    // на цели). Разные значения anchorVolatility → разные ключи кэша, коллизий нет.
     applyFactPLAnchor({
-      option: baseOption,
+      option: { ...PUT_LEG, actualPL: -1, actualPLDate: '2026-01-15', actualPLQuantity: 2, quantity: 2 },
       theoreticalPL: 0,
       targetDaysRemaining: 30,
       targetDaysPassed: 100,
       oldestEntry: OLDEST_ENTRY,
+      computeTheoreticalPrice: spyComputeTheoreticalPrice,
       anchorVolatility: 150,
       anchorPrice: price,
+      targetPrice: price,
+      entryPrice: PUT_ENTRY_PRICE,
+      contractMultiplier: PUT_MULT,
       currentQuantity: 2,
-      computeTheoreticalPL: spyComputeTheoreticalPL,
     });
 
     applyFactPLAnchor({
-      option: baseOption,
+      option: { ...PUT_LEG, actualPL: -1, actualPLDate: '2026-01-16', actualPLQuantity: 2, quantity: 2 },
       theoreticalPL: 0,
       targetDaysRemaining: 30,
       targetDaysPassed: 100,
       oldestEntry: OLDEST_ENTRY,
+      computeTheoreticalPrice: spyComputeTheoreticalPrice,
       anchorVolatility: 50,
       anchorPrice: price,
+      targetPrice: price,
+      entryPrice: PUT_ENTRY_PRICE,
+      contractMultiplier: PUT_MULT,
       currentQuantity: 2,
-      computeTheoreticalPL: spyComputeTheoreticalPL,
     });
 
-    expect(receivedVolatilities).toEqual([150, 50]); // ровно то, что передали — без деления внутри applyFactPLAnchor
+    // Первый вызов в каждом сценарии — расчёт теоретической цены на якоре по Fact IV
+    // (theoAnchorPriceOriginal внутри applyFactPLAnchor), который получает anchorVolatility
+    // напрямую как переданное значение.
+    expect(receivedVolatilities[0]).toBe(150);
+    // Индекс второго набора вызовов зависит от того, сколько итераций сделала бисекция
+    // в первом сценарии — ищем первое вхождение 50 после этого, а не по фиксированному индексу.
+    expect(receivedVolatilities).toContain(50);
+    expect(receivedVolatilities.every((v) => v === 150 || v === 50 || (v > 1 && v <= 500))).toBe(true);
 
     // (б) сквозная проверка через реальный движок: более высокая IV даёт более дорогую
     // (более щедрую по временной стоимости) теоретическую цену опциона.
-    const priceAtVol150 = calculateOptionTheoreticalPrice(PUT_LEG, price, days, 150);
-    const priceAtVol50 = calculateOptionTheoreticalPrice(PUT_LEG, price, days, 50);
+    const priceAtVol150 = calculateOptionTheoreticalPrice(PUT_LEG, price, 30, 150);
+    const priceAtVol50 = calculateOptionTheoreticalPrice(PUT_LEG, price, 30, 50);
     expect(priceAtVol150).toBeGreaterThan(priceAtVol50);
   });
 });

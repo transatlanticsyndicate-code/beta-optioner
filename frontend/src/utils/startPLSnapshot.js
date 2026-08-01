@@ -33,8 +33,8 @@
 //     формата (без этих полей) — мягкая миграция: расчёт берёт текущие
 //     значения из ctx.
 
-import { calculateOptionPLValue as calculateStockOptionPLValue } from './optionPricing';
-import { calculateFuturesOptionPLValue } from './futuresPricing';
+import { calculateOptionPLValue as calculateStockOptionPLValue, calculateOptionTheoreticalPrice as calculateStockOptionTheoreticalPrice } from './optionPricing';
+import { calculateFuturesOptionPLValue, calculateFuturesOptionTheoreticalPrice } from './futuresPricing';
 import { getOptionVolatility } from './volatilitySurface';
 import {
   calculateDaysRemainingUTC,
@@ -216,6 +216,13 @@ export function computeStartPL(snapshot, option, ctx) {
   const divYield = snapshot.dividendYield ?? 0;
   const targetForCalc = targetPrice || currentPrice;
 
+  // Цена входа за контракт — из СНАПШОТНЫХ ask/bid/premium (tempOpt), нужна калибровке
+  // якоря (applyFactPLAnchor ниже). isAskModified/isBidModified/isPremiumModified в
+  // tempOpt всегда false (см. построение tempOpt выше) — правки пользователя после
+  // сохранения снимка сюда не попадают, поэтому упрощённая формула без их учёта.
+  const isBuyStart = (option.action || 'Buy').toLowerCase() === 'buy';
+  const startEntryPrice = isBuyStart ? (tempOpt.ask || tempOpt.premium || 0) : (tempOpt.bid || tempOpt.premium || 0);
+
   let pl = calculatorMode === CALCULATOR_MODES.FUTURES
     ? calculateFuturesOptionPLValue(tempOpt, targetForCalc, optionDaysRemaining, contractMultiplier, optionVolatility)
     : calculateStockOptionPLValue(tempOpt, targetForCalc, optAssetPrice, optionDaysRemaining, optionVolatility, divYield, contractMultiplier, rfrOpt);
@@ -240,6 +247,7 @@ export function computeStartPL(snapshot, option, ctx) {
     },
     theoreticalPL: pl,
     targetDaysRemaining: optionDaysRemainingForAnchor,
+    targetDaysRemainingPrecise: optionDaysRemaining,
     targetDaysPassed: daysPassed,
     oldestEntry,
     // IV в момент якоря — снапшотный manualIvOverride если задан,
@@ -249,13 +257,17 @@ export function computeStartPL(snapshot, option, ctx) {
       : optionVolatility,
     // Цена актива на дату якоря — снапшотная (зафиксирована при сохранении).
     anchorPrice: snapshot.actualPLPrice || optAssetPrice,
+    targetPrice: targetForCalc,
+    entryPrice: startEntryPrice,
+    contractMultiplier,
     currentQuantity: snapshot.quantity,
-    computeTheoreticalPL: (price, days, vol) => {
+    // adjustPLByStockGroup НЕ применяем — см. комментарий в конце функции (и заголовок
+    // factPLAnchor.js: калибровка/фолбэк работают с сырой ценой, без групповой корректировки).
+    computeTheoreticalPrice: (price, days, vol) => {
       const rfrAnchor = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
-      // adjustPLByStockGroup НЕ применяем — см. комментарий в конце функции.
       return calculatorMode === CALCULATOR_MODES.FUTURES
-        ? calculateFuturesOptionPLValue(tempOpt, price, days, contractMultiplier, vol)
-        : calculateStockOptionPLValue(tempOpt, price, optAssetPrice, days, vol, divYield, contractMultiplier, rfrAnchor);
+        ? calculateFuturesOptionTheoreticalPrice(tempOpt, price, days, vol)
+        : calculateStockOptionTheoreticalPrice(tempOpt, price, days, vol, divYield, rfrAnchor);
     },
   });
   pl = anchorResultStart.pl;

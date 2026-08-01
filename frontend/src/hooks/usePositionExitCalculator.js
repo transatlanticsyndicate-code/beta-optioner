@@ -496,6 +496,7 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
         option,
         theoreticalPL: pl,
         targetDaysRemaining: simulatedDaysToExpirationForAnchor,
+        targetDaysRemainingPrecise: simulatedDaysToExpiration,
         targetDaysPassed: daysPassed,
         oldestEntry: oldestEntryDate,
         // ВАЖНО: manualIvOverride хранится в ПРОЦЕНТАХ (150 = 150%) — передаём как есть,
@@ -511,14 +512,16 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
         // ВАЖНО: plAtAnchor считается при ЦЕНЕ АКТИВА НА МОМЕНТ ВВОДА якоря (actualPLPrice)
         // ЗАЧЕМ: Якорь фиксирует P&L при конкретной цене, дельта должна учитывать изменение цены
         anchorPrice: option.actualPLPrice || currentPrice,
+        targetPrice: underlyingPrice,
+        entryPrice,
+        contractMultiplier,
         currentQuantity: option.quantity,
-        computeTheoreticalPL: (price, days, vol) => (
+        // Сырая цена (без adjustPLByStockGroup) — калибровка/фолбэк несовместимы с
+        // групповой корректировкой, см. заголовок factPLAnchor.js.
+        computeTheoreticalPrice: (price, days, vol) => (
           calculatorMode === CALCULATOR_MODES.FUTURES
-            ? calculateFuturesOptionPLValue(tempOption, price, days, contractMultiplier, vol)
-            // ВАЖНО: цена БА для расчёта — currentPrice (не assetPriceAtEntry), в отличие
-            // от OptionsTableV3/ExitPlanTable — это существующее расхождение сценариев
-            // usePositionExitCalculator, сохранено как есть (не унифицируем молча).
-            : calculateStockOptionPLValue(tempOption, price, currentPrice, days, vol, dividendYield, contractMultiplier, rfrScenario2)
+            ? calculateFuturesOptionTheoreticalPrice(tempOption, price, days, vol)
+            : calculateStockOptionTheoreticalPrice(tempOption, price, days, vol, dividendYield, rfrScenario2)
         ),
       });
       pl = anchorResultS2.pl;
@@ -697,6 +700,7 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
         option,
         theoreticalPL: pl,
         targetDaysRemaining: simulatedDaysToExpirationForAnchor,
+        targetDaysRemainingPrecise: simulatedDaysToExpiration,
         targetDaysPassed: daysPassed,
         oldestEntry: oldestEntryDate,
         // ВАЖНО: manualIvOverride хранится в ПРОЦЕНТАХ — без деления на 100
@@ -706,13 +710,16 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
           : optionVolatility,
         // ВАЖНО: plAtAnchor считается при ЦЕНЕ АКТИВА НА МОМЕНТ ВВОДА якоря (actualPLPrice)
         anchorPrice: option.actualPLPrice || currentPrice,
+        targetPrice: underlyingPrice,
+        entryPrice,
+        contractMultiplier,
         currentQuantity: option.quantity,
-        computeTheoreticalPL: (price, days, vol) => (
+        // Сырая цена (без adjustPLByStockGroup) — калибровка/фолбэк несовместимы с
+        // групповой корректировкой, см. заголовок factPLAnchor.js.
+        computeTheoreticalPrice: (price, days, vol) => (
           calculatorMode === CALCULATOR_MODES.FUTURES
-            ? calculateFuturesOptionPLValue(tempOption, price, days, contractMultiplier, vol)
-            // ВАЖНО: цена БА для расчёта — currentPrice (не assetPriceAtEntry), то же
-            // расхождение, что и в Сценарии 2 — сохранено как есть.
-            : calculateStockOptionPLValue(tempOption, price, currentPrice, days, vol, dividendYield, contractMultiplier, rfrScenario3)
+            ? calculateFuturesOptionTheoreticalPrice(tempOption, price, days, vol)
+            : calculateStockOptionTheoreticalPrice(tempOption, price, days, vol, dividendYield, rfrScenario3)
         ),
       });
       pl = anchorResultS3.pl;
