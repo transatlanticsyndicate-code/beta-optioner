@@ -1,0 +1,30 @@
+name: Check Shadowed Modules
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+  push:
+    branches: [ main, develop ]
+
+jobs:
+  check-shadowed-modules:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+
+    - name: Check shadowed modules
+      run: |
+        cd frontend
+        npm run check-shadowed-modules || exit 1
+
+    - name: Report results
+      if: failure()
+      run: |
+        echo "::error::Найдены затенённые каталоги (X.jsx рядом с X/index.*) — react-scripts резолвит файл раньше каталога, каталог мёртв."

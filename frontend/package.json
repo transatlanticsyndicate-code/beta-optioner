@@ -58,7 +58,8 @@
     "check-file-size:all": "node ../scripts/check-file-size.js --all",
     "check-forbidden": "node ../scripts/check-forbidden-patterns.js",
     "check-forbidden:all": "node ../scripts/check-forbidden-patterns.js --all",
-    "check-all": "npm run check-file-size:all && npm run check-forbidden:all"
+    "check-shadowed-modules": "node ../scripts/check-shadowed-modules.js",
+    "check-all": "npm run check-file-size:all && npm run check-forbidden:all && npm run check-shadowed-modules"
   },
   "eslintConfig": {
     "extends": [
