@@ -1,32 +1,26 @@
 /**
- * Числовой тест-инвариант для формулы «якоря Fact P&L» из OptionsTableV3.jsx.
+ * Числовой тест-инвариант для гарда экспирации в формуле якоря Fact P&L
+ * (блок ИТОГО OptionsTableV3.jsx, применяет applyFactPLAnchor из factPLAnchor.js).
  *
  * КОНТЕКСТ (см. tasks/fix-expiry-anchor-total/diagnose.md):
  * Логика якоря — «P&L = введённый пользователем Fact P&L + (теоретическая P&L на
  * целевую дату − теоретическая P&L на дату ввода Fact P&L)» — была продублирована
- * в 4 местах компонента OptionsTableV3.jsx. В 3 из них есть защита
- * `optionDaysRemaining > 0` (или `optDaysRemaining > 0`), которая на дату экспирации
- * ОТКЛЮЧАЕТ якорь — там P&L обязана считаться чистой формулой
- * intrinsic_value − премия, иначе итог перестаёт быть физически ограничен
- * максимальным убытком купленной позиции (суммой премий).
- *
- * В блоке суммирования ИТОГО (~строки 220-246 OptionsTableV3.jsx) этой защиты не
- * было — баг воспроизводился на проде (сделка dbConfig=2a797da0-fba4-4332-bbb5-
+ * в семи местах кодовой базы (см. заголовок frontend/src/utils/factPLAnchor.js).
+ * В блоке суммирования ИТОГО (OptionsTableV3.jsx) защиты «на экспирации якорь не
+ * применяем» не было — баг воспроизводился на проде (сделка dbConfig=2a797da0-fba4-4332-bbb5-
  * cb95fd482f23, MKTX: 4 CALL 130 @3.97 + 2 PUT 115 @8.02, премия $3192): на
  * экспирации строки показывали корректные -1588 / -1604, а ИТОГО было -4210,
  * что невозможно для купленной позиции (максимальный убыток = премия).
  *
- * Этот тест НЕ рендерит компонент (он требует слишком много контекста/пропсов —
- * ivSurface, calculatorMode, стейт таблицы и т.д.), а моделирует ДВА варианта той
- * же формулы якоря (с защитой — как сейчас в коде после фикса, и без защиты — как
- * было до фикса) поверх РЕАЛЬНОЙ функции ценообразования calculateOptionPLValue
- * (тот же движок BSM, что использует компонент), на данных MKTX-репро.
- *
- * ВАЖНО: если формулу якоря в блоке ИТОГО OptionsTableV3.jsx изменят — этот тест
- * нужно поправить синхронно, иначе он перестанет отражать реальный код.
+ * ДО РЕФАКТОРИНГА (задача refactor/fact-pl-anchor) этот тест МОДЕЛИРОВАЛ формулу
+ * якоря копией (см. git-историю файла) — теперь он вызывает РЕАЛЬНУЮ функцию
+ * applyFactPLAnchor поверх РЕАЛЬНОГО движка ценообразования (calculateOptionPLValue),
+ * поэтому это настоящий регрессионный тест, а не копия формулы: если гард
+ * экспирации внутри applyFactPLAnchor сломают, тест упадёт без ручной синхронизации.
  */
 
 import { calculateOptionPLValue } from '../optionPricing';
+import { applyFactPLAnchor } from '../factPLAnchor';
 
 // --- Данные MKTX-репро ---
 const CALL_LEG = {
@@ -37,6 +31,8 @@ const CALL_LEG = {
   bid: 3.97,
   quantity: 4,
   contractSize: 100,
+  date: '2026-09-18',
+  entryDate: '2026-01-01',
 };
 
 const PUT_LEG = {
@@ -47,7 +43,11 @@ const PUT_LEG = {
   bid: 8.02,
   quantity: 2,
   contractSize: 100,
+  date: '2026-09-18',
+  entryDate: '2026-01-01',
 };
+
+const OLDEST_ENTRY = new Date('2026-01-01T00:00:00Z');
 
 const TOTAL_PREMIUM =
   CALL_LEG.ask * CALL_LEG.quantity * CALL_LEG.contractSize +
@@ -59,24 +59,34 @@ const PRICE_AT_EXPIRY = 120;
 const DAYS_REMAINING_AT_EXPIRY = 0;
 
 /**
- * Применяет формулу якоря Fact P&L ровно так, как она реализована в
- * OptionsTableV3.jsx (блок ИТОГО, ~строки 220-246 / блок строки, ~строка 1320).
- *
- * @param {object} params
- * @param {number} params.pl - теоретическая P&L на целевую дату (без якоря)
- * @param {number} params.plAtAnchor - теоретическая P&L на дату ввода Fact P&L
- * @param {number} params.actualPL - введённый пользователем Fact P&L
- * @param {number} params.anchorRatio - currentQty / anchorQty (обычно 1)
- * @param {number} params.daysRemaining - дни до экспирации на целевую дату
- * @param {boolean} params.withGuard - применять ли защиту `daysRemaining > 0`
+ * Применяет якорную формулу С ГАРДОМ, ровно как это делает реальный код
+ * (applyFactPLAnchor c targetDaysRemaining <= 0 → якорь не применяется).
  */
-function applyAnchorFormula({ pl, plAtAnchor, actualPL, anchorRatio, daysRemaining, withGuard }) {
-  const anchorApplies = withGuard ? daysRemaining > 0 : true;
-  if (!anchorApplies) return pl;
+function applyGuarded({ option, theoreticalPL, targetDaysRemaining, targetDaysPassed, anchorVolatility, anchorPrice, currentQuantity }) {
+  return applyFactPLAnchor({
+    option,
+    theoreticalPL,
+    targetDaysRemaining,
+    targetDaysPassed,
+    oldestEntry: OLDEST_ENTRY,
+    anchorVolatility,
+    anchorPrice,
+    currentQuantity,
+    computeTheoreticalPL: (price, days, vol) => calculateOptionPLValue(option, price, price, days, vol),
+  }).pl;
+}
+
+/**
+ * Применяет якорную формулу БЕЗ ГАРДА — воспроизводит поведение ДО фикса
+ * (когда защита targetDaysRemaining > 0 отсутствовала), напрямую по формуле,
+ * а не через applyFactPLAnchor (которая гард убрать не позволяет — он теперь
+ * встроенный инвариант функции).
+ */
+function applyUnguarded({ pl, plAtAnchor, actualPL, anchorRatio }) {
   return actualPL * anchorRatio + (pl - plAtAnchor);
 }
 
-describe('Инвариант якоря Fact P&L на дату экспирации (ИТОГО, OptionsTableV3)', () => {
+describe('Инвариант якоря Fact P&L на дату экспирации (ИТОГО, OptionsTableV3 → applyFactPLAnchor)', () => {
   // Чистая P&L на экспирации (без якоря) — реальный движок компонента.
   const plCallExpiry = calculateOptionPLValue(CALL_LEG, PRICE_AT_EXPIRY, PRICE_AT_EXPIRY, DAYS_REMAINING_AT_EXPIRY);
   const plPutExpiry = calculateOptionPLValue(PUT_LEG, PRICE_AT_EXPIRY, PRICE_AT_EXPIRY, DAYS_REMAINING_AT_EXPIRY);
@@ -100,23 +110,29 @@ describe('Инвариант якоря Fact P&L на дату экспирац�
 
   const plPutAtAnchor = calculateOptionPLValue(PUT_LEG, ANCHOR_PRICE, ANCHOR_PRICE, ANCHOR_DAYS_REMAINING, ANCHOR_IV);
 
-  it('(а) с защитой: якорь на экспирации не применяется, ИТОГО = сумме строк = -премия', () => {
-    const finalCall = applyAnchorFormula({
-      pl: plCallExpiry,
-      plAtAnchor: plCallExpiry, // якорь на CALL не вводился
-      actualPL: plCallExpiry,
-      anchorRatio: 1,
-      daysRemaining: DAYS_REMAINING_AT_EXPIRY,
-      withGuard: true,
+  it('(а) с гардом (реальный код): якорь на экспирации не применяется, ИТОГО = сумме строк = -премия', () => {
+    // CALL: якорь не вводился — actualPL/actualPLDate отсутствуют.
+    const finalCall = applyGuarded({
+      option: { ...CALL_LEG, actualPL: null, actualPLDate: null, actualPLQuantity: null, quantity: CALL_LEG.quantity },
+      theoreticalPL: plCallExpiry,
+      targetDaysRemaining: DAYS_REMAINING_AT_EXPIRY,
+      targetDaysPassed: 260,
+      anchorVolatility: ANCHOR_IV,
+      anchorPrice: ANCHOR_PRICE,
+      currentQuantity: CALL_LEG.quantity,
     });
 
-    const finalPut = applyAnchorFormula({
-      pl: plPutExpiry,
-      plAtAnchor: plPutAtAnchor,
-      actualPL: ACTUAL_PL_PUT,
-      anchorRatio: 1,
-      daysRemaining: DAYS_REMAINING_AT_EXPIRY,
-      withGuard: true,
+    // PUT: якорь введён (actualPL = -900 на дату, дающую anchorDaysPassed = 30 от OLDEST_ENTRY),
+    // но целевая точка — экспирация (targetDaysRemaining = 0) → гард должен отключить якорь.
+    const anchorDateStr = new Date(OLDEST_ENTRY.getTime() + 30 * 86400000).toISOString().slice(0, 10);
+    const finalPut = applyGuarded({
+      option: { ...PUT_LEG, actualPL: ACTUAL_PL_PUT, actualPLDate: anchorDateStr, actualPLQuantity: PUT_LEG.quantity, quantity: PUT_LEG.quantity },
+      theoreticalPL: plPutExpiry,
+      targetDaysRemaining: DAYS_REMAINING_AT_EXPIRY,
+      targetDaysPassed: 260,
+      anchorVolatility: ANCHOR_IV,
+      anchorPrice: ANCHOR_PRICE,
+      currentQuantity: PUT_LEG.quantity,
     });
 
     const total = finalCall + finalPut;
@@ -129,48 +145,40 @@ describe('Инвариант якоря Fact P&L на дату экспирац�
     expect(total).toBeCloseTo(-TOTAL_PREMIUM, 2);
   });
 
-  it('(б) инвариант |ИТОГО| <= премия держится с защитой и НАРУШАЕТСЯ без неё (баг до фикса)', () => {
+  it('(б) инвариант |ИТОГО| <= премия держится с гардом (реальный код) и НАРУШАЕТСЯ без него (баг до фикса)', () => {
+    const anchorDateStr = new Date(OLDEST_ENTRY.getTime() + 30 * 86400000).toISOString().slice(0, 10);
+
     const totalGuarded =
-      applyAnchorFormula({
-        pl: plCallExpiry,
-        plAtAnchor: plCallExpiry,
-        actualPL: plCallExpiry,
-        anchorRatio: 1,
-        daysRemaining: DAYS_REMAINING_AT_EXPIRY,
-        withGuard: true,
+      applyGuarded({
+        option: { ...CALL_LEG, actualPL: null, actualPLDate: null, actualPLQuantity: null, quantity: CALL_LEG.quantity },
+        theoreticalPL: plCallExpiry,
+        targetDaysRemaining: DAYS_REMAINING_AT_EXPIRY,
+        targetDaysPassed: 260,
+        anchorVolatility: ANCHOR_IV,
+        anchorPrice: ANCHOR_PRICE,
+        currentQuantity: CALL_LEG.quantity,
       }) +
-      applyAnchorFormula({
-        pl: plPutExpiry,
-        plAtAnchor: plPutAtAnchor,
-        actualPL: ACTUAL_PL_PUT,
-        anchorRatio: 1,
-        daysRemaining: DAYS_REMAINING_AT_EXPIRY,
-        withGuard: true,
+      applyGuarded({
+        option: { ...PUT_LEG, actualPL: ACTUAL_PL_PUT, actualPLDate: anchorDateStr, actualPLQuantity: PUT_LEG.quantity, quantity: PUT_LEG.quantity },
+        theoreticalPL: plPutExpiry,
+        targetDaysRemaining: DAYS_REMAINING_AT_EXPIRY,
+        targetDaysPassed: 260,
+        anchorVolatility: ANCHOR_IV,
+        anchorPrice: ANCHOR_PRICE,
+        currentQuantity: PUT_LEG.quantity,
       });
 
+    // Код ДО фикса (без гарда) — формула применена напрямую, минуя applyFactPLAnchor
+    // (сама функция больше не позволяет отключить гард — это её встроенный инвариант).
     const totalUnguarded =
-      applyAnchorFormula({
-        pl: plCallExpiry,
-        plAtAnchor: plCallExpiry,
-        actualPL: plCallExpiry,
-        anchorRatio: 1,
-        daysRemaining: DAYS_REMAINING_AT_EXPIRY,
-        withGuard: false,
-      }) +
-      applyAnchorFormula({
-        pl: plPutExpiry,
-        plAtAnchor: plPutAtAnchor,
-        actualPL: ACTUAL_PL_PUT,
-        anchorRatio: 1,
-        daysRemaining: DAYS_REMAINING_AT_EXPIRY,
-        withGuard: false,
-      });
+      applyUnguarded({ pl: plCallExpiry, plAtAnchor: plCallExpiry, actualPL: plCallExpiry, anchorRatio: 1 }) +
+      applyUnguarded({ pl: plPutExpiry, plAtAnchor: plPutAtAnchor, actualPL: ACTUAL_PL_PUT, anchorRatio: 1 });
 
-    // С защитой (текущий код после фикса) инвариант держится — максимум это
-    // равенство (весь убыток = премии), превышения быть не может.
+    // С гардом (текущий код после фикса, через applyFactPLAnchor) инвариант держится —
+    // максимум это равенство (весь убыток = премии), превышения быть не может.
     expect(Math.abs(totalGuarded)).toBeLessThanOrEqual(TOTAL_PREMIUM + 1e-6);
 
-    // Без защиты (код ИТОГО до фикса) на этих данных инвариант нарушается —
+    // Без гарда (код ИТОГО до фикса) на этих данных инвариант нарушается —
     // именно это и было причиной прод-бага (-4210 вместо максимум -3192).
     expect(Math.abs(totalUnguarded)).toBeGreaterThan(TOTAL_PREMIUM);
   });

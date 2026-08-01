@@ -43,6 +43,7 @@ import {
   calculateDaysToExpirationFromToday,
 } from './dateUtils';
 import { CALCULATOR_MODES } from './calculatorModes';
+import { applyFactPLAnchor } from './factPLAnchor';
 
 /**
  * Построить снимок исходных данных для одной ноги в момент фиксации позиции.
@@ -214,49 +215,44 @@ export function computeStartPL(snapshot, option, ctx) {
     : calculateStockOptionPLValue(tempOpt, targetForCalc, optAssetPrice, optionDaysRemaining, optionVolatility, divYield, contractMultiplier, rfrOpt);
 
   // Якорь Fact P&L — применяем по СНАПШОТНЫМ значениям (зафиксированы на момент
-  // сохранения). Логика повторяет блок из OptionsTableV3.jsx (строки 1297-1342),
-  // но источники — snapshot.*, а не option.*. Так Start P&L реагирует только на
-  // тот Fact P&L, что был в момент сохранения; последующие правки игнорирует.
-  // На дату экспирации (optionDaysRemaining <= 0) якорь не применяем —
-  // там P&L определяется чистой формулой intrinsic_value − entry_price.
-  if (
-    optionDaysRemaining > 0 &&
-    snapshot.actualPL !== null &&
-    snapshot.actualPL !== undefined &&
-    snapshot.actualPLDate
-  ) {
-    const anchorDateObj = new Date(snapshot.actualPLDate + 'T00:00:00Z');
-    const oldestEntryDateObj = oldestEntry || new Date();
-    const anchorDaysPassed = Math.round((anchorDateObj - oldestEntryDateObj) / (1000 * 60 * 60 * 24));
-
-    if (daysPassed >= anchorDaysPassed) {
-      const anchorDaysToExp = calculateDaysRemainingUTC(option, anchorDaysPassed, 30, oldestEntry);
+  // сохранения), через единую функцию applyFactPLAnchor. Источники — snapshot.*,
+  // а не option.* — так Start P&L реагирует только на тот Fact P&L, что был в
+  // момент сохранения; последующие правки игнорирует. Поэтому в applyFactPLAnchor
+  // передаём не «сырой» option, а гибрид: {...option (для strike/date/type — нужны
+  // calculateDaysRemainingUTC), actualPL*/quantity — из snapshot}.
+  // На дату экспирации (optionDaysRemaining <= 0) якорь не применяем — гард внутри функции.
+  // «Текущее» количество для коэффициента — тоже снапшотное (Start P&L не реагирует
+  // на изменение quantity после сохранения; и якорное, и «текущее» qty — из снапшота,
+  // поэтому коэффициент почти всегда = 1).
+  const anchorResultStart = applyFactPLAnchor({
+    option: {
+      ...option,
+      actualPL: snapshot.actualPL,
+      actualPLDate: snapshot.actualPLDate,
+      actualPLQuantity: snapshot.actualPLQuantity,
+      quantity: snapshot.quantity,
+    },
+    theoreticalPL: pl,
+    targetDaysRemaining: optionDaysRemaining,
+    targetDaysPassed: daysPassed,
+    oldestEntry,
+    // IV в момент якоря — снапшотный manualIvOverride если задан,
+    // иначе — общая optionVolatility, посчитанная выше из снапшотных IV-входов.
+    anchorVolatility: snapshot.manualIvOverride !== null && snapshot.manualIvOverride !== undefined
+      ? snapshot.manualIvOverride
+      : optionVolatility,
+    // Цена актива на дату якоря — снапшотная (зафиксирована при сохранении).
+    anchorPrice: snapshot.actualPLPrice || optAssetPrice,
+    currentQuantity: snapshot.quantity,
+    computeTheoreticalPL: (price, days, vol) => {
       const rfrAnchor = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
-
-      // IV в момент якоря — снапшотный manualIvOverride если задан,
-      // иначе — общая optionVolatility, посчитанная выше из снапшотных IV-входов.
-      const anchorIV = snapshot.manualIvOverride !== null && snapshot.manualIvOverride !== undefined
-        ? snapshot.manualIvOverride
-        : optionVolatility;
-
-      // Цена актива на дату якоря — снапшотная (зафиксирована при сохранении).
-      const anchorPrice = snapshot.actualPLPrice || optAssetPrice;
-
-      const plAtAnchor = calculatorMode === CALCULATOR_MODES.FUTURES
-        ? calculateFuturesOptionPLValue(tempOpt, anchorPrice, anchorDaysToExp, contractMultiplier, anchorIV)
-        : calculateStockOptionPLValue(tempOpt, anchorPrice, optAssetPrice, anchorDaysToExp, anchorIV, divYield, contractMultiplier, rfrAnchor);
-
-      // Масштаб по количеству — снапшотное количество (Start P&L не реагирует на
-      // изменение quantity после сохранения; и якорное, и «текущее» qty берём
-      // одинаково — из снапшота, чтобы коэффициент = 1).
-      const anchorQty = Number(snapshot.actualPLQuantity) > 0
-        ? Number(snapshot.actualPLQuantity)
-        : (Number(snapshot.quantity) || 1);
-      const currentQty = Number(snapshot.quantity) || 0;
-      const anchorRatio = anchorQty > 0 ? (currentQty / anchorQty) : 1;
-      pl = snapshot.actualPL * anchorRatio + (pl - plAtAnchor);
-    }
-  }
+      // adjustPLByStockGroup НЕ применяем — см. комментарий в конце функции.
+      return calculatorMode === CALCULATOR_MODES.FUTURES
+        ? calculateFuturesOptionPLValue(tempOpt, price, days, contractMultiplier, vol)
+        : calculateStockOptionPLValue(tempOpt, price, optAssetPrice, days, vol, divYield, contractMultiplier, rfrAnchor);
+    },
+  });
+  pl = anchorResultStart.pl;
 
   // adjustPLByStockGroup НЕ применяем — stockClassification в текущем коде null,
   // и применять его к Start P&L было бы корректировкой, которую мы по дизайну исключаем.

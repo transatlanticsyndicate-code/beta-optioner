@@ -25,6 +25,7 @@ import { assessLiquidity, getLiquidityColor, formatLiquidityTooltip, LIQUIDITY_L
 import { calculateDaysRemainingUTC, getOldestEntryDate, isOptionActiveAtDay, isOptionExpiredAtDay, calculateDaysToExpirationFromToday } from '../../utils/dateUtils';
 import { computeStartPL } from '../../utils/startPLSnapshot';
 import { getLegCost, validateFactPL, describeAnchorResidual } from '../../utils/factPLValidation';
+import { applyFactPLAnchor } from '../../utils/factPLAnchor';
 import LockIcon from './LockIcon';
 import { isStockLikeMode } from '../../utils/calculatorModes';
 
@@ -224,37 +225,31 @@ function OptionsTableV3({
           pl = adjustPLByStockGroup(pl, stockClassification);
         }
 
-        // ВАЖНО: на дату экспирации (optDaysRemaining <= 0) якорь НЕ применяется —
-        // там P&L определяется чистой формулой intrinsic_value − entry_price,
-        // и любая корректировка через якорь искажает математически точное значение.
-        // (та же защита, что в блоке расчёта P&L строки, см. optionDaysRemaining > 0 ниже по файлу)
-        if (optDaysRemaining > 0 && opt.actualPL !== null && opt.actualPL !== undefined && opt.actualPLDate) {
-          const anchorDateObj = new Date(opt.actualPLDate + 'T00:00:00Z');
-          const oldestEntryDateObj = oldestEntry || new Date();
-          const anchorDaysPassed = Math.round((anchorDateObj - oldestEntryDateObj) / (1000 * 60 * 60 * 24));
-
-          if (daysPassed >= anchorDaysPassed) {
-            const anchorDaysToExp = calculateDaysRemainingUTC(opt, anchorDaysPassed, 30, oldestEntry);
+        // Якорная поправка Fact P&L — единая функция applyFactPLAnchor (frontend/src/utils/factPLAnchor.js).
+        // ВАЖНО: гард экспирации (targetDaysRemaining <= 0 → якорь не применяется) — ВНУТРИ функции.
+        const anchorResultSum = applyFactPLAnchor({
+          option: opt,
+          theoreticalPL: pl,
+          targetDaysRemaining: optDaysRemaining,
+          targetDaysPassed: daysPassed,
+          oldestEntry,
+          anchorVolatility: opt.manualIvOverride !== null && opt.manualIvOverride !== undefined
+            ? opt.manualIvOverride
+            : optVolatility,
+          anchorPrice: opt.actualPLPrice || currentPrice,
+          currentQuantity: opt.quantity,
+          computeTheoreticalPL: (price, days, vol) => {
             const rfrAnchor = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
-            const anchorIV = opt.manualIvOverride !== null && opt.manualIvOverride !== undefined
-              ? opt.manualIvOverride
-              : optVolatility;
-            const anchorPrice = opt.actualPLPrice || currentPrice;
-
-            let plAtAnchor = calculatorMode === CALCULATOR_MODES.FUTURES
-              ? calculateFuturesOptionPLValue(tempOpt, anchorPrice, anchorDaysToExp, contractMultiplier, anchorIV)
-              : calculateStockOptionPLValue(tempOpt, anchorPrice, optAssetPrice, anchorDaysToExp, anchorIV, dividendYield, contractMultiplier, rfrAnchor);
-
+            let v = calculatorMode === CALCULATOR_MODES.FUTURES
+              ? calculateFuturesOptionPLValue(tempOpt, price, days, contractMultiplier, vol)
+              : calculateStockOptionPLValue(tempOpt, price, optAssetPrice, days, vol, dividendYield, contractMultiplier, rfrAnchor);
             if (isStockLikeMode(calculatorMode) && stockClassification) {
-              plAtAnchor = adjustPLByStockGroup(plAtAnchor, stockClassification);
+              v = adjustPLByStockGroup(v, stockClassification);
             }
-
-            const anchorQtySum = Number(opt.actualPLQuantity) > 0 ? Number(opt.actualPLQuantity) : (Number(opt.quantity) || 1);
-            const currentQtySum = Number(opt.quantity) || 0;
-            const anchorRatioSum = anchorQtySum > 0 ? (currentQtySum / anchorQtySum) : 1;
-            pl = opt.actualPL * anchorRatioSum + (pl - plAtAnchor);
-          }
-        }
+            return v;
+          },
+        });
+        pl = anchorResultSum.pl;
 
         return sum + pl;
       }, 0);
@@ -1455,67 +1450,52 @@ function OptionsTableV3({
 
                     // Логика якорной P&L: если пользователь ввел actualPL, используем её как якорь
                     // ЗАЧЕМ: Позволяет пользователю зафиксировать реальную P&L и проецировать от неё
-                    // ВАЖНО: на дату экспирации (optionDaysRemaining <= 0) якорь НЕ применяется —
-                    // там P&L определяется чистой формулой intrinsic_value − entry_price,
-                    // и любая корректировка через якорь искажает математически точное значение.
-                    if (optionDaysRemaining > 0 && option.actualPL !== null && option.actualPL !== undefined && option.actualPLDate) {
-                      // Вычисляем дни от входа до даты ввода actualPL
-                      const anchorDateObj = new Date(option.actualPLDate + 'T00:00:00Z');
-                      const oldestEntryDateObj = oldestEntry || new Date();
-                      const anchorDaysPassed = Math.round((anchorDateObj - oldestEntryDateObj) / (1000 * 60 * 60 * 24));
-
-                      // Если текущий день < дня ввода — показываем стандартный расчёт
-                      // Если текущий день >= дня ввода — используем якорную формулу
-                      if (daysPassed >= anchorDaysPassed) {
-                        // Вычисляем теоретическую цену на момент якоря
-                        const anchorDaysToExp = calculateDaysRemainingUTC(option, anchorDaysPassed, 30, oldestEntry);
-                        const rfrAnchor = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
-
-                        // IV на момент якоря: используем manualIvOverride если задан, иначе marketIV
-                        // manualIvOverride хранится в процентах (150 = 150%), конвертацию делают функции расчёта
-                        const anchorIV = option.manualIvOverride !== null && option.manualIvOverride !== undefined
+                    // Единая функция applyFactPLAnchor (frontend/src/utils/factPLAnchor.js) —
+                    // гард экспирации (targetDaysRemaining <= 0 → якорь не применяется) ВНУТРИ неё.
+                    {
+                      const plBeforeAnchor = pl;
+                      const anchorResult = applyFactPLAnchor({
+                        option,
+                        theoreticalPL: pl,
+                        targetDaysRemaining: optionDaysRemaining,
+                        targetDaysPassed: daysPassed,
+                        oldestEntry,
+                        anchorVolatility: option.manualIvOverride !== null && option.manualIvOverride !== undefined
                           ? option.manualIvOverride
-                          : optionVolatility;
-
+                          : optionVolatility,
                         // ВАЖНО: plAtAnchor считается при ЦЕНЕ АКТИВА НА МОМЕНТ ВВОДА якоря (actualPLPrice)
                         // ЗАЧЕМ: Якорь фиксирует P&L при конкретной цене, дельта должна учитывать изменение цены
-                        const anchorPrice = option.actualPLPrice || currentPrice;
+                        anchorPrice: option.actualPLPrice || currentPrice,
+                        currentQuantity: option.quantity,
+                        computeTheoreticalPL: (price, days, vol) => {
+                          const rfrAnchor = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
+                          let v = calculatorMode === CALCULATOR_MODES.FUTURES
+                            ? calculateFuturesOptionPLValue(tempOpt, price, days, contractMultiplier, vol)
+                            : calculateStockOptionPLValue(tempOpt, price, optionAssetPrice, days, vol, dividendYield, contractMultiplier, rfrAnchor);
+                          if (isStockLikeMode(calculatorMode) && stockClassification) {
+                            v = adjustPLByStockGroup(v, stockClassification);
+                          }
+                          return v;
+                        },
+                      });
+                      pl = anchorResult.pl;
 
-                        let plAtAnchor = calculatorMode === CALCULATOR_MODES.FUTURES
-                          ? calculateFuturesOptionPLValue(tempOpt, anchorPrice, anchorDaysToExp, contractMultiplier, anchorIV)
-                          : calculateStockOptionPLValue(tempOpt, anchorPrice, optionAssetPrice, anchorDaysToExp, anchorIV, dividendYield, contractMultiplier, rfrAnchor);
-                        
-                        if (isStockLikeMode(calculatorMode) && stockClassification) {
-                          plAtAnchor = adjustPLByStockGroup(plAtAnchor, stockClassification);
-                        }
-
-                        // Поднимаем plAtAnchor в область видимости строки (см. объявление
-                        // rowPlAtAnchor выше) — подсказка у поля «Fact P&L» использует его
-                        // через describeAnchorResidual вместо повторного расчёта цены.
-                        rowPlAtAnchor = plAtAnchor;
-
-                        const plBeforeAnchor = pl;
-                        // Итоговая P&L = actualPL × ratio + (текущая теор. P&L − теор. P&L на якоре)
-                        // ratio = текущее количество / количество в момент ввода Fact P&L
-                        // ЗАЧЕМ: Дельта (pl − plAtAnchor) уже масштабирована текущим количеством;
-                        // якорь тоже должен масштабироваться, иначе P&L растёт непропорционально количеству
-                        const anchorQty = Number(option.actualPLQuantity) > 0 ? Number(option.actualPLQuantity) : (Number(option.quantity) || 1);
-                        const currentQty = Number(option.quantity) || 0;
-                        const anchorRatio = anchorQty > 0 ? (currentQty / anchorQty) : 1;
-                        pl = option.actualPL * anchorRatio + (pl - plAtAnchor);
+                      // Поднимаем plAtAnchor в область видимости строки (см. объявление
+                      // rowPlAtAnchor выше) — подсказка у поля «Fact P&L» использует его
+                      // через describeAnchorResidual вместо повторного расчёта цены.
+                      if (anchorResult.applied) {
+                        rowPlAtAnchor = anchorResult.plAtAnchor;
 
                         console.log(`🎯 [Якорь] ${option.type} Strike ${option.strike}:`, {
                           actualPL: option.actualPL,
                           actualPLPrice: option.actualPLPrice,
                           actualPLQuantity: option.actualPLQuantity,
                           currentQuantity: option.quantity,
-                          anchorRatio,
                           currentPrice,
                           targetPrice,
-                          anchorPrice,
                           plBeforeAnchor: Math.round(plBeforeAnchor),
-                          plAtAnchor: Math.round(plAtAnchor),
-                          delta: Math.round(plBeforeAnchor - plAtAnchor),
+                          plAtAnchor: Math.round(anchorResult.plAtAnchor),
+                          delta: Math.round(plBeforeAnchor - anchorResult.plAtAnchor),
                           plAfterAnchor: Math.round(pl)
                         });
                       }
@@ -1755,38 +1735,34 @@ function OptionsTableV3({
                       pl = adjustPLByStockGroup(pl, stockClassification);
                     }
 
-                    // Применяем логику якорной P&L
+                    // Применяем логику якорной P&L — единая функция applyFactPLAnchor.
                     // ВАЖНО: на дату экспирации (optionDaysRemaining <= 0) якорь НЕ применяется —
                     // P&L и обратный расчёт цены закрытия должны опираться на чистую формулу
-                    // intrinsic_value − entry_price без коррекций.
-                    if (optionDaysRemaining > 0 && option.actualPL !== null && option.actualPL !== undefined && option.actualPLDate) {
-                      const anchorDateObj = new Date(option.actualPLDate + 'T00:00:00Z');
-                      const oldestEntryDateObj = oldestEntry || new Date();
-                      const anchorDaysPassed = Math.round((anchorDateObj - oldestEntryDateObj) / (1000 * 60 * 60 * 24));
-
-                      if (daysPassed >= anchorDaysPassed) {
-                        const anchorDaysToExp = calculateDaysRemainingUTC(option, anchorDaysPassed, 30, oldestEntry);
-                        const rfrAnchor = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
-                        // manualIvOverride хранится в процентах, конвертацию делают функции расчёта
-                        const anchorIV = option.manualIvOverride !== null && option.manualIvOverride !== undefined
+                    // intrinsic_value − entry_price без коррекций (гард внутри функции).
+                    {
+                      const anchorResultClose = applyFactPLAnchor({
+                        option,
+                        theoreticalPL: pl,
+                        targetDaysRemaining: optionDaysRemaining,
+                        targetDaysPassed: daysPassed,
+                        oldestEntry,
+                        anchorVolatility: option.manualIvOverride !== null && option.manualIvOverride !== undefined
                           ? option.manualIvOverride
-                          : optionVolatility;
-                        const anchorPrice = option.actualPLPrice || currentPrice;
-
-                        let plAtAnchor = calculatorMode === CALCULATOR_MODES.FUTURES
-                          ? calculateFuturesOptionPLValue(tempOpt, anchorPrice, anchorDaysToExp, contractMultiplier, anchorIV)
-                          : calculateStockOptionPLValue(tempOpt, anchorPrice, optionAssetPrice, anchorDaysToExp, anchorIV, dividendYield, contractMultiplier, rfrAnchor);
-                        
-                        if (isStockLikeMode(calculatorMode) && stockClassification) {
-                          plAtAnchor = adjustPLByStockGroup(plAtAnchor, stockClassification);
-                        }
-
-                        // Масштабируем якорь по текущему количеству (см. колонку P&L выше)
-                        const anchorQtyClose = Number(option.actualPLQuantity) > 0 ? Number(option.actualPLQuantity) : (Number(option.quantity) || 1);
-                        const currentQtyClose = Number(option.quantity) || 0;
-                        const anchorRatioClose = anchorQtyClose > 0 ? (currentQtyClose / anchorQtyClose) : 1;
-                        pl = option.actualPL * anchorRatioClose + (pl - plAtAnchor);
-                      }
+                          : optionVolatility,
+                        anchorPrice: option.actualPLPrice || currentPrice,
+                        currentQuantity: option.quantity,
+                        computeTheoreticalPL: (price, days, vol) => {
+                          const rfrAnchor = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
+                          let v = calculatorMode === CALCULATOR_MODES.FUTURES
+                            ? calculateFuturesOptionPLValue(tempOpt, price, days, contractMultiplier, vol)
+                            : calculateStockOptionPLValue(tempOpt, price, optionAssetPrice, days, vol, dividendYield, contractMultiplier, rfrAnchor);
+                          if (isStockLikeMode(calculatorMode) && stockClassification) {
+                            v = adjustPLByStockGroup(v, stockClassification);
+                          }
+                          return v;
+                        },
+                      });
+                      pl = anchorResultClose.pl;
                     }
 
                     // === Обратный расчёт цены закрытия из adjusted P&L ===

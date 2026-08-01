@@ -6,6 +6,7 @@ import { CALCULATOR_MODES } from '../../../utils/universalPricing';
 import { isStockLikeMode } from '../../../utils/calculatorModes';
 import { getOptionVolatility } from '../../../utils/volatilitySurface';
 import { calculateDaysToExpirationFromToday, calculateDaysRemainingUTC, getOldestEntryDate } from '../../../utils/dateUtils';
+import { applyFactPLAnchor } from '../../../utils/factPLAnchor';
 
 /**
  * Таблица Плана выхода для сделки
@@ -563,57 +564,57 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
       pl = adjustPLByStockGroup(pl, stockClassification);
     }
 
-    // Якорная формула: полностью идентична таблице опционов (OptionsTableV3.jsx:1400-1456)
-    // ВАЖНО: на дату экспирации (optionDaysRemaining <= 0) якорь НЕ применяется —
-    // там P&L определяется чистой формулой intrinsic_value − премия, и любая
-    // корректировка через якорь искажает математически точное значение
-    // (см. optionDaysRemaining > 0 в эталоне, OptionsTableV3.jsx:1397-1399).
-    if (optionDaysRemaining > 0 && option.actualPL !== null && option.actualPL !== undefined && option.actualPLDate) {
-      const anchorDateObj = new Date(option.actualPLDate + 'T00:00:00Z');
-      const anchorDaysPassed = Math.round((anchorDateObj - oldestEntry) / MS_IN_DAY);
-
-      // Условие аналогично `daysPassed >= anchorDaysPassed` в таблице опционов
-      if (stepSimDays >= anchorDaysPassed) {
-        const anchorDaysToExp = calculateDaysRemainingUTC(option, anchorDaysPassed, 30, oldestEntry);
-
+    // Якорная формула — единая функция applyFactPLAnchor (frontend/src/utils/factPLAnchor.js),
+    // полностью идентична по результату таблице опционов (OptionsTableV3.jsx).
+    // ВАЖНО: на дату экспирации (optionDaysRemaining <= 0) якорь НЕ применяется — гард внутри функции.
+    {
+      const plBeforeAnchor = pl;
+      const anchorResultExit = applyFactPLAnchor({
+        option,
+        theoreticalPL: pl,
+        targetDaysRemaining: optionDaysRemaining,
+        // Условие аналогично `daysPassed >= anchorDaysPassed` в таблице опционов,
+        // но своя «текущая точка» — stepSimDays (день выхода шага), а не daysPassed симуляции.
+        targetDaysPassed: stepSimDays,
+        oldestEntry,
         // ВАЖНО: manualIvOverride передаётся как процент (без /100) — строго как в OptionsTableV3
-        const anchorIV = option.manualIvOverride !== null && option.manualIvOverride !== undefined
+        anchorVolatility: option.manualIvOverride !== null && option.manualIvOverride !== undefined
           ? option.manualIvOverride
-          : optionVolatility;
+          : optionVolatility,
+        anchorPrice: option.actualPLPrice || currentPrice,
+        // Масштабируем якорь по количеству ШАГА (не всей ноги): actualPL соответствует
+        // actualPLQuantity (вся позиция в момент ввода), а текущий шаг закрывает
+        // step.quantity контрактов — числитель коэффициента = step.quantity.
+        currentQuantity: step.quantity,
+        // ЗАЧЕМ 0, а не 1: если якорное количество неизвестно (<=0), шаг без данных
+        // о доле позиции не должен получать чужой actualPL целиком — отличие от
+        // остальных мест (там фолбэк 1), сохранено намеренно.
+        ratioFallback: 0,
+        computeTheoreticalPL: (price, days, vol) => {
+          // Тот же аудит множителя и ставки, что и в основном расчёте pl выше —
+          // без contractMultiplier якорная P&L для крипто тоже была бы завышена до 100 раз
+          let v = calculatorMode === CALCULATOR_MODES.FUTURES
+            ? calculateFuturesOptionPLValue(tempOpt, price, days, contractMultiplier, vol)
+            : calculateOptionPLValue(tempOpt, price, optionAssetPrice, days, vol, dividendYield, contractMultiplier, rfrOpt);
+          if (isStockLikeMode(calculatorMode) && stockClassification) {
+            v = adjustPLByStockGroup(v, stockClassification);
+          }
+          return v;
+        },
+      });
+      pl = anchorResultExit.pl;
 
-        const anchorPrice = option.actualPLPrice || currentPrice;
-
-        // Тот же аудит множителя и ставки, что и в основном расчёте pl выше —
-        // без contractMultiplier якорная P&L для крипто тоже была бы завышена до 100 раз
-        let plAtAnchor = calculatorMode === CALCULATOR_MODES.FUTURES
-          ? calculateFuturesOptionPLValue(tempOpt, anchorPrice, anchorDaysToExp, contractMultiplier, anchorIV)
-          : calculateOptionPLValue(tempOpt, anchorPrice, optionAssetPrice, anchorDaysToExp, anchorIV, dividendYield, contractMultiplier, rfrOpt);
-
-        if (isStockLikeMode(calculatorMode) && stockClassification) {
-          plAtAnchor = adjustPLByStockGroup(plAtAnchor, stockClassification);
-        }
-
-        const plBeforeAnchor = pl;
-        // Масштабируем якорь по количеству шага: actualPL соответствует actualPLQuantity (всей позиции в момент ввода),
-        // а текущий шаг закрывает step.quantity контрактов — пересчитываем долю якоря
-        // ЗАЧЕМ: Дельта (pl − plAtAnchor) уже считается по step.quantity (через tempOpt.quantity),
-        // якорь тоже должен быть в долях шага, иначе суммы не совпадут с таблицей опционов
-        const anchorQtyExit = Number(option.actualPLQuantity) > 0 ? Number(option.actualPLQuantity) : (Number(option.quantity) || 1);
-        const stepQty = Number(step.quantity) || 0;
-        const anchorRatioExit = anchorQtyExit > 0 ? (stepQty / anchorQtyExit) : 0;
-        pl = option.actualPL * anchorRatioExit + (pl - plAtAnchor);
-
+      if (anchorResultExit.applied) {
         console.log(`[План выхода] 🎯 Якорная формула применена:`, {
           actualPL: option.actualPL,
           actualPLQuantity: option.actualPLQuantity,
           stepQuantity: step.quantity,
-          anchorRatio: anchorRatioExit,
-          anchorPrice,
+          anchorPrice: option.actualPLPrice || currentPrice,
           stepSimDays,
-          anchorDaysPassed,
+          anchorDaysPassed: anchorResultExit.anchorDaysPassed,
           plBeforeAnchor: Math.round(plBeforeAnchor),
-          plAtAnchor: Math.round(plAtAnchor),
-          delta: Math.round(plBeforeAnchor - plAtAnchor),
+          plAtAnchor: Math.round(anchorResultExit.plAtAnchor),
+          delta: Math.round(plBeforeAnchor - anchorResultExit.plAtAnchor),
           plAfterAnchor: Math.round(pl)
         });
       }
