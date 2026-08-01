@@ -13,7 +13,12 @@ import {
   PRICING_CONSTANTS
 } from './optionPricing';
 import { calculateFuturesOptionPLValue, calculateFuturesGreeks } from './futuresPricing';
-import { calculateDaysRemainingUTC, getOldestEntryDate, isOptionActiveAtDay, calculateDaysToExpirationFromToday } from './dateUtils';
+import {
+  getOldestEntryDate,
+  isOptionActiveAtDay,
+  calculateDaysRemainingPreciseET,
+  calculateDaysToExpirationFromTodayPreciseET,
+} from './dateUtils';
 import { getOptionVolatility } from './volatilitySurface';
 import { CALCULATOR_MODES } from './universalPricing';
 import { calculateGreeks as calculateBSMGreeks } from './blackScholes';
@@ -659,7 +664,8 @@ export function calculateTotalGreeks(options, contractMultiplier = 100) {
  * входа. Используем ту же волатильность/дни-до-экспирации по каждой ноге, что и P&L график
  * (calculatePLDataForMetrics в PLChart.jsx), чтобы карточки были согласованы с графиком и
  * колонкой P&L таблицы:
- *  - calculateDaysRemainingUTC / isOptionActiveAtDay / getOldestEntryDate — те же дни/активность ноги;
+ *  - calculateDaysRemainingPreciseET / isOptionActiveAtDay / getOldestEntryDate — те же дни/активность ноги
+ *    (дни — точная ET-версия, т.к. идут в формулу ценообразования, см. комментарий ниже по коду);
  *  - getOptionVolatility(..., option.manualIvOverride, ...) — та же волатильность (Fact IV/IV Surface).
  *
  * Считаем каждую ногу напрямую через Black-Scholes-Merton (акции/крипта/ETF) или Black-76
@@ -718,9 +724,16 @@ export function calculateLiveGreeks(
 
     // Индивидуальные дни до экспирации для этой ноги (с учётом ползунка daysPassed) — та же
     // логика, что использует P&L график и MAX прибыль/убыток.
-    const optionDaysRemaining = calculateDaysRemainingUTC(option, daysPassed, 30, oldestEntryDate);
-    const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0, 30, oldestEntryDate);
-    const todaySimDaysForOpt = calculateDaysToExpirationFromToday(option);
+    // ЗАЧЕМ (аудит A1 п.3): здесь эти дни идут ПРЯМО в формулу ценообразования
+    // (timeToExpiryYears = optionDaysRemaining/365 ниже, вход в Black-Scholes/Black-76) —
+    // поэтому используем точную ET-версию (16:00 America/New_York), а не целые календарные
+    // дни до полуночи UTC. currentDaysToExpiration и optionDaysRemaining переключены ВМЕСТЕ
+    // (одна и та же precise-функция), чтобы их разница (используется getOptionVolatility для
+    // проекции IV между текущей и симулируемой точкой) не исказилась — обе смещаются на одну
+    // и ту же дробную поправку для этой даты экспирации.
+    const optionDaysRemaining = calculateDaysRemainingPreciseET(option, daysPassed, 30, oldestEntryDate);
+    const currentDaysToExpiration = calculateDaysRemainingPreciseET(option, 0, 30, oldestEntryDate);
+    const todaySimDaysForOpt = calculateDaysToExpirationFromTodayPreciseET(option);
 
     // Волатильность: ручная Fact IV ноги (manualIvOverride) имеет приоритет, иначе — IV Surface/API.
     // getOptionVolatility возвращает волатильность В ПРОЦЕНТАХ (например 25 = 25%).

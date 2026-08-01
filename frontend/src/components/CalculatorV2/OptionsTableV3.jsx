@@ -22,7 +22,7 @@ import { calculateFuturesOptionPLValue, calculateFuturesOptionTheoreticalPrice }
 import { getOptionVolatility } from '../../utils/volatilitySurface';
 import { normalizeMarketIv } from '../../utils/extensionRefreshPolicy';
 import { assessLiquidity, getLiquidityColor, formatLiquidityTooltip, LIQUIDITY_LEVELS } from '../../utils/liquidityCheck';
-import { calculateDaysRemainingUTC, getOldestEntryDate, isOptionActiveAtDay, isOptionExpiredAtDay, calculateDaysToExpirationFromToday } from '../../utils/dateUtils';
+import { calculateDaysRemainingUTC, getOldestEntryDate, isOptionActiveAtDay, isOptionExpiredAtDay, calculateDaysToExpirationFromToday, getTodayDateStringET } from '../../utils/dateUtils';
 import { computeStartPL } from '../../utils/startPLSnapshot';
 import { getLegCost, validateFactPL, describeAnchorResidual } from '../../utils/factPLValidation';
 import { applyFactPLAnchor } from '../../utils/factPLAnchor';
@@ -437,7 +437,10 @@ function OptionsTableV3({
     // ЗАЧЕМ: Дата нужна для перерасчёта IV от якорного значения до текущей даты
     if (numValue !== null) {
       const now = new Date();
-      const todayISO = now.toISOString().split('T')[0];
+      // ЗАЧЕМ (аудит A5 п.7): дата ввода Fact IV — единая база America/New_York, а не
+      // browser-UTC (now.toISOString()). Для пользователя в Панаме (UTC-5) ввод после
+      // ~19:00 локального времени раньше получал дату СЛЕДУЮЩЕГО дня.
+      const todayISO = getTodayDateStringET();
       const todayDisplay = now.toLocaleDateString('ru-RU') + ' ' + now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
       handleFieldChange(optionId, 'manualIvOverride', numValue);
       handleFieldChange(optionId, 'manualIvOverrideDate', todayISO);
@@ -467,7 +470,11 @@ function OptionsTableV3({
     const opt = options.find(o => o.id === optionId);
 
     if (numValue !== null) {
-      const today = new Date().toISOString().split('T')[0]; // ISO формат: YYYY-MM-DD
+      // ЗАЧЕМ (аудит A5 п.7): якорь Fact P&L фиксируется по дате ввода — единая база
+      // America/New_York, а не browser-UTC (new Date().toISOString()). Для пользователя
+      // в Панаме (UTC-5) ввод после ~19:00 локального времени раньше получал дату
+      // СЛЕДУЮЩЕГО дня (UTC уже сутки как наступили), что сдвигало якорную точку.
+      const today = getTodayDateStringET(); // формат YYYY-MM-DD
 
       // Валидация (1B-2): проверяем ПРОСПЕКТИВНОЕ состояние ноги — с датой/ценой,
       // которые будут записаны прямо сейчас (actualPLDate=сегодня, actualPLPrice=

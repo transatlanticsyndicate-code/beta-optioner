@@ -15,7 +15,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { normalizeDateString } from '../utils/dateUtils';
+import { normalizeDateString, getTodayDateStringET } from '../utils/dateUtils';
 
 // Ключ в localStorage, куда расширение записывает данные
 // ВАЖНО: Расширение использует именно этот ключ — НЕ МЕНЯТЬ!
@@ -74,7 +74,9 @@ function adaptOption(option) {
     (isBuy ? option.askIV : option.bidIV) || 0;
 
   const normalizedOptionDate = normalizeDateString(option.date || option.expirationDate) || '';
-  const normalizedEntryDate = normalizeDateString(option.entryDate) || new Date().toISOString().split('T')[0];
+  // ЗАЧЕМ (аудит A5 п.7): единая база «сегодня» — America/New_York, а не browser-UTC
+  // (new Date().toISOString()) — см. заголовок dateUtils.js.
+  const normalizedEntryDate = normalizeDateString(option.entryDate) || getTodayDateStringET();
 
   return {
     id: option.id || Date.now().toString(),

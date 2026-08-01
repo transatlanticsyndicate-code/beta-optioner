@@ -19,7 +19,7 @@ import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import { isNonTradingDay } from '../../utils/marketHolidays';
-import { parseDateAtStartOfDay } from '../../utils/dateUtils';
+import { parseDateAtStartOfDay, getTodayDateStringET } from '../../utils/dateUtils';
 
 function PriceAndTimeSettings({
   currentPrice = 0,
@@ -58,7 +58,8 @@ function PriceAndTimeSettings({
     let oldest = null;
     options.forEach(option => {
       // Используем entryDate если есть, иначе текущую дату
-      const entryDateStr = option.entryDate || new Date().toISOString().split('T')[0];
+      // ЗАЧЕМ (аудит A5 п.7): единая база «сегодня» — America/New_York, а не browser-UTC.
+      const entryDateStr = option.entryDate || getTodayDateStringET();
       const entryDate = parseDateAtStartOfDay(entryDateStr);
       if (!entryDate) {
         return;
@@ -81,7 +82,9 @@ function PriceAndTimeSettings({
     // Базовая дата: самая старая дата входа или дата сохранения (для зафиксированных)
     let baseDate = savedConfigDate ? parseDateAtStartOfDay(savedConfigDate) : oldestEntryDate;
     if (!baseDate) {
-      baseDate = new Date();
+      // ЗАЧЕМ (аудит A5 п.7): единая база «сегодня» — America/New_York, а не локальное
+      // время машины пользователя.
+      baseDate = parseDateAtStartOfDay(getTodayDateStringET());
     }
     baseDate.setHours(0, 0, 0, 0);
     
@@ -134,11 +137,16 @@ function PriceAndTimeSettings({
   // ЗАЧЕМ: Кнопка "С" должна устанавливать ползунок на сегодняшнюю дату,
   // а не на daysPassed=0, так как для сохраненных позиций нулевой день может быть в прошлом
   const getDaysPassedToToday = React.useCallback(() => {
-    const today = new Date();
+    // ЗАЧЕМ (аудит A5 п.7): «сегодня» для слайдера дней — единая база America/New_York,
+    // а не локальное время машины пользователя (new Date()). Иначе для заказчика в Панаме
+    // (UTC-5) кнопка «С» могла бы указывать на другой день, чем реально идёт на бирже.
+    const today = parseDateAtStartOfDay(getTodayDateStringET());
     today.setHours(0, 0, 0, 0);
 
-    // Базовая дата: дата сохранения (для зафиксированных) или самая старая дата входа
-    const baseDate = savedConfigDate ? (parseDateAtStartOfDay(savedConfigDate) || new Date()) : (oldestEntryDate || new Date());
+    // Базовая дата: дата сохранения (для зафиксированных) или самая старая дата входа.
+    // ЗАЧЕМ клонируем today через new Date(today) для фолбэка: baseDate и today не должны
+    // быть одним и тем же объектом — ниже baseDate.setHours(...) не должен задевать today.
+    const baseDate = savedConfigDate ? (parseDateAtStartOfDay(savedConfigDate) || new Date(today)) : (oldestEntryDate || new Date(today));
     baseDate.setHours(0, 0, 0, 0);
 
     const diffTime = today.getTime() - baseDate.getTime();
