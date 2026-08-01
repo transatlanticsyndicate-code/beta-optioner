@@ -52,7 +52,7 @@ import OptionsTable from '../components/CalculatorV2/OptionsTable';
 import FinancialControl from '../components/CalculatorV2/FinancialControl';
 import ExitCalculator from '../components/CalculatorV2/ExitCalculator';
 import OptionSelectionResult from '../components/CalculatorV2/OptionSelectionResult';
-import { getDaysUntilExpirationUTC, calculateDaysRemainingUTC } from '../utils/dateUtils';
+import { getDaysUntilExpirationUTC, calculateDaysRemainingUTC, calculateDaysRemainingPreciseET } from '../utils/dateUtils';
 import { WhatsNewModal, shouldShowModal } from '../components/WhatsNewModal';
 import { useIVSurface } from '../hooks/useIVSurface';
 import aiPredictionService from '../services/aiPredictionService';
@@ -795,9 +795,16 @@ function OptionsCalculatorV3() {
       for (const option of options) {
         if (!option.visible || !option.strike || !option.date) continue;
         
-        // Вычисляем дни до экспирации
-        const daysToExpiration = calculateDaysRemainingUTC(option, daysPassed);
-        if (daysToExpiration < 0) continue;
+        // Вычисляем дни до экспирации.
+        // ВАЖНО: гард "опцион уже истёк" остаётся на целочисленной (UTC) версии — это
+        // проверка активности, а не ценообразование, её поведение не трогаем.
+        const daysToExpirationGuard = calculateDaysRemainingUTC(option, daysPassed);
+        if (daysToExpirationGuard < 0) continue;
+
+        // Точная (ET, дробная) версия — уходит в fetchAIVolatility, где считается
+        // ttm = daysToExpiration / 365 для запроса к AI-модели волатильности
+        // (см. dateUtils.js — семья PreciseET предназначена именно для разрешения волатильности)
+        const daysToExpiration = calculateDaysRemainingPreciseET(option, daysPassed);
 
         // Запрашиваем прогноз (функция сама проверит кэш)
         await fetchAIVolatility(option, targetPrice, daysToExpiration);

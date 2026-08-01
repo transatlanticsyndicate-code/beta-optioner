@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import Plot from 'react-plotly.js';
 import { calculateOptionPLValue } from '../../utils/optionPricing';
-import { calculateDaysRemainingUTC, getDaysUntilExpirationUTC } from '../../utils/dateUtils';
+import { getDaysUntilExpirationUTC, calculateDaysRemainingPreciseET } from '../../utils/dateUtils';
 import { getOptionVolatility } from '../../utils/volatilitySurface';
 
 /**
@@ -61,10 +61,11 @@ function ExitTimeDecayChart({
   }, []);
 
   // Вычисляет оставшиеся дни до экспирации для конкретного опциона
-  // ВАЖНО: Используем UTC для консистентности между часовыми поясами
+  // ВАЖНО: Точная (ET, дробная) версия — результат идёт прямо в ценообразование
+  // (calculateOptionPLValue ниже) и в IV-интерполяцию (getOptionVolatility), гардов
+  // на этом значении в компоненте нет (см. заголовок dateUtils.js про две семьи функций)
   const calculateDaysRemainingForOption = useCallback((option, currentDaysPassed) => {
-    // Используем UTC-функцию для единообразного расчёта во всех часовых поясах
-    return calculateDaysRemainingUTC(option, currentDaysPassed, 30);
+    return calculateDaysRemainingPreciseET(option, currentDaysPassed, 30);
   }, []);
 
   // Расчет P&L для опциона с общей моделью (как в блоке "Закрыть всё")
@@ -73,7 +74,8 @@ function ExitTimeDecayChart({
     (option, daysToExpiration) => {
       // Получаем IV из API через единую функцию (как в usePositionExitCalculator и PLChart)
       // ivSurface используется для точной интерполяции IV между датами экспирации
-      const currentDaysToExpiration = calculateDaysRemainingUTC(option, 0);
+      // Точная (ET) версия — значение идёт в getOptionVolatility (разрешение волатильности)
+      const currentDaysToExpiration = calculateDaysRemainingPreciseET(option, 0);
       let optionVolatility = getOptionVolatility(option, currentDaysToExpiration, daysToExpiration, ivSurface, 'simple');
       
       // Используем AI волатильность если доступна

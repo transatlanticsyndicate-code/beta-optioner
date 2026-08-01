@@ -23,6 +23,7 @@ import { getOptionVolatility } from './volatilitySurface';
 import { CALCULATOR_MODES } from './universalPricing';
 import { calculateGreeks as calculateBSMGreeks } from './blackScholes';
 import { getRiskFreeRateSync } from '../hooks/useRiskFreeRate';
+import { getCryptoBasisRate } from './cryptoRateSettings';
 
 /**
  * Получение цены входа в позицию
@@ -707,9 +708,10 @@ export function calculateLiveGreeks(
   if (visibleOptions.length === 0) return zero;
 
   const oldestEntryDate = getOldestEntryDate(options);
-  // ЗАЧЕМ: для крипто (Binance) безрисковая ставка = 0, как и в остальном калькуляторе
+  // ЗАЧЕМ: для крипто — настраиваемый форвардный базис (по умолчанию 0 — старое
+  // поведение, см. cryptoRateSettings.js), как и в остальном калькуляторе
   // (см. calculatePLDataForMetrics в PLChart.jsx), для акций/ETF — актуальная ставка ФРС.
-  const riskFreeRate = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : getRiskFreeRateSync();
+  const riskFreeRate = calculatorMode === CALCULATOR_MODES.CRYPTO ? getCryptoBasisRate() : getRiskFreeRateSync();
 
   return visibleOptions.reduce((total, option) => {
     // Опцион ещё не куплен на симулируемую дату — не должен участвовать в греках (как и в P&L графике).

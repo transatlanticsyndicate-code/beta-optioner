@@ -8,6 +8,8 @@ import requests
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 
+from app.utils.trading_date import get_trading_today
+
 
 class OptionsService:
     """Сервис для получения опционных данных"""
@@ -69,7 +71,8 @@ class OptionsService:
                 page += 1
             
             # Сортируем и возвращаем только будущие даты
-            today = datetime.now().date()
+            # Торговая дата (America/New_York) — единая база с фронтом, а не серверное время
+            today = get_trading_today()
             future_expirations = [
                 exp for exp in sorted(all_expirations)
                 if datetime.strptime(exp, "%Y-%m-%d").date() >= today
@@ -656,7 +659,9 @@ class OptionsService:
             # Шаг 2: Загружаем опционы для каждой даты
             surface = {}
             total_points = 0
-            today = datetime.now().date()
+            # Торговая дата (America/New_York) — единая база с фронтом, дни до экспирации
+            # идут ключами в IV Surface, которую потом использует калькулятор
+            today = get_trading_today()
             
             for exp_date in selected_expirations:
                 # Вычисляем дни до экспирации

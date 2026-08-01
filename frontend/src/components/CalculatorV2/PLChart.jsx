@@ -17,6 +17,7 @@ import {
 import { hasRemainingDaysUTC, getOldestEntryDate, isOptionActiveAtDay, calculateDaysRemainingPreciseET, calculateDaysToExpirationFromTodayPreciseET } from '../../utils/dateUtils';
 import { getOptionVolatility } from '../../utils/volatilitySurface';
 import { isStockLikeMode } from '../../utils/calculatorModes';
+import { getCryptoBasisRate } from '../../utils/cryptoRateSettings';
 
 // Режимы калькулятора
 // ETF математически эквивалентен STOCKS — отличается только бейдж в UI.
@@ -100,8 +101,9 @@ function PLChart({ options = [], currentPrice = 0, positions = [], showOptionLin
       return calculateFuturesOptionPLValue(option, price, daysRemaining, contractMultiplier, volatility);
     }
     if (calculatorMode === CALCULATOR_MODES.CRYPTO) {
-      // Режим "Крипто" — множитель 1, безрисковая ставка 0 (Binance не использует ставку ФРС)
-      return calculateStockOptionPLValue(option, price, currentPriceVal, daysRemaining, volatility, divYield, contractMultiplier, 0);
+      // Режим "Крипто" — множитель 1, ставка = настраиваемый форвардный базис
+      // (по умолчанию 0 — старое поведение, см. cryptoRateSettings.js)
+      return calculateStockOptionPLValue(option, price, currentPriceVal, daysRemaining, volatility, divYield, contractMultiplier, getCryptoBasisRate());
     }
     // Режим "Акции" — множитель 100, ставка ФРС (null = берём из FRED)
     return calculateStockOptionPLValue(option, price, currentPriceVal, daysRemaining, volatility, divYield, contractMultiplier, null);
@@ -1017,8 +1019,9 @@ export function calculatePLDataForMetrics(options = [], currentPrice = 0, positi
       if (calculatorMode === CALCULATOR_MODES.FUTURES) {
         pl = calculateFuturesOptionPLValue(tempOption, price, optionDaysRemaining, contractMultiplier, optionVolatility);
       } else {
-        // Для крипто (Binance) безрисковая ставка = 0, для акций — из FRED (null)
-        const rfr = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
+        // Для крипто — настраиваемый форвардный базис (по умолчанию 0 — старое
+        // поведение, см. cryptoRateSettings.js), для акций — из FRED (null)
+        const rfr = calculatorMode === CALCULATOR_MODES.CRYPTO ? getCryptoBasisRate() : null;
         pl = calculateStockOptionPLValue(tempOption, price, currentPrice, optionDaysRemaining, optionVolatility, dividendYield, contractMultiplier, rfr);
       }
       totalPLArray[i] += pl;

@@ -243,8 +243,10 @@ def _fill_prompt_placeholders(prompt, c):
     if cd:
         try:
             from datetime import date
+            from app.utils.trading_date import get_trading_today
             y, m, d = (int(x) for x in str(cd).split("-"))
-            days = str((date(y, m, d) - date.today()).days)
+            # Торговая дата (America/New_York) — единая база с фронтом, а не date.today() сервера
+            days = str((date(y, m, d) - get_trading_today()).days)
         except Exception:
             days = ""
     mapping = {

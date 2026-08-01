@@ -5,7 +5,7 @@
 Это гарантирует, что в калькулятор не попадёт несуществующий опцион или
 выдуманная цена. Чистая логика без сети — легко тестируется.
 """
-from datetime import date
+from app.utils.trading_date import get_trading_today_iso
 
 
 def _skey(strike):
@@ -63,7 +63,9 @@ def _snapshot(row, qty, entry_price):
         "gamma": row.get("gamma"),
         "theta": row.get("theta"),
         "vega": row.get("vega"),
-        "entryDate": date.today().isoformat(),
+        # Торговая дата (America/New_York) — единая база с фронтом (getTodayDateStringET),
+        # а не date.today() сервера (см. app/utils/trading_date.py)
+        "entryDate": get_trading_today_iso(),
         "assetPriceAtEntry": entry_price,
     }
 

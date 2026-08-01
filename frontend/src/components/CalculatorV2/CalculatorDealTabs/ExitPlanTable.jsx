@@ -7,6 +7,7 @@ import { isStockLikeMode } from '../../../utils/calculatorModes';
 import { getOptionVolatility } from '../../../utils/volatilitySurface';
 import { calculateDaysRemainingUTC, getOldestEntryDate, calculateDaysRemainingPreciseET, calculateDaysToExpirationFromTodayPreciseET } from '../../../utils/dateUtils';
 import { applyFactPLAnchor } from '../../../utils/factPLAnchor';
+import { getCryptoBasisRate } from '../../../utils/cryptoRateSettings';
 
 /**
  * Таблица Плана выхода для сделки
@@ -536,9 +537,10 @@ function ExitPlanTable({ ticker, currentPrice, dealInfo, options, calculatorMode
     // Цена актива на момент входа в опцион — для BSM-расчёта
     const optionAssetPrice = option.assetPriceAtEntry || currentPrice;
 
-    // Безрисковая ставка: для крипто (Binance) = 0, для акций/фьючерсов — из FRED (null)
+    // Безрисковая ставка: для крипто — настраиваемый форвардный базис (по умолчанию
+    // 0 — старое поведение, см. cryptoRateSettings.js), для акций/фьючерсов — из FRED (null)
     // ЗАЧЕМ: синхронизировано с эталоном OptionsTableV3.jsx (rfrOpt/rfrSum)
-    const rfrOpt = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
+    const rfrOpt = calculatorMode === CALCULATOR_MODES.CRYPTO ? getCryptoBasisRate() : null;
 
     let pl = 0;
     if (calculatorMode === CALCULATOR_MODES.FUTURES) {

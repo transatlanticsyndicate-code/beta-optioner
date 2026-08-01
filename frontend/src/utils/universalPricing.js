@@ -33,6 +33,7 @@ import {
 } from './futuresPricing';
 
 import { calculateIntrinsicValueBlack76 } from './black76';
+import { getCryptoBasisRate } from './cryptoRateSettings';
 
 // Режимы калькулятора
 // ETF математически эквивалентен STOCKS — попадает во все «не FUTURES, не CRYPTO»
@@ -80,8 +81,9 @@ export const calculateOptionTheoreticalPrice = (
   }
 
   // Режим "Акции" и "Крипто" — Black-Scholes-Merton
-  // Для крипто (Binance) безрисковая ставка = 0, для акций — ставка ФРС
-  const cryptoRiskFreeRate = mode === CALCULATOR_MODES.CRYPTO ? 0 : null;
+  // Для крипто ставка = настраиваемый форвардный базис (по умолчанию 0 — старое
+  // поведение, см. cryptoRateSettings.js), для акций — ставка ФРС
+  const cryptoRiskFreeRate = mode === CALCULATOR_MODES.CRYPTO ? getCryptoBasisRate() : null;
   return calculateStockOptionTheoreticalPrice(
     option,
     targetPrice,
@@ -132,9 +134,10 @@ export const calculateOptionPLValue = (
   }
 
   // Режим "Акции" и "Крипто" — Black-Scholes-Merton
-  // Для крипто используем множитель 1 и безрисковую ставку 0 (Binance)
+  // Для крипто используем множитель 1 и настраиваемый форвардный базис
+  // (по умолчанию 0 — старое поведение, см. cryptoRateSettings.js)
   const multiplier = mode === CALCULATOR_MODES.CRYPTO ? 1 : 100;
-  const cryptoRiskFreeRate = mode === CALCULATOR_MODES.CRYPTO ? 0 : null;
+  const cryptoRiskFreeRate = mode === CALCULATOR_MODES.CRYPTO ? getCryptoBasisRate() : null;
   return calculateStockOptionPLValue(
     option,
     targetPrice,

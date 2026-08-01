@@ -4,8 +4,10 @@ Options Calculations
 """
 
 from typing import List, Dict, Tuple, Optional
-from datetime import datetime, date
+from datetime import datetime
 import pandas as pd
+
+from app.utils.trading_date import get_trading_today
 
 
 def calculate_max_pain(options_data: List[Dict]) -> float:
@@ -308,7 +310,8 @@ def calculate_days_to_expiry(options_data: List[Dict]) -> int:
     
     # Найти ближайшую дату
     nearest_exp = min(exp_dates)
-    today = date.today()
+    # Торговая дата (America/New_York) — единая база с фронтом, а не date.today() сервера
+    today = get_trading_today()
     
     days_to_exp = (nearest_exp - today).days
     return max(0, days_to_exp)  # Не может быть отрицательным

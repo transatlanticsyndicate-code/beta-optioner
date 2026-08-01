@@ -28,6 +28,7 @@ import { getLegCost, validateFactPL, describeAnchorResidual } from '../../utils/
 import { applyFactPLAnchor } from '../../utils/factPLAnchor';
 import LockIcon from './LockIcon';
 import { isStockLikeMode } from '../../utils/calculatorModes';
+import { getCryptoBasisRate } from '../../utils/cryptoRateSettings';
 
 // Режимы калькулятора
 // ETF математически эквивалентен STOCKS — отличается только бейдж в UI.
@@ -221,7 +222,7 @@ function OptionsTableV3({
           bid: opt.isPremiumModified ? 0 : opt.bid
         };
 
-        const rfrSum = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
+        const rfrSum = calculatorMode === CALCULATOR_MODES.CRYPTO ? getCryptoBasisRate() : null;
         const optAssetPrice = opt.assetPriceAtEntry || currentPrice;
         let pl = calculatorMode === CALCULATOR_MODES.FUTURES
           ? calculateFuturesOptionPLValue(tempOpt, targetPrice || currentPrice, optDaysRemaining, contractMultiplier, optVolatility)
@@ -245,7 +246,7 @@ function OptionsTableV3({
           anchorPrice: opt.actualPLPrice || currentPrice,
           currentQuantity: opt.quantity,
           computeTheoreticalPL: (price, days, vol) => {
-            const rfrAnchor = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
+            const rfrAnchor = calculatorMode === CALCULATOR_MODES.CRYPTO ? getCryptoBasisRate() : null;
             let v = calculatorMode === CALCULATOR_MODES.FUTURES
               ? calculateFuturesOptionPLValue(tempOpt, price, days, contractMultiplier, vol)
               : calculateStockOptionPLValue(tempOpt, price, optAssetPrice, days, vol, dividendYield, contractMultiplier, rfrAnchor);
@@ -1455,7 +1456,7 @@ function OptionsTableV3({
                     // Выбираем модель расчёта в зависимости от режима калькулятора
                     // ЗАЧЕМ: Режим "Фьючерсы" использует Black-76, режимы "Акции" и "Крипто" — BSM
                     // Для крипто (Binance) безрисковая ставка = 0, для акций — из FRED (null)
-                    const rfrOpt = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
+                    const rfrOpt = calculatorMode === CALCULATOR_MODES.CRYPTO ? getCryptoBasisRate() : null;
                     // Цена актива на момент входа — для расчётов P&L
                     const optionAssetPrice = option.assetPriceAtEntry || currentPrice;
                     let pl = calculatorMode === CALCULATOR_MODES.FUTURES
@@ -1487,7 +1488,7 @@ function OptionsTableV3({
                         anchorPrice: option.actualPLPrice || currentPrice,
                         currentQuantity: option.quantity,
                         computeTheoreticalPL: (price, days, vol) => {
-                          const rfrAnchor = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
+                          const rfrAnchor = calculatorMode === CALCULATOR_MODES.CRYPTO ? getCryptoBasisRate() : null;
                           let v = calculatorMode === CALCULATOR_MODES.FUTURES
                             ? calculateFuturesOptionPLValue(tempOpt, price, days, contractMultiplier, vol)
                             : calculateStockOptionPLValue(tempOpt, price, optionAssetPrice, days, vol, dividendYield, contractMultiplier, rfrAnchor);
@@ -1735,7 +1736,7 @@ function OptionsTableV3({
                         optionVolatility
                       );
                     } else {
-                      const rfrOpt = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
+                      const rfrOpt = calculatorMode === CALCULATOR_MODES.CRYPTO ? getCryptoBasisRate() : null;
                       theoreticalPrice = calculateOptionTheoreticalPrice(
                         option,
                         targetPrice || currentPrice,
@@ -1747,7 +1748,7 @@ function OptionsTableV3({
                     }
 
                     // Расчёт raw P&L
-                    const rfrOpt = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
+                    const rfrOpt = calculatorMode === CALCULATOR_MODES.CRYPTO ? getCryptoBasisRate() : null;
                     const optionAssetPrice = option.assetPriceAtEntry || currentPrice;
                     let pl = calculatorMode === CALCULATOR_MODES.FUTURES
                       ? calculateFuturesOptionPLValue(tempOpt, targetPrice || currentPrice, optionDaysRemaining, contractMultiplier, optionVolatility)
@@ -1775,7 +1776,7 @@ function OptionsTableV3({
                         anchorPrice: option.actualPLPrice || currentPrice,
                         currentQuantity: option.quantity,
                         computeTheoreticalPL: (price, days, vol) => {
-                          const rfrAnchor = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
+                          const rfrAnchor = calculatorMode === CALCULATOR_MODES.CRYPTO ? getCryptoBasisRate() : null;
                           let v = calculatorMode === CALCULATOR_MODES.FUTURES
                             ? calculateFuturesOptionPLValue(tempOpt, price, days, contractMultiplier, vol)
                             : calculateStockOptionPLValue(tempOpt, price, optionAssetPrice, days, vol, dividendYield, contractMultiplier, rfrAnchor);

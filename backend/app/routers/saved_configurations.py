@@ -12,6 +12,7 @@ from datetime import datetime
 
 from app.database import get_db
 from app.models.saved_configuration import SavedConfiguration
+from app.utils.trading_date import get_trading_now
 
 router = APIRouter(prefix="/api/configurations", tags=["saved_configurations"])
 
@@ -313,14 +314,22 @@ async def update_configuration(
             # ЗАЧЕМ: Момент перевода в «Зафиксирована» = момент реального входа.
             # entry_date обновляется на сейчас, в state каждому опциону/позиции
             # проставляется isLockedPosition=true и пересчитывается initialDaysToExpiration.
-            now_dt = datetime.utcnow()
+            #
+            # ВАЖНО (единая торговая база, см. app/utils/trading_date.py): раньше здесь был
+            # datetime.utcnow() — «сегодня» по UTC могло разойтись на календарный день с
+            # «сегодня» на фронте (America/New_York), и initialDaysToExpiration, уходящий
+            # напрямую в ценообразование зафиксированных позиций (calculateDaysRemainingUTC/
+            # PreciseET на фронте), считался от неверной даты. Теперь берём торговую дату NY.
+            now_trading = get_trading_now()
             config.status = 'standard'
             config.is_locked = True
-            config.entry_date = now_dt
+            # Колонка entry_date — TIMESTAMP без часового пояса, храним как naive-значение
+            # (числа совпадают с NY wall-clock, как и остальные торговые даты в проекте).
+            config.entry_date = now_trading.replace(tzinfo=None)
 
             target_state = config.state or {}
-            today_utc_date = now_dt.date()
-            today_iso = today_utc_date.isoformat()
+            today_trading_date = now_trading.date()
+            today_iso = today_trading_date.isoformat()
 
             options = target_state.get('options') or []
             for opt in options:
@@ -334,7 +343,7 @@ async def update_configuration(
                     if exp_date_str:
                         exp_y, exp_m, exp_d = (int(p) for p in exp_date_str.split('-'))
                         exp_date = datetime(exp_y, exp_m, exp_d).date()
-                        days = (exp_date - today_utc_date).days
+                        days = (exp_date - today_trading_date).days
                         opt['initialDaysToExpiration'] = max(days, 0)
                 except Exception:
                     pass

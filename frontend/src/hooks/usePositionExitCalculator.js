@@ -19,6 +19,7 @@ import { assessLiquidity, LIQUIDITY_LEVELS } from '../utils/liquidityCheck';
 import { assessAllGreeks } from '../utils/greeksCheck';
 import { calculateDaysRemainingUTC, getOldestEntryDate, calculateDaysRemainingPreciseET, calculateDaysToExpirationFromTodayPreciseET } from '../utils/dateUtils';
 import { applyFactPLAnchor } from '../utils/factPLAnchor';
+import { getCryptoBasisRate } from '../utils/cryptoRateSettings';
 
 // Режимы калькулятора
 const CALCULATOR_MODES = {
@@ -480,8 +481,9 @@ const calculateCloseOptionsScenario = ({ options, positions, underlyingPrice, da
     const currentValue = calculatorMode === CALCULATOR_MODES.FUTURES
       ? calculateFuturesOptionTheoreticalPrice(tempOption, underlyingPrice, simulatedDaysToExpiration, optionVolatility)
       : calculateStockOptionTheoreticalPrice(tempOption, underlyingPrice, simulatedDaysToExpiration, optionVolatility, dividendYield);
-    // Для крипто (Binance) безрисковая ставка = 0, для акций — из FRED (null)
-    const rfrScenario2 = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
+    // Для крипто — настраиваемый форвардный базис (по умолчанию 0 — старое
+    // поведение, см. cryptoRateSettings.js), для акций — из FRED (null)
+    const rfrScenario2 = calculatorMode === CALCULATOR_MODES.CRYPTO ? getCryptoBasisRate() : null;
     let pl = calculatorMode === CALCULATOR_MODES.FUTURES
       ? calculateFuturesOptionPLValue(tempOption, underlyingPrice, simulatedDaysToExpiration, contractMultiplier, optionVolatility)
       : calculateStockOptionPLValue(tempOption, underlyingPrice, currentPrice, simulatedDaysToExpiration, optionVolatility, dividendYield, contractMultiplier, rfrScenario2);
@@ -680,8 +682,9 @@ const calculateCloseAllScenario = ({ options, positions, underlyingPrice, daysPa
     const currentValue = calculatorMode === CALCULATOR_MODES.FUTURES
       ? calculateFuturesOptionTheoreticalPrice(tempOption, underlyingPrice, simulatedDaysToExpiration, optionVolatility)
       : calculateStockOptionTheoreticalPrice(tempOption, underlyingPrice, simulatedDaysToExpiration, optionVolatility, dividendYield);
-    // Для крипто (Binance) безрисковая ставка = 0, для акций — из FRED (null)
-    const rfrScenario3 = calculatorMode === CALCULATOR_MODES.CRYPTO ? 0 : null;
+    // Для крипто — настраиваемый форвардный базис (по умолчанию 0 — старое
+    // поведение, см. cryptoRateSettings.js), для акций — из FRED (null)
+    const rfrScenario3 = calculatorMode === CALCULATOR_MODES.CRYPTO ? getCryptoBasisRate() : null;
     let pl = calculatorMode === CALCULATOR_MODES.FUTURES
       ? calculateFuturesOptionPLValue(tempOption, underlyingPrice, simulatedDaysToExpiration, contractMultiplier, optionVolatility)
       : calculateStockOptionPLValue(tempOption, underlyingPrice, currentPrice, simulatedDaysToExpiration, optionVolatility, dividendYield, contractMultiplier, rfrScenario3);
