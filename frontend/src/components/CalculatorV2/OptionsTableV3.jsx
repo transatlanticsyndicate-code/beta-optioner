@@ -24,7 +24,7 @@ import { normalizeMarketIv } from '../../utils/extensionRefreshPolicy';
 import { assessLiquidity, getLiquidityColor, formatLiquidityTooltip, LIQUIDITY_LEVELS } from '../../utils/liquidityCheck';
 import { calculateDaysRemainingUTC, getOldestEntryDate, isOptionActiveAtDay, isOptionExpiredAtDay, getTodayDateStringET, calculateDaysRemainingPreciseET, calculateDaysToExpirationFromTodayPreciseET } from '../../utils/dateUtils';
 import { computeStartPL } from '../../utils/startPLSnapshot';
-import { getLegCost, validateFactPL, describeAnchorResidual, describeAnchorCalibration } from '../../utils/factPLValidation';
+import { validateFactPL, describeAnchorCalibration } from '../../utils/factPLValidation';
 import { applyFactPLAnchor } from '../../utils/factPLAnchor';
 import LockIcon from './LockIcon';
 import { isStockLikeMode } from '../../utils/calculatorModes';
@@ -904,15 +904,12 @@ function OptionsTableV3({
             // ЗАЧЕМ: Скрытые или истёкшие опционы отображаются серым
             const isGrayedOut = !option.visible || isExpired;
 
-            // Теоретическая P&L на момент якоря Fact P&L (plAtAnchor) — считается
-            // внутри IIFE колонки «P&L» (см. ниже, якорный блок). Поднимаем сюда,
-            // в область видимости строки, чтобы подсказка у поля «Fact P&L» могла
-            // показать размер поправки через describeAnchorResidual, НЕ дублируя
-            // расчёт ценообразования (calculateFuturesOptionPLValue/calculateStockOptionPLValue).
-            let rowPlAtAnchor = null;
             // Результат калибровки волатильности (mode/calibratedVolatility/reason) —
-            // та же логика подъёма из якорного блока, для подсказки «волатильность
-            // подобрана под факт X% вместо введённых Y%» у поля «Fact P&L».
+            // считается внутри IIFE колонки «P&L» (см. ниже, якорный блок) и
+            // поднимается сюда, в область видимости строки, чтобы подсказка у поля
+            // «Fact P&L» могла показать «волатильность подобрана под факт X% вместо
+            // введённых Y%», НЕ дублируя расчёт ценообразования
+            // (calculateFuturesOptionPLValue/calculateStockOptionPLValue).
             let rowAnchorCalibration = null;
 
             return (
@@ -1521,12 +1518,11 @@ function OptionsTableV3({
                       });
                       pl = anchorResult.pl;
 
-                      // Поднимаем plAtAnchor и результат калибровки в область видимости строки
-                      // (см. объявление rowPlAtAnchor/rowAnchorCalibration выше) — подсказка у поля
-                      // «Fact P&L» использует их через describeAnchorResidual/describeAnchorCalibration
+                      // Поднимаем результат калибровки в область видимости строки
+                      // (см. объявление rowAnchorCalibration выше) — подсказка у поля
+                      // «Fact P&L» использует его через describeAnchorCalibration
                       // вместо повторного расчёта цены.
                       if (anchorResult.applied) {
-                        rowPlAtAnchor = anchorResult.plAtAnchor;
                         rowAnchorCalibration = {
                           mode: anchorResult.mode,
                           calibratedVolatility: anchorResult.calibratedVolatility,
@@ -1567,27 +1563,24 @@ function OptionsTableV3({
                     (type="number" в controlled-инпуте теряет промежуточный «-»). */}
                 {(() => {
                   // 1B-2: валидация ТЕКУЩЕГО сохранённого значения (для оранжевого warn-бейджа)
-                  // и подсказка с размером поправки якоря (describeAnchorResidual использует
-                  // rowPlAtAnchor, поднятый из якорного блока колонки «P&L» выше по строке —
-                  // без повторного вызова моделей ценообразования).
-                  const factPLLegCost = getLegCost(option, contractMultiplier);
+                  // и подсказка про калибровку якоря (describeAnchorCalibration использует
+                  // rowAnchorCalibration, поднятый из якорного блока колонки «P&L» выше по
+                  // строке — без повторного вызова моделей ценообразования).
                   const hasActualPL = option.actualPL !== null && option.actualPL !== undefined;
                   const currentValidation = hasActualPL
                     ? validateFactPL({ value: option.actualPL, option, contractMultiplier })
                     : { level: 'ok', message: '' };
-                  const anchorResidualText = hasActualPL && rowPlAtAnchor !== null
-                    ? describeAnchorResidual({ actualPL: option.actualPL, plAtAnchor: rowPlAtAnchor, legCost: factPLLegCost })
-                    : '';
                   // Текст про калиброванную волатильность (режим 'calibrated') или про
-                  // недостижимость факта (режим 'fallback') — рядом с текстом про поправку.
-                  const anchorCalibrationText = hasActualPL && rowAnchorCalibration
+                  // недостижимость факта (режим 'fallback'); в режиме 'none' (якорь не
+                  // применён, например на дату экспирации) и при почти точном совпадении
+                  // калиброванной и введённой волатильности функция возвращает ''.
+                  const anchorText = hasActualPL && rowAnchorCalibration
                     ? describeAnchorCalibration(rowAnchorCalibration)
                     : '';
                   const blockMessage = factPLBlockMessage[option.id];
 
                   // Приоритет подсказки: активная блокировка (только что введено
-                  // недопустимое значение) > warn > поправка якоря + калибровка волатильности.
-                  const anchorText = [anchorResidualText, anchorCalibrationText].filter(Boolean).join('. ');
+                  // недопустимое значение) > warn валидации > информация о калибровке якоря.
                   let fieldTitle = '';
                   if (blockMessage) {
                     fieldTitle = `Заблокировано: ${blockMessage}`;

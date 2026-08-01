@@ -111,47 +111,20 @@ export function validateFactPL({ value, option, contractMultiplier }) {
 }
 
 /**
- * Человекочитаемое описание размера поправки, которую якорь Fact P&L вносит
- * поверх теоретической модели — для подсказки у жёлтого поля Fact P&L.
- *
- * @param {object} params
- * @param {number} params.actualPL — введённый пользователем Fact P&L
- * @param {number} params.plAtAnchor — теоретическая P&L на момент ввода якоря (уже посчитана в рендере строки)
- * @param {number|null} params.legCost — стоимость ноги (для кратности), может быть null
- * @returns {string} — например «поправка к модели +$587 = 13× стоимости ноги», либо '' если посчитать нечего
- */
-export function describeAnchorResidual({ actualPL, plAtAnchor, legCost }) {
-  if (actualPL === null || actualPL === undefined || plAtAnchor === null || plAtAnchor === undefined) {
-    return '';
-  }
-  const numActual = Number(actualPL);
-  const numAnchor = Number(plAtAnchor);
-  if (!Number.isFinite(numActual) || !Number.isFinite(numAnchor)) return '';
-
-  const residual = Math.round(numActual - numAnchor);
-  const sign = residual > 0 ? '+' : (residual < 0 ? '−' : '');
-  const abs = Math.abs(residual);
-
-  let text = `поправка к модели ${sign}$${abs}`;
-  if (legCost !== null && legCost !== undefined && legCost > 0 && abs > 0) {
-    const multiple = Math.round(abs / legCost);
-    if (multiple >= 1) {
-      text += ` = ${multiple}× стоимости ноги`;
-    }
-  }
-  return text;
-}
-
-/**
  * Человекочитаемое описание результата КАЛИБРОВКИ волатильности якоря Fact P&L —
- * для той же подсказки у поля «Fact P&L», рядом с describeAnchorResidual выше.
+ * для подсказки у жёлтого поля «Fact P&L».
  *
  * ЗАЧЕМ: с перехода на калибровку (frontend/src/utils/factPLAnchor.js, applyFactPLAnchor)
- * поправка больше не «постоянная добавка», а подобранная волатильность — пользователю
- * (не программисту) полезно видеть, на что модель подстроилась, а не только сумму
- * расхождения. Для 2 ног из 132 в аудите заказчика (scratchpad/anchor_decay/README.md,
- * §5) введённый факт физически недостижим (подразумеваемая цена опциона отрицательна) —
- * для них вместо волатильности показываем понятное объяснение фолбэка.
+ * факт больше не «постоянная добавка» поверх модели — он встроен внутрь модели через
+ * подобранную волатильность, поэтому отдельной «поправки» в старом смысле не существует.
+ * Пользователю (не программисту) полезно видеть, на что модель подстроилась. Для 2 ног
+ * из 132 в аудите заказчика (scratchpad/anchor_decay/README.md, §5) введённый факт
+ * физически недостижим (подразумеваемая цена опциона отрицательна) — для них вместо
+ * волатильности показываем понятное объяснение фолбэка.
+ *
+ * Если откалиброванная волатильность практически совпадает с введённой (разница
+ * меньше 0.05 процентного пункта) — модель ничего не подстраивала, показывать нечего,
+ * возвращается ''.
  *
  * @param {object} params
  * @param {'calibrated'|'fallback'|'none'} params.mode — результат applyFactPLAnchor.mode.
@@ -166,12 +139,15 @@ export function describeAnchorResidual({ actualPL, plAtAnchor, legCost }) {
  */
 export function describeAnchorCalibration({ mode, calibratedVolatility, anchorVolatility, reason } = {}) {
   if (mode === 'calibrated' && calibratedVolatility !== null && calibratedVolatility !== undefined) {
-    const calibratedStr = calibratedVolatility.toFixed(1);
     const anchorStr = Number.isFinite(anchorVolatility) ? anchorVolatility.toFixed(1) : null;
-    if (anchorStr !== null && Math.abs(calibratedVolatility - anchorVolatility) >= 0.05) {
-      return `Модель подобрана под ваш факт: волатильность ${calibratedStr}% вместо введённой ${anchorStr}%`;
+    if (anchorStr !== null && Math.abs(calibratedVolatility - anchorVolatility) < 0.05) {
+      // Калибровка практически не сдвинула волатильность — сообщать пользователю нечего.
+      return '';
     }
-    return `Модель подобрана под ваш факт: волатильность ${calibratedStr}%`;
+    const calibratedStr = calibratedVolatility.toFixed(1);
+    return anchorStr !== null
+      ? `Модель подобрана под ваш факт: волатильность ${calibratedStr}% вместо введённой ${anchorStr}%`
+      : `Модель подобрана под ваш факт: волатильность ${calibratedStr}%`;
   }
 
   if (mode === 'fallback') {

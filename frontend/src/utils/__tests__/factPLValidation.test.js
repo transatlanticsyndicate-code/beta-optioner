@@ -7,7 +7,7 @@
  *    на которую был записан ошибочный якорь +$587 (в ~13 раз больше стоимости ноги).
  */
 
-import { getLegCost, validateFactPL, describeAnchorResidual } from '../factPLValidation';
+import { getLegCost, validateFactPL, describeAnchorCalibration } from '../factPLValidation';
 
 // Нога MKTX: 4× CALL 130, цена входа (ask) 3.97, множитель 100 → стоимость $1588.
 const MKTX_CALL_LEG = {
@@ -126,19 +126,32 @@ describe('validateFactPL — предупреждения (warn)', () => {
   });
 });
 
-describe('describeAnchorResidual', () => {
-  test('форматирует кратность поправки к стоимости ноги (кейс ZC, ~13×)', () => {
-    const text = describeAnchorResidual({ actualPL: 587, plAtAnchor: 0, legCost: 43.75 });
-    expect(text).toContain('+$587');
-    expect(text).toContain('13×');
+describe('describeAnchorCalibration', () => {
+  test('режим calibrated, волатильность подобрана заметно иначе введённой → текст с "вместо"', () => {
+    const text = describeAnchorCalibration({ mode: 'calibrated', calibratedVolatility: 54.8, anchorVolatility: 54.2 });
+    expect(text).toBe('Модель подобрана под ваш факт: волатильность 54.8% вместо введённой 54.2%');
   });
 
-  test('без legCost выводит только сумму поправки, без кратности', () => {
-    const text = describeAnchorResidual({ actualPL: 587, plAtAnchor: 0, legCost: null });
-    expect(text).toBe('поправка к модели +$587');
+  test('режим calibrated, разница меньше 0.05 п.п. → пустая строка (нечего показывать)', () => {
+    const text = describeAnchorCalibration({ mode: 'calibrated', calibratedVolatility: 54.82, anchorVolatility: 54.80 });
+    expect(text).toBe('');
   });
 
-  test('возвращает пустую строку, если plAtAnchor не посчитан', () => {
-    expect(describeAnchorResidual({ actualPL: 587, plAtAnchor: null, legCost: 43.75 })).toBe('');
+  test('режим calibrated без anchorVolatility → короткий текст без "вместо"', () => {
+    const text = describeAnchorCalibration({ mode: 'calibrated', calibratedVolatility: 54.8, anchorVolatility: null });
+    expect(text).toBe('Модель подобрана под ваш факт: волатильность 54.8%');
+  });
+
+  test('режим fallback → предупреждение о недостижимости факта', () => {
+    const text = describeAnchorCalibration({ mode: 'fallback', reason: 'below-intrinsic' });
+    expect(text).toContain('недостижим');
+  });
+
+  test('режим none (якорь не применён) → пустая строка', () => {
+    expect(describeAnchorCalibration({ mode: 'none' })).toBe('');
+  });
+
+  test('без аргументов → пустая строка', () => {
+    expect(describeAnchorCalibration()).toBe('');
   });
 });
