@@ -20,7 +20,7 @@
 
 import { applyFactPLAnchor } from '../factPLAnchor';
 import { calculateOptionPLValue, calculateOptionTheoreticalPrice } from '../optionPricing';
-import { calculateDaysRemainingUTC } from '../dateUtils';
+import { calculateDaysRemainingUTC, calculateDaysRemainingPreciseET } from '../dateUtils';
 
 // --- Данные MKTX-репро (см. также expiryAnchorInvariant.test.js, exitPlanExpiryGuard.test.js) ---
 // entryDate = дата OLDEST_ENTRY ниже — чтобы calculateDaysRemainingUTC (используется
@@ -140,10 +140,17 @@ describe('applyFactPLAnchor — инварианты', () => {
       .slice(0, 10);
 
     // «Дни до экспирации» на дату якоря — та же утилита, что использует сама
-    // applyFactPLAnchor внутри. Раз целевая точка совпадает с точкой якоря
+    // applyFactPLAnchor внутри для ГАРДОВ. Раз целевая точка совпадает с точкой якоря
     // (targetDaysPassed === anchorDaysPassed), targetDaysRemaining ДОЛЖЕН равняться
     // этому же значению, иначе точки физически не совпадают.
     const targetDaysRemaining = calculateDaysRemainingUTC(PUT_LEG, anchorDaysPassed, 30, OLDEST_ENTRY);
+    // Точная (ET) шкала — так реально вызывают applyFactPLAnchor OptionsTableV3.jsx/
+    // ExitPlanTable.jsx/startPLSnapshot.js: ОТДЕЛЬНЫЙ вызов calculateDaysRemainingPreciseET
+    // с тем же daysPassed, а не переиспользование targetDaysRemaining. Раньше тест
+    // передавал одно и то же целое число в оба параметра (де-факто не передавал
+    // targetDaysRemainingPrecise вообще) — из-за чего расхождение шкалы якоря/цели
+    // не ловилось этим тестом (см. регрессию 2026-08 в JSDoc applyFactPLAnchor).
+    const targetDaysRemainingPrecise = calculateDaysRemainingPreciseET(PUT_LEG, anchorDaysPassed, 30, OLDEST_ENTRY);
     const anchorPrice = 118;
     const anchorVolatility = 47.84; // Fact IV — используется как база для plAtAnchor/фолбэка, не как результат
 
@@ -155,6 +162,7 @@ describe('applyFactPLAnchor — инварианты', () => {
       option: { ...PUT_LEG, actualPL, actualPLDate: anchorDateStr, actualPLQuantity, quantity: currentQuantity },
       theoreticalPL: 0, // не используется в калиброванном режиме
       targetDaysRemaining,
+      targetDaysRemainingPrecise,
       targetDaysPassed: anchorDaysPassed, // === anchorDaysPassed → «точка якоря»
       oldestEntry: OLDEST_ENTRY,
       computeTheoreticalPrice: makeComputeTheoreticalPrice(PUT_LEG),

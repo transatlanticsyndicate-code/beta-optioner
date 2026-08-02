@@ -43,7 +43,7 @@
 // корректировка не применяется — калиброванная волатильность уже точнее задаёт
 // P&L именно этой ноги, чем общий групповой коэффициент.
 
-import { calculateDaysRemainingUTC } from './dateUtils';
+import { calculateDaysRemainingUTC, calculateDaysRemainingPreciseET } from './dateUtils';
 import { bisectImpliedVolatility } from './impliedVolatilitySolver';
 
 // --- Кэш калибровки волатильности ---
@@ -79,8 +79,16 @@ function round(value, digits = 6) {
  * количество») дополнено ценой входа/множителем/Fact IV: любое из них меняет
  * результат подбора, а без них правка Fact IV или ask задним числом молча вернула
  * бы старую (неверную) калиброванную волатильность из кэша.
+ *
+ * @param {number} anchorDaysToExpForPricing — ТОЧНАЯ (дробная) шкала дней якоря, та же,
+ *   что реально идёт в computeTheoreticalPrice при подборе σ* (см. вызов ниже). Округляем
+ *   до 6 знаков (как остальные числовые поля ключа) — округление нужно не потому, что
+ *   значение «дрожит» от текущего времени (оно считается от anchorDaysPassed, целого и
+ *   зафиксированного на момент ввода факта, а не от `new Date()` на каждый рендер), а
+ *   для устойчивости ключа к плавающей арифметике при повторных вызовах с одними и теми
+ *   же логическими параметрами.
  */
-function buildCalibrationKey(option, anchorDaysToExp, anchorPrice, entryPrice, contractMultiplier, anchorVolatility, anchorQty) {
+function buildCalibrationKey(option, anchorDaysToExpForPricing, anchorPrice, entryPrice, contractMultiplier, anchorVolatility, anchorQty) {
   const legId = option?.id ?? `${option?.type}|${option?.strike}|${option?.date}|${option?.entryDate}`;
   return [
     legId,
@@ -88,7 +96,7 @@ function buildCalibrationKey(option, anchorDaysToExp, anchorPrice, entryPrice, c
     round(anchorPrice),
     round(option.actualPL),
     round(anchorQty),
-    anchorDaysToExp,
+    round(anchorDaysToExpForPricing),
     round(entryPrice),
     round(contractMultiplier),
     round(anchorVolatility),
@@ -137,8 +145,23 @@ function priceToPL(price, entryPrice, sign, qty, mult) {
  *   целевой точки в режимах 'calibrated'/'fallback' — если не передан, используется
  *   targetDaysRemaining (целое), что вносит систематическое расхождение в доли дня
  *   (при большом портфеле суммируется в заметную величину, см. scratchpad/anchor_decay/
- *   verify_implementation.md). Дата самого ЯКОРЯ (anchorDaysToExp) остаётся целочисленной
- *   намеренно — она определяется календарной датой ввода Fact P&L, не долями дня.
+ *   verify_implementation.md).
+ *
+ *   ВАЖНО (фикс регрессии 2026-08): точка ЯКОРЯ для ценообразования (подбор σ* и цена
+ *   на якоре) считается ТОЙ ЖЕ точной ET-шкалой — calculateDaysRemainingPreciseET, а не
+ *   calculateDaysRemainingUTC. Раньше якорь намеренно оставляли целочисленным («дата
+ *   ввода факта — календарная, не доли дня»), но это было ошибкой: калибровка подбирает
+ *   волатильность так, чтобы модель воспроизвела факт РОВНО в точке якоря, и дальше
+ *   прогноз считается по этой же волатильности в целевой точке. Если точка якоря и
+ *   целевая точка выражены в разных шкалах времени (целые дни до полуночи UTC vs дробные
+ *   до 16:00 ET — разница ~0.83 дня для дат экспирации США), то даже когда пользователь
+ *   смотрит «сегодня» сразу после ввода факта (targetDaysPassed === anchorDaysPassed),
+ *   цена опциона в целевой точке считается по ДРУГОЙ шкале, чем та, на которой калибровалась
+ *   волатильность — результат систематически отличается от введённого факта на величину
+ *   порядка дневной теты. Инвариант «в точке якоря результат == введённый факт» держится
+ *   только тогда, когда обе точки — якорная и целевая — в ОДНОЙ системе координат.
+ *   См. anchorDaysToExpForPricing внутри функции и frontend/src/utils/__tests__/
+ *   factPLAnchorCalibration.test.js, тест «воспроизведение факта».
  * @param {number} params.targetDaysPassed — «дни от oldestEntry» целевой точки.
  * @param {Date|null} params.oldestEntry — самая ранняя дата входа среди опционов позиции.
  * @param {(price: number, days: number, vol: number) => number} [params.computeTheoreticalPrice] —
@@ -219,7 +242,19 @@ export function applyFactPLAnchor({
     return { pl: theoreticalPL, residual: null, applied: false, reason: 'before-anchor', anchorDaysPassed, plAtAnchor: null, calibratedVolatility: null, mode: 'none' };
   }
 
+  // ЦЕЛАЯ шкала — ТОЛЬКО для гардов ниже (anchorDaysToExp > 0 как условие «входные данные
+  // валидны», семантика «день или не день»). НЕ идёт в ценообразование — см. пояснение
+  // в JSDoc про targetDaysRemainingPrecise и anchorDaysToExpForPricing ниже.
   const anchorDaysToExp = calculateDaysRemainingUTC(option, anchorDaysPassed, 30, oldestEntry);
+  // ТОЧНАЯ (дробная, до 16:00 ET) шкала — идёт в ценообразование на точке якоря (подбор
+  // σ*, теоретическая цена на якоре). Обязана быть в ТОЙ ЖЕ системе координат, что и
+  // targetDaysForPricing целевой точки (тоже calculateDaysRemainingPreciseET, см. вызовы
+  // в OptionsTableV3.jsx/ExitPlanTable.jsx/startPLSnapshot.js) — иначе калибровка,
+  // подобранная под одну шкалу времени, применяется к цене, посчитанной в другой, и
+  // даже при targetDaysPassed === anchorDaysPassed (пользователь смотрит «сегодня» сразу
+  // после ввода факта) результат не воспроизводит введённый factPL. Это и была регрессия
+  // 2026-08 (анкор по calculateDaysRemainingUTC при цели по calculateDaysRemainingPreciseET).
+  const anchorDaysToExpForPricing = calculateDaysRemainingPreciseET(option, anchorDaysPassed, 30, oldestEntry);
 
   // Масштабирование по количеству: коэффициент = текущее кол-во / кол-во на якоре.
   const anchorQty = Number(option.actualPLQuantity) > 0
@@ -245,21 +280,30 @@ export function applyFactPLAnchor({
   const mult = Number(contractMultiplier);
   const ep = Number(entryPrice);
 
-  const calibrationKey = buildCalibrationKey(option, anchorDaysToExp, anchorPrice, ep, mult, anchorVolatility, anchorQty);
+  const calibrationKey = buildCalibrationKey(option, anchorDaysToExpForPricing, anchorPrice, ep, mult, anchorVolatility, anchorQty);
 
   const anchor = memoizeCalibration(calibrationKey, () => {
     // Теоретическая цена/P&L на якоре ПО ИСХОДНОЙ (не калиброванной) волатильности —
     // база для «поправки к модели» (residual) в подсказке UI, и опорная точка для
-    // фолбэка (B2), если корня для калибровки не найдётся.
-    const theoAnchorPriceOriginal = computeTheoreticalPrice(anchorPrice, anchorDaysToExp, anchorVolatility);
+    // фолбэка (B2), если корня для калибровки не найдётся. Точная шкала — см. комментарий
+    // у anchorDaysToExpForPricing выше.
+    const theoAnchorPriceOriginal = computeTheoreticalPrice(anchorPrice, anchorDaysToExpForPricing, anchorVolatility);
 
     // Факт-цена опциона на дату якоря — обратный расчёт из брокерского P&L:
     // цена = цена входа + знак×факт / (кол-во на якоре × множитель).
     const factAnchorPrice = ep + sign * option.actualPL / (anchorQty * mult);
 
     const solverResult = bisectImpliedVolatility({
-      priceFn: (vol) => computeTheoreticalPrice(anchorPrice, anchorDaysToExp, vol),
+      priceFn: (vol) => computeTheoreticalPrice(anchorPrice, anchorDaysToExpForPricing, vol),
       targetPrice: factAnchorPrice,
+      // Точность подбора σ* по умолчанию (1e-4 $ за контракт) при переводе в P&L позиции
+      // умножается на qty×mult — для ног с десятками контрактов это уже заметные центы
+      // (репро при фиксе регрессии шкалы дней: qty×mult=6000 → ошибка ~1 цент,
+      // qty×mult=500 → ~5 центов), а инвариант «в точке якоря результат == введённый
+      // factPL» требует точности до цента независимо от размера позиции. 1e-6 $ по цене
+      // контракта сходится за ~29 итераций бисекции (запас — maxIterations=60 по
+      // умолчанию), поэтому ужесточение безопасно по производительности.
+      tolerance: 1e-6,
     });
 
     let k2 = null;
