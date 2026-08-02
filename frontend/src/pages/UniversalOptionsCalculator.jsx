@@ -96,7 +96,7 @@ import { loadFuturesSettings, getPointValue, getMarginPerContract, getFutureByTi
 
 // Импорт хука для работы с данными от Chrome Extension TradingView Parser
 // ЗАЧЕМ: Получение опционов, тикера и цены из localStorage и URL параметров
-import { useExtensionData, useExtensionRefreshCommand, writeRefreshResult } from '../hooks/useExtensionData';
+import { useExtensionData, useExtensionRefreshCommand, writeRefreshResult, useExtensionRefreshNotice } from '../hooks/useExtensionData';
 
 // Импорт политики применения обновлений от расширения к рыночной IV
 // ЗАЧЕМ: Изолирует правило «рыночная IV → только impliedVolatility, Fact IV не трогаем»
@@ -1024,6 +1024,11 @@ function UniversalOptionsCalculator() {
   //              bid / ask / volume / assetPriceAtEntry опционов НЕ трогаем (это снимок входа в сделку).
   // Греки delta/gamma/theta/vega из команды игнорируются — калькулятор пересчитывает их сам из IV.
   const { pendingRefresh, markProcessed } = useExtensionRefreshCommand();
+  // ЗАЧЕМ: раньше итог обновления (успех/ошибка) писался в tvc_refresh_result,
+  // но в живом UI его никто не читал — при сбое (например TradingView открыл не
+  // тот листинг и не отдал таблицу) пользователь видел «ничего не произошло».
+  // Показываем краткую плашку в шапке, сама исчезает через несколько секунд.
+  const { notice: extRefreshNotice, dismiss: dismissExtRefreshNotice } = useExtensionRefreshNotice();
 
   useEffect(() => {
     if (!pendingRefresh) return;
@@ -4526,6 +4531,31 @@ function UniversalOptionsCalculator() {
   return (
     <div className="min-h-screen bg-background text-foreground" style={{ minWidth: '1570px' }}>
       <div className="p-6">
+        {/* === ИТОГ ОБНОВЛЕНИЯ ОТ РАСШИРЕНИЯ (tvc_refresh_result) === */}
+        {/* ЗАЧЕМ: см. useExtensionRefreshNotice — раньше сбой обновления с TradingView
+            был не виден пользователю вообще. Плашка сама скрывается через несколько секунд. */}
+        {extRefreshNotice && (
+          <div className={`mb-4 border-2 rounded-lg p-3 text-sm flex items-center justify-between gap-3 ${
+            extRefreshNotice.type === 'error'
+              ? 'border-red-400 bg-red-50 dark:bg-red-950/30 text-red-800 dark:text-red-200'
+              : 'border-green-400 bg-green-50 dark:bg-green-950/30 text-green-800 dark:text-green-200'
+          }`}>
+            <span>
+              {extRefreshNotice.type === 'error'
+                ? `TradingView не отдал данные — попробуйте ещё раз (${extRefreshNotice.message})`
+                : `Обновлено: ${extRefreshNotice.message}`}
+            </span>
+            <button
+              type="button"
+              onClick={dismissExtRefreshNotice}
+              className="opacity-60 hover:opacity-100 leading-none text-lg"
+              aria-label="Скрыть уведомление"
+            >
+              ×
+            </button>
+          </div>
+        )}
+
         {/* === ПРЕДУПРЕЖДЕНИЕ О НЕДОСТОВЕРНОЙ ЦЕНЕ БАЗОВОГО АКТИВА === */}
         {/* ЗАЧЕМ: Если расширение не смогло однозначно привязать цену к текущему тикеру
             (TradingView изменил вёрстку или в DOM присутствуют элементы других тикеров) —
