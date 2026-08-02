@@ -133,7 +133,16 @@ export function pickPersistablePatch({ mode, currentPrice, options }) {
     options: safeOptions.map((opt) => {
       const legPatch = { id: opt.id };
       for (const field of MARKET_ONLY_LEG_FIELDS) {
-        legPatch[field] = opt[field];
+        // ЗАЧЕМ: если поле в текущем состоянии формы undefined (расширение эту
+        // ногу не обновляло), ключ в патч не кладём вообще. applyPersistablePatch
+        // сливает патч через object spread ({...baseOpt, ...legPatch}) — а спред
+        // ключа с явным undefined ПЕРЕЗАПИСЫВАЕТ существующее значение в
+        // baseState на undefined, стирая ранее сохранённые impliedVolatility/
+        // ivUpdatedAt. Пропуская undefined-поля, оставляем в baseState то, что
+        // там уже лежало.
+        if (opt[field] !== undefined) {
+          legPatch[field] = opt[field];
+        }
       }
       return legPatch;
     }),

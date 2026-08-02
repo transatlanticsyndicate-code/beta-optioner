@@ -49,13 +49,14 @@ function clearDbConfigOverlayDedupe(calcTabId) {
 const DB_TICKER_EXCHANGE_MAP = {
   // NASDAQ
   'AAPL': 'NASDAQ', 'ADBE': 'NASDAQ', 'ADSK': 'NASDAQ', 'AMD': 'NASDAQ',
-  'AMSC': 'NASDAQ', 'AMZN': 'NASDAQ', 'CG': 'NASDAQ', 'CMCSA': 'NASDAQ',
-  'CPRT': 'NASDAQ', 'CRNX': 'NASDAQ', 'GOOGL': 'NASDAQ', 'INTC': 'NASDAQ',
-  'ISRG': 'NASDAQ', 'JKHY': 'NASDAQ', 'META': 'NASDAQ', 'MKTX': 'NASDAQ',
-  'MSFT': 'NASDAQ', 'MSTR': 'NASDAQ', 'NFLX': 'NASDAQ', 'NVDA': 'NASDAQ',
-  'PDD': 'NASDAQ', 'PLTR': 'NASDAQ', 'PYPL': 'NASDAQ', 'QQQ': 'NASDAQ',
-  'TCOM': 'NASDAQ', 'TSCO': 'NASDAQ', 'TSLA': 'NASDAQ', 'TTD': 'NASDAQ',
-  'TW': 'NASDAQ', 'WYNN': 'NASDAQ', 'XP': 'NASDAQ', 'ZG': 'NASDAQ',
+  'AMSC': 'NASDAQ', 'AMZN': 'NASDAQ', 'BAND': 'NASDAQ', 'CG': 'NASDAQ',
+  'CMCSA': 'NASDAQ', 'CPRT': 'NASDAQ', 'CRNX': 'NASDAQ', 'GOOGL': 'NASDAQ',
+  'INTC': 'NASDAQ', 'ISRG': 'NASDAQ', 'JKHY': 'NASDAQ', 'META': 'NASDAQ',
+  'MKTX': 'NASDAQ', 'MSFT': 'NASDAQ', 'MSTR': 'NASDAQ', 'NFLX': 'NASDAQ',
+  'NVDA': 'NASDAQ', 'PDD': 'NASDAQ', 'PLTR': 'NASDAQ', 'PYPL': 'NASDAQ',
+  'QCOM': 'NASDAQ', 'QQQ': 'NASDAQ', 'TCOM': 'NASDAQ', 'TSCO': 'NASDAQ',
+  'TSLA': 'NASDAQ', 'TTD': 'NASDAQ', 'TW': 'NASDAQ', 'WYNN': 'NASDAQ',
+  'XP': 'NASDAQ', 'ZG': 'NASDAQ',
 
   // NYSE
   'AA': 'NYSE', 'ACN': 'NYSE', 'AEM': 'NYSE', 'B': 'NYSE', 'BJ': 'NYSE',
@@ -881,7 +882,9 @@ async function executeDbConfigRefresh(calcTabId, configData) {
 
     // ЗАЧЕМ: Передаём полный массив опционов, чтобы вычислить точные экспирации
     // и диапазон страйков — TradingView виртуализирует таблицу, нужны точные параметры.
-    const tvUrl = await buildTvOptionsUrl(configData.ticker, configData.options);
+    // let (не const): адрес может быть пересчитан ниже до-резолвом биржи после
+    // открытия вкладки TradingView.
+    let tvUrl = await buildTvOptionsUrl(configData.ticker, configData.options);
     if (!tvUrl) {
       await writeStatusToCalculator(calcTabId, 'error', 0, 'Не удалось определить URL TradingView');
       return;
@@ -904,6 +907,28 @@ async function executeDbConfigRefresh(calcTabId, configData) {
         await waitForPageLoad(tvTabs[0].id, 30000);
       } else {
         console.log('[TVC DbConfig] TV вкладка уже на правильном URL');
+      }
+    }
+
+    // ЗАЧЕМ («первый клик»): resolveTickerExchange() выше (в buildTvOptionsUrl) для
+    // тикера вне DB_TICKER_EXCHANGE_MAP требует УЖЕ открытую вкладку TradingView —
+    // без неё биржа не резолвится и в tvUrl ушёл голый символ (?symbol=TICKER без
+    // EXCHANGE:), из-за чего TV мог открыть неамериканский листинг без опционов.
+    // Вкладка теперь точно есть (создана/найдена выше) — пробуем резолв ещё раз
+    // и, если биржа определилась и адрес изменился, перенавигируем один раз ДО
+    // входа в цикл сбора данных. Это ровно то, что раньше делал второй клик пользователя.
+    const symbolParamMatch = tvUrl.match(/[?&]symbol=([^&]+)/);
+    const symbolWasBare = symbolParamMatch ? !symbolParamMatch[1].includes('%3A') : false;
+    if (symbolWasBare) {
+      const resolvedTvUrl = await buildTvOptionsUrl(configData.ticker, configData.options);
+      const tabAfterOpen = (await chrome.tabs.query({ url: '*://*.tradingview.com/options/*' }))[0];
+      if (resolvedTvUrl && tabAfterOpen && resolvedTvUrl !== tabAfterOpen.url) {
+        console.log('[TVC DbConfig] До-резолв биржи после открытия вкладки — перенавигация на', resolvedTvUrl);
+        await chrome.tabs.update(tabAfterOpen.id, { url: resolvedTvUrl, active: true });
+        await waitForPageLoad(tabAfterOpen.id, 30000);
+        tvUrl = resolvedTvUrl;
+      } else {
+        console.log('[TVC DbConfig] До-резолв биржи не изменил URL — перенавигация не требуется');
       }
     }
 
@@ -1523,7 +1548,10 @@ async function sendPrIVToCalc(calcTabId, { ticker, boardUrl, currentPrice, optio
     dbConfigId: dbConfigId || null,
     options: validOptions,
     timestamp: Date.now(),
-    processed: false
+    processed: false,
+    // ЗАЧЕМ: версия расширения в самой команде — по консоли калькулятора видно,
+    // какая версия реально стоит у пользователя, без похода в chrome://extensions.
+    extVersion: chrome.runtime.getManifest().version
   };
 
   try {

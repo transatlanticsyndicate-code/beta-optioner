@@ -360,7 +360,10 @@ export function useExtensionRefreshCommand(pollInterval = 1500) {
         console.log('📥 [ExtRefresh] Обнаружена команда sendPrIV_tocallc:', {
           ticker: command.ticker,
           currentPrice: command.currentPrice,
-          optionsCount: command.options?.length || 0
+          optionsCount: command.options?.length || 0,
+          // ЗАЧЕМ: версия расширения в консоли — видно, какая версия реально
+          // стоит у пользователя, без похода в chrome://extensions
+          extVersion: command.extVersion || 'неизвестна'
         });
 
         const toNumOrNull = (v) =>
@@ -670,8 +673,68 @@ export function writeRefreshResult({ status, progress, message }) {
       message: message || '',
       timestamp: Date.now()
     };
-    localStorage.setItem(RESULT_KEY, JSON.stringify(data));
+    const raw = JSON.stringify(data);
+    localStorage.setItem(RESULT_KEY, raw);
+    // ЗАЧЕМ: нативное 'storage'-событие НЕ срабатывает в той же вкладке, где
+    // произошла запись, а именно здесь калькулятор пишет о своём собственном
+    // результате. Диспатчим вручную (тот же приём использует background-скрипт
+    // расширения в writeStatusToCalculator), чтобы useExtensionRefreshNotice()
+    // увидел результат сразу, без отдельного polling.
+    window.dispatchEvent(new StorageEvent('storage', { key: RESULT_KEY, newValue: raw }));
   } catch (e) {
     console.error('❌ [writeRefreshResult] Ошибка записи:', e);
   }
+}
+
+/**
+ * Хук — уведомление пользователя об итоге обновления от расширения (tvc_refresh_result).
+ * ЗАЧЕМ: и background-скрипт расширения (dbConfigRefresh.js), и сам калькулятор
+ * (writeRefreshResult выше) пишут статус в tvc_refresh_result, но раньше в живом
+ * UI это никто не читал (единственный читатель — readExtensionResult() — используется
+ * только в мёртвом SuperSelectionModal). Из-за этого сбой (например TradingView
+ * открыл не тот листинг и не отдал таблицу) выглядел как «ничего не произошло».
+ * Слушаем 'storage': и background, и writeRefreshResult() дispatch-ят его вручную
+ * даже для той же вкладки. Показываем только терминальные статусы — 'collecting'
+ * пропускаем, чтобы не мигать плашкой на каждый промежуточный тик.
+ *
+ * @param {number} autoHideMs - через сколько мс уведомление скрывается само
+ * @returns {{ notice: {type:'success'|'error', message:string, id:number}|null, dismiss: Function }}
+ */
+export function useExtensionRefreshNotice(autoHideMs = 6000) {
+  const [notice, setNotice] = useState(null);
+  const lastTimestampRef = useRef(0);
+
+  useEffect(() => {
+    const handleStorage = (e) => {
+      if (e.key !== RESULT_KEY || !e.newValue) return;
+      try {
+        const result = JSON.parse(e.newValue);
+        if (result.status !== 'complete' && result.status !== 'error') return;
+        if (result.timestamp && result.timestamp <= lastTimestampRef.current) return;
+        lastTimestampRef.current = result.timestamp || Date.now();
+        setNotice({
+          type: result.status === 'error' ? 'error' : 'success',
+          message: result.message || (result.status === 'error'
+            ? 'Не удалось получить данные с TradingView'
+            : 'Обновление завершено'),
+          id: lastTimestampRef.current
+        });
+      } catch (err) {
+        console.error('❌ [ExtRefreshNotice] Ошибка чтения tvc_refresh_result:', err);
+      }
+    };
+
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
+  useEffect(() => {
+    if (!notice) return undefined;
+    const timer = setTimeout(() => setNotice(null), autoHideMs);
+    return () => clearTimeout(timer);
+  }, [notice, autoHideMs]);
+
+  const dismiss = useCallback(() => setNotice(null), []);
+
+  return { notice, dismiss };
 }

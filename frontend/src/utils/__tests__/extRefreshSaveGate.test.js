@@ -111,6 +111,24 @@ describe('pickPersistablePatch (отбор полей для сохранени�
     const patch = pickPersistablePatch({ mode: 'market-only', currentPrice: 100, options: null });
     expect(patch).toEqual({ currentPrice: 100, options: [] });
   });
+
+  // Регрессия: нога, которую расширение в этот раз не обновило (рыночные поля
+  // undefined в текущем снимке формы), не должна попасть в патч с undefined-
+  // значениями — иначе applyPersistablePatch (через object spread) сотрёт ранее
+  // сохранённые impliedVolatility/ivUpdatedAt этой ноги в baseState.
+  test('mode market-only → нога без рыночных полей (undefined) не кладёт их в патч', () => {
+    const optionsWithUntouchedLeg = [
+      { id: 'leg-1', impliedVolatility: 54.62, ivUpdatedFromExtension: true, ivUpdatedAt: '2026-07-29T10:00:00.000Z' },
+      { id: 'leg-untouched' }, // расширение эту ногу не трогало — все три поля undefined
+    ];
+    const patch = pickPersistablePatch({ mode: 'market-only', currentPrice: 101.5, options: optionsWithUntouchedLeg });
+
+    const untouched = patch.options.find((o) => o.id === 'leg-untouched');
+    expect(untouched).toEqual({ id: 'leg-untouched' });
+    expect(untouched).not.toHaveProperty('impliedVolatility');
+    expect(untouched).not.toHaveProperty('ivUpdatedFromExtension');
+    expect(untouched).not.toHaveProperty('ivUpdatedAt');
+  });
 });
 
 // Слияние узкого патча с состоянием, уже лежащим в БД/localStorage.
@@ -181,6 +199,26 @@ describe('applyPersistablePatch (слияние узкого патча с со�
     const merged = applyPersistablePatch(baseState, patch);
     const leg2 = merged.options.find((o) => o.id === 'leg-2');
     expect(leg2).toEqual(baseState.options[1]);
+  });
+
+  // Регрессия сквозь весь пайплайн pickPersistablePatch → applyPersistablePatch:
+  // нога, которую расширение в этом цикле не обновило (рыночные поля формы
+  // undefined), не должна терять ранее сохранённые impliedVolatility/ivUpdatedAt
+  // в baseState. До фикса pickPersistablePatch клал undefined в патч, и спред
+  // в applyPersistablePatch стирал существующее значение.
+  test('нога без рыночных полей в форме (undefined) не теряет сохранённые impliedVolatility/ivUpdatedAt', () => {
+    const formOptions = [
+      { id: 'leg-1' }, // форма ещё не подтянула рыночные поля этой ноги в этом цикле
+      { id: 'leg-2', impliedVolatility: 33.1, ivUpdatedFromExtension: true, ivUpdatedAt: '2026-07-29T10:00:00.000Z' },
+    ];
+    const patch = pickPersistablePatch({ mode: 'market-only', currentPrice: 205.5, options: formOptions });
+    const merged = applyPersistablePatch(baseState, patch);
+
+    const leg1 = merged.options.find((o) => o.id === 'leg-1');
+    // Значения из baseState должны сохраниться, а не быть стёртыми в undefined
+    expect(leg1.impliedVolatility).toBe(40);
+    expect(leg1.ivUpdatedFromExtension).toBe(false);
+    expect(leg1.ivUpdatedAt).toBeNull();
   });
 
   test('patch.currentPrice отсутствует → currentPrice берётся из baseState', () => {
