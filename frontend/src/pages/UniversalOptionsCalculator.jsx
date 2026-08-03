@@ -27,6 +27,7 @@ import { saveCustomStrategy, getCustomStrategies, deleteCustomStrategy, applyCus
 import { detectInstrumentType } from '../utils/instrumentTypeDetector';
 import { createConfiguration, getConfiguration, updateConfiguration } from '../services/configurationsApi';
 import { buildStartSnapshot } from '../utils/startPLSnapshot';
+import { findLegsWithoutFactPL, describeMissingFactPL } from '../utils/entrySnapshotCheck';
 import { supabase } from '../services/supabase';
 import { Card, CardContent } from '../components/ui/card';
 import {
@@ -4146,6 +4147,17 @@ function UniversalOptionsCalculator() {
 
       const config = configurations[configIndex];
 
+      // Предупреждение о незаполненном Fact P&L: снимок входа ниже создаётся только
+      // если позиция уже зафиксирована (config.isLocked). Проверяем ДО сохранения,
+      // пока пользователь ещё может отменить и вернуться заполнить факт.
+      if (config.isLocked) {
+        const legsWithoutFact = findLegsWithoutFactPL(options);
+        if (legsWithoutFact.length > 0) {
+          const proceed = window.confirm(describeMissingFactPL(legsWithoutFact));
+          if (!proceed) return;
+        }
+      }
+
       // Генерируем новое название на основе текущих данных
       // ЗАЧЕМ: Название должно отражать новые данные после редактирования
       const updatedName = generateConfigurationName();
@@ -4222,6 +4234,17 @@ function UniversalOptionsCalculator() {
     if (!loadedConfigId || configSource !== 'db') {
       console.warn('⚠️ [handleSaveDBConfiguration] Функция вернулась:', { loadedConfigId, configSource });
       return;
+    }
+
+    // Предупреждение о незаполненном Fact P&L: снимок входа ниже создаётся только для
+    // status === 'standard' (зафиксированные сделки). Проверяем ДО сохранения, пока
+    // пользователь ещё может отменить и вернуться заполнить факт.
+    if (loadedConfigStatus === 'standard') {
+      const legsWithoutFact = findLegsWithoutFactPL(options);
+      if (legsWithoutFact.length > 0) {
+        const proceed = window.confirm(describeMissingFactPL(legsWithoutFact));
+        if (!proceed) return;
+      }
     }
 
     try {
@@ -4335,6 +4358,17 @@ function UniversalOptionsCalculator() {
     if (loadedConfigStatus !== 'pending') {
       return;
     }
+
+    // Предупреждение о незаполненном Fact P&L: именно в этот момент каждая нога
+    // без своего startSnapshot получает снимок входа (см. ниже). Проверяем ДО
+    // подтверждения перехода, пока пользователь ещё может отменить и вернуться
+    // заполнить факт.
+    const legsWithoutFact = findLegsWithoutFactPL(options);
+    if (legsWithoutFact.length > 0) {
+      const proceedDespiteMissingFact = window.confirm(describeMissingFactPL(legsWithoutFact));
+      if (!proceedDespiteMissingFact) return;
+    }
+
     const confirmed = window.confirm(
       'Перевести позицию в статус «Зафиксирована»?\n\n' +
       'Даты входа будут зафиксированы на текущий момент. Откатить переход обратно в «В ожидании» нельзя.'
@@ -4411,6 +4445,19 @@ function UniversalOptionsCalculator() {
   // ЗАЧЕМ: Сохранение позиции в базу данных для доступа всем пользователям
   const handleSaveToDB = async (configuration) => {
     try {
+      // Предупреждение о незаполненном Fact P&L: снимок входа ниже создаётся только
+      // если пользователь сохраняет сразу со статусом «Зафиксирована» (standard).
+      // Проверяем ДО отправки на сервер, пока пользователь ещё может отменить
+      // сохранение и вернуться заполнить факт в диалоге.
+      const targetStatusForCheck = configuration.status || 'standard';
+      if (targetStatusForCheck === 'standard' && Array.isArray(configuration.state?.options)) {
+        const legsWithoutFact = findLegsWithoutFactPL(configuration.state.options);
+        if (legsWithoutFact.length > 0) {
+          const proceed = window.confirm(describeMissingFactPL(legsWithoutFact));
+          if (!proceed) return;
+        }
+      }
+
       // Получаем userId из Supabase если пользователь залогинен
       let userId = null;
       if (supabase) {
