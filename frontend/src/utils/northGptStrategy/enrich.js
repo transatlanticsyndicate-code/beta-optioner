@@ -212,6 +212,19 @@ export const gateByBottomTolerance = (combination, plTolerance) => {
 };
 
 /**
+ * Оставить в цепочке только Call — для режима «без Put».
+ * ЗАЧЕМ: модель не должна видеть Put вовсе (иначе может их предложить),
+ * плюс вдвое меньше строк в запросе = меньше токенов и быстрее ответ.
+ *
+ * @param {Array} chain — плоская цепочка опционов
+ * @param {boolean} withoutPut — режим «без Put»
+ */
+export const filterChainByMode = (chain, withoutPut) => {
+  if (!withoutPut || !Array.isArray(chain)) return chain;
+  return chain.filter((row) => (row?.type || '').toUpperCase() === 'CALL');
+};
+
+/**
  * Посчитать для КАЖДОГО опциона цепочки прогнозный P&L одного купленного
  * контракта на дату расчёта при цене актива topPrice и bottomPrice.
  *

@@ -6,7 +6,7 @@
  * выдаёт сбой расчёта за идеальный ноль.
  */
 
-import { gateByBottomTolerance } from '../northGptStrategy/enrich';
+import { gateByBottomTolerance, filterChainByMode } from '../northGptStrategy/enrich';
 
 const combo = (bottomMetric, extra = {}) => ({
   kind: 'optionsOnly',
@@ -40,6 +40,9 @@ describe('gateByBottomTolerance', () => {
     expect(gateByBottomTolerance(c, 0)).toBe(c);
     expect(gateByBottomTolerance(c, undefined)).toBe(c);
     expect(gateByBottomTolerance(c, NaN)).toBe(c);
+    // Режим «без Put»: допуск не заполняется (null) — чистый Call с крупным
+    // убытком по низу должен показываться, а не отсекаться.
+    expect(gateByBottomTolerance(c, null)).toBe(c);
   });
 
   it('не трогает блок с ошибкой и блок без позиций', () => {
@@ -61,5 +64,28 @@ describe('gateByBottomTolerance', () => {
   it('отсекает комбинацию с нечисловым P&L по низу', () => {
     const res = gateByBottomTolerance(combo(NaN), 200);
     expect(res.error).toMatch(/Не удалось рассчитать P&L/);
+  });
+});
+
+describe('filterChainByMode', () => {
+  const chain = [
+    { type: 'CALL', strike: 100 },
+    { type: 'PUT', strike: 90 },
+    { type: 'call', strike: 105 },
+  ];
+
+  it('в режиме «без Put» оставляет только Call (регистр не важен)', () => {
+    const res = filterChainByMode(chain, true);
+    expect(res).toHaveLength(2);
+    expect(res.every((r) => r.type.toUpperCase() === 'CALL')).toBe(true);
+  });
+
+  it('в обычном режиме возвращает цепочку без изменений', () => {
+    expect(filterChainByMode(chain, false)).toBe(chain);
+  });
+
+  it('не падает на пустых данных', () => {
+    expect(filterChainByMode(null, true)).toBeNull();
+    expect(filterChainByMode([], true)).toEqual([]);
   });
 });

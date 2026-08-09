@@ -25,7 +25,7 @@ def post_and_wait(payload, tries=300, delay=0.02):
 
 
 class FakeClient:
-    def select_combinations(self, user_prompt, constraints, chain, with_asset=True):
+    def select_combinations(self, user_prompt, constraints, chain, with_asset=True, call_only=False):
         return {
             "with_asset": {
                 "legs": [{"option_type": "CALL", "strike": 150.0, "quantity": 1, "side": "BUY"}],
@@ -59,7 +59,7 @@ def test_select_returns_two_validated_blocks(monkeypatch):
     captured = {}
 
     class CapturingClient(FakeClient):
-        def select_combinations(self, user_prompt, constraints, chain, with_asset=True):
+        def select_combinations(self, user_prompt, constraints, chain, with_asset=True, call_only=False):
             captured["constraints"] = constraints
             captured["chain"] = chain
             return super().select_combinations(user_prompt, constraints, chain)
@@ -94,7 +94,7 @@ def test_select_futures_margin_basis_passed_to_model(monkeypatch):
     captured = {}
 
     class CapturingClient(FakeClient):
-        def select_combinations(self, user_prompt, constraints, chain, with_asset=True):
+        def select_combinations(self, user_prompt, constraints, chain, with_asset=True, call_only=False):
             captured["constraints"] = constraints
             captured["chain"] = chain
             return super().select_combinations(user_prompt, constraints, chain)
@@ -116,7 +116,7 @@ def test_select_futures_margin_basis_passed_to_model(monkeypatch):
 
 def test_select_hallucinated_strike_becomes_block_error(monkeypatch):
     class HallucinatingClient:
-        def select_combinations(self, user_prompt, constraints, chain, with_asset=True):
+        def select_combinations(self, user_prompt, constraints, chain, with_asset=True, call_only=False):
             return {
                 "with_asset": {"legs": [{"option_type": "CALL", "strike": 777.0, "quantity": 1, "side": "BUY"}],
                                "stock_quantity": 100, "rationale": "x"},
@@ -146,7 +146,7 @@ def test_fill_prompt_placeholders():
 
 def test_select_forwards_debug(monkeypatch):
     class DebugClient:
-        def select_combinations(self, user_prompt, constraints, chain, with_asset=True):
+        def select_combinations(self, user_prompt, constraints, chain, with_asset=True, call_only=False):
             return (
                 {
                     "with_asset": {"legs": [{"option_type": "CALL", "strike": 150.0, "quantity": 1, "side": "BUY"}],
@@ -186,7 +186,7 @@ def test_select_dual_expiration_returns_two_groups(monkeypatch):
     seen = []
 
     class PerExpirationClient(FakeClient):
-        def select_combinations(self, user_prompt, constraints, chain, with_asset=True):
+        def select_combinations(self, user_prompt, constraints, chain, with_asset=True, call_only=False):
             seen.append(constraints["expirationDate"])
             return super().select_combinations(user_prompt, constraints, chain)
 
@@ -221,7 +221,7 @@ def test_with_asset_disabled_asks_model_only_for_options_only(monkeypatch):
     seen = {}
 
     class OnlyOptionsClient:
-        def select_combinations(self, user_prompt, constraints, chain, with_asset=True):
+        def select_combinations(self, user_prompt, constraints, chain, with_asset=True, call_only=False):
             seen["with_asset"] = with_asset
             seen["system"] = user_prompt
             seen["constraints"] = constraints
@@ -253,7 +253,7 @@ def test_with_asset_enabled_by_default_keeps_both(monkeypatch):
     seen = {}
 
     class CapturingClient(FakeClient):
-        def select_combinations(self, user_prompt, constraints, chain, with_asset=True):
+        def select_combinations(self, user_prompt, constraints, chain, with_asset=True, call_only=False):
             seen["with_asset"] = with_asset
             return super().select_combinations(user_prompt, constraints, chain)
 
@@ -263,6 +263,79 @@ def test_with_asset_enabled_by_default_keeps_both(monkeypatch):
     assert seen["with_asset"] is True
     assert data["withAsset"]["kind"] == "withStock"
     assert data["optionsOnly"]["kind"] == "optionsOnly"
+
+
+def test_without_put_asks_model_for_calls_only(monkeypatch):
+    """Галочка «Без Put»: модель не видит Put ни в цепочке, ни в условиях,
+    и получает флаг call_only — вернуть Put она физически не может."""
+    seen = {}
+
+    class CallOnlyClient:
+        def select_combinations(self, user_prompt, constraints, chain, with_asset=True, call_only=False):
+            seen["call_only"] = call_only
+            seen["constraints"] = constraints
+            seen["chain"] = chain
+            seen["prompt"] = user_prompt
+            return {
+                "with_asset": {"legs": [{"option_type": "CALL", "strike": 150.0, "quantity": 1, "side": "BUY"}],
+                               "stock_quantity": 100, "rationale": "rA"},
+                "options_only": {"legs": [{"option_type": "CALL", "strike": 150.0, "quantity": 2, "side": "BUY"}],
+                                 "stock_quantity": 0, "rationale": "чистый Call"},
+            }
+
+    monkeypatch.setattr(ng, "get_openai_client", lambda: CallOnlyClient())
+    payload = {**PAYLOAD, "params": {**PAYLOAD["params"], "withoutPut": True,
+                                     "putStrikeMin": None, "putStrikeMax": None,
+                                     "plTolerance": None}}
+    data = post_and_wait(payload)
+    assert data["status"] == "success"
+    assert seen["call_only"] is True
+    # В цепочке для модели только Call.
+    assert all(row["type"] == "CALL" for row in seen["chain"])
+    # Ни диапазона Put, ни допуска по низу, ни служебного флага модели не уходит.
+    for key in ("putStrikeMin", "putStrikeMax", "plTolerance", "withoutPut"):
+        assert key not in seen["constraints"]
+    assert data["optionsOnly"]["positions"][0]["type"] == "CALL"
+    assert data["optionsOnly"]["puts"] == []
+
+
+def test_without_put_rejects_put_leg_from_model(monkeypatch):
+    """Даже если модель всё-таки прислала Put — нога отбраковывается валидатором."""
+    class SneakyPutClient:
+        def select_combinations(self, user_prompt, constraints, chain, with_asset=True, call_only=False):
+            return {
+                "with_asset": {"legs": [{"option_type": "CALL", "strike": 150.0, "quantity": 1, "side": "BUY"}],
+                               "stock_quantity": 100, "rationale": "x"},
+                "options_only": {"legs": [{"option_type": "PUT", "strike": 140.0, "quantity": 1, "side": "BUY"}],
+                                 "stock_quantity": 0, "rationale": "y"},
+            }
+
+    monkeypatch.setattr(ng, "get_openai_client", lambda: SneakyPutClient())
+    payload = {**PAYLOAD, "params": {**PAYLOAD["params"], "withoutPut": True,
+                                     "putStrikeMin": None, "putStrikeMax": None}}
+    data = post_and_wait(payload)
+    assert data["status"] == "success"
+    assert "error" in data["optionsOnly"]  # Put в сделку не попал
+    assert data["withAsset"]["positions"][0]["type"] == "CALL"
+
+
+def test_fill_prompt_placeholders_without_put():
+    """Без Put вместо чисел подставляется словесное пояснение, а не пустая строка."""
+    c = {"entryPrice": 55, "topPrice": 70, "bottomPrice": 45}
+    out = ng._fill_prompt_placeholders(
+        "страйки пут {страйки_пут}, допуск низ {допуск_низ}", c, True)
+    assert "страйки пут не используются" in out
+    assert "допуск низ не задан" in out
+
+
+def test_openai_schema_call_only_forbids_put():
+    """В режиме «без Put» тип ноги в схеме — только CALL."""
+    from app.services.openai_client import build_schema
+    call_only = build_schema(with_asset=False, call_only=True)
+    leg = call_only["schema"]["$defs"]["combo"]["properties"]["legs"]["items"]
+    assert leg["properties"]["option_type"]["enum"] == ["CALL"]
+    normal = build_schema(with_asset=False, call_only=False)
+    assert normal["schema"]["$defs"]["combo"]["properties"]["legs"]["items"]["properties"]["option_type"]["enum"] == ["CALL", "PUT"]
 
 
 def test_openai_client_picks_schema_by_with_asset_flag():

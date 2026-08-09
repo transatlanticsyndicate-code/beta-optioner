@@ -43,6 +43,21 @@ def test_out_of_range_strike_dropped():
     assert out["positions"] == []
 
 
+def test_put_leg_rejected_when_puts_not_used():
+    """Режим «без Put»: диапазон Put = None → любая нога Put отбраковывается,
+    а Call из своего диапазона проходит."""
+    idx = build_chain_index(CHAIN, entry_price=145.0)
+    ranges = {"call": (145.0, 160.0), "put": None}
+    out = validate_combination(
+        legs=[{"option_type": "CALL", "strike": 150.0, "quantity": 1, "side": "BUY"},
+              {"option_type": "PUT", "strike": 140.0, "quantity": 1, "side": "BUY"}],
+        stock_quantity=0, chain_index=idx, ranges=ranges)
+    assert len(out["positions"]) == 1
+    assert out["positions"][0]["type"] == "CALL"
+    assert out["puts"] == []
+    assert out["errors"]
+
+
 def test_sell_side_rejected():
     idx = build_chain_index(CHAIN, entry_price=145.0)
     out = validate_combination(

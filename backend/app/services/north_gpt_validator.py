@@ -75,6 +75,10 @@ def validate_combination(legs, stock_quantity, chain_index, ranges):
     Проверить и восстановить ноги комбинации по цепочке.
     Возвращает {positions, calls, puts, qtyStock, errors}.
     positions пуст => комбинация невалидна (показать ошибку в блоке).
+
+    ranges — {"call": (от, до), "put": (от, до)}. Значение None вместо кортежа
+    означает, что опционы этого типа в сделке НЕ используются (режим «без Put»):
+    такие ноги отбраковываются, даже если модель их всё-таки прислала.
     """
     errors = []
     merged = {}
@@ -97,7 +101,11 @@ def validate_combination(legs, stock_quantity, chain_index, ranges):
         if not row:
             errors.append(f"Страйк не найден в цепочке: {t} {strike}")
             continue
-        lo, hi = ranges["call"] if t == "CALL" else ranges["put"]
+        rng = ranges.get("call") if t == "CALL" else ranges.get("put")
+        if rng is None:
+            errors.append(f"Опционы {t} не используются в этой сделке: {leg}")
+            continue
+        lo, hi = rng
         if lo is not None and hi is not None and not (lo <= strike <= hi):
             errors.append(f"Страйк вне диапазона: {t} {strike}")
             continue

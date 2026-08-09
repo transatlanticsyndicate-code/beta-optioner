@@ -24,7 +24,12 @@ import NorthGptParamsForm from './NorthGptParamsForm';
 import NorthGptResultsView from './NorthGptResultsView';
 import { requestNorthGptCombination } from '../../../services/northGptApi';
 import { requestDealPrecheck } from '../../../services/dealPrecheckApi';
-import { enrichNorthGptCombination, precomputeChainPLs, gateByBottomTolerance } from '../../../utils/northGptStrategy/enrich';
+import {
+  enrichNorthGptCombination,
+  precomputeChainPLs,
+  gateByBottomTolerance,
+  filterChainByMode,
+} from '../../../utils/northGptStrategy/enrich';
 import { buildPrecheckRequest } from '../../../utils/northGptStrategy/buildPrecheckRequest';
 import { sendNorthExpandExpirationCommand, sendNorthInitCommand } from '../../../hooks/useExtensionData';
 
@@ -437,9 +442,15 @@ function NorthGptStrategyDialog({
 
     // Цепочки собираем ПОСЛЕДОВАТЕЛЬНО: у расширения один слот команды и одна
     // ячейка tvc_full_chain. Каждую дату предрасчитываем под её срок ДО объединения.
+    // В режиме «без Put» Put-строки отбрасываем сразу — они не нужны ни для
+    // расчёта, ни модели (см. filterChainByMode).
+    const withoutPut = !!formParams.withoutPut;
+
     let combined;
     try {
-      const primaryRows = await collectChainForExpiration(formParams.expirationDate);
+      const primaryRows = filterChainByMode(
+        await collectChainForExpiration(formParams.expirationDate), withoutPut,
+      );
       combined = precomputeChainPLs(primaryRows, { ...basePlCtx, expirationDate: formParams.expirationDate });
     } catch (err) {
       showCollectError(err?.message || 'Не удалось получить опционы.');
@@ -448,7 +459,9 @@ function NorthGptStrategyDialog({
 
     if (dual) {
       try {
-        const altRows = await collectChainForExpiration(formParams.alternativeExpirationDate);
+        const altRows = filterChainByMode(
+          await collectChainForExpiration(formParams.alternativeExpirationDate), withoutPut,
+        );
         combined.push(...precomputeChainPLs(altRows, { ...basePlCtx, expirationDate: formParams.alternativeExpirationDate }));
       } catch (err) {
         // Основная собралась, а альтернативная — нет: сообщаем явно про неё.

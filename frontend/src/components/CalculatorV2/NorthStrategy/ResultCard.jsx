@@ -97,6 +97,9 @@ function FocusedCard({ combination, levels, kind, onPick }) {
   const { calls = [], puts = [], qtyStock, criteria, cost, meta, score } = combination;
   const fmtLevel = (v) => (Number.isFinite(v) ? `$${Number(v).toFixed(2)}` : null);
   const withStock = kind === NORTH_KINDS.WITH_STOCK;
+  // Сделка только из купленных Call (режим «без Put»): максимальный убыток
+  // равен уплаченной премии — отдельная подпись вместо «идеал ≈ 0».
+  const pureCall = !withStock && puts.length === 0;
   const palette = PALETTE[kind] || PALETTE.withStock;
   const entryFromMeta = Number.isFinite(meta?.levelA) && Number.isFinite(levels?.top)
     ? (2 * meta.levelA - levels.top)
@@ -182,14 +185,18 @@ function FocusedCard({ combination, levels, kind, onPick }) {
             note={withStock ? 'P&L всей позиции' : 'P&L опционов'}
           />
         )}
+        {/* Чистый Call без актива: убыток по низу ограничен уплаченной премией,
+            «идеал ≈ 0» тут неприменим — показываем сам потолок убытка. */}
         <CriterionRow
           label={
             `Закрытие по низу${fmtLevel(levels?.bottom) ? ` (${fmtLevel(levels?.bottom)})` : ''} — `
             + (withStock ? 'P&L всей позиции' : 'P&L опционов')
           }
-          hint="идеал ≈ 0"
+          hint={pureCall
+            ? `максимальный убыток — уплаченная премия ${formatCurrency(cost.optionsCost)}`
+            : 'идеал ≈ 0'}
           value={criteria.bottomMetric}
-          idealZero
+          idealZero={!pureCall}
         />
       </div>
 

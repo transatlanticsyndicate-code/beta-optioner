@@ -116,6 +116,9 @@ class NorthGptParams(BaseModel):
     # опционную конструкцию и не тратит токены на вариант с активом.
     # По умолчанию True — обратная совместимость со старым фронтендом.
     withAssetEnabled: Optional[bool] = True
+    # Режим «без Put»: сделка собирается только из купленных CALL. Диапазон
+    # страйков Put и допуск P&L по низу в этом режиме не заданы (None).
+    withoutPut: Optional[bool] = False
     calcDate: Optional[str] = None
     topPrice: Optional[float] = None
     bottomPrice: Optional[float] = None
@@ -229,12 +232,16 @@ def _fmt_num(v):
         return str(v)
 
 
-def _fill_prompt_placeholders(prompt, c):
+def _fill_prompt_placeholders(prompt, c, without_put=False):
     """
     Подставить значения параметров вместо плейсхолдеров в тексте промпта.
     ЗАЧЕМ: пользователь пишет промпт со ссылками ({вход}, {цель_верх}, ...),
     а при подборе на их место подставляются реальные числа из параметров.
     Неизвестные плейсхолдеры остаются как есть.
+
+    without_put=True — режим «без Put»: чисел для диапазона Put и допуска по
+    низу нет, поэтому вместо них подставляем словесное «не используются» —
+    иначе в промпт ушли бы пустые «-» и «».
     """
     if not prompt:
         return prompt
@@ -256,11 +263,12 @@ def _fill_prompt_placeholders(prompt, c):
         "{цель_низ}": _fmt_num(c.get("bottomPrice")),
         "{маржин}": _fmt_num(c.get("margin")),
         "{допуск_маржин}": _fmt_num(c.get("marginTolerance")),
-        "{допуск_низ}": _fmt_num(c.get("plTolerance")),
+        "{допуск_низ}": "не задан" if without_put else _fmt_num(c.get("plTolerance")),
         "{плечо}": _fmt_num(c.get("leverage")),
         "{доля_акции}": _fmt_num(c.get("minStockMarginPct")),
         "{страйки_колл}": f"{_fmt_num(c.get('callStrikeMin'))}-{_fmt_num(c.get('callStrikeMax'))}",
-        "{страйки_пут}": f"{_fmt_num(c.get('putStrikeMin'))}-{_fmt_num(c.get('putStrikeMax'))}",
+        "{страйки_пут}": ("не используются" if without_put
+                          else f"{_fmt_num(c.get('putStrikeMin'))}-{_fmt_num(c.get('putStrikeMax'))}"),
         "{дата}": str(cd or ""),
         "{экспирация}": str(c.get("expirationDate") or ""),
         "{дней}": days,
@@ -341,9 +349,16 @@ def _select_for_expiration(req, expiration, ctx, ranges, with_asset=True):
     with_asset=False — вариант «актив + опционы» выключен пользователем: модель
     просят собрать ТОЛЬКО опционную конструкцию (см. select_combinations), поэтому
     токены на ненужный вариант не тратятся, а withAsset в ответе = None.
+
+    Режим «без Put» (params.withoutPut) — из цепочки и условий убираются Put:
+    модель их не видит и не может использовать.
     """
     p = req.params
+    without_put = bool(p.withoutPut)
     full_chain = _filter_chain(req.chain, expiration)
+    if without_put:
+        # Страховка: фронтенд уже прислал только CALL, но полагаться на это нельзя.
+        full_chain = [r for r in full_chain if (r.get("type") or "").upper() == "CALL"]
     idx = validator.build_chain_index(full_chain, ctx.get("entryPrice"))
     # Множитель контракта (100/1/стоимость пункта) — тот же, что в compute_cost.
     mult = _contract_multiplier(ctx)
@@ -357,6 +372,13 @@ def _select_for_expiration(req, expiration, ctx, ranges, with_asset=True):
     constraints.pop("alternativeExpirationDate", None)
     # Флаг «считать вариант с активом» — служебный, модели он не нужен.
     constraints.pop("withAssetEnabled", None)
+    constraints.pop("withoutPut", None)
+    if without_put:
+        # Put в сделке нет: ни диапазона его страйков, ни допуска P&L по низу
+        # (для чистого CALL убыток на нижней цене ограничен уплаченной премией).
+        constraints.pop("putStrikeMin", None)
+        constraints.pop("putStrikeMax", None)
+        constraints.pop("plTolerance", None)
     if not with_asset:
         # Порог доли акции относится только к варианту «актив + опционы» —
         # при выключенном варианте не занимаем им внимание модели.
@@ -378,9 +400,9 @@ def _select_for_expiration(req, expiration, ctx, ranges, with_asset=True):
         constraints["assetMarginPerUnit"] = (entry / lev) if lev else entry
         constraints["assetPlMultiplier"] = 1
     # Подстановка реальных чисел вместо плейсхолдеров ({вход}, {цель_верх}, ...).
-    filled_prompt = _fill_prompt_placeholders(req.prompt, constraints)
+    filled_prompt = _fill_prompt_placeholders(req.prompt, constraints, without_put)
     out = get_openai_client().select_combinations(
-        filled_prompt, constraints, compact, with_asset=with_asset)
+        filled_prompt, constraints, compact, with_asset=with_asset, call_only=without_put)
     result, debug = out if isinstance(out, tuple) else (out, {})
     return {
         # Вариант с активом не запрашивали — блок не собираем (модель его и не присылала).
@@ -393,8 +415,10 @@ def _select_for_expiration(req, expiration, ctx, ranges, with_asset=True):
 def _do_select(req):
     """Сама работа подбора (выполняется в фоновом потоке). Может бросить исключение."""
     p = req.params
+    # None вместо диапазона Put = «опционы Put в сделке не используются»:
+    # валидатор отбракует такую ногу, даже если модель её всё-таки пришлёт.
     ranges = {"call": (p.callStrikeMin, p.callStrikeMax),
-              "put": (p.putStrikeMin, p.putStrikeMax)}
+              "put": None if p.withoutPut else (p.putStrikeMin, p.putStrikeMax)}
     ctx = req.context.model_dump()
 
     alt = p.alternativeExpirationDate

@@ -86,6 +86,8 @@ function NorthGptParamsForm({
       calcDays: daysFromIsoDate(calcDate) ?? ud.calcDays,
       callStrikeMin: round2(initialValues?.callStrikeMin ?? basePrice),
       callStrikeMax: round2(initialValues?.callStrikeMax ?? top),
+      // В режиме «без Put» прошлый запуск сохранил здесь null — возвращаем
+      // обычные значения, чтобы поля были заполнены, если галочку снимут.
       putStrikeMin: round2(initialValues?.putStrikeMin ?? bottom),
       putStrikeMax: round2(initialValues?.putStrikeMax ?? basePrice),
       plTolerance: initialValues?.plTolerance ?? ud.plTolerance,
@@ -117,6 +119,10 @@ function NorthGptParamsForm({
   const [minStockMarginPct, setMinStockMarginPct] = useState(defaults.minStockMarginPct);
   // Вариант «актив + опционы»: по умолчанию ВЫКЛЮЧЕН (считаем только «только опционы»).
   const [withAssetEnabled, setWithAssetEnabled] = useState(initialValues?.withAssetEnabled ?? false);
+  // Режим «без Put»: сделка только из купленных Call. Диапазон страйков Put и
+  // допуск P&L по низу в этом режиме не нужны — для чистого Call убыток на нижней
+  // цене ограничен уплаченной премией, и требовать «около нуля» бессмысленно.
+  const [withoutPut, setWithoutPut] = useState(initialValues?.withoutPut ?? false);
 
   // ===== Промпты =====
   const [prompts, setPrompts] = useState([]);
@@ -285,7 +291,8 @@ function NorthGptParamsForm({
   const handleBottomBlur = () => {
     const r = round2(bottom);
     setBottom(r);
-    setPutStrikeMin(r);
+    // В режиме «без Put» нижняя граница Put-страйков не используется — не трогаем её.
+    if (!withoutPut) setPutStrikeMin(r);
   };
 
   // Двусторонняя связь «дней» ⇄ «дата расчёта».
@@ -315,8 +322,9 @@ function NorthGptParamsForm({
   }
   if (!calcDate) errors.push('Выберите дату расчёта');
   if (toNum(callStrikeMin) >= toNum(callStrikeMax)) errors.push('Диапазон страйков Call задан некорректно');
-  if (toNum(putStrikeMin) >= toNum(putStrikeMax)) errors.push('Диапазон страйков Put задан некорректно');
-  if (toNum(plTolerance) <= 0) errors.push('Допустимый диапазон P&L должен быть положительным');
+  // Без Put диапазон его страйков и допуск P&L по низу не заполняются и не проверяются.
+  if (!withoutPut && toNum(putStrikeMin) >= toNum(putStrikeMax)) errors.push('Диапазон страйков Put задан некорректно');
+  if (!withoutPut && toNum(plTolerance) <= 0) errors.push('Допустимый диапазон P&L должен быть положительным');
   if (toNum(margin) <= 0) errors.push('Маржин должен быть положительным');
   if (toNum(marginTolerance) < 0) errors.push('Допуск маржина не может быть отрицательным');
   if (toNum(minStockMarginPct) < 0 || toNum(minStockMarginPct) > 100) errors.push('Доля акции должна быть от 0 до 100%');
@@ -334,9 +342,12 @@ function NorthGptParamsForm({
       calcDate,
       callStrikeMin: round2(toNum(callStrikeMin)),
       callStrikeMax: round2(toNum(callStrikeMax)),
-      putStrikeMin: round2(toNum(putStrikeMin)),
-      putStrikeMax: round2(toNum(putStrikeMax)),
-      plTolerance: toNum(plTolerance),
+      // Без Put диапазон и допуск по низу уходят пустыми: по ним не фильтруем
+      // и не ограничиваем модель (см. withoutPut).
+      withoutPut,
+      putStrikeMin: withoutPut ? null : round2(toNum(putStrikeMin)),
+      putStrikeMax: withoutPut ? null : round2(toNum(putStrikeMax)),
+      plTolerance: withoutPut ? null : toNum(plTolerance),
       margin: toNum(margin),
       marginTolerance: toNum(marginTolerance),
       minStockMarginPct: toNum(minStockMarginPct),
@@ -386,11 +397,15 @@ function NorthGptParamsForm({
             <Input type="number" step="0.01" value={bottom}
               onChange={(e) => setBottom(e.target.value)} onBlur={handleBottomBlur} />
           </div>
-          <div>
-            <Label className="text-xs">Допустимый диапазон P&L по низу ± ($)</Label>
-            <Input type="number" step="1" min="1" value={plTolerance}
-              onChange={(e) => setPlTolerance(e.target.value)} />
-          </div>
+          {/* Только для сделок с Put: у чистого Call убыток по низу ограничен
+              уплаченной премией, требовать «около нуля» бессмысленно. */}
+          {!withoutPut && (
+            <div>
+              <Label className="text-xs">Допустимый диапазон P&L по низу ± ($)</Label>
+              <Input type="number" step="1" min="1" value={plTolerance}
+                onChange={(e) => setPlTolerance(e.target.value)} />
+            </div>
+          )}
         </div>
 
         <div className="bg-border w-px h-full" aria-hidden="true" />
@@ -451,7 +466,18 @@ function NorthGptParamsForm({
       </div>
 
       <div className="space-y-2">
-        <div className="text-xs font-medium">Диапазоны страйков</div>
+        <div className="flex items-center justify-between">
+          <div className="text-xs font-medium">Диапазоны страйков</div>
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-input"
+              checked={withoutPut}
+              onChange={(e) => setWithoutPut(e.target.checked)}
+            />
+            <span className="text-xs">Без Put — только опционы Call</span>
+          </label>
+        </div>
         <div className="grid grid-cols-[80px_1fr_1fr] items-end gap-2">
           <div className="text-xs text-muted-foreground pb-2">Call</div>
           <div>
@@ -467,21 +493,29 @@ function NorthGptParamsForm({
               onBlur={() => setCallStrikeMax(round2(callStrikeMax))} />
           </div>
         </div>
-        <div className="grid grid-cols-[80px_1fr_1fr] items-end gap-2">
-          <div className="text-xs text-muted-foreground pb-2">Put</div>
-          <div>
-            <Label className="text-[10px]">от ($)</Label>
-            <Input type="number" step="0.01" value={putStrikeMin}
-              onChange={(e) => setPutStrikeMin(e.target.value)}
-              onBlur={() => setPutStrikeMin(round2(putStrikeMin))} />
+        {!withoutPut && (
+          <div className="grid grid-cols-[80px_1fr_1fr] items-end gap-2">
+            <div className="text-xs text-muted-foreground pb-2">Put</div>
+            <div>
+              <Label className="text-[10px]">от ($)</Label>
+              <Input type="number" step="0.01" value={putStrikeMin}
+                onChange={(e) => setPutStrikeMin(e.target.value)}
+                onBlur={() => setPutStrikeMin(round2(putStrikeMin))} />
+            </div>
+            <div>
+              <Label className="text-[10px]">до ($)</Label>
+              <Input type="number" step="0.01" value={putStrikeMax}
+                onChange={(e) => setPutStrikeMax(e.target.value)}
+                onBlur={() => setPutStrikeMax(round2(putStrikeMax))} />
+            </div>
           </div>
-          <div>
-            <Label className="text-[10px]">до ($)</Label>
-            <Input type="number" step="0.01" value={putStrikeMax}
-              onChange={(e) => setPutStrikeMax(e.target.value)}
-              onBlur={() => setPutStrikeMax(round2(putStrikeMax))} />
+        )}
+        {withoutPut && (
+          <div className="text-[11px] text-muted-foreground">
+            Опционы Put не используются: сделка собирается только из купленных Call,
+            максимальный убыток равен уплаченной премии.
           </div>
-        </div>
+        )}
       </div>
 
       <div className="border rounded-md p-3 space-y-3 bg-muted/30">

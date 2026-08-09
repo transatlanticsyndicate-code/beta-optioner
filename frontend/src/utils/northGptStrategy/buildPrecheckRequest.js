@@ -103,9 +103,13 @@ export const buildPrecheckRequest = (block, ctx, formParams, chain, meta = {}) =
     allow_short_legs: false,
     dte_short_blocks: false,
     pnl_stop_tolerance: finiteOrUndefined(formParams?.plTolerance),
+    // Режим «без Put»: диапазона Put нет — ключ не отправляем вовсе, чтобы сервис
+    // не пытался искать Put там, где их в сделке нет.
     strike_ranges: {
       call: { from: finiteOrUndefined(formParams?.callStrikeMin), to: finiteOrUndefined(formParams?.callStrikeMax) },
-      put: { from: finiteOrUndefined(formParams?.putStrikeMin), to: finiteOrUndefined(formParams?.putStrikeMax) },
+      put: formParams?.withoutPut
+        ? undefined
+        : { from: finiteOrUndefined(formParams?.putStrikeMin), to: finiteOrUndefined(formParams?.putStrikeMax) },
     },
     calculator: {
       margin_used: finiteOrUndefined(block?.cost?.marginUsed),
