@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Settings as SettingsIcon, TrendingUp, BarChart3, Palette, Landmark, SlidersHorizontal } from 'lucide-react';
+import { Settings as SettingsIcon, TrendingUp, BarChart3, Palette, Landmark, SlidersHorizontal, Activity } from 'lucide-react';
 import SettingsGeneral from './SettingsGeneral';
 import SettingsMarketData from './SettingsMarketData';
 import SettingsDefaultValues from './SettingsDefaultValues';
 import SettingsFutures from './SettingsFutures';
 import SettingsEtf from './SettingsEtf';
+import SettingsVolatilityUpdate from './SettingsVolatilityUpdate';
 import SettingsComponents from './SettingsComponents';
 
 const SECTIONS = [
@@ -14,6 +15,7 @@ const SECTIONS = [
   { id: 'defaults', label: 'Значения по умолчанию', Icon: SlidersHorizontal },
   { id: 'futures', label: 'Фьючерсы', Icon: TrendingUp },
   { id: 'etf', label: 'ETF', Icon: Landmark },
+  { id: 'volatility', label: 'Актуализация Волатильности', Icon: Activity },
   { id: 'components', label: 'Компоненты', Icon: Palette },
 ];
 
@@ -23,6 +25,7 @@ const SECTION_COMPONENTS = {
   defaults: SettingsDefaultValues,
   futures: SettingsFutures,
   etf: SettingsEtf,
+  volatility: SettingsVolatilityUpdate,
   components: SettingsComponents,
 };
 

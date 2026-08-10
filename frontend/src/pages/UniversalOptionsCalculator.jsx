@@ -107,6 +107,7 @@ import { buildIvPatch, shouldPersistExtensionRefresh, pickPersistablePatch, appl
 // Импорт построителя ключа опциона для хранилища ручных правок (с учётом тикера)
 // ЗАЧЕМ: Ключ без тикера приводил к "перетеканию" правок между разными инструментами
 import { buildOptionKey } from '../utils/optionKey';
+import { OPTIONER_USER_OVERRIDES_KEY, OPTIONER_USER_OVERRIDES_LEGACY_KEY } from '../utils/userOptionOverrides';
 
 // Импорт чистого резолвера множителя контракта
 // ЗАЧЕМ: Изолирует правило «нет настроек фьючерса → null, а не акционные 100» в чистой
@@ -135,13 +136,9 @@ const CALCULATOR_MODES = {
 // Крипто-тикеры — для них не показываем группы акций и не запрашиваем классификацию
 const CRYPTO_TICKERS = ['BTCUSDT', 'ETHUSDT'];
 
-// Ключ хранилища ручных правок опционов (quantity/customPremium/Fact P&L/Fact IV и т.д.).
-// ЗАЧЕМ v2: старый ключ 'optioner_user_overrides' строился БЕЗ тикера — правки одного
-// инструмента "перетекали" в другой с тем же страйком/типом/датой (см. utils/optionKey.js).
-// Старый ключ НЕ читаем и не мигрируем (записи неоднозначны — неизвестно, какому тикеру
-// они принадлежали), только чистим при полном сбросе калькулятора, чтобы не копился мусор.
-const OPTIONER_USER_OVERRIDES_KEY = 'optioner_user_overrides_v2';
-const OPTIONER_USER_OVERRIDES_LEGACY_KEY = 'optioner_user_overrides';
+// Ключи хранилища ручных правок опционов (quantity/customPremium/Fact P&L/Fact IV и т.д.)
+// живут в utils/userOptionOverrides.js — их использует ещё и актуализация волатильности
+// из Настроек, а две копии строки ключа означали бы молча неработающую очистку.
 
 // Демо-данные для опционов (вынесены за пределы компонента для оптимизации)
 const demoOptions = [

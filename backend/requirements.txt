@@ -14,6 +14,7 @@ PyJWT==2.8.0
 aiohttp==3.9.1
 APScheduler==3.10.4
 tzdata>=2024.1  # база часовых поясов для zoneinfo (app/utils/trading_date.py) — гарантирует America/New_York на любом хосте, даже без системного tzdata
+python-multipart==0.0.9  # приём загружаемых файлов (app/routers/volatility_update.py) — без него FastAPI не разбирает форму с CSV
 
 # ML модуль (AI Калькулятор)
 torch>=2.0.0
