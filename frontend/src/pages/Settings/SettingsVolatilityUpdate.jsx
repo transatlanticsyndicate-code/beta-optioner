@@ -73,7 +73,9 @@ function SettingsVolatilityUpdate() {
             2026-08-09-watchlist.csv). Черновики сделок не затрагиваются.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        {/* pb-6: у общего CardContent есть только боковые отступы, без нижнего —
+            иначе кнопка прилипает к нижней границе карточки. */}
+        <CardContent className="space-y-4 pb-6">
           <div className="flex flex-wrap items-center gap-3">
             <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
               <Upload className="h-4 w-4 mr-2" />

@@ -52,7 +52,8 @@ function VolatilityUpdateReport({ report }) {
       <CardHeader>
         <CardTitle>Отчёт об актуализации</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      {/* pb-6 — см. пояснение в SettingsVolatilityUpdate.jsx: у CardContent нет нижнего отступа */}
+      <CardContent className="space-y-4 pb-6">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Metric label="Позиций в файле" value={report.positionsParsed} />
           <Metric label="Активных сделок проверено" value={report.dealsScanned} />

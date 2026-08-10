@@ -15,7 +15,7 @@ const SECTIONS = [
   { id: 'defaults', label: 'Значения по умолчанию', Icon: SlidersHorizontal },
   { id: 'futures', label: 'Фьючерсы', Icon: TrendingUp },
   { id: 'etf', label: 'ETF', Icon: Landmark },
-  { id: 'volatility', label: 'Актуализация Волатильности', Icon: Activity },
+  { id: 'volatility', label: 'Актуализация IV', Icon: Activity },
   { id: 'components', label: 'Компоненты', Icon: Palette },
 ];
 
