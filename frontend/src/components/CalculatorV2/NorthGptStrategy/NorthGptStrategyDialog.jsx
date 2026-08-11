@@ -276,7 +276,10 @@ function NorthGptStrategyDialog({
   const runGptSelect = async (chainForModel, formParams) => {
     setIsAnalyzing(true);
     setAnalyzeMessage('ChatGPT анализирует цепочку и подбирает комбинацию… это может занять 1–3 минуты.');
-    const { prompt, promptId, ...numericParams } = formParams;
+    // gptMode — положение переключателя режима, служебное поле формы: на сервер
+    // не уходит (там режим уже развёрнут в withAssetEnabled/withoutPut), но
+    // остаётся в сохранённых параметрах запуска для восстановления формы.
+    const { prompt, promptId, gptMode, ...numericParams } = formParams;
     const effectiveEntry = numericParams.entryPrice ?? entryPrice;
     const context = {
       entryPrice: effectiveEntry,

@@ -77,6 +77,41 @@ def get_db():
         db.close()
 
 
+def _ensure_north_gpt_prompt_mode():
+    """
+    Дотянуть колонку `mode` в north_gpt_prompts, если её ещё нет.
+
+    ЗАЧЕМ: библиотека промптов «Север GPT» разделена на три набора по режимам
+    стратегии. Существующие промпты получают режим 'options_only' — тот, в котором
+    библиотека и наполнялась до разделения. Полный текст миграции с пояснениями:
+    migrations/add_mode_to_north_gpt_prompts.sql (и ..._sqlite.sql).
+
+    Идемпотентно: при наличии колонки не делает ничего.
+    """
+    from sqlalchemy import inspect
+
+    try:
+        inspector = inspect(engine)
+        if "north_gpt_prompts" not in inspector.get_table_names():
+            return  # таблицы ещё нет — create_all создаст её сразу с колонкой
+        columns = {c["name"] for c in inspector.get_columns("north_gpt_prompts")}
+        if "mode" in columns:
+            return
+        with engine.connect() as conn:
+            conn.execute(text(
+                "ALTER TABLE north_gpt_prompts "
+                "ADD COLUMN mode VARCHAR(20) NOT NULL DEFAULT 'options_only'"
+            ))
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_north_gpt_prompts_mode "
+                "ON north_gpt_prompts (mode)"
+            ))
+            conn.commit()
+        print("✅ north_gpt_prompts.mode добавлена (все промпты → options_only)")
+    except Exception as e:
+        print(f"⚠️ Не удалось добавить north_gpt_prompts.mode: {e}")
+
+
 def init_db():
     """
     Инициализация базы данных
@@ -92,6 +127,13 @@ def init_db():
     from app.models import crypto_app_state  # Import crypto cloud state
     from app.models import strategy_default_setting  # Import «Север»/«Север GPT» defaults
     Base.metadata.create_all(bind=engine)
+
+    # ЗАЧЕМ: create_all создаёт только отсутствующие ТАБЛИЦЫ и не добавляет колонки
+    # в уже существующие. Деплой-скрипты SQL-миграции не запускают, а забытая
+    # миграция кладёт всю библиотеку промптов в 500. Поэтому — идемпотентная
+    # доводка схемы при старте. SQL-файлы в migrations/ остаются как документация
+    # и как способ накатить изменение заранее, до деплоя бэкенда.
+    _ensure_north_gpt_prompt_mode()
 
     # ЗАЧЕМ: Сидинг таблицы etf_settings при первом запуске —
     # если таблица пуста, наполняем её 5 популярными ETF (SPY, QQQ, IWM, VOO, DIA).

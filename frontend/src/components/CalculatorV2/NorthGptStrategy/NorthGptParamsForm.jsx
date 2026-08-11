@@ -7,12 +7,19 @@
  * последний использованный промпт (сервер отдаёт его первым в списке).
  */
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
 import { Save, RefreshCw, Pencil, Trash2 } from 'lucide-react';
 import { DEFAULT_NORTH_GPT_PROMPT } from './northGptConstants';
+import {
+  NORTH_GPT_MODES,
+  NORTH_GPT_MODE_OPTIONS,
+  isNorthGptMode,
+  modeToFlags,
+  flagsToMode,
+} from './northGptModes';
 import { getPrompts, createPrompt, updatePrompt, deletePrompt } from '../../../services/northGptApi';
 import { getNorthGptDefaults } from '../../../utils/strategyDefaults';
 
@@ -117,12 +124,23 @@ function NorthGptParamsForm({
   const [margin, setMargin] = useState(defaults.margin);
   const [marginTolerance, setMarginTolerance] = useState(defaults.marginTolerance);
   const [minStockMarginPct, setMinStockMarginPct] = useState(defaults.minStockMarginPct);
-  // Вариант «актив + опционы»: по умолчанию ВЫКЛЮЧЕН (считаем только «только опционы»).
-  const [withAssetEnabled, setWithAssetEnabled] = useState(initialValues?.withAssetEnabled ?? false);
-  // Режим «без Put»: сделка только из купленных Call. Диапазон страйков Put и
-  // допуск P&L по низу в этом режиме не нужны — для чистого Call убыток на нижней
-  // цене ограничен уплаченной премией, и требовать «около нуля» бессмысленно.
-  const [withoutPut, setWithoutPut] = useState(initialValues?.withoutPut ?? false);
+  // Режим работы стратегии: один переключатель на три положения вместо прежних
+  // двух независимых галочек (комбинация «актив + только CALL» смысла не имела).
+  // Запуски, сделанные до появления переключателя, восстанавливаются по старым флагам.
+  const [gptMode, setGptMode] = useState(() => (
+    isNorthGptMode(initialValues?.gptMode)
+      ? initialValues.gptMode
+      : flagsToMode(initialValues)
+  ));
+  const isWithAsset = gptMode === NORTH_GPT_MODES.WITH_ASSET;
+  // «Только CALL»: диапазон страйков Put и допуск P&L по низу в этом режиме не нужны —
+  // для чистого Call убыток на нижней цене ограничен уплаченной премией, и требовать
+  // «около нуля» бессмысленно.
+  const isCallOnly = gptMode === NORTH_GPT_MODES.CALL_ONLY;
+  const activeModeHint = useMemo(
+    () => NORTH_GPT_MODE_OPTIONS.find((m) => m.value === gptMode)?.hint || '',
+    [gptMode],
+  );
 
   // ===== Промпты =====
   const [prompts, setPrompts] = useState([]);
@@ -132,34 +150,68 @@ function NorthGptParamsForm({
   const [promptBusy, setPromptBusy] = useState(false);
   const [promptError, setPromptError] = useState('');
 
-  // Загрузка библиотеки промптов на маунте. Активным становится первый
-  // (сервер сортирует «последний использованный» первым). Если у нас уже есть
-  // восстановленный текст из initialValues — не перетираем его.
+  // ЗАЧЕМ: восстановленный из прошлого запуска текст бережём только на ПЕРВОЙ
+  // загрузке. При переключении режима поле обязано показать промпт нового набора,
+  // иначе список сменится, а текст в поле останется чужим.
+  const keepRestoredTextRef = useRef(!!initialValues?.prompt);
+  // ЗАЧЕМ: переключение режима — частое разведочное действие, молча терять набранный
+  // текст плохо. Черновик каждого режима запоминается при уходе и восстанавливается
+  // при возврате — ровно на время, пока открыт диалог.
+  const draftsRef = useRef({});
+
+  // Загрузка библиотеки промптов текущего режима. Активным становится первый
+  // (сервер сортирует «последний использованный в этом режиме» первым).
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const list = await getPrompts();
+        const list = await getPrompts(gptMode);
+        // ЗАЧЕМ: при быстром переключении между режимами ответы могут прийти не в
+        // том порядке — устаревший результат отбрасываем.
         if (cancelled) return;
         setPrompts(list);
-        if (!initialValues?.prompt) {
-          if (list.length > 0) {
-            setSelectedPromptId(list[0].id);
-            setPromptText(list[0].text);
-          } else {
-            setSelectedPromptId('');
-            setPromptText(DEFAULT_NORTH_GPT_PROMPT);
-          }
+        if (keepRestoredTextRef.current) {
+          keepRestoredTextRef.current = false;
+          // Запуск, сделанный до разделения на наборы, мог сослаться на промпт из
+          // другого режима — тогда считаем текст «своим», чтобы кнопки правки не
+          // работали над чужой записью.
+          setSelectedPromptId((prev) => (
+            prev && !list.some((p) => p.id === prev) ? '' : prev
+          ));
+          return;
+        }
+        // Черновик этого режима, если промпт из него всё ещё существует.
+        const draft = draftsRef.current[gptMode];
+        const draftValid = draft && (!draft.selectedPromptId
+          || list.some((p) => p.id === draft.selectedPromptId));
+        if (draftValid) {
+          setSelectedPromptId(draft.selectedPromptId);
+          setPromptText(draft.promptText);
+        } else if (list.length > 0) {
+          setSelectedPromptId(list[0].id);
+          setPromptText(list[0].text);
+        } else {
+          setSelectedPromptId('');
+          setPromptText(DEFAULT_NORTH_GPT_PROMPT);
         }
       } catch (e) {
         if (cancelled) return;
-        if (!initialValues?.prompt) setPromptText(DEFAULT_NORTH_GPT_PROMPT);
+        if (!keepRestoredTextRef.current) setPromptText(DEFAULT_NORTH_GPT_PROMPT);
+        keepRestoredTextRef.current = false;
         setPromptError('Не удалось загрузить библиотеку промптов');
       }
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [gptMode]);
+
+  // Смена режима: сохранить черновик текущего набора, затем переключиться.
+  const handleModeChange = (mode) => {
+    if (mode === gptMode) return;
+    draftsRef.current[gptMode] = { selectedPromptId, promptText };
+    setPromptError('');
+    setGptMode(mode);
+  };
 
   const selectedPrompt = useMemo(
     () => prompts.find((p) => p.id === selectedPromptId) || null,
@@ -168,7 +220,7 @@ function NorthGptParamsForm({
   const promptDirty = !!selectedPrompt && selectedPrompt.text !== promptText;
 
   const reloadPrompts = async (selectId) => {
-    const list = await getPrompts();
+    const list = await getPrompts(gptMode);
     setPrompts(list);
     if (selectId) {
       const found = list.find((p) => p.id === selectId);
@@ -193,7 +245,7 @@ function NorthGptParamsForm({
     if (!promptText.trim()) { setPromptError('Текст промпта не может быть пустым'); return; }
     setPromptBusy(true); setPromptError('');
     try {
-      const created = await createPrompt({ name, text: promptText });
+      const created = await createPrompt({ name, text: promptText, mode: gptMode });
       setNameDraft('');
       await reloadPrompts(created.id);
     } catch (e) {
@@ -233,7 +285,7 @@ function NorthGptParamsForm({
     setPromptBusy(true); setPromptError('');
     try {
       await deletePrompt(selectedPromptId);
-      const list = await getPrompts();
+      const list = await getPrompts(gptMode);
       setPrompts(list);
       if (list.length > 0) {
         setSelectedPromptId(list[0].id);
@@ -291,8 +343,8 @@ function NorthGptParamsForm({
   const handleBottomBlur = () => {
     const r = round2(bottom);
     setBottom(r);
-    // В режиме «без Put» нижняя граница Put-страйков не используется — не трогаем её.
-    if (!withoutPut) setPutStrikeMin(r);
+    // В режиме «только CALL» нижняя граница Put-страйков не используется — не трогаем её.
+    if (!isCallOnly) setPutStrikeMin(r);
   };
 
   // Двусторонняя связь «дней» ⇄ «дата расчёта».
@@ -322,9 +374,9 @@ function NorthGptParamsForm({
   }
   if (!calcDate) errors.push('Выберите дату расчёта');
   if (toNum(callStrikeMin) >= toNum(callStrikeMax)) errors.push('Диапазон страйков Call задан некорректно');
-  // Без Put диапазон его страйков и допуск P&L по низу не заполняются и не проверяются.
-  if (!withoutPut && toNum(putStrikeMin) >= toNum(putStrikeMax)) errors.push('Диапазон страйков Put задан некорректно');
-  if (!withoutPut && toNum(plTolerance) <= 0) errors.push('Допустимый диапазон P&L должен быть положительным');
+  // В «только CALL» диапазон Put-страйков и допуск P&L по низу не заполняются и не проверяются.
+  if (!isCallOnly && toNum(putStrikeMin) >= toNum(putStrikeMax)) errors.push('Диапазон страйков Put задан некорректно');
+  if (!isCallOnly && toNum(plTolerance) <= 0) errors.push('Допустимый диапазон P&L должен быть положительным');
   if (toNum(margin) <= 0) errors.push('Маржин должен быть положительным');
   if (toNum(marginTolerance) < 0) errors.push('Допуск маржина не может быть отрицательным');
   if (toNum(minStockMarginPct) < 0 || toNum(minStockMarginPct) > 100) errors.push('Доля акции должна быть от 0 до 100%');
@@ -332,7 +384,13 @@ function NorthGptParamsForm({
 
   const handleSubmit = () => {
     if (errors.length > 0) return;
+    // Режим раскладываем в те же два признака, что бэкенд получал от старых галочек —
+    // расчётная логика на сервере не менялась.
+    const { withAssetEnabled, withoutPut } = modeToFlags(gptMode);
     onAnalyze({
+      // Само положение переключателя — чтобы при повторном открытии диалога
+      // восстановить его точно, а не выводить обратно из двух признаков.
+      gptMode,
       entryPrice: toNum(entry),
       topPrice: round2(toNum(top)),
       bottomPrice: round2(toNum(bottom)),
@@ -374,16 +432,27 @@ function NorthGptParamsForm({
         </div>
       </div>
 
-      <label className="flex items-center gap-2 cursor-pointer select-none">
-        <input
-          type="checkbox"
-          className="h-4 w-4 rounded border-input"
-          checked={withAssetEnabled}
-          onChange={(e) => setWithAssetEnabled(e.target.checked)}
-        />
-        <span className="text-xs">Считать вариант «актив + опционы»</span>
-        <span className="text-[11px] text-muted-foreground">— по умолчанию считается только «только опционы»</span>
-      </label>
+      {/* Режим работы: определяет и состав сделки, и набор доступных промптов */}
+      <div className="space-y-1">
+        <Label className="text-xs">Режим работы</Label>
+        <div className="flex gap-1 p-0.5 rounded-md bg-muted w-fit">
+          {NORTH_GPT_MODE_OPTIONS.map((m) => (
+            <button
+              key={m.value}
+              type="button"
+              onClick={() => handleModeChange(m.value)}
+              className={`px-3 h-7 rounded text-xs transition-colors ${
+                gptMode === m.value
+                  ? 'bg-background shadow-sm font-medium'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+        <div className="text-[11px] text-muted-foreground">{activeModeHint}</div>
+      </div>
 
       <div className="grid grid-cols-[1fr_1px_1fr] gap-4">
         <div className="space-y-3">
@@ -399,7 +468,7 @@ function NorthGptParamsForm({
           </div>
           {/* Только для сделок с Put: у чистого Call убыток по низу ограничен
               уплаченной премией, требовать «около нуля» бессмысленно. */}
-          {!withoutPut && (
+          {!isCallOnly && (
             <div>
               <Label className="text-xs">Допустимый диапазон P&L по низу ± ($)</Label>
               <Input type="number" step="1" min="1" value={plTolerance}
@@ -466,18 +535,7 @@ function NorthGptParamsForm({
       </div>
 
       <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <div className="text-xs font-medium">Диапазоны страйков</div>
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded border-input"
-              checked={withoutPut}
-              onChange={(e) => setWithoutPut(e.target.checked)}
-            />
-            <span className="text-xs">Без Put — только опционы Call</span>
-          </label>
-        </div>
+        <div className="text-xs font-medium">Диапазоны страйков</div>
         <div className="grid grid-cols-[80px_1fr_1fr] items-end gap-2">
           <div className="text-xs text-muted-foreground pb-2">Call</div>
           <div>
@@ -493,7 +551,7 @@ function NorthGptParamsForm({
               onBlur={() => setCallStrikeMax(round2(callStrikeMax))} />
           </div>
         </div>
-        {!withoutPut && (
+        {!isCallOnly && (
           <div className="grid grid-cols-[80px_1fr_1fr] items-end gap-2">
             <div className="text-xs text-muted-foreground pb-2">Put</div>
             <div>
@@ -510,7 +568,7 @@ function NorthGptParamsForm({
             </div>
           </div>
         )}
-        {withoutPut && (
+        {isCallOnly && (
           <div className="text-[11px] text-muted-foreground">
             Опционы Put не используются: сделка собирается только из купленных Call,
             максимальный убыток равен уплаченной премии.
@@ -532,7 +590,7 @@ function NorthGptParamsForm({
               onChange={(e) => setMarginTolerance(e.target.value)} />
           </div>
         </div>
-        {withAssetEnabled && (
+        {isWithAsset && (
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-xs">Мин. доля акции (%)</Label>

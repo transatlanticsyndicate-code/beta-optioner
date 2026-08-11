@@ -47,10 +47,14 @@ export const requestNorthGptCombination = async ({ params, prompt, chain, contex
   }
 };
 
-/** Список промптов (первым — последний использованный). */
-export const getPrompts = async () => {
+/**
+ * Список промптов выбранного режима (первым — последний использованный в нём).
+ * Без режима сервер отдаёт промпты всех наборов.
+ */
+export const getPrompts = async (mode) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/north-gpt/prompts`);
+    const qs = mode ? `?mode=${encodeURIComponent(mode)}` : '';
+    const response = await fetch(`${API_BASE_URL}/api/north-gpt/prompts${qs}`);
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     const data = await response.json();
     return data.data || [];
@@ -60,13 +64,15 @@ export const getPrompts = async () => {
   }
 };
 
-/** Создать новый промпт. */
-export const createPrompt = async ({ name, text }) => {
+/** Создать новый промпт в наборе указанного режима. */
+export const createPrompt = async ({ name, text, mode }) => {
   try {
+    const body = { name, text };
+    if (mode) body.mode = mode;
     const response = await fetch(`${API_BASE_URL}/api/north-gpt/prompts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, text }),
+      body: JSON.stringify(body),
     });
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     const data = await response.json();

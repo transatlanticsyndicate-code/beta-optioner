@@ -234,7 +234,8 @@ def test_with_asset_disabled_asks_model_only_for_options_only(monkeypatch):
             }
 
     monkeypatch.setattr(ng, "get_openai_client", lambda: OnlyOptionsClient())
-    payload = {**PAYLOAD, "params": {**PAYLOAD["params"], "withAssetEnabled": False}}
+    payload = {**PAYLOAD, "params": {**PAYLOAD["params"], "withAssetEnabled": False,
+                                     "gptMode": "options_only"}}
     data = post_and_wait(payload)
     assert data["status"] == "success"
     # Модель вызвана в режиме «только опционы».
@@ -243,8 +244,9 @@ def test_with_asset_disabled_asks_model_only_for_options_only(monkeypatch):
     assert data["withAsset"] is None
     assert data["optionsOnly"]["positions"][0]["type"] == "PUT"
     assert data["optionsOnly"]["kind"] == "optionsOnly"
-    # Служебный флаг и неактуальный порог доли акции модели не уходят.
+    # Служебные поля формы и неактуальный порог доли акции модели не уходят.
     assert "withAssetEnabled" not in seen["constraints"]
+    assert "gptMode" not in seen["constraints"]
     assert "minStockMarginPct" not in seen["constraints"]
 
 
@@ -285,6 +287,7 @@ def test_without_put_asks_model_for_calls_only(monkeypatch):
 
     monkeypatch.setattr(ng, "get_openai_client", lambda: CallOnlyClient())
     payload = {**PAYLOAD, "params": {**PAYLOAD["params"], "withoutPut": True,
+                                     "gptMode": "call_only",
                                      "putStrikeMin": None, "putStrikeMax": None,
                                      "plTolerance": None}}
     data = post_and_wait(payload)
@@ -292,8 +295,8 @@ def test_without_put_asks_model_for_calls_only(monkeypatch):
     assert seen["call_only"] is True
     # В цепочке для модели только Call.
     assert all(row["type"] == "CALL" for row in seen["chain"])
-    # Ни диапазона Put, ни допуска по низу, ни служебного флага модели не уходит.
-    for key in ("putStrikeMin", "putStrikeMax", "plTolerance", "withoutPut"):
+    # Ни диапазона Put, ни допуска по низу, ни служебных полей формы модели не уходит.
+    for key in ("putStrikeMin", "putStrikeMax", "plTolerance", "withoutPut", "gptMode"):
         assert key not in seen["constraints"]
     assert data["optionsOnly"]["positions"][0]["type"] == "CALL"
     assert data["optionsOnly"]["puts"] == []

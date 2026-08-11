@@ -11,6 +11,11 @@ import uuid
 
 from app.database import Base
 
+# ЗАЧЕМ: три изолированных набора промптов — по одному на режим работы стратегии.
+# Список держим рядом с моделью: и колонка, и валидация в роутере смотрят сюда.
+NORTH_GPT_MODES = ("with_asset", "options_only", "call_only")
+DEFAULT_NORTH_GPT_MODE = "options_only"
+
 
 class NorthGptPrompt(Base):
     """Промпт для ИИ-подбора комбинаций (стратегия «Север GPT»)"""
@@ -19,6 +24,17 @@ class NorthGptPrompt(Base):
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String(255), nullable=False, index=True)
     text = Column(Text, nullable=False)
+    # ЗАЧЕМ: режим стратегии, к которому относится промпт. Наборы изолированы —
+    # в выпадающем списке формы видны только промпты выбранного режима.
+    # VARCHAR, а не Enum: расширять список значений дешевле (правки типа в PG не нужны),
+    # корректность обеспечивает валидация на входе в роутере.
+    mode = Column(
+        String(20),
+        nullable=False,
+        index=True,
+        default=DEFAULT_NORTH_GPT_MODE,
+        server_default=DEFAULT_NORTH_GPT_MODE,
+    )
     created_at = Column(TIMESTAMP, server_default=func.now(), nullable=False)
     updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now(), nullable=False)
     # ЗАЧЕМ: метка последнего использования — по ней промпт становится активным по умолчанию
@@ -32,6 +48,7 @@ class NorthGptPrompt(Base):
             "id": str(self.id),
             "name": self.name,
             "text": self.text,
+            "mode": self.mode or DEFAULT_NORTH_GPT_MODE,
             "createdAt": self.created_at.isoformat() if self.created_at else None,
             "updatedAt": self.updated_at.isoformat() if self.updated_at else None,
             "lastUsedAt": self.last_used_at.isoformat() if self.last_used_at else None,

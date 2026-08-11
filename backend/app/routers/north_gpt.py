@@ -8,7 +8,7 @@ import time
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 from sqlalchemy import nullslast
@@ -16,7 +16,11 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 
 from app.database import get_db
-from app.models.north_gpt_prompt import NorthGptPrompt
+from app.models.north_gpt_prompt import (
+    NorthGptPrompt,
+    NORTH_GPT_MODES,
+    DEFAULT_NORTH_GPT_MODE,
+)
 from app.services import north_gpt_validator as validator
 from app.services.openai_client import OpenAIClient
 
@@ -27,23 +31,48 @@ router = APIRouter(prefix="/api/north-gpt", tags=["north_gpt"])
 class PromptCreate(BaseModel):
     name: str
     text: str
+    # Режим стратегии, в набор которого попадёт промпт. Не задан — режим по умолчанию
+    # (обратная совместимость со старым фронтендом, который про режимы не знает).
+    mode: Optional[str] = None
 
 
 class PromptUpdate(BaseModel):
     name: Optional[str] = None
     text: Optional[str] = None
+    # mode здесь намеренно НЕТ: перенос промпта между наборами в интерфейсе не
+    # предусмотрен, сценарий закрывается связкой «сменить режим → Сохранить как новый».
+
+
+def _validate_mode(mode):
+    """
+    Проверить режим промпта.
+    ЗАЧЕМ: колонка — обычный VARCHAR, поэтому валидация на входе — единственная
+    защита от мусорных значений в базе. None пропускаем (значит «не задан»).
+    """
+    if mode is None:
+        return None
+    if mode not in NORTH_GPT_MODES:
+        raise HTTPException(status_code=400, detail=f"Неизвестный режим промпта: {mode}")
+    return mode
 
 
 # ============ CRUD библиотеки промптов ============
 @router.get("/prompts")
-def list_prompts(db: Session = Depends(get_db)):
+def list_prompts(mode: Optional[str] = Query(None), db: Session = Depends(get_db)):
     """
-    Список промптов. Первым идёт последний использованный
+    Список промптов выбранного режима. Первым идёт последний использованный
     (last_used_at desc, NULL — в конце), затем по дате обновления.
-    ЗАЧЕМ: фронтенд берёт первый элемент как активный по умолчанию.
+    ЗАЧЕМ: фронтенд берёт первый элемент как активный по умолчанию — благодаря
+    фильтрации на сервере это автоматически «последний использованный в этом режиме».
+
+    mode не передан — отдаём все промпты (поведение до разделения на наборы:
+    у пользователя может быть закэширован старый бандл фронтенда).
     """
+    query = db.query(NorthGptPrompt)
+    if _validate_mode(mode) is not None:
+        query = query.filter(NorthGptPrompt.mode == mode)
     items = (
-        db.query(NorthGptPrompt)
+        query
         .order_by(
             nullslast(NorthGptPrompt.last_used_at.desc()),
             NorthGptPrompt.updated_at.desc(),
@@ -60,7 +89,8 @@ def create_prompt(body: PromptCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Название промпта не может быть пустым")
     if not (body.text or "").strip():
         raise HTTPException(status_code=400, detail="Текст промпта не может быть пустым")
-    prompt = NorthGptPrompt(name=name, text=body.text)
+    mode = _validate_mode(body.mode) or DEFAULT_NORTH_GPT_MODE
+    prompt = NorthGptPrompt(name=name, text=body.text, mode=mode)
     db.add(prompt)
     db.commit()
     db.refresh(prompt)
@@ -373,6 +403,10 @@ def _select_for_expiration(req, expiration, ctx, ranges, with_asset=True):
     # Флаг «считать вариант с активом» — служебный, модели он не нужен.
     constraints.pop("withAssetEnabled", None)
     constraints.pop("withoutPut", None)
+    # Положение переключателя режима — тоже служебное поле формы. Модель NorthGptParams
+    # пропускает любые лишние поля (extra=allow), поэтому без явного удаления название
+    # режима уехало бы прямо в текст запроса к ChatGPT.
+    constraints.pop("gptMode", None)
     if without_put:
         # Put в сделке нет: ни диапазона его страйков, ни допуска P&L по низу
         # (для чистого CALL убыток на нижней цене ограничен уплаченной премией).
