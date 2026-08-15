@@ -4,16 +4,35 @@
  *        ожиданиям парсера, и сообщает пользователю, что нужно обновить расширение.
  *        Также валидирует цену базового актива, чтобы в калькулятор не попадала цена
  *        чужого тикера из watchlist/сравнения/popup.
+ *
+ * Обновлено 2026-08-15: TradingView заменил ~50 отдельных <th> в шапке доски опционов
+ * на 16 ГРУППИРОВАННЫХ колонок (напр. подколонки Bid и Ask теперь один <th> "Bid × Ask",
+ * Delta и Gamma — один <th> "DeltaGamma"). Число этих групп почти не меняется при
+ * включении/выключении полей в Customize columns — меняется состав токенов в тексте th.
+ * Поэтому пороги колонок ослаблены, а обязательные поля ищутся подстрокой по тексту
+ * th нужной стороны (Call/Put), а не по точному имени/индексу колонки.
  */
 
-const EXT2_EXPECTED_COLUMNS = 50;
-const EXT2_REQUIRED_HEADERS_CALL = ['bid', 'ask', 'delta', 'ltp'];
-const EXT2_REQUIRED_HEADERS_PUT = ['bid', 'ask', 'delta'];
+const EXT2_EXPECTED_COLUMNS = 16;       // ожидаемое число th в дефолтной раскладке TV (сгруппированные колонки)
+const EXT2_MIN_COLUMNS_CRITICAL = 10;   // меньше этого — TV точно сломал структуру таблицы, не просто перегруппировал поля
+const EXT2_REQUIRED_TOKENS_CALL = ['bid', 'ask', 'iv', 'delta'];
+const EXT2_REQUIRED_TOKENS_PUT = ['bid', 'ask', 'iv', 'delta'];
 
 // Проверка структуры страницы доски опционов
 // Возвращает { issues: [{ level, msg }], severity: 'ok'|'warning'|'critical' }
 function ext2CheckPageStructure() {
   const issues = [];
+
+  // 0. Канарейка на смену вёрстки TV: якорь data-qa-id="options-chain" — контейнер доски опционов.
+  // Не critical: страница могла ещё не дорисоваться (первый вызов из mainInit.js идёт через
+  // setTimeout, а повторные — при каждом клике по кнопке, так что временное отсутствие само
+  // "рассосётся" при следующем вызове без блокировки пользователя).
+  if (window.location.pathname.includes('/options/') && !document.querySelector('[data-qa-id="options-chain"]')) {
+    issues.push({
+      level: 'warning',
+      msg: 'Не найден контейнер доски опционов ([data-qa-id="options-chain"]) — возможно, TradingView снова сменил вёрстку, либо страница ещё не загрузилась'
+    });
+  }
 
   // 1. Шапка таблицы — вторая строка thead содержит заголовки колонок
   const headerRow = document.querySelector('thead tr:nth-child(2)');
@@ -21,38 +40,54 @@ function ext2CheckPageStructure() {
     issues.push({ level: 'critical', msg: 'Не найдена шапка таблицы опционов (thead > tr:nth-child(2))' });
     return { issues, severity: 'critical' };
   }
-  const ths = headerRow.querySelectorAll('th');
-  if (ths.length < 40) {
+  const ths = [...headerRow.querySelectorAll('th')];
+  const strikeIdx = ths.findIndex(th => th.textContent.trim().toLowerCase() === 'strike');
+
+  if (ths.length < EXT2_MIN_COLUMNS_CRITICAL || strikeIdx === -1) {
     issues.push({
       level: 'critical',
-      msg: `Число колонок в шапке (${ths.length}) сильно меньше ожидаемых ${EXT2_EXPECTED_COLUMNS} — TradingView изменил структуру таблицы`
+      msg: `Шапка таблицы опционов не похожа на ожидаемую (колонок: ${ths.length}${strikeIdx === -1 ? ', колонка Strike не найдена' : ''}) — TradingView, вероятно, снова изменил структуру таблицы`
     });
   } else if (ths.length !== EXT2_EXPECTED_COLUMNS) {
     issues.push({
       level: 'warning',
-      msg: `Число колонок в шапке (${ths.length}) отличается от ожидаемых ${EXT2_EXPECTED_COLUMNS} — греки и доп. поля могут парситься неточно`
+      msg: `Число колонок в шапке (${ths.length}) отличается от ожидаемых ${EXT2_EXPECTED_COLUMNS} — пользователь включил/выключил доп. поля в Customize columns TradingView`
     });
   }
 
-  // 2. Обязательные заголовки в карте колонок
-  const columnMap = typeof buildColumnMap === 'function' ? buildColumnMap() : null;
-  if (columnMap) {
-    const missingCall = EXT2_REQUIRED_HEADERS_CALL.filter(h => columnMap.call[h] === undefined);
-    const missingPut = EXT2_REQUIRED_HEADERS_PUT.filter(h => columnMap.put[h] === undefined);
+  // 2. Обязательные поля Bid/Ask/IV/Delta в группах Call и Put.
+  // ЗАЧЕМ: TV сливает подколонки в один <th> (напр. "Bid × Ask", "DeltaGamma"), поэтому
+  // токен ищем подстрокой в тексте th, а не по точному имени колонки через buildColumnMap()
+  // (parser.js) — та функция всё ещё ждёт старую раскладку 24 call + 2 central + 24 put и
+  // на 16 колонках отдаёт все th в map.call, ломая деление на call/put.
+  if (strikeIdx > 0) {
+    const callText = ths.slice(0, strikeIdx).map(th => th.textContent.trim().toLowerCase()).join(' | ');
+    const putText = ths.slice(strikeIdx + 1).map(th => th.textContent.trim().toLowerCase()).join(' | ');
+
+    const missingCall = EXT2_REQUIRED_TOKENS_CALL.filter(t => !callText.includes(t));
+    const missingPut = EXT2_REQUIRED_TOKENS_PUT.filter(t => !putText.includes(t));
     if (missingCall.length) {
       issues.push({
-        level: 'warning',
-        msg: `Не найдены обязательные заголовки Call: ${missingCall.join(', ')}`
+        level: 'critical',
+        msg: `В колонках Call не хватает полей: ${missingCall.join(', ')} — включите их через Customize columns на TradingView`
       });
     }
     if (missingPut.length) {
       issues.push({
-        level: 'warning',
-        msg: `Не найдены обязательные заголовки Put: ${missingPut.join(', ')}`
+        level: 'critical',
+        msg: `В колонках Put не хватает полей: ${missingPut.join(', ')} — включите их через Customize columns на TradingView`
       });
     }
-  } else {
-    issues.push({ level: 'warning', msg: 'buildColumnMap() не вернул карту колонок' });
+    // LTP выключен по умолчанию в новой раскладке — это не критично, парсер честно
+    // считает цену опциона как середину bid/ask, но пользователь должен об этом знать
+    if (!callText.includes('ltp') && !putText.includes('ltp')) {
+      issues.push({
+        level: 'warning',
+        msg: 'Колонка LTP (цена последней сделки) не включена — цена опциона будет считаться как середина bid/ask'
+      });
+    }
+  } else if (strikeIdx === 0) {
+    issues.push({ level: 'critical', msg: 'Колонка Strike стоит первой в шапке — слева от неё нет колонок Call' });
   }
 
   // 3. Строки страйков
@@ -65,15 +100,23 @@ function ext2CheckPageStructure() {
     return { issues, severity: 'critical' };
   }
 
-  // 4. Разметка call/put ячеек в первой строке
+  // 4. Разметка call/central/put ячеек в первой строке
   const firstRow = rows[0];
   const callCells = firstRow.querySelectorAll('td[data-cell-part="call"]');
+  const centralCells = firstRow.querySelectorAll('td[data-cell-part="central"]');
   const putCells = firstRow.querySelectorAll('td[data-cell-part="put"]');
   if (callCells.length === 0) {
     issues.push({ level: 'critical', msg: 'В строках страйков нет ячеек с data-cell-part="call"' });
   }
   if (putCells.length === 0) {
     issues.push({ level: 'critical', msg: 'В строках страйков нет ячеек с data-cell-part="put"' });
+  }
+  // Раньше central нёс 2 ячейки (Strike + IV), в новой раскладке по умолчанию — только Strike (1 ячейка)
+  if (centralCells.length === 0) {
+    issues.push({
+      level: 'warning',
+      msg: 'В строках страйков нет ячейки data-cell-part="central" (Strike) — возможно, TradingView снова изменил разметку центральной колонки'
+    });
   }
 
   // 5. data-cell-id и парсинг экспирации из него
@@ -104,10 +147,12 @@ function ext2CheckPageStructure() {
     });
   }
 
-  // 7. Структура Volume-ячейки
-  if (columnMap && columnMap.call.volume !== undefined && callCells.length > 0) {
-    const volIdx = columnMap.call.volume;
-    const volCell = callCells[volIdx];
+  // 7. Структура Volume-ячейки — колонку Volume ищем напрямую по заголовкам Call
+  // (без buildColumnMap, см. пояснение в п.2)
+  if (strikeIdx > 0 && callCells.length > 0) {
+    const callThs = ths.slice(0, strikeIdx);
+    const volIdx = callThs.findIndex(th => th.textContent.trim().toLowerCase().includes('volume'));
+    const volCell = volIdx >= 0 ? callCells[volIdx] : null;
     if (volCell && !volCell.querySelector('span')) {
       issues.push({
         level: 'warning',
@@ -127,15 +172,53 @@ function ext2CheckPageStructure() {
 function ext2GetUnderlyingPriceWithConfidence() {
   const issues = [];
 
-  // Якорь 1: диапазон страйков таблицы — гарантированно для текущего тикера
+  // Диапазон страйков таблицы — гарантированно для текущего тикера, используется и
+  // приоритетным якорем ниже, и старой цепочкой fallback'ов
   const rows = [...document.querySelectorAll('tr[data-strike]')];
   const strikes = rows.map(r => parseFloat(r.dataset.strike)).filter(s => s > 0);
   const hasStrikes = strikes.length >= 3;
   const minStrike = hasStrikes ? Math.min(...strikes) : 0;
   const maxStrike = hasStrikes ? Math.max(...strikes) : Infinity;
   const midStrike = hasStrikes ? (minStrike + maxStrike) / 2 : null;
+  const isPlausible = (v) => !hasStrikes || (v >= minStrike * 0.5 && v <= maxStrike * 1.5);
 
-  // Якорь 2: текущий тикер из URL — для привязки priceWrap к нужному символу
+  const _parseNum = typeof parseNumber === 'function'
+    ? parseNumber
+    : (t) => {
+        const n = parseFloat(String(t || '').replace(/[,\s]/g, '').replace(/−/g, '-'));
+        return isNaN(n) ? 0 : n;
+      };
+
+  // Якорь 0 (высший приоритет): строка цены БА внутри самой доски опционов.
+  // ЗАЧЕМ: data-qa-id="option-chain-underlying-row" — новый стабильный якорь TradingView,
+  // лежит в tbody чейна текущего тикера, поэтому цена гарантированно относится к нему
+  // и не может быть перепутана с watchlist/сайдбаром/чужим сравнением на графике.
+  // Вся цепочка ниже (priceWrap- по документу, отсечение сайдбара, привязка по тикеру,
+  // правдоподобие по страйкам) остаётся нетронутым fallback'ом на случай, если TV уберёт
+  // и этот якорь в очередной A/B-раскатке вёрстки.
+  const underlyingRow = document.querySelector('[data-qa-id="option-chain-underlying-row"]');
+  if (underlyingRow) {
+    const wrapEl = underlyingRow.querySelector('[class*="priceWrap-"]');
+    const rawText = wrapEl ? wrapEl.textContent : underlyingRow.textContent;
+    let rowValue = _parseNum(rawText);
+    if (!(rowValue > 0)) {
+      // Без priceWrap- текст строки — "AAPL 305.93 USD +0.67 +0.22%": тикер спереди мешает
+      // parseFloat, поэтому вытаскиваем первое десятичное число явным регэкспом
+      const m = String(rawText || '').match(/([\d,]+\.\d+)/);
+      if (m) rowValue = _parseNum(m[1]);
+    }
+    if (rowValue > 0) {
+      if (isPlausible(rowValue)) {
+        return { price: rowValue, confidence: 'high', issues };
+      }
+      issues.push({
+        level: 'warning',
+        msg: `Цена ${rowValue} из строки БА доски опционов не попадает в диапазон страйков [${minStrike}-${maxStrike}] — используем резервный способ поиска цены`
+      });
+    }
+  }
+
+  // Якорь 1: текущий тикер из URL — для привязки priceWrap к нужному символу
   const ticker = typeof getTickerFromUrl === 'function' ? getTickerFromUrl() : null;
 
   // Собираем всех кандидатов priceWrap
@@ -146,12 +229,6 @@ function ext2GetUnderlyingPriceWithConfidence() {
   const _skipSidebar = typeof isInTvSidebar === 'function' ? isInTvSidebar : () => false;
   const priceWraps = [...document.querySelectorAll('[class*="priceWrap-"]')]
     .filter(el => !_skipSidebar(el));
-  const _parseNum = typeof parseNumber === 'function'
-    ? parseNumber
-    : (t) => {
-        const n = parseFloat(String(t || '').replace(/[,\s]/g, '').replace(/−/g, '-'));
-        return isNaN(n) ? 0 : n;
-      };
 
   const candidates = priceWraps
     .map(el => ({ el, value: _parseNum(el.textContent) }))
@@ -182,8 +259,6 @@ function ext2GetUnderlyingPriceWithConfidence() {
       if (bestByTicker) break;
     }
   }
-
-  const isPlausible = (v) => !hasStrikes || (v >= minStrike * 0.5 && v <= maxStrike * 1.5);
 
   if (bestByTicker) {
     if (isPlausible(bestByTicker.value)) {

@@ -20,7 +20,11 @@ function getTickerFromUrl() {
   }
   // Fallback: /options/chain/NASDAQ-AAPL/ → AAPL
   const match = window.location.pathname.match(/chain\/[^/]+-([^/]+)/);
-  return match ? match[1] : null;
+  if (match) return match[1];
+  // Fallback: TV после редизайна встраивает доску в страницу символа —
+  // /symbols/NASDAQ-AAPL/options-chain/ → AAPL (без ?symbol= в URL)
+  const symbolsMatch = window.location.pathname.match(/\/symbols\/[^/]+-([^/]+)/);
+  return symbolsMatch ? symbolsMatch[1] : null;
 }
 
 // Полный символ из URL: CME_MINI:ESU2026
@@ -39,7 +43,10 @@ function getExchangeFromUrl() {
   }
   // Fallback: /options/chain/NASDAQ-AAPL → NASDAQ
   const match = window.location.pathname.match(/chain\/([A-Z_]+)-[^/]+/);
-  return match ? match[1] : null;
+  if (match) return match[1];
+  // Fallback: /symbols/NASDAQ-AAPL/options-chain/ → NASDAQ (страница символа после редизайна TV)
+  const symbolsMatch = window.location.pathname.match(/\/symbols\/([A-Z_]+)-[^/]+/);
+  return symbolsMatch ? symbolsMatch[1] : null;
 }
 
 // Экспирация из data-cell-id: CME_MINI:E3D260618C6625 → 2026-06-18
@@ -123,7 +130,13 @@ function getUnderlyingPrice() {
   return null;
 }
 
-// Экспирации из URL-параметра series: 20260618,20260630 → ["2026-06-18", "2026-06-30"]
+/**
+ * @deprecated После редизайна TradingView страница доски опционов больше не читает
+ * URL-параметр `?series=` (канонический URL — /options/chain/?symbol=...). Функция оставлена
+ * как безвредный fallback: если параметр когда-нибудь появится в URL, отработает как раньше;
+ * если его нет — просто вернёт пустой массив, ничего не ломая.
+ * Экспирации из URL-параметра series: 20260618,20260630 → ["2026-06-18", "2026-06-30"]
+ */
 function getExpirationsFromUrl() {
   const params = new URLSearchParams(window.location.search);
   const series = params.get('series');

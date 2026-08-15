@@ -1,14 +1,122 @@
 /**
- * ext2 — Парсер таблицы опционов (новая верстка TradingView 2026-03)
+ * ext2 — Парсер таблицы опционов (вёрстка TradingView 2026-08, сгруппированные колонки)
  *
- * Структура: 24 Call + 2 Central (Strike, IV) + 24 Put = 50 колонок
+ * Структура thead (вторая строка, 16 <th>): 7 call-групп + Strike + 7 put-групп + 1 пустой
+ * служебный th в конце. Каждая группа (напр. "Bid × Ask", "IV", "DeltaGamma" при включённой
+ * Gamma) — ОДИН <th> и ОДНА <td data-cell-part="call|put">, внутри которой может быть
+ * несколько под-значений (TV больше не рисует их отдельными колонками). Разделитель
+ * под-значений внутри ячейки: перевод строки (\n) или "×" (для пар вида "12.05 × 15.15").
+ * ВАЖНО: порядок под-значений внутри ячейки НЕ зеркалится между call/put — он всегда
+ * совпадает с порядком токенов в заголовке этой же группы (проверено живьём: put "Bid × Ask"
+ * = "0.03 × 0.05", bid первым, как и в заголовке "Bid × Ask").
+ *
+ * Central-часть раньше содержала 2 ячейки (Strike + "чистый" IV), теперь — только Strike
+ * (td[data-cell-part="central"] ×1). "Чистого" IV больше нет, IV читается из group-токена
+ * 'iv' на каждой стороне отдельно.
+ *
  * data-cell-part="call"|"central"|"put" на каждой <td>
  * data-strike на <tr>
- * data-cell-id="CME_MINI:E3D260618C6625" содержит экспирацию и тип
+ * data-cell-id="OPRA:AAPL260817C292.5" содержит экспирацию и тип
  */
 
-// Динамический маппинг колонок из <th> заголовков
-// Возвращает { call: { bid: index, ask: index, ... }, put: { ... } }
+// Словарь токенов заголовков группы. Порядок ВАЖЕН: более длинные/специфичные токены
+// должны стоять раньше более коротких, иначе, например, "bid iv" будет по ошибке распознан
+// как "bid" (жадное сопоставление префиксов, см. описание задачи). Точные сокращения TV
+// для ещё не встречавшихся комбинаций под-колонок неизвестны — словарь намеренно толерантен:
+// нераспознанный остаток заголовка просто обрывает разбор, не роняя парсер.
+const HEADER_TOKEN_DICT = [
+  ['annualized', 'annualized'],
+  ['time value', 'timeValue'],
+  ['iv spread', 'ivSpread'],
+  ['rel dist', 'relDist'],
+  ['distance', 'distance'],
+  ['to be %', 'toBePct'],
+  ['bid iv', 'bidIV'],
+  ['ask iv', 'askIV'],
+  ['volume', 'volume'],
+  ['spread', 'spread'],
+  ['theor', 'theor'],
+  ['delta', 'delta'],
+  ['gamma', 'gamma'],
+  ['theta', 'theta'],
+  ['bid %', 'bidPct'],
+  ['ask %', 'askPct'],
+  ['vega', 'vega'],
+  ['intr', 'intrinsicValue'],
+  ['ltp', 'ltp'],
+  ['bid', 'bid'],
+  ['ask', 'ask'],
+  ['rho', 'rho'],
+  ['be', 'be'],
+  ['iv', 'iv'],
+];
+
+// Точное совпадение токена (используется для частей, разбитых по "×", напр. "Bid × Ask")
+function matchToken(part) {
+  const found = HEADER_TOKEN_DICT.find(([raw]) => raw === part);
+  return found ? found[1] : null;
+}
+
+// "annualized" — не самостоятельное значение, а модификатор предыдущего bidPct/askPct
+// (полное имя колонки в TV — "Bid % annualized" / "Ask % annualized").
+function mergeAnnualizedTokens(tokens) {
+  const result = [];
+  for (const token of tokens) {
+    if (token === 'annualized') {
+      const prev = result[result.length - 1];
+      if (prev === 'bidPct') { result[result.length - 1] = 'annBidPct'; continue; }
+      if (prev === 'askPct') { result[result.length - 1] = 'annAskPct'; continue; }
+      continue; // модификатор без известного контекста — игнорируем
+    }
+    result.push(token);
+  }
+  return result;
+}
+
+// Разбор текста заголовка одной группы в упорядоченный список токенов
+// (порядок = порядок под-значений внутри соответствующей td).
+function tokenizeHeader(text) {
+  const normalized = (text || '').trim().toLowerCase();
+  if (!normalized) return [];
+
+  // "Bid × Ask" — TV явно разделяет пару символом "×"
+  if (normalized.includes('×')) {
+    return normalized.split('×').map(part => matchToken(part.trim())).filter(Boolean);
+  }
+
+  // Иначе заголовок — конкатенация сокращений без разделителя (напр. "deltagamma"),
+  // разбираем жадным сопоставлением по словарю (длинные токены раньше коротких).
+  const tokens = [];
+  let rest = normalized;
+  while (rest.length > 0) {
+    const found = HEADER_TOKEN_DICT.find(([raw]) => rest.startsWith(raw));
+    if (!found) break; // неизвестный остаток — сохраняем то, что успели распознать
+    rest = rest.slice(found[0].length).trimStart();
+    tokens.push(found[1]);
+  }
+  return mergeAnnualizedTokens(tokens);
+}
+
+// Разбор заголовков одной стороны (call или put) в lookup «токен → {cellIdx, subIdx}».
+// cellIdx — индекс td[data-cell-part=сторона] в строке (1:1 с индексом th этой стороны),
+// subIdx — позиция значения внутри ячейки, если в одном th объединено несколько под-колонок.
+function buildSideMap(ths) {
+  const sideMap = {};
+  ths.forEach((th, cellIdx) => {
+    const tokens = tokenizeHeader(th.textContent);
+    tokens.forEach((key, subIdx) => {
+      // Первое вхождение токена побеждает — на случай дублей в неизвестных сочетаниях TV
+      if (key && sideMap[key] === undefined) {
+        sideMap[key] = { cellIdx, subIdx };
+      }
+    });
+  });
+  return sideMap;
+}
+
+// Динамический маппинг колонок из <th> заголовков.
+// Возвращает { call: { токен: {cellIdx, subIdx}, ... }, central: {}, put: { ... } }
+// Имя и сигнатура сохранены — используется buttonsHandlers.js и healthCheck.js.
 function buildColumnMap() {
   const headerRow = document.querySelector('thead tr:nth-child(2)');
   if (!headerRow) {
@@ -16,44 +124,63 @@ function buildColumnMap() {
     return null;
   }
 
-  const ths = headerRow.querySelectorAll('th');
-  if (ths.length < 50) {
-    console.warn(LOG_TAG, 'buildColumnMap: ожидалось 50+ колонок, получено', ths.length);
+  const ths = Array.from(headerRow.querySelectorAll('th'));
+
+  // Граница call/put — заголовок "Strike", а не фиксированное число колонок: TV теперь
+  // рисует 16 сгруппированных th (число не меняется от вкл/выкл под-колонок — они просто
+  // расширяют текст и содержимое уже существующей группы, не добавляя новый th).
+  const strikeIdx = ths.findIndex(th => th.textContent.trim().toLowerCase() === 'strike');
+  if (strikeIdx === -1) {
+    console.warn(LOG_TAG, 'buildColumnMap: заголовок Strike не найден — структура таблицы изменилась');
+    return null;
   }
 
-  const map = { call: {}, central: {}, put: {} };
+  const callThs = ths.slice(0, strikeIdx);
+  // Хвостовой пустой служебный th (последний элемент) даёт tokenizeHeader([]) → пустой
+  // список токенов, поэтому соответствующая ему пустая put-ячейка сама по себе никогда
+  // не попадёт в sideMap — отдельно отрезать её не нужно.
+  const putThs = ths.slice(strikeIdx + 1);
 
-  // Первые 24 th = Call (порядок: Rho, Vega, Gamma, ... Volume)
-  // [24] = Strike, [25] = IV (central)
-  // [26..49] = Put (порядок: Volume, Distance, ... Rho)
-  const callCount = 24;
-  const centralCount = 2;
-
-  for (let i = 0; i < ths.length; i++) {
-    const name = ths[i].textContent.trim().toLowerCase();
-    if (i < callCount) {
-      map.call[name] = i;
-    } else if (i < callCount + centralCount) {
-      map.central[name] = i - callCount;
-    } else {
-      map.put[name] = i - callCount - centralCount;
-    }
-  }
-
-  return map;
+  return {
+    call: buildSideMap(callThs),
+    central: {},
+    put: buildSideMap(putThs),
+  };
 }
 
-// Парсинг данных из ячейки (может содержать <span> для Volume progressbar)
-function parseCellValue(cell) {
-  if (!cell) return 0;
-  // Volume ячейки: <div><span class="value-...">6</span><div role="progressbar">...</div></div>
-  const span = cell.querySelector('span[class*="value"]') || cell.querySelector('span');
-  if (span) return parseNumber(span.textContent);
-  return parseNumber(cell.textContent);
+// Значения внутри группированной ячейки, в порядке, соответствующем токенам заголовка.
+function readCellSubValues(cell) {
+  if (!cell) return [];
+
+  // Volume-ячейка: <span class="value-...">6</span><div role="progressbar">...</div> —
+  // прогресс-бар может подмешать в innerText лишние пробельные символы, поэтому если
+  // ячейка не групповая (нет \n и ×) и содержит value-span, читаем его напрямую
+  // (сохранена логика старого parseCellValue).
+  const valueSpan = cell.querySelector('span[class*="value"]');
+  const raw = (cell.innerText || cell.textContent || '').trim();
+  if (valueSpan && !raw.includes('\n') && !raw.includes('×')) {
+    return [valueSpan.textContent.trim()];
+  }
+
+  if (!raw) return [];
+  return raw
+    .split('\n')
+    .flatMap(line => line.split('×'))
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+}
+
+// Чтение одного под-значения стороны по токену через карту колонок
+function getSideValue(cells, sideMap, token) {
+  const loc = sideMap ? sideMap[token] : undefined;
+  if (!loc) return 0;
+  const subvalues = readCellSubValues(cells[loc.cellIdx]);
+  const raw = subvalues[loc.subIdx];
+  return raw !== undefined ? parseNumber(raw) : 0;
 }
 
 // Парсинг строки опциона
-// row = <tr data-strike="6625">
+// row = <tr data-strike="292.5">
 function parseOptionRow(row, columnMap) {
   const strike = parseFloat(row.dataset.strike);
 
@@ -66,10 +193,7 @@ function parseOptionRow(row, columnMap) {
   const expiration = getExpirationFromCellId(firstCallCell?.dataset.cellId || firstPutCell?.dataset.cellId);
 
   function extractSide(cells, sideMap) {
-    function get(name) {
-      const idx = sideMap[name];
-      return idx !== undefined ? parseCellValue(cells[idx]) : 0;
-    }
+    const get = (token) => getSideValue(cells, sideMap, token);
     return {
       bid: get('bid'),
       ask: get('ask'),
@@ -78,39 +202,32 @@ function parseOptionRow(row, columnMap) {
       spread: get('spread'),
       volume: get('volume'),
       distance: get('distance'),
-      relDist: get('rel dist'),
-      bidPct: get('bid %'),
-      askPct: get('ask %'),
-      annBidPct: get('ann bid %'),
-      annAskPct: get('ann ask %'),
-      intrinsicValue: get('intr value'),
-      timeValue: get('time value'),
-      bidIV: get('bid iv %'),
-      askIV: get('ask iv %'),
-      ivSpread: get('iv spread'),
+      relDist: get('relDist'),
+      bidPct: get('bidPct'),
+      askPct: get('askPct'),
+      annBidPct: get('annBidPct'),
+      annAskPct: get('annAskPct'),
+      intrinsicValue: get('intrinsicValue'),
+      timeValue: get('timeValue'),
+      bidIV: get('bidIV'),
+      askIV: get('askIV'),
+      ivSpread: get('ivSpread'),
       be: get('be'),
-      toBePct: get('to be %'),
+      toBePct: get('toBePct'),
       delta: get('delta'),
       theta: get('theta'),
       gamma: get('gamma'),
       vega: get('vega'),
       rho: get('rho'),
-      // Вычисляемые
-      iv: get('ask iv %') || get('bid iv %'),
+      // Вычисляемые: IV — основной токен группы "IV", фолбэк на Ask/Bid IV, если вместо
+      // дефолтной колонки IV включены отдельные Bid IV / Ask IV.
+      iv: get('iv') || get('askIV') || get('bidIV'),
       price: get('ltp') || (get('bid') + get('ask')) / 2
     };
   }
 
   const callData = columnMap ? extractSide(callCells, columnMap.call) : {};
   const putData = columnMap ? extractSide(putCells, columnMap.put) : {};
-
-  // Чистый IV из central колонки (вторая central ячейка = IV для страйка)
-  const centralCells = row.querySelectorAll('td[data-cell-part="central"]');
-  const centralIV = centralCells.length >= 2 ? parseNumber(centralCells[1].textContent) : 0;
-  if (centralIV > 0) {
-    callData.iv = centralIV;
-    putData.iv = centralIV;
-  }
 
   return { strike, expiration, callData, putData };
 }
@@ -219,4 +336,3 @@ function dumpFullChain() {
     }
   }
 }
-
