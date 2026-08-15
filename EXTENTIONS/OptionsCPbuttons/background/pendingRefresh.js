@@ -89,6 +89,20 @@ async function _readUnderlyingPrice(tvTabId) {
     const fb = await chrome.scripting.executeScript({
       target: { tabId: tvTabId },
       func: () => {
+        // Шаг 1: строка цены БА внутри самой доски опционов — стабильный якорь
+        // data-qa-id, не зависит от хэш-классов и не путается с сайдбаром.
+        const row = document.querySelector('[data-qa-id="option-chain-underlying-row"]');
+        if (row) {
+          const wrap = row.querySelector('[class*="priceWrap-"]');
+          const text = (wrap ? wrap.textContent : row.textContent) || '';
+          const m = text.match(/[\d.,]+/);
+          if (m) {
+            const p = parseFloat(m[0].replace(/,/g, ''));
+            if (p > 0) return p;
+          }
+        }
+        // Шаг 2 (существующая логика, без изменений): документ-wide priceWrap-
+        // с SKIP-списком сайдбара — резерв, если option-chain-underlying-row нет в DOM.
         const SKIP = [
           '[class*="widgetbar-widget"]',
           '[class*="widgetbar-page"]',
@@ -163,6 +177,27 @@ async function executePendingRefresh(calcTabId, configData, dbConfigId) {
     }
 
     const tvTabId = tvTabs[0].id;
+
+    // ЗАЧЕМ: URL-параметры series/strikes TV больше не читает (см. buildTvOptionsUrl
+    // в dbConfigRefresh.js) — дефолтные фильтры доски могут не показать нужные даты/
+    // страйки pending-позиции. Выставляем их кликами через content-script ДО ожидания
+    // таблицы. Отказ (нет content-script, таймаут, ok:false) не прерывает поток —
+    // ниже уже есть парсинг с delay-паузами, который переживёт дефолтные фильтры.
+    try {
+      const chainVisibility = await chrome.tabs.sendMessage(tvTabId, {
+        action: 'ensureChainVisibility',
+        payload: {
+          dates: [...new Set((configData.options || []).map(o => o.date).filter(Boolean))],
+          allStrikes: true
+        }
+      }).catch(e => { console.warn('[TVC Pending] ensureChainVisibility недоступен:', e.message); return null; });
+      if (!chainVisibility || !chainVisibility.ok) {
+        console.warn('[TVC Pending] ensureChainVisibility вернул отказ — продолжаем на дефолтных фильтрах', chainVisibility);
+      }
+      await delay(1500); // даём странице перерисоваться после смены фильтров
+    } catch (e) {
+      console.warn('[TVC Pending] Ошибка вызова ensureChainVisibility:', e.message);
+    }
 
     await writeStatusToCalculator(calcTabId, 'collecting', 5, 'Ожидание загрузки TradingView...');
 

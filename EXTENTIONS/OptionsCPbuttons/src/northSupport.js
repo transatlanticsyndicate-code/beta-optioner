@@ -1,13 +1,20 @@
 /**
  * ext2 — Поддержка фичи "Стратегия СЕВЕР" в калькуляторе.
  *
- * 1. Сканирует таблицу опционов и возвращает СПИСОК доступных экспираций по
- *    бейджам "X DTE" — без парсинга строк (работает даже на свёрнутых группах).
+ * 1. Сканирует доску опционов и возвращает СПИСОК доступных экспираций — основной
+ *    источник это поповер фильтра "Expiration" (data-qa-id), он отдаёт ПОЛНЫЙ список
+ *    дат без необходимости скроллить/раскрывать таблицу; резервный источник —
+ *    групповые заголовки в самой таблице (только уже отрисованные даты).
  * 2. По команде разворачивает указанную группу экспирации (если свёрнута),
  *    ждёт появления строк и зовёт dumpFullChain() — это пишет полную цепочку
  *    в chrome.storage.local.tvc_full_chain, откуда её читает калькулятор.
- * 3. Перед раскрытием убеждается, что в фильтрах стоит "Next 6 months" (≈180
- *    дней) и "All strikes" — без них в таблице может быть слишком мало дат/страйков.
+ * 3. Перед раскрытием убеждается через ensureChainVisibility(), что нужная дата
+ *    (или все даты) видна в фильтре и что страйки не обрезаны ("All strikes").
+ *
+ * Вёрстка TV 2026-08: фильтры — чипы с data-qa-id*="series-filter"/"strikes-filter",
+ * поповеры рендерятся в портал [data-qa-id="overlap-manager-root"]. Старые эвристики
+ * (regex "N DTE" по всем span/div, подъём по 10 предкам, глифы ▼▶, рамки чипов по
+ * геометрии) — сломаны новой вёрсткой и полностью заменены на data-qa-id якоря.
  */
 
 (function () {
@@ -16,15 +23,9 @@
   const LOG = (...args) => console.log('[ext2/north]', ...args);
   const WARN = (...args) => console.warn('[ext2/north]', ...args);
 
-  function todayPlus(days) {
-    const d = new Date();
-    d.setUTCDate(d.getUTCDate() + days);
-    return d.toISOString().split('T')[0];
-  }
-
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-  /** React-friendly клик с polный набором событий */
+  /** React-friendly клик с полным набором событий */
   function reactClick(el) {
     if (!el) return;
     try { el.scrollIntoView({ block: 'center', behavior: 'instant' }); } catch (e) {}
@@ -42,390 +43,442 @@
     try { el.click(); } catch (e) {}
   }
 
-  /** Поиск группового заголовка экспирации по бейджу "N DTE" */
-  function findExpirationHeaders() {
-    const results = [];
-    const seen = new Set();
-    const all = document.querySelectorAll('span, div, td, button');
-    for (const el of all) {
-      const text = (el.textContent || '').trim();
-      if (text.length > 40) continue;
-      const m = text.match(/^(\d{1,4})\s*DTE\b/i);
-      if (!m) continue;
-      const days = parseInt(m[1], 10);
-      if (!Number.isFinite(days) || days < 0 || days > 3650) continue;
-      const date = todayPlus(days);
-      if (seen.has(date)) continue;
-      seen.add(date);
+  // ---------------------------------------------------------------------
+  // Якоря новой вёрстки (проверены живьём 2026-08-15)
+  // ---------------------------------------------------------------------
+  const SERIES_FILTER_SEL = '[data-qa-id*="series-filter"]';
+  const STRIKES_FILTER_SEL = '[data-qa-id*="strikes-filter"]';
+  const OVERLAY_SEL = '[data-qa-id="overlap-manager-root"]';
+  const SERIES_MODE_SEL = '[data-qa-id="option-chain-series-filter-mode"]';
+  const STRIKES_MODE_SEL = '[data-qa-id="option-chain-strikes-filter-mode"]';
+  const SELECT_ALL_SEL = '[data-qa-id="select-all-option"]';
 
-      let header = el;
-      let clickable = el;
-      let isExpanded = null;
-      for (let i = 0; i < 10; i++) {
-        const aria = header.getAttribute && header.getAttribute('aria-expanded');
-        if (aria === 'true' || aria === 'false') {
-          isExpanded = aria === 'true';
-          clickable = header;
-          break;
-        }
-        const role = header.getAttribute && header.getAttribute('role');
-        if (header.tagName === 'BUTTON' || role === 'button') {
-          clickable = header;
-          break;
-        }
-        try {
-          const cs = window.getComputedStyle(header);
-          if (cs && cs.cursor === 'pointer') clickable = header;
-        } catch (e) {}
-        const parent = header.parentElement;
-        if (!parent) break;
-        header = parent;
-      }
-      if (isExpanded === null) {
-        const ht = (clickable.textContent || '');
-        if (ht.includes('▼') || ht.includes('⌄') || ht.includes('⏷')) isExpanded = true;
-        else if (ht.includes('▶') || ht.includes('›') || ht.includes('⏵') || ht.includes('▸')) isExpanded = false;
-      }
-      results.push({ date, days, header: clickable, badge: el, isExpanded });
-    }
-    results.sort((a, b) => a.days - b.days);
-    return results;
+  /** Чип фильтра по типу — прямой селектор, без геометрии/keyword-эвристик. */
+  function findFilterChip(kind) {
+    return document.querySelector(kind === 'strikes' ? STRIKES_FILTER_SEL : SERIES_FILTER_SEL);
   }
 
-  /**
-   * Поиск чипа фильтра по ключевым словам. TV рендерит чипы как кликабельные
-   * блоки с подписью + значением + крестиком. Ищем самый внешний кликабельный
-   * блок, содержащий все ключевые слова. Игнорируем крестик-кнопку (закрытие).
-   */
-  function findFilterChip(keywords) {
-    const lowerKeywords = keywords.map(k => k.toLowerCase());
-    // Кандидаты — кликабельные элементы (button, role=button, cursor:pointer)
-    const candidates = [];
-    const all = document.querySelectorAll('button, [role="button"], [tabindex]');
-    for (const el of all) {
-      const text = ((el.textContent || '').toLowerCase()).trim();
-      if (!text || text.length > 80) continue;
-      // Все ключевые слова должны присутствовать
-      const matchAll = lowerKeywords.every(k => text.includes(k));
-      if (!matchAll) continue;
-      // Игнорируем сам крестик — у него обычно роль 'close' или короткий текст
-      if (text.length < 3) continue;
-      // Фильтруем по размеру: чип — небольшая прямоугольная штука
-      const r = el.getBoundingClientRect();
-      if (r.width < 40 || r.width > 500 || r.height < 16 || r.height > 80) continue;
-      candidates.push({ el, text, area: r.width * r.height });
+  /** Ждём, пока поповер (портал в body) появится в DOM после клика по чипу. */
+  async function waitForOverlay(timeoutMs = 2500) {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const overlay = document.querySelector(OVERLAY_SEL);
+      if (overlay) return overlay;
+      await sleep(150);
     }
-    if (candidates.length === 0) return null;
-    // Берём кандидат с минимальной площадью, чтобы не зацепить контейнер
-    candidates.sort((a, b) => a.area - b.area);
-    LOG('findFilterChip:', keywords, '→', candidates[0].text);
-    return candidates[0].el;
-  }
-
-  /**
-   * Поиск пункта меню по тексту. Сначала пробуем "семантические" роли
-   * (option/menuitem/li/button), потом — ЛЮБЫЕ элементы с подходящим
-   * текстом и кликабельным предком. TV рендерит выпадающее меню в портале
-   * под document.body, обычно поверх всего и без role.
-   */
-  function findMenuItem(textPattern) {
-    const regex = textPattern instanceof RegExp ? textPattern : new RegExp(`^${textPattern}\\s*$`, 'i');
-
-    // 1. Семантические роли
-    const semantic = document.querySelectorAll('[role="option"], [role="menuitem"], [role="menuitemradio"], li, button');
-    for (const el of semantic) {
-      const text = (el.textContent || '').trim();
-      if (!text || text.length > 60) continue;
-      if (regex.test(text)) {
-        LOG('findMenuItem(semantic):', textPattern, '→', text);
-        return el;
-      }
-    }
-
-    // 2. Любые видимые элементы с подходящим текстом — выбираем самый "нижний"
-    //    (с наименьшим количеством детей), чтобы попасть в конкретный пункт меню.
-    const all = document.querySelectorAll('div, span, a');
-    const matches = [];
-    for (const el of all) {
-      // Только листовые/почти-листовые ноды
-      if (el.children.length > 3) continue;
-      const text = (el.textContent || '').trim();
-      if (!text || text.length > 60) continue;
-      if (!regex.test(text)) continue;
-      // Проверим, что элемент видим
-      try {
-        const r = el.getBoundingClientRect();
-        if (r.width < 4 || r.height < 4) continue;
-        if (r.top < 0 && r.bottom < 0) continue;
-        if (r.left < 0 && r.right < 0) continue;
-      } catch (e) {}
-      matches.push({ el, depth: 0 });
-    }
-    if (matches.length > 0) {
-      // Сначала — листовые элементы
-      matches.sort((a, b) => a.el.children.length - b.el.children.length);
-      const winner = matches[0].el;
-      // Если winner — это текст внутри обёртки, поднимаемся до ближайшего
-      // кликабельного предка (cursor:pointer / role / button)
-      let clickable = winner;
-      for (let i = 0; i < 6; i++) {
-        const role = clickable.getAttribute && clickable.getAttribute('role');
-        if (role === 'option' || role === 'menuitem' || role === 'menuitemradio' || clickable.tagName === 'BUTTON') break;
-        try {
-          const cs = window.getComputedStyle(clickable);
-          if (cs && cs.cursor === 'pointer') break;
-        } catch (e) {}
-        if (!clickable.parentElement) break;
-        clickable = clickable.parentElement;
-      }
-      LOG('findMenuItem(fallback):', textPattern, '→', winner.textContent.trim(), '(click через', clickable.tagName, ')');
-      return clickable;
-    }
-
-    // 3. Если ничего не нашли — логируем все короткие тексты с ключевыми словами для диагностики
-    const debugAll = Array.from(document.querySelectorAll('*'))
-      .map(el => (el.textContent || '').trim())
-      .filter(t => t && t.length < 40 && (/\bdays\b/i.test(t) || /\bstrikes?\b/i.test(t) || /^all\b/i.test(t)))
-      .slice(0, 20);
-    LOG('findMenuItem: ничего не нашёл. Видимые тексты с keywords:', debugAll);
     return null;
   }
 
+  /** Закрыть поповер по Escape (клик вне тоже работает, но Escape надёжнее из кода). */
+  function closePopover() {
+    try {
+      const opts = { key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true };
+      document.dispatchEvent(new KeyboardEvent('keydown', opts));
+      if (document.activeElement && document.activeElement !== document.body) {
+        document.activeElement.dispatchEvent(new KeyboardEvent('keydown', opts));
+      }
+    } catch (e) {}
+  }
+
   /**
-   * Установить один фильтр: найти чип по ключевым словам, проверить значение,
-   * если не то — кликнуть и выбрать нужный пункт меню. Возвращает true если
-   * после операции значение совпадает с ожидаемым (или уже было).
+   * Переключить режим внутри поповера (напр. "Specific dates"/"Ranges") — кнопки
+   * role="radio" внутри контейнера modeContainerSel. Кликаем, только если желаемая
+   * кнопка ещё не активна (aria-checked/aria-selected) — меньше лишних кликов.
    */
-  async function setOneFilter({ chipKeywords, valueKeyword, menuMatchers }) {
-    for (let attempt = 0; attempt < 4; attempt++) {
-      const chip = findFilterChip(chipKeywords);
-      if (!chip) {
-        LOG(`setOneFilter[${chipKeywords.join('/')}] чип не найден (попытка ${attempt + 1}), жду 800мс`);
-        await sleep(800);
-        continue;
+  async function setPopoverMode(modeContainerSel, desiredTextRegex) {
+    const container = document.querySelector(modeContainerSel);
+    if (!container) return false;
+    const radios = container.querySelectorAll('[role="radio"]');
+    for (const radio of radios) {
+      const text = (radio.textContent || '').trim();
+      if (!desiredTextRegex.test(text)) continue;
+      const state = radio.getAttribute('aria-checked') ?? radio.getAttribute('aria-selected');
+      if (state !== 'true') {
+        reactClick(radio);
+        await sleep(350);
       }
-      const chipText = (chip.textContent || '').toLowerCase();
-      if (chipText.includes(valueKeyword)) {
-        LOG(`setOneFilter[${chipKeywords.join('/')}] уже стоит "${valueKeyword}"`);
-        return true;
-      }
-      LOG(`setOneFilter[${chipKeywords.join('/')}] открываю меню, текущий чип: "${chipText}"`);
-      reactClick(chip);
-      // Ждём появления меню. TV рендерит выпадашку асинхронно (портал, анимация).
-      // Несколько раундов поиска с возрастающим ожиданием.
-      let opt = null;
-      for (const delay of [400, 600, 800, 1000]) {
-        await sleep(delay);
-        for (const matcher of menuMatchers) {
-          opt = findMenuItem(matcher);
-          if (opt) break;
-        }
-        if (opt) break;
-      }
-      if (opt) {
-        LOG(`setOneFilter[${chipKeywords.join('/')}] кликаю по пункту: "${opt.textContent}"`);
-        reactClick(opt);
-        await sleep(800);
-        // Проверим, изменился ли чип
-        const newChip = findFilterChip(chipKeywords);
-        const newText = (newChip?.textContent || '').toLowerCase();
-        if (newText.includes(valueKeyword)) {
-          LOG(`setOneFilter[${chipKeywords.join('/')}] ОК, новое значение: "${newText}"`);
-          return true;
-        }
-        WARN(`setOneFilter[${chipKeywords.join('/')}] клик не привёл к нужному значению, было "${chipText}" стало "${newText}"`);
-      } else {
-        WARN(`setOneFilter[${chipKeywords.join('/')}] пункт меню не найден, закрываю меню`);
-        document.body.click();
-        await sleep(300);
-      }
+      return true;
     }
     return false;
   }
 
   /**
-   * Установить фильтр Expiration → Next 6 months (≈180 дней), Strikes → All strikes.
-   * Многократные эвристики, ничего не ломаем при неудаче.
+   * Пункты-даты внутри открытого поповера series-filter. qa-id вида
+   * "option-NASDAQ:AAPL;AAPL;20260817" — дата машиночитаема в последнем сегменте
+   * после ';'. Отфильтровываем чужие qa-id, начинающиеся с "option-" (напр.
+   * переключатель режима "option-chain-series-filter-mode"), по формату 8 цифр.
    */
+  function getDateOptionItems() {
+    const overlay = document.querySelector(OVERLAY_SEL);
+    if (!overlay) return [];
+    const nodes = overlay.querySelectorAll('[data-qa-id^="option-"]');
+    const items = [];
+    for (const el of nodes) {
+      const qa = el.getAttribute('data-qa-id') || '';
+      const last = qa.split(';').pop();
+      if (!/^\d{8}$/.test(last || '')) continue;
+      const iso = `${last.slice(0, 4)}-${last.slice(4, 6)}-${last.slice(6, 8)}`;
+      const dteMatch = (el.textContent || '').match(/(\d+)\s*DTE/i);
+      const days = dteMatch ? parseInt(dteMatch[1], 10) : null;
+      const selected = el.getAttribute('aria-selected') === 'true';
+      items.push({ date: iso, days, selected, el });
+    }
+    return items;
+  }
+
+  /**
+   * Пункты режима "Ranges" (страйки) без qa-id — ищем листовой элемент с точным
+   * текстом внутри поповера (напр. "All strikes").
+   */
+  function findOverlayLeafByText(matchFn) {
+    const overlay = document.querySelector(OVERLAY_SEL);
+    if (!overlay) return null;
+    const all = overlay.querySelectorAll('div, span');
+    for (const el of all) {
+      if (el.children.length > 0) continue; // только листовые ноды — сам текст пункта
+      const text = (el.textContent || '').trim();
+      if (!text) continue;
+      if (matchFn(text)) return el;
+    }
+    return null;
+  }
+
+  /** Клик по пункту без qa-id: поднимаемся до ближайшего кликабельного предка. */
+  function clickOverlayLeaf(el) {
+    if (!el) return;
+    const target = el.closest('[class*="button-"], [role="button"], button') || el;
+    reactClick(target);
+  }
+
+  // ---------------------------------------------------------------------
+  // Примитивы установки фильтров
+  // ---------------------------------------------------------------------
+
+  /** Выставить страйки → "All strikes". Возвращает true, если в итоге чип это подтверждает. */
+  async function ensureAllStrikes() {
+    const chip = findFilterChip('strikes');
+    if (!chip) { WARN('ensureAllStrikes: чип страйков не найден'); return false; }
+    if ((chip.textContent || '').toLowerCase().includes('all strikes')) return true;
+
+    reactClick(chip);
+    const overlay = await waitForOverlay();
+    if (!overlay) { WARN('ensureAllStrikes: поповер не открылся'); return false; }
+    try {
+      await setPopoverMode(STRIKES_MODE_SEL, /^ranges$/i);
+      await sleep(300);
+      const item = findOverlayLeafByText(t => /^all strikes$/i.test(t));
+      if (!item) { WARN('ensureAllStrikes: пункт "All strikes" не найден'); return false; }
+      clickOverlayLeaf(item);
+      await sleep(500);
+      return true;
+    } finally {
+      closePopover();
+      await sleep(200);
+    }
+  }
+
+  /** Выставить в фильтре дат "все даты" (select-all-option). */
+  async function ensureAllDatesSelected() {
+    const chip = findFilterChip('expiration');
+    if (!chip) { WARN('ensureAllDatesSelected: чип экспираций не найден'); return false; }
+
+    reactClick(chip);
+    const overlay = await waitForOverlay();
+    if (!overlay) { WARN('ensureAllDatesSelected: поповер не открылся'); return false; }
+    try {
+      await setPopoverMode(SERIES_MODE_SEL, /^specific dates$/i);
+      await sleep(300);
+      const btn = document.querySelector(SELECT_ALL_SEL);
+      if (!btn) { WARN('ensureAllDatesSelected: кнопка select-all не найдена'); return false; }
+      reactClick(btn);
+      await sleep(400);
+      return true;
+    } finally {
+      closePopover();
+      await sleep(200);
+    }
+  }
+
+  /**
+   * Отметить в поповере только НУЖНЫЕ даты (не снимая чужие уже выбранные — лишние
+   * данные безвредны, меньше кликов). Возвращает даты, которых нет в списке пунктов.
+   */
+  async function ensureSpecificDatesSelected(dates) {
+    const missing = [];
+    const chip = findFilterChip('expiration');
+    if (!chip) { WARN('ensureSpecificDatesSelected: чип экспираций не найден'); return { missing: dates.slice() }; }
+
+    reactClick(chip);
+    const overlay = await waitForOverlay();
+    if (!overlay) { WARN('ensureSpecificDatesSelected: поповер не открылся'); return { missing: dates.slice() }; }
+    try {
+      await setPopoverMode(SERIES_MODE_SEL, /^specific dates$/i);
+      await sleep(300);
+      const items = getDateOptionItems();
+      for (const date of dates) {
+        const item = items.find(it => it.date === date);
+        if (!item) { missing.push(date); continue; }
+        if (!item.selected) {
+          reactClick(item.el);
+          await sleep(250);
+        }
+      }
+      return { missing };
+    } finally {
+      closePopover();
+      await sleep(200);
+    }
+  }
+
+  /**
+   * Публичный примитив: гарантировать, что доска показывает нужные даты и страйки.
+   * dates: массив 'YYYY-MM-DD' (отметить только их) или null (выбрать все даты).
+   * Никогда не бросает исключение наружу — недоступность элементов даёт {ok:false}.
+   */
+  async function ensureChainVisibility({ dates = null, allStrikes = true } = {}) {
+    const missing = [];
+    try {
+      if (allStrikes) {
+        const ok = await ensureAllStrikes();
+        if (!ok) WARN('ensureChainVisibility: не удалось выставить All strikes');
+      }
+      if (dates === null) {
+        const ok = await ensureAllDatesSelected();
+        if (!ok) return { ok: false, missing };
+      } else {
+        const result = await ensureSpecificDatesSelected(dates);
+        missing.push(...result.missing);
+      }
+    } catch (e) {
+      WARN('ensureChainVisibility error:', e.message);
+      return { ok: false, missing };
+    }
+    return { ok: missing.length === 0, missing };
+  }
+
+  /** Установить фильтры по умолчанию: все даты + все страйки. */
   async function ensureFilters() {
     try {
-      await setOneFilter({
-        chipKeywords: ['expiration'],
-        valueKeyword: 'next 6 months',
-        menuMatchers: [
-          /^next\s+6\s+months$/i,
-          /^next\s+6\b/i,
-          /\bnext\s+6\s+months\b/i,
-          /^6\s+months$/i,
-        ],
-      });
-      await setOneFilter({
-        chipKeywords: ['strikes'],
-        valueKeyword: 'all strikes',
-        menuMatchers: [
-          /^all\s+strikes$/i,
-          /^all\b/i,
-        ],
-      });
+      await ensureChainVisibility({ dates: null, allStrikes: true });
     } catch (e) {
       WARN('ensureFilters error:', e.message);
     }
   }
 
-  /**
-   * Собрать кандидаты для клика в заголовке группы:
-   *  - сам бейдж DTE,
-   *  - его родители вверх по DOM (до 8 уровней),
-   *  - стрелки/иконки внутри заголовка,
-   *  - элементы с cursor:pointer.
-   * Выкидываем дубликаты и контейнеры размером во весь экран.
-   */
-  function collectClickCandidates(badge) {
-    const candidates = [];
-    const seen = new Set();
-    const push = (el, why) => {
-      if (!el || seen.has(el)) return;
-      try {
-        const r = el.getBoundingClientRect();
-        if (r.width < 6 || r.height < 6) return;
-        if (r.width > window.innerWidth * 0.95 && r.height > 200) return; // целые блоки страницы пропускаем
-      } catch (e) {}
-      seen.add(el);
-      candidates.push({ el, why });
-    };
+  // ---------------------------------------------------------------------
+  // Список экспираций (заголовки)
+  // ---------------------------------------------------------------------
 
-    push(badge, 'badge');
-    // Родители вверх по DOM
-    let cur = badge;
-    for (let i = 0; i < 8; i++) {
-      if (!cur.parentElement) break;
-      cur = cur.parentElement;
-      push(cur, `parent-${i + 1}`);
-      // На каждом уровне — дети с cursor:pointer и икон-подобные ноды
-      try {
-        const kids = cur.children;
-        for (const kid of kids) {
-          try {
-            const cs = window.getComputedStyle(kid);
-            if (cs && cs.cursor === 'pointer') push(kid, `pointer-sibling`);
-          } catch (e) {}
-          // SVG-стрелки и иконки внутри строки заголовка
-          if (kid.tagName === 'SVG' || kid.tagName === 'svg' || /icon|chevron|arrow|toggle/i.test(kid.className || '')) {
-            push(kid, 'icon');
-          }
-        }
-      } catch (e) {}
+  const MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+
+  /**
+   * Разобрать текст группового заголовка таблицы ("August 17" или "Jan 15, 2027")
+   * в ISO-дату. Год берём явно из текста, если он есть; иначе подбираем ближайший
+   * год из {текущий-1, текущий, текущий+1}, минимизируя |разница_в_днях − DTE| —
+   * НЕ просто today+DTE, это дрейфует на границах года/таймзон.
+   */
+  function parseGroupCellDate(text, days) {
+    const m = text.match(/([A-Za-z]{3,})\s+(\d{1,2})(?:,\s*(\d{4}))?/);
+    if (!m) return null;
+    const month = MONTHS[m[1].slice(0, 3).toLowerCase()];
+    if (month === undefined) return null;
+    const day = parseInt(m[2], 10);
+
+    let year = m[3] ? parseInt(m[3], 10) : null;
+    if (year === null) {
+      const now = new Date();
+      const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+      let bestYear = now.getUTCFullYear();
+      let bestDiff = Infinity;
+      for (const y of [now.getUTCFullYear() - 1, now.getUTCFullYear(), now.getUTCFullYear() + 1]) {
+        const candidateDays = Math.round((Date.UTC(y, month, day) - todayUTC) / 86400000);
+        const diff = Math.abs(candidateDays - (Number.isFinite(days) ? days : candidateDays));
+        if (diff < bestDiff) { bestDiff = diff; bestYear = y; }
+      }
+      year = bestYear;
     }
-    return candidates;
+    return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  }
+
+  /** Признак "экспирация развёрнута и отрисована" — надёжный приём, сохранён без изменений. */
+  function isExpirationExpanded(iso) {
+    const ymd = iso.replace(/-/g, '').slice(2);
+    return document.querySelector(`td[data-cell-id*="${ymd}C"], td[data-cell-id*="${ymd}P"]`) != null;
+  }
+
+  /** Найти групповой заголовок строки для даты (для клика сворачивания/разворачивания). */
+  function findGroupCellElement(iso) {
+    const groups = document.querySelectorAll('[class*="groupCell"]');
+    for (const el of groups) {
+      const text = (el.textContent || '').trim();
+      const dteMatch = text.match(/(\d+)\s*DTE/i);
+      const days = dteMatch ? parseInt(dteMatch[1], 10) : null;
+      if (parseGroupCellDate(text, days) === iso) return el;
+    }
+    return null;
+  }
+
+  /** Клик по секции — сама строка groupCell или её button/[role=button]-потомок. */
+  function groupRowClickTarget(groupCellEl) {
+    // Слушатель клика TV висит на внутреннем div[class*="groupContent"], а не на
+    // строке/ячейке: клик по <tr> секцию НЕ раскрывает (проверено живьём 2026-08-15).
+    const content = groupCellEl.querySelector('[class*="groupContent"]');
+    if (content) return content;
+    const row = groupCellEl.closest('tr');
+    const btn = (row || groupCellEl).querySelector('button, [role="button"]');
+    return btn || groupCellEl || row;
+  }
+
+  /**
+   * Основной источник: поповер series-filter отдаёт ПОЛНЫЙ список дат/DTE без
+   * скролла таблицы. Открывает и сразу закрывает поповер, ничего в фильтре не меняя.
+   */
+  async function readExpirationsFromPopover() {
+    const chip = findFilterChip('expiration');
+    if (!chip) return null;
+    reactClick(chip);
+    const overlay = await waitForOverlay();
+    if (!overlay) return null;
+    try {
+      await setPopoverMode(SERIES_MODE_SEL, /^specific dates$/i);
+      await sleep(250);
+      const items = getDateOptionItems();
+      if (items.length === 0) return null;
+      return items.map(it => ({ date: it.date, days: it.days }));
+    } finally {
+      closePopover();
+      await sleep(150);
+    }
+  }
+
+  /** Резервный источник: групповые заголовки в таблице — только уже отрисованные даты. */
+  function readExpirationsFromTable() {
+    const results = [];
+    const seen = new Set();
+    const groups = document.querySelectorAll('[class*="groupCell"]');
+    for (const el of groups) {
+      const text = (el.textContent || '').trim();
+      const dteMatch = text.match(/(\d+)\s*DTE/i);
+      const days = dteMatch ? parseInt(dteMatch[1], 10) : null;
+      const iso = parseGroupCellDate(text, days);
+      if (!iso || seen.has(iso)) continue;
+      seen.add(iso);
+      results.push({ date: iso, days });
+    }
+    return results;
+  }
+
+  // Кэш полного списка дат из поповера: без него dumpExpirationsList (вызывается на
+  // КАЖДОЕ добавление строк в таблицу — виртуализация/скролл/раскрытие) открывал бы
+  // поповер фильтра слишком часто и мешал бы пользователю. "expanded" при этом всегда
+  // читаем заново — это дешёвая проверка DOM, без открытия поповера.
+  const HEADERS_CACHE_TTL_MS = 8000;
+  let headersCache = { list: null, ts: 0 };
+
+  /** Список заголовков экспираций: {date, days, isExpanded}. Основной источник — поповер (с TTL-кэшем), резервный — таблица. */
+  async function findExpirationHeaders({ forceRefresh = false } = {}) {
+    const now = Date.now();
+    let base;
+    if (!forceRefresh && headersCache.list && (now - headersCache.ts) < HEADERS_CACHE_TTL_MS) {
+      base = headersCache.list;
+    } else {
+      base = await readExpirationsFromPopover();
+      if (base) {
+        headersCache = { list: base, ts: now };
+      } else {
+        WARN('findExpirationHeaders: поповер недоступен, использую резервный источник (таблица)');
+        base = readExpirationsFromTable(); // резервный список не кэшируем — он неполон
+      }
+    }
+    return base
+      .map(h => ({ date: h.date, days: h.days, isExpanded: isExpirationExpanded(h.date) }))
+      .sort((a, b) => (a.days ?? 0) - (b.days ?? 0));
   }
 
   /**
    * Свернуть все ПРОЧИЕ раскрытые экспирации (кроме целевой).
    * ЗАЧЕМ: TradingView ненадёжно раскрывает вторую группу, когда первая уже
    * раскрыта — из-за этого ломался сбор второй (альтернативной) даты в режиме
-   * двойной экспирации. Сворачивание возвращает таблицу в «чистое» состояние,
-   * и раскрытие целевой группы работает так же надёжно, как одиночное.
-   * Свёрнутость определяем по наличию строк даты в DOM (надёжнее aria-атрибута).
+   * двойной экспирации. Сворачивание возвращает таблицу в «чистое» состояние.
    */
   async function collapseOtherExpirations(targetIso) {
-    const headers = findExpirationHeaders();
+    const headers = await findExpirationHeaders();
     for (const h of headers) {
       if (h.date === targetIso) continue;
-      const ymd = h.date.replace(/-/g, '').slice(2);
-      const sel = `td[data-cell-id*="${ymd}C"], td[data-cell-id*="${ymd}P"]`;
-      if (!document.querySelector(sel)) continue; // уже свёрнута
+      if (!isExpirationExpanded(h.date)) continue; // уже свёрнута
+      const groupCellEl = findGroupCellElement(h.date);
+      if (!groupCellEl) continue; // группа не отрисована — сворачивать нечего
       LOG('Сворачиваю прочую экспирацию перед раскрытием цели:', h.date);
-      reactClick(h.header);
+      reactClick(groupRowClickTarget(groupCellEl));
       const start = Date.now();
       while (Date.now() - start < 2500) {
-        if (!document.querySelector(sel)) break;
+        if (!isExpirationExpanded(h.date)) break;
         await sleep(150);
       }
     }
   }
 
-  /**
-   * Развернуть группу указанной экспирации (если свёрнута). Перебираем
-   * кандидаты для клика и после каждого ждём появления строк — кто первым
-   * сработал, того и оставили.
-   */
-  function expandExpirationByDate(targetIso, timeoutMs = 12000) {
-    return new Promise(async (resolve) => {
+  /** Развернуть группу указанной экспирации (если свёрнута). */
+  async function expandExpirationByDate(targetIso, timeoutMs = 12000) {
+    const rowsSelector = () => {
       const ymd = targetIso.replace(/-/g, '').slice(2);
-      const rowsSelector = `td[data-cell-id*="${ymd}C"], td[data-cell-id*="${ymd}P"]`;
+      return `td[data-cell-id*="${ymd}C"], td[data-cell-id*="${ymd}P"]`;
+    };
 
-      if (document.querySelector(rowsSelector)) {
-        resolve({ ok: true, expanded: false, date: targetIso });
-        return;
+    if (document.querySelector(rowsSelector())) {
+      return { ok: true, expanded: false, date: targetIso };
+    }
+
+    // Гарантируем, что нужная дата видна в фильтре, и что страйки не обрезаны —
+    // иначе групповой строки для этой даты вообще не будет в DOM.
+    const visibility = await ensureChainVisibility({ dates: [targetIso], allStrikes: true });
+    if (visibility.missing.includes(targetIso)) {
+      WARN('expandExpirationByDate: дата отсутствует в списке фильтра', targetIso);
+    }
+    await sleep(300);
+
+    // Чистое состояние: сворачиваем прочие раскрытые экспирации, иначе вторую
+    // группу TradingView раскрывает ненадёжно (ломался сбор альтернативной даты).
+    await collapseOtherExpirations(targetIso);
+    await sleep(300);
+
+    if (document.querySelector(rowsSelector())) {
+      return { ok: true, expanded: false, date: targetIso };
+    }
+
+    const groupCellEl = findGroupCellElement(targetIso);
+    if (!groupCellEl) {
+      const headers = await findExpirationHeaders();
+      return { ok: false, reason: 'header-not-found', date: targetIso, knownDates: headers.map(h => h.date) };
+    }
+
+    const waitForRows = async (ms) => {
+      const start = Date.now();
+      while (Date.now() - start < ms) {
+        if (document.querySelector(rowsSelector())) return true;
+        await sleep(150);
       }
+      return false;
+    };
 
-      await ensureFilters();
-      await sleep(400);
-
-      // Чистое состояние: сворачиваем прочие раскрытые экспирации, иначе вторую
-      // группу TradingView раскрывает ненадёжно (ломался сбор альтернативной даты).
-      await collapseOtherExpirations(targetIso);
-      await sleep(300);
-
-      const headers = findExpirationHeaders();
-      LOG('Найдено заголовков:', headers.length, headers.map(h => `${h.date}(${h.isExpanded === true ? '▼' : h.isExpanded === false ? '▶' : '?'})`));
-      const target = headers.find(h => h.date === targetIso);
-
-      if (!target) {
-        resolve({
-          ok: false,
-          reason: 'header-not-found',
-          date: targetIso,
-          knownDates: headers.map(h => h.date),
-        });
-        return;
-      }
-
-      if (target.isExpanded === true && document.querySelector(rowsSelector)) {
-        LOG('Группа уже развёрнута:', targetIso);
-        resolve({ ok: true, expanded: false, date: targetIso });
-        return;
-      }
-
-      // Собираем кандидаты и кликаем по очереди, проверяя появление строк
-      const candidates = collectClickCandidates(target.badge);
-      LOG(`Кандидаты для клика по ${targetIso}:`, candidates.length, candidates.map(c => `${c.why}<${c.el.tagName}>`).join(', '));
-
-      const waitForRows = async (ms) => {
-        const start = Date.now();
-        while (Date.now() - start < ms) {
-          if (document.querySelector(rowsSelector)) return true;
-          await sleep(150);
-        }
-        return false;
-      };
-
-      // Первая попытка: badge → каждый parent → иконки. До 4 кандидатов.
-      for (let i = 0; i < Math.min(candidates.length, 6); i++) {
-        const { el, why } = candidates[i];
-        LOG(`Кликаю кандидат [${why}] для ${targetIso}`);
-        reactClick(el);
-        if (await waitForRows(1500)) {
-          LOG(`✓ Раскрылось после клика [${why}]`);
-          resolve({ ok: true, expanded: true, date: targetIso, via: why });
-          return;
-        }
-      }
-
-      // Финальное ожидание — на случай если последний клик сработал асинхронно
-      if (await waitForRows(timeoutMs - 6 * 1500)) {
-        resolve({ ok: true, expanded: true, date: targetIso, via: 'late' });
-        return;
-      }
-
-      resolve({ ok: false, reason: 'timeout-waiting-rows', date: targetIso });
-    });
+    LOG('Кликаю по секции экспирации', targetIso);
+    reactClick(groupRowClickTarget(groupCellEl));
+    if (await waitForRows(2500)) {
+      return { ok: true, expanded: true, date: targetIso };
+    }
+    // Повторный клик — иногда первый клик не долетает из-за незавершённого рендера
+    // сразу после смены фильтра дат.
+    reactClick(groupRowClickTarget(groupCellEl));
+    if (await waitForRows(Math.max(timeoutMs - 2500, 1000))) {
+      return { ok: true, expanded: true, date: targetIso, via: 'retry' };
+    }
+    return { ok: false, reason: 'timeout-waiting-rows', date: targetIso };
   }
 
-  function dumpExpirationsList() {
+  async function dumpExpirationsList() {
     try {
       if (!chrome?.runtime?.id) return;
-      const headers = findExpirationHeaders();
+      const headers = await findExpirationHeaders();
       const list = headers.map(h => ({ date: h.date, days: h.days, expanded: h.isExpanded }));
       const ticker = typeof getTickerFromUrl === 'function' ? (getTickerFromUrl() || '') : '';
       chrome.storage.local.set({
@@ -442,7 +495,7 @@
   }
 
   function handleNorthExpandAndDump(targetIso, sendResponse) {
-    expandExpirationByDate(targetIso).then((result) => {
+    expandExpirationByDate(targetIso).then(async (result) => {
       try {
         if (result.ok && typeof injectButtons === 'function') {
           injectButtons();
@@ -450,7 +503,7 @@
         if (typeof dumpFullChain === 'function') {
           dumpFullChain();
         }
-        dumpExpirationsList();
+        await dumpExpirationsList();
         sendResponse(result);
       } catch (e) {
         sendResponse({ ok: false, reason: 'post-dump-error: ' + e.message, date: targetIso });
@@ -466,11 +519,11 @@
     LOG('handleNorthEnsureFilters старт');
     ensureFilters().then(() => {
       // Подождать перерисовки + дополнительный круг — если TV рендерит асинхронно
-      setTimeout(() => {
-        dumpExpirationsList();
+      setTimeout(async () => {
+        await dumpExpirationsList();
         // Иногда первый ensureFilters не успевает: даём странице ещё кружок
-        setTimeout(() => {
-          dumpExpirationsList();
+        setTimeout(async () => {
+          await dumpExpirationsList();
           sendResponse({ ok: true });
         }, 1200);
       }, 800);
@@ -481,6 +534,7 @@
     findExpirationHeaders,
     expandExpirationByDate,
     ensureFilters,
+    ensureChainVisibility,
     dumpExpirationsList,
     handleNorthExpandAndDump,
     handleNorthEnsureFilters,

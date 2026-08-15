@@ -213,6 +213,14 @@ const DB_TICKER_PATTERNS = [
 
 /**
  * Построить URL TradingView для тикера (background-версия)
+ *
+ * ЗАЧЕМ options больше не влияет на URL: раньше сюда дописывались ?series=...&strikes=...
+ * (нужные экспирации/страйки), но после редизайна доски (2026-08) TradingView эти
+ * query-параметры молча игнорирует (проверено живьём) — таблица всегда открывается
+ * с дефолтными фильтрами «This month» + «±6 strikes». Показ нужных данных теперь
+ * делает ensureChainVisibility() кликами по UI фильтров (см. src/northSupport.js,
+ * message.action 'ensureChainVisibility' в mainInit.js), а не URL. Параметр options
+ * сохранён в сигнатуре ради обратной совместимости вызывающего кода — не используется.
  * @returns {Promise<string|null>} URL или null если тикер пустой
  */
 async function buildTvOptionsUrl(ticker, options = []) {
@@ -225,28 +233,7 @@ async function buildTvOptionsUrl(ticker, options = []) {
   const exchange = await resolveTickerExchange(ticker);
 
   const symbol = exchange ? `${exchange}%3A${ticker}` : ticker;
-  let baseUrl = `https://www.tradingview.com/options/chain/?symbol=${symbol}`;
-
-  // ЗАЧЕМ: TradingView виртуализирует таблицу — рендерит только видимые строки.
-  // Передаём точные экспирации (series) и диапазон страйков (strikes),
-  // чтобы нужные опционы оказались на экране и были доступны парсеру.
-  if (options.length > 0) {
-    // Уникальные даты экспираций в формате YYYYMMDD, через запятую
-    const uniqueDates = [...new Set(
-      options.map(o => o.date).filter(Boolean).map(d => d.replace(/-/g, ''))
-    )].sort();
-    const seriesParam = encodeURIComponent(uniqueDates.join(','));
-
-    // Точный список страйков через запятую — без лишних строк в таблице
-    const uniqueStrikes = [...new Set(
-      options.map(o => Number(o.strike)).filter(n => !isNaN(n))
-    )].sort((a, b) => a - b);
-    const strikesParam = uniqueStrikes.join(',');
-
-    baseUrl += `&series=${seriesParam}&strikes=${strikesParam}`;
-  }
-
-  return baseUrl;
+  return `https://www.tradingview.com/options/chain/?symbol=${symbol}`;
 }
 
 /**
@@ -273,7 +260,10 @@ async function waitForTvOptionsTable(tabId, timeoutMs = 30000, expectedPrefixes 
           // Требуем И таблицу опционов, И чейновую цену: без второго условия SPA отдаёт «готово»
           // когда страйки уже есть, а шапка ещё пустая, и парсер уходит с null. Из-за этого
           // первый клик «Да, обновить» после свежего открытия TV не доносил цену до калькулятора.
-          const hasTable = document.querySelectorAll('td[class*="td-"]').length > 5;
+          // ЗАЧЕМ tr[data-strike] td[data-cell-part] вместо td[class*="td-"]: хэш-классы
+          // (td-XXXX) нестабильны между релизами TV, а data-strike/data-cell-part — проверенные
+          // живьём атрибуты новой групповой вёрстки (см. src/parser.js).
+          const hasTable = document.querySelectorAll('tr[data-strike] td[data-cell-part]').length > 5;
           const hasPriceWrap = !!document.querySelector('[class*="priceWrap-"]');
           if (!hasTable || !hasPriceWrap) return false;
 
@@ -939,6 +929,28 @@ async function executeDbConfigRefresh(calcTabId, configData) {
       return;
     }
 
+    // ЗАЧЕМ: URL-параметры series/strikes TV больше не читает (см. buildTvOptionsUrl) —
+    // дефолтные фильтры доски («This month» + «±6 strikes») могут не показать нужные
+    // экспирации/страйки. Просим content-script выставить фильтры кликами ДО ожидания
+    // таблицы. Отказ (нет content-script, таймаут, ok:false) НЕ прерывает поток — ниже
+    // уже есть циклы повторов (COLLECT_MAX_ATTEMPTS, парсинг по 8 тиков), которые
+    // деградируют на дефолтных фильтрах вместо падения.
+    try {
+      const chainVisibility = await chrome.tabs.sendMessage(tvTabs[0].id, {
+        action: 'ensureChainVisibility',
+        payload: {
+          dates: [...new Set((configData.options || []).map(o => o.date).filter(Boolean))],
+          allStrikes: true
+        }
+      }).catch(e => { console.warn('[TVC DbConfig] ensureChainVisibility недоступен:', e.message); return null; });
+      if (!chainVisibility || !chainVisibility.ok) {
+        console.warn('[TVC DbConfig] ensureChainVisibility вернул отказ — продолжаем на дефолтных фильтрах', chainVisibility);
+      }
+      await delay(1500); // даём странице перерисоваться после смены фильтров
+    } catch (e) {
+      console.warn('[TVC DbConfig] Ошибка вызова ensureChainVisibility:', e.message);
+    }
+
     // === АВТО-ПОВТОР СБОРА ДАННЫХ ===========================================
     // ЗАЧЕМ: «второй клик» пользователя превращаем в автоматический повтор.
     // Холодная (только что открытая) вкладка TradingView часто не успевает
@@ -961,188 +973,54 @@ async function executeDbConfigRefresh(calcTabId, configData) {
       }
     };
 
-    // Парсер одной строки опциона (инжектится в страницу TradingView).
-    // ЗАЧЕМ: вынесен в const, чтобы переиспользовать при повторных тиках ожидания строки.
-    const parseRowFn = (optDate, optStrike, optType) => {
-          const monthNames = ['January','February','March','April','May','June',
-                               'July','August','September','October','November','December'];
-          const dc = optDate.replace(/-/g, '');
-          const prefix = monthNames[parseInt(dc.substring(4, 6), 10) - 1] + ' ' + parseInt(dc.substring(6, 8), 10);
+    // Раскрыть свёрнутую секцию экспирации (инжектится в страницу TradingView).
+    // ЗАЧЕМ: ensureChainVisibility() выше выставляет фильтры дат/страйков, но сама
+    // групповая секция ("August 17") на доске может остаться СВЁРНУТОЙ — тогда
+    // td[data-cell-id] нужной даты просто нет в DOM, парсер вернёт null. Функция
+    // самодостаточна (executeScript инжектит её изолированно, без доступа к контент-
+    // скрипту) — reactClick продублирован из src/northSupport.js (полный набор
+    // pointer/mouse событий, иначе React не воспринимает синтетический клик).
+    const expandGroupCellFn = (optDate) => {
+      const dc = optDate.replace(/-/g, '');
+      const ymd = dc.slice(2); // YYMMDD — так экспирация закодирована в data-cell-id
+      if (document.querySelector(`td[data-cell-id*="${ymd}C"], td[data-cell-id*="${ymd}P"]`)) {
+        return { clicked: false, reason: 'already-expanded' };
+      }
+      const monthNames = ['January','February','March','April','May','June',
+                           'July','August','September','October','November','December'];
+      const prefix = monthNames[parseInt(dc.substring(4, 6), 10) - 1] + ' ' + parseInt(dc.substring(6, 8), 10);
 
-          // ЗАЧЕМ: innerText, а не textContent.
-          // TradingView прячет внутри кнопок два вложенных span с одинаковым
-          // текстом (visible + overflow tooltip) — textContent склеивает их
-          // ("245" + "245" = "245245"), innerText возвращает видимое значение.
-          const cellText = (cell) => {
-            if (!cell) return '';
-            const t = (cell.innerText || '').trim();
-            if (t) return t;
-            return (cell.textContent || '').trim();
-          };
+      let groupCellEl = null;
+      for (const el of document.querySelectorAll('[class*="groupCell"]')) {
+        const text = (el.textContent || '').trim();
+        if (text.startsWith(prefix)) { groupCellEl = el; break; }
+      }
+      if (!groupCellEl) return { clicked: false, reason: 'group-not-found' };
 
-          // ЗАЧЕМ: один хелпер для чтения числа из ячейки (страйк/IV/греки).
-          // Возвращает ОБА: число (для калькулятора) и строку-как-на-доске
-          // (для оверлея — без округлений, trailing zeros сохраняются).
-          // TradingView использует юникодный минус U+2212 ("−"), а не ASCII "-":
-          // заменяем перед парсингом, чтобы знак не терялся.
-          const readCell = (idx, cellsArr) => {
-            if (idx == null || idx < 0 || idx >= cellsArr.length) return { num: null, text: null };
-            const raw = cellText(cellsArr[idx]);
-            if (!raw || raw === '—' || raw === '-' || raw === '\u2212') return { num: null, text: null };
-            const normalized = raw.replace(/\u2212/g, '-');
-            const cleaned = normalized.replace(/[^\d.+\-eE]/g, '');
-            if (!cleaned || cleaned === '-' || cleaned === '+') return { num: null, text: null };
-            const n = parseFloat(cleaned);
-            if (typeof n !== 'number' || isNaN(n)) return { num: null, text: null };
-            return { num: n, text: normalized };
-          };
-          const parseNumCell = (idx, cellsArr) => readCell(idx, cellsArr).num;
+      // Слушатель клика TV висит на внутреннем div[class*="groupContent"] заголовка
+      // секции — клик по <tr> или кнопкам секцию НЕ раскрывает (проверено живьём).
+      const target = groupCellEl.querySelector('[class*="groupContent"]') || groupCellEl;
 
-          // ЗАЧЕМ: один раз для таблицы находим шапку и индексы ВСЕХ нужных
-          // колонок — Strike, IV, Delta, Gamma, Theta, Vega — отдельно для
-          // Call (слева от Strike) и Put (справа). Надёжность > скорости:
-          // у пользователя может быть 50 колонок, индексы от "стандартной"
-          // раскладки отличаются.
-          const findColumnMap = (table) => {
-            if (!table) return null;
-            let maxTh = 0, bestRow = null;
-            for (const r of table.querySelectorAll('tr')) {
-              const tc = r.querySelectorAll('th').length;
-              if (tc > maxTh) { maxTh = tc; bestRow = r; }
-            }
-            if (!bestRow) return null;
-            const ths = bestRow.querySelectorAll('th');
-            const map = { call: {}, put: {}, strikeIndex: -1, ivIndex: -1 };
-            let afterStrike = false;
-            for (let i = 0; i < ths.length; i++) {
-              const t = (ths[i].textContent || '').trim().toLowerCase();
-              if (t === 'strike') { map.strikeIndex = i; afterStrike = true; continue; }
-              const side = afterStrike ? 'put' : 'call';
-              // IV — первая колонка после Strike, на ней общий IV (Call=Put)
-              if (t === 'iv' && afterStrike && map.ivIndex === -1) map.ivIndex = i;
-              if (t === 'delta') map[side].delta = i;
-              else if (t === 'gamma') map[side].gamma = i;
-              else if (t === 'theta') map[side].theta = i;
-              else if (t === 'vega')  map[side].vega = i;
-              // ЗАЧЕМ: bid/ask/volume нужны для pending-позиций (черновики сделок),
-              // где трейдер ещё не зафиксировал цену и видит пустые поля
-              else if (t === 'bid')    map[side].bid = i;
-              else if (t === 'ask')    map[side].ask = i;
-              else if (t === 'volume') map[side].volume = i;
-            }
-            return (map.strikeIndex >= 0) ? map : null;
-          };
+      try { target.scrollIntoView({ block: 'center', behavior: 'instant' }); } catch (e) {}
+      try {
+        const events = ['pointerover', 'pointerenter', 'pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
+        for (const type of events) {
+          const ev = type.startsWith('pointer')
+            ? new PointerEvent(type, { bubbles: true, cancelable: true, pointerType: 'mouse', isPrimary: true, button: 0 })
+            : new MouseEvent(type, { bubbles: true, cancelable: true, view: window, button: 0 });
+          target.dispatchEvent(ev);
+        }
+      } catch (e) {}
+      try { target.click(); } catch (e) {}
 
-          // Fallback: жёсткие смещения (старая 28-колоночная раскладка TV).
-          // Используем ТОЛЬКО если карту заголовков построить не удалось.
-          const fallbackGreekIdx = (sIdx, side, greek) => {
-            if (side === 'call') {
-              if (greek === 'delta') return sIdx - 5;
-              if (greek === 'gamma') return sIdx - 6;
-              if (greek === 'theta') return sIdx - 7;
-              if (greek === 'vega')  return sIdx - 8;
-            } else {
-              if (greek === 'delta') return sIdx + 6;
-              if (greek === 'gamma') return sIdx + 7;
-              if (greek === 'theta') return sIdx + 8;
-              if (greek === 'vega')  return sIdx + 9;
-            }
-            return null;
-          };
-
-          // ЗАЧЕМ: карту строим один раз на первую попавшуюся таблицу с данными,
-          // а не для каждой строки — ощутимая экономия на 50-колоночных досках.
-          let columnMap = null;
-          const allTrs = document.querySelectorAll('tr');
-          let inSection = false;
-          for (const tr of allTrs) {
-            const gc = tr.querySelector('[class*="groupCell"]');
-            if (gc) {
-              if (gc.textContent?.trim().startsWith(prefix)) { inSection = true; continue; }
-              if (inSection) break;
-              continue;
-            }
-            if (!inSection) continue;
-            const cells = tr.querySelectorAll('td');
-            if (cells.length < 30) continue;
-
-            // Карта колонок — один раз на таблицу
-            if (columnMap === null) {
-              columnMap = findColumnMap(cells[0]?.closest('table')) || false;
-            }
-
-            // 1) ищем страйк строго по карте заголовков (основной путь)
-            let sVal = null, sIdx = -1;
-            if (columnMap && columnMap.strikeIndex >= 0) {
-              sIdx = columnMap.strikeIndex;
-              sVal = parseNumCell(sIdx, cells);
-              if (sVal !== null && !(sVal >= 1 && sVal < 100000)) sVal = null;
-            }
-
-            // 2) fallback: если карты нет — перебор маркеров +P/-C
-            if (sVal === null) {
-              for (let i = 0; i < cells.length; i++) {
-                const t = cellText(cells[i]);
-                if (t.includes('+P') || t.includes('-C')) {
-                  const m = t.match(/([\d,]+\.?\d*)/);
-                  if (m) { sVal = parseFloat(m[1].replace(/,/g, '')); sIdx = i; break; }
-                }
-              }
-            }
-            // 3) fallback: перебор кнопок
-            if (sVal === null) {
-              for (let i = 0; i < cells.length; i++) {
-                const btn = cells[i].querySelector('button');
-                if (btn) {
-                  const raw = (btn.innerText || '').trim();
-                  const num = parseFloat(raw.replace(/,/g, ''));
-                  if (num >= 1 && num < 100000) { sVal = num; sIdx = i; break; }
-                }
-              }
-            }
-            if (sVal === null || Math.abs(sVal - optStrike) >= 1) continue;
-
-            // IV: индекс из карты, иначе sIdx+1 (как в старой 28-колоночной)
-            const ivIdx = (columnMap && columnMap.ivIndex >= 0) ? columnMap.ivIndex : (sIdx + 1);
-            const ivCell = readCell(ivIdx, cells);
-            if (ivCell.num === null) return null;
-
-            const side = (optType === 'C' || optType === 'CALL') ? 'call' : 'put';
-            const sideMap = columnMap ? columnMap[side] : null;
-
-            const pickIdx = (greek) => {
-              if (sideMap && typeof sideMap[greek] === 'number') return sideMap[greek];
-              return fallbackGreekIdx(sIdx, side, greek);
-            };
-
-            const deltaCell  = readCell(pickIdx('delta'),  cells);
-            const gammaCell  = readCell(pickIdx('gamma'),  cells);
-            const thetaCell  = readCell(pickIdx('theta'),  cells);
-            const vegaCell   = readCell(pickIdx('vega'),   cells);
-            // ЗАЧЕМ: bid/ask/volume берём только из карты заголовков — fallback
-            // не вводим (см. план задачи UpdatePending), null в команде допустим
-            const bidCell    = readCell(pickIdx('bid'),    cells);
-            const askCell    = readCell(pickIdx('ask'),    cells);
-            const volumeCell = readCell(pickIdx('volume'), cells);
-
-            // ЗАЧЕМ: возвращаем и число (для калькулятора), и текст-как-на-доске
-            // (для оверлея — точный показ без округлений)
-            return {
-              strike: sVal,
-              iv: ivCell.num,
-              ivText: ivCell.text,
-              expirationISO: optDate,
-              delta: deltaCell.num,  deltaText: deltaCell.text,
-              gamma: gammaCell.num,  gammaText: gammaCell.text,
-              theta: thetaCell.num,  thetaText: thetaCell.text,
-              vega:  vegaCell.num,   vegaText:  vegaCell.text,
-              bid:   bidCell.num,
-              ask:   askCell.num,
-              volume: volumeCell.num
-            };
-          }
-          return null;
+      return { clicked: true };
     };
+
+    // Парсер одной строки опциона — parseTvOptionRow из pendingParser.js (общий SW-scope,
+    // подключён через importScripts в background.js). Раньше здесь был собственный
+    // inline-дубль (~180 строк) с той же логикой — убран, чтобы не расходиться при
+    // очередной смене вёрстки TV (см. src/parser.js — образец групповой модели колонок,
+    // pendingParser.js — самодостаточная копия той же логики для инжекции executeScript).
 
     // Параметры повторов и аккумуляторы результата сбора.
     const COLLECT_MAX_ATTEMPTS = 3;
@@ -1188,6 +1066,20 @@ async function executeDbConfigRefresh(calcTabId, configData) {
           const fb = await chrome.scripting.executeScript({
             target: { tabId: tvTabId },
             func: () => {
+              // Шаг 1: строка цены БА внутри самой доски опционов — стабильный якорь
+              // data-qa-id, не зависит от хэш-классов и не путается с сайдбаром.
+              const row = document.querySelector('[data-qa-id="option-chain-underlying-row"]');
+              if (row) {
+                const wrap = row.querySelector('[class*="priceWrap-"]');
+                const text = (wrap ? wrap.textContent : row.textContent) || '';
+                const m = text.match(/[\d.,]+/);
+                if (m) {
+                  const p = parseFloat(m[0].replace(/,/g, ''));
+                  if (p > 0) return p;
+                }
+              }
+              // Шаг 2 (существующая логика, без изменений): документ-wide priceWrap-
+              // с SKIP-списком сайдбара — резерв, если option-chain-underlying-row нет в DOM.
               const SKIP = [
                 '[class*="widgetbar-widget"]',
                 '[class*="widgetbar-page"]',
@@ -1219,6 +1111,7 @@ async function executeDbConfigRefresh(calcTabId, configData) {
       const collected = [];
       for (const opt of configData.options) {
         let parsed = null;
+        let expandTried = false;
         for (let t = 0; t < 8 && !parsed; t++) {
           await chrome.scripting.executeScript({
             target: { tabId: tvTabId },
@@ -1226,9 +1119,23 @@ async function executeDbConfigRefresh(calcTabId, configData) {
             args: [opt.date]
           }).catch(() => {});
           await delay(500);
+          // Одна попытка раскрыть свёрнутую секцию на опцион — дальше её докрывают
+          // уже существующие повторы этого же цикла (t) и внешний COLLECT_MAX_ATTEMPTS.
+          if (!expandTried) {
+            expandTried = true;
+            const expandResult = await chrome.scripting.executeScript({
+              target: { tabId: tvTabId },
+              func: expandGroupCellFn,
+              args: [opt.date]
+            }).catch(() => []);
+            if (expandResult?.[0]?.result?.clicked) {
+              await delay(600); // дать React перерисовать раскрытую секцию
+            }
+          }
           const parseResult = await chrome.scripting.executeScript({
             target: { tabId: tvTabId },
-            func: parseRowFn,
+            // parseTvOptionRow подгружен из pendingParser.js (общий SW-scope)
+            func: parseTvOptionRow,
             args: [opt.date, opt.strike, opt.type]
           }).catch(() => []);
           parsed = parseResult?.[0]?.result;

@@ -97,6 +97,24 @@
       return true; // async
     }
 
+    // Выставить фильтры доски (даты экспираций + "All strikes") через UI-клики.
+    // ЗАЧЕМ: TradingView игнорирует URL-параметры series/strikes после редизайна —
+    // единственный надёжный способ показать нужные опционы это кликнуть чипы фильтров
+    // (см. northSupport.js ensureChainVisibility). Вызывается фоном (dbConfigRefresh.js /
+    // pendingRefresh.js) перед ожиданием таблицы, чтобы нужные строки успели отрисоваться.
+    if (message.action === 'ensureChainVisibility') {
+      try {
+        if (window.ext2North && typeof window.ext2North.ensureChainVisibility === 'function') {
+          window.ext2North.ensureChainVisibility(message.payload).then(sendResponse);
+        } else {
+          sendResponse({ ok: false, reason: 'ext2North not loaded' });
+        }
+      } catch (e) {
+        sendResponse({ ok: false, reason: e.message });
+      }
+      return true; // async response
+    }
+
     if (message.action === 'refreshPanel') {
       loadPositions().then(() => {
         if (Object.keys(tvc_positions).length > 0) {
