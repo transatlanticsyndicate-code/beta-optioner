@@ -2968,18 +2968,17 @@ function UniversalOptionsCalculator() {
   const [northGptState, setNorthGptState] = useState(null);
 
   const northGptActive = useMemo(() => options.some(o => o.fromNorthGptStrategy), [options]);
-  // Кнопка «Север GPT» — те же условия, что и «Север», НО дополнительно доступна
-  // на крипте (источник цепочки — Binance через Options Bridge). Старый
-  // математический «Север» на крипте не включаем — отсюда отдельный мемо.
+  // Кнопка «Север GPT» доступна и на крипте (источник цепочки — Binance через
+  // Options Bridge). Лонг-позиция по активу НЕ обязательна: режим по умолчанию —
+  // «Только опционы», а в режиме «Актив + опционы» стратегия добавит актив сама.
   const canShowNorthGptButton = useMemo(() => (
     (calculatorMode === CALCULATOR_MODES.STOCKS ||
       calculatorMode === CALCULATOR_MODES.ETF ||
       calculatorMode === CALCULATOR_MODES.CRYPTO ||
       calculatorMode === CALCULATOR_MODES.FUTURES) &&
-    !!longPositionsEntry &&
     options.filter(o => o.visible !== false).length === 0 &&
     Number(currentPrice) > 0
-  ), [calculatorMode, longPositionsEntry, options, currentPrice]);
+  ), [calculatorMode, options, currentPrice]);
 
   const handleOpenNorthGptStrategy = useCallback(() => {
     setNorthGptDialogStep('params');
