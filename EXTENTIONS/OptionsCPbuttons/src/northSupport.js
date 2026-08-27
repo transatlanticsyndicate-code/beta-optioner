@@ -272,6 +272,28 @@
   const MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
 
   /**
+   * Текст группового заголовка, собранный ПО ТЕКСТОВЫМ УЗЛАМ через пробел.
+   * ЗАЧЕМ: в новой вёрстке TV бейдж "N DTE" — отдельный элемент рядом с датой, и
+   * textContent склеивает их без разделителя ("Sep 4" + "8 DTE" → "Sep 48 DTE").
+   * После склейки regex дня откусывал "48", а regex бейджа — "48"/"1822": отсюда
+   * несуществующие дни и сдвинутые годы в списке экспираций.
+   */
+  function groupCellText(el) {
+    const parts = [];
+    try {
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) {
+        const t = (node.textContent || '').trim();
+        if (t) parts.push(t);
+      }
+    } catch (e) {
+      return (el.textContent || '').trim();
+    }
+    return parts.join(' ');
+  }
+
+  /**
    * Разобрать текст группового заголовка таблицы ("August 17" или "Jan 15, 2027")
    * в ISO-дату. Год берём явно из текста, если он есть; иначе подбираем ближайший
    * год из {текущий-1, текущий, текущий+1}, минимизируя |разница_в_днях − DTE| —
@@ -283,6 +305,9 @@
     const month = MONTHS[m[1].slice(0, 3).toLowerCase()];
     if (month === undefined) return null;
     const day = parseInt(m[2], 10);
+    // Страховка от мусорного разбора: несуществующий день (в т.ч. 31 февраля)
+    // лучше отбросить, чем показать заказчику дату, которой нет в TradingView.
+    if (!(day >= 1 && day <= 31)) return null;
 
     let year = m[3] ? parseInt(m[3], 10) : null;
     if (year === null) {
@@ -297,6 +322,8 @@
       }
       year = bestYear;
     }
+    const probe = new Date(Date.UTC(year, month, day));
+    if (probe.getUTCMonth() !== month) return null; // переполнение месяца (31 апреля и т.п.)
     return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   }
 
@@ -310,7 +337,7 @@
   function findGroupCellElement(iso) {
     const groups = document.querySelectorAll('[class*="groupCell"]');
     for (const el of groups) {
-      const text = (el.textContent || '').trim();
+      const text = groupCellText(el);
       const dteMatch = text.match(/(\d+)\s*DTE/i);
       const days = dteMatch ? parseInt(dteMatch[1], 10) : null;
       if (parseGroupCellDate(text, days) === iso) return el;
@@ -333,7 +360,20 @@
    * Основной источник: поповер series-filter отдаёт ПОЛНЫЙ список дат/DTE без
    * скролла таблицы. Открывает и сразу закрывает поповер, ничего в фильтре не меняя.
    */
+  // Дедуп параллельных чтений: dumpExpirationsList() зовётся на каждую перерисовку
+  // таблицы, и без этого две копии дрались за один поповер — вторая закрывала его по
+  // Escape у первой, чтение возвращало пусто, и список молча уезжал в неполный и
+  // испорченный резервный источник (таблица).
+  let popoverReadInFlight = null;
+
   async function readExpirationsFromPopover() {
+    if (popoverReadInFlight) return popoverReadInFlight;
+    popoverReadInFlight = readExpirationsFromPopoverOnce()
+      .finally(() => { popoverReadInFlight = null; });
+    return popoverReadInFlight;
+  }
+
+  async function readExpirationsFromPopoverOnce() {
     const chip = findFilterChip('expiration');
     if (!chip) return null;
     reactClick(chip);
@@ -357,7 +397,7 @@
     const seen = new Set();
     const groups = document.querySelectorAll('[class*="groupCell"]');
     for (const el of groups) {
-      const text = (el.textContent || '').trim();
+      const text = groupCellText(el);
       const dteMatch = text.match(/(\d+)\s*DTE/i);
       const days = dteMatch ? parseInt(dteMatch[1], 10) : null;
       const iso = parseGroupCellDate(text, days);
