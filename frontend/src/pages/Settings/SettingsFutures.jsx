@@ -25,6 +25,9 @@ import {
   updateFuture,
   deleteFuture,
 } from '../../utils/futuresSettings';
+// Эталонные множители контрактов: подсвечиваем расхождение (типовая ошибка —
+// вместо цены пункта вводят стоимость тика, и все расчёты уезжают в разы).
+import { checkPointValue } from '../../utils/futuresPointValueReference';
 
 function SettingsFutures() {
   const [futures, setFutures] = useState(() => loadFuturesSettings());
@@ -177,6 +180,15 @@ function SettingsFutures() {
       <div>
         <h2 className="text-2xl font-bold tracking-tight">Фьючерсы</h2>
         <p className="text-muted-foreground mt-1">Настройки и параметры фьючерсов</p>
+        {/* Пояснение к «цене пункта»: её легко перепутать со стоимостью тика,
+            а расчёт опционов тогда уезжает в сотни и тысячи раз. */}
+        <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <b>Цена пункта</b> — сколько долларов приносит движение цены на <b>1.00</b> (полный пункт),
+          а не стоимость тика. Пример: природный газ NG торгуется по $3,63 за MMBtu, в контракте
+          10 000 MMBtu → цена пункта <b>10 000</b> (шаг цены 0,001 стоит $10 — это стоимость тика,
+          её сюда вводить нельзя). По этому числу считаются премия опциона, P&amp;L и подбор
+          количества контрактов.
+        </div>
       </div>
 
       <Card>
@@ -244,6 +256,19 @@ function SettingsFutures() {
                             onChange={(e) => handleInputChange('pointValue', e.target.value)}
                             className="h-8"
                           />
+                          {/* Подсказка прямо при вводе — чтобы ошибку было видно
+                              до сохранения, а не после расчёта сделки. */}
+                          {(() => {
+                            const check = checkPointValue(editData.ticker, editData.pointValue);
+                            if (!check) return null;
+                            return (
+                              <div className="mt-1 text-xs text-amber-600">
+                                {check.looksLikeTickValue
+                                  ? `⚠ похоже на стоимость тика — по спецификации биржи ${check.reference}`
+                                  : `⚠ по спецификации биржи ${check.reference}`}
+                              </div>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell>
                           <Input
@@ -282,7 +307,25 @@ function SettingsFutures() {
                       <>
                         <TableCell className="font-medium">{item.ticker}</TableCell>
                         <TableCell>{item.name}</TableCell>
-                        <TableCell>{item.pointValue}</TableCell>
+                        <TableCell>
+                          {item.pointValue}
+                          {/* Расхождение с биржевой спецификацией — чаще всего сюда
+                              по ошибке вписана стоимость тика. Не блокируем, но показываем. */}
+                          {(() => {
+                            const check = checkPointValue(item.ticker, item.pointValue);
+                            if (!check) return null;
+                            return (
+                              <span
+                                className="ml-2 text-amber-600 cursor-help"
+                                title={check.looksLikeTickValue
+                                  ? `Похоже на стоимость тика. По спецификации биржи цена пункта ${check.reference}`
+                                  : `По спецификации биржи цена пункта ${check.reference}`}
+                              >
+                                ⚠
+                              </span>
+                            );
+                          })()}
+                        </TableCell>
                         <TableCell>
                           {item.marginPerContract != null && item.marginPerContract > 0
                             ? `$ ${Math.round(item.marginPerContract).toLocaleString('ru-RU').replace(/,/g, ' ')}`
