@@ -212,6 +212,45 @@ export const gateByBottomTolerance = (combination, plTolerance) => {
 };
 
 /**
+ * Шлюз по маржину сделки. Пользователь задаёт бюджет («Маржин» и «Допуск ±»),
+ * и сделка не должна стоить дороже. Модель считает сумму сама и иногда
+ * промахивается — здесь сверяем её выбор с реальной стоимостью комбинации,
+ * посчитанной бэкендом (ask × множитель контракта + залог под актив).
+ *
+ * Превышение — блокируем: денег на такую сделку у пользователя нет.
+ * Недобор (дешевле бюджета) НЕ блокируем: неиспользованные деньги — не ошибка,
+ * а рабочий вариант, который пользователь может принять.
+ *
+ * @param {object} combination — блок ответа бэкенда (с полем cost)
+ * @param {number} margin — заданный маржин сделки ($)
+ * @param {number} marginTolerance — допуск ± ($)
+ */
+export const gateByMargin = (combination, margin, marginTolerance) => {
+  if (!combination || combination.error || !Array.isArray(combination.positions)) return combination;
+  const budget = Number(margin);
+  if (!Number.isFinite(budget) || budget <= 0) return combination;
+  const tol = Number(marginTolerance);
+  const limit = budget + (Number.isFinite(tol) && tol > 0 ? tol : 0);
+  const used = Number(combination?.cost?.marginUsed);
+  if (!Number.isFinite(used)) {
+    return {
+      error: 'Не удалось посчитать маржин этой комбинации. Попробуйте подобрать заново.',
+      rationale: combination.rationale,
+    };
+  }
+  // Округляем до доллара: расхождение в центах — не превышение бюджета.
+  if (Math.round(used) > Math.round(limit)) {
+    const fmt = (v) => `$${Math.round(v).toLocaleString('ru-RU').replace(/,/g, ' ')}`;
+    return {
+      error: `Нет подходящей комбинации: сделка стоит ${fmt(used)} — дороже заданного маржина `
+        + `${fmt(budget)}${limit > budget ? ` (с допуском до ${fmt(limit)})` : ''}.`,
+      rationale: combination.rationale,
+    };
+  }
+  return combination;
+};
+
+/**
  * Оставить в цепочке только Call — для режима «без Put».
  * ЗАЧЕМ: модель не должна видеть Put вовсе (иначе может их предложить),
  * плюс вдвое меньше строк в запросе = меньше токенов и быстрее ответ.

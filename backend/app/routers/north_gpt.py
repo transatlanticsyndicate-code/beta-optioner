@@ -225,12 +225,16 @@ def _compact_chain(chain, multiplier):
     multiplier — множитель контракта (100 акции / 1 крипта / стоимость пункта фьючерс):
     нужен, чтобы отдать модели ГОТОВУЮ стоимость 1 контракта (cost), иначе модель
     угадывает множитель — для фьючерсов неверно.
+
+    Стоимость округляем до центов, а НЕ до целых долларов: на дешёвых контрактах
+    целое округление ($3,30 → $3) давало модели заниженную цену, она набирала
+    количество под бюджет по этой цене — и реальная сумма сделки вылезала за маржин.
     """
     compact = []
     for row in chain:
         ask = row.get("ask")
         try:
-            cost = round(float(ask) * multiplier) if ask else None
+            cost = round(float(ask) * multiplier, 2) if ask else None
         except (TypeError, ValueError):
             cost = None
         compact.append({

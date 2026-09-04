@@ -28,6 +28,7 @@ import {
   enrichNorthGptCombination,
   precomputeChainPLs,
   gateByBottomTolerance,
+  gateByMargin,
   filterChainByMode,
 } from '../../../utils/northGptStrategy/enrich';
 import { buildPrecheckRequest } from '../../../utils/northGptStrategy/buildPrecheckRequest';
@@ -304,9 +305,14 @@ function NorthGptStrategyDialog({
       });
 
       // Обогащаем P&L-метриками и сразу отсекаем комбинации, не уложившиеся в
-      // допуск по низу (показываем «нет подходящей комбинации» вместо слабого варианта).
+      // допуск по низу или дороже заданного маржина (показываем «нет подходящей
+      // комбинации» вместо слабого или неподъёмного варианта).
       const enrichGated = (block, plCtx) => gateByBottomTolerance(
-        enrichNorthGptCombination(block, plCtx), numericParams.plTolerance,
+        gateByMargin(
+          enrichNorthGptCombination(block, plCtx),
+          numericParams.margin, numericParams.marginTolerance,
+        ),
+        numericParams.plTolerance,
       );
       // Вариант «актив + опционы» по умолчанию выключен — тогда его не показываем.
       const withAssetOn = !!numericParams.withAssetEnabled;

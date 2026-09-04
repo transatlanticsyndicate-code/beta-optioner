@@ -6,7 +6,7 @@
  * выдаёт сбой расчёта за идеальный ноль.
  */
 
-import { gateByBottomTolerance, filterChainByMode } from '../northGptStrategy/enrich';
+import { gateByBottomTolerance, gateByMargin, filterChainByMode } from '../northGptStrategy/enrich';
 
 const combo = (bottomMetric, extra = {}) => ({
   kind: 'optionsOnly',
@@ -87,5 +87,55 @@ describe('filterChainByMode', () => {
   it('не падает на пустых данных', () => {
     expect(filterChainByMode(null, true)).toBeNull();
     expect(filterChainByMode([], true)).toEqual([]);
+  });
+});
+
+describe('gateByMargin', () => {
+  const marginCombo = (marginUsed) => ({
+    kind: 'optionsOnly',
+    positions: [{ type: 'CALL', strike: 100, quantity: 1 }],
+    rationale: 'пояснение ИИ',
+    cost: { marginUsed },
+  });
+
+  it('пропускает сделку в пределах бюджета с допуском', () => {
+    const c = marginCombo(10400);
+    expect(gateByMargin(c, 10000, 500)).toBe(c);
+  });
+
+  it('пропускает ровно на границе допуска', () => {
+    const c = marginCombo(10500);
+    expect(gateByMargin(c, 10000, 500)).toBe(c);
+  });
+
+  it('отсекает сделку дороже бюджета', () => {
+    const res = gateByMargin(marginCombo(11522), 10000, 500);
+    expect(res.error).toMatch(/дороже заданного маржина/);
+    // Разделитель разрядов — неразрывный пробел (ru-RU), поэтому \s.
+    expect(res.error).toMatch(/11\s522/);
+    expect(res.rationale).toBe('пояснение ИИ');
+    expect(res.positions).toBeUndefined();
+  });
+
+  it('недобор по бюджету не считается ошибкой', () => {
+    const c = marginCombo(4000);
+    expect(gateByMargin(c, 10000, 500)).toBe(c);
+  });
+
+  it('не фильтрует, если маржин не задан', () => {
+    const c = marginCombo(999999);
+    expect(gateByMargin(c, 0, 500)).toBe(c);
+    expect(gateByMargin(c, undefined, undefined)).toBe(c);
+  });
+
+  it('отсекает комбинацию с нечисловым маржином', () => {
+    const res = gateByMargin(marginCombo(NaN), 10000, 500);
+    expect(res.error).toMatch(/Не удалось посчитать маржин/);
+  });
+
+  it('не трогает блок с ошибкой и пустые данные', () => {
+    const err = { error: 'ChatGPT не собрал комбинацию' };
+    expect(gateByMargin(err, 10000, 500)).toBe(err);
+    expect(gateByMargin(null, 10000, 500)).toBeNull();
   });
 });
