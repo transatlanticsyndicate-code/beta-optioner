@@ -92,8 +92,6 @@ export class WeeklyStatsRenderer {
         const profitInput = document.getElementById('weekly-profit-input') as HTMLInputElement;
         const lossInput = document.getElementById('weekly-loss-input') as HTMLInputElement;
         const posInput = document.getElementById('weekly-positions-input') as HTMLInputElement;
-        const usdtInput = document.getElementById('weekly-usdt-input') as HTMLInputElement;
-        const eurInput = document.getElementById('weekly-eur-input') as HTMLInputElement;
 
         // Set default date to today
         if (dateInput && !dateInput.value) {
@@ -106,13 +104,11 @@ export class WeeklyStatsRenderer {
             const isValid = dateInput?.value &&
                 profitInput?.value !== '' &&
                 lossInput?.value !== '' &&
-                posInput?.value !== '' &&
-                usdtInput?.value !== '' &&
-                eurInput?.value !== '';
+                posInput?.value !== '';
             addBtn.disabled = !isValid;
         };
 
-        const inputs = [dateInput, profitInput, lossInput, posInput, usdtInput, eurInput];
+        const inputs = [dateInput, profitInput, lossInput, posInput];
         inputs.forEach(input => {
             if (input) {
                 input.style.display = ''; // Ensure visible
@@ -129,8 +125,10 @@ export class WeeklyStatsRenderer {
                     weeklyProfit: profitInput.value,
                     portfolioLoss: lossInput.value,
                     positionsAmount: posInput.value,
-                    readyUSDT: usdtInput.value,
-                    readyEUR: eurInput.value
+                    // Суммы "Готово на вывод" убраны из интерфейса — пишем нули,
+                    // чтобы структура записи осталась прежней
+                    readyUSDT: '',
+                    readyEUR: ''
                 });
 
                 this.onAction(WeeklyStatsActionType.ADD_TRANSACTION, entry);
@@ -140,8 +138,6 @@ export class WeeklyStatsRenderer {
                 profitInput.value = '';
                 lossInput.value = '';
                 posInput.value = '';
-                usdtInput.value = '';
-                eurInput.value = '';
                 checkFormValidity();
             });
         }
@@ -285,16 +281,18 @@ export class WeeklyStatsRenderer {
         const profitVal = getVal('weeklyProfit');
         const lossVal = getVal('portfolioLoss');
         const posVal = getVal('positionsAmount');
-        const usdtVal = getVal('readyUSDT');
-        const eurVal = getVal('readyEUR');
+
+        // Суммы "Готово на вывод" больше не показываются в таблице —
+        // берём их из исходной записи, чтобы не потерять при редактировании
+        const original = this.state.weeklyStats.transactions.find(t => t.id === id);
+        const usdtVal = original?.readyUSDT || '';
+        const eurVal = original?.readyEUR || '';
 
         // Те же правила валидации, что и при создании
         const isValid = dateVal &&
             profitVal !== '' &&
             lossVal !== '' &&
-            posVal !== '' &&
-            usdtVal !== '' &&
-            eurVal !== '';
+            posVal !== '';
 
         if (!isValid) {
             alert('Заполните все поля перед сохранением.');

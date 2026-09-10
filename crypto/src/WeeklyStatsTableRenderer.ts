@@ -14,7 +14,7 @@ export class WeeklyStatsTableRenderer {
         if (!tbody) return;
 
         if (transactions.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--text-secondary); padding: 20px;">Записей нет</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-secondary); padding: 20px;">Записей нет</td></tr>`;
             return;
         }
 
@@ -60,32 +60,12 @@ export class WeeklyStatsTableRenderer {
                     <td>
                         <input type="number" step="0.01" min="0" class="weekly-edit-input" data-field="positionsAmount" value="${parseNum(t.positionsAmount)}" />
                     </td>
-                    <td>
-                        <input type="number" step="0.01" min="0" class="weekly-edit-input" data-field="readyUSDT" value="${parseNum(t.readyUSDT)}" />
-                    </td>
-                    <td>
-                        <input type="number" step="0.01" min="0" class="weekly-edit-input" data-field="readyEUR" value="${parseNum(t.readyEUR)}" />
-                    </td>
                     <td style="text-align: center; white-space: nowrap;">
                         <button class="save-btn" data-id="${t.id}" title="Сохранить">${checkSvg}</button>
                         <button class="cancel-btn" data-id="${t.id}" title="Отменить">${trashSvg}</button>
                     </td>
                 </tr>
                 `;
-            }
-
-            // Format Ready EUR column
-            let eurDisplay = t.readyEUR || '€0';
-            const readyEUR = t.readyEUR || '';
-            const eurClean = readyEUR.replace(/[€\s]/g, '').replace(',', '.');
-            const eurValue = parseFloat(eurClean);
-
-            if (!isNaN(eurValue) && eurValue !== 0) {
-                // Simulate conversion rate ~1.1
-                const RATE = 1.1;
-                const usdValue = eurValue * RATE;
-                const usdFormatted = `$${Math.round(usdValue).toLocaleString('ru-RU').replace(',', ' ')}`;
-                eurDisplay = `<span style="font-size:0.8em; color:var(--text-secondary); margin-right: 6px; font-weight: normal;">(${t.readyEUR || '€0'})</span>${usdFormatted}`;
             }
 
             return `
@@ -96,8 +76,6 @@ export class WeeklyStatsTableRenderer {
                     <td style="font-weight: 600; text-align: right;">${t.portfolioLoss || '-'}</td>
                     <td style="text-align: right;">${t.lossPercent || '-'}</td>
                     <td style="text-align: right;">${t.positionsAmount || '-'}</td>
-                    <td style="text-align: right;">${t.readyUSDT || '-'}</td>
-                    <td style="text-align: right; font-weight: 600;">${eurDisplay}</td>
                     <td style="text-align: center; white-space: nowrap;">
                          <button class="edit-btn" data-id="${t.id}" title="Редактировать">${pencilSvg}</button>
                          <button class="delete-btn" data-id="${t.id}" title="Удалить">${trashSvg}</button>
