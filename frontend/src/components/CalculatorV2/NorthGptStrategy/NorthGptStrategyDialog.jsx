@@ -33,6 +33,7 @@ import {
 } from '../../../utils/northGptStrategy/enrich';
 import { buildPrecheckRequest } from '../../../utils/northGptStrategy/buildPrecheckRequest';
 import { sendNorthExpandExpirationCommand, sendNorthInitCommand } from '../../../hooks/useExtensionData';
+import { limitExpirationDates } from '../../../utils/expirationWindow';
 
 // Иммутабельно прочитать/записать значение по пути (['primary','optionsOnly'] и т.п.) —
 // блоки результата «Север GPT» лежат на разной глубине (одиночный/двойной режим).
@@ -189,7 +190,7 @@ function NorthGptStrategyDialog({
       if (normalizedTicker && (data.ticker || '').toUpperCase() && (data.ticker || '').toUpperCase() !== normalizedTicker) {
         return false;
       }
-      setAvailableExpirations((data.expirations || []).map((e) => e.date));
+      setAvailableExpirations(limitExpirationDates((data.expirations || []).map((e) => e.date)));
       setExpirationsStatus('done');
       setExpirationsMessage('');
       return true;
@@ -511,7 +512,7 @@ function NorthGptStrategyDialog({
       if (normalizedTicker && (data.ticker || '').toUpperCase() && (data.ticker || '').toUpperCase() !== normalizedTicker) {
         return false;
       }
-      setAvailableExpirations((data.expirations || []).map((e) => e.date));
+      setAvailableExpirations(limitExpirationDates((data.expirations || []).map((e) => e.date)));
       setExpirationsStatus('done');
       setExpirationsMessage('');
       return true;

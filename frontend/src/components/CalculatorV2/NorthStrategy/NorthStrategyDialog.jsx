@@ -32,6 +32,7 @@ import ResultsView from './ResultsView';
 import { analyzeNorthStrategy } from '../../../utils/northStrategy/analyzer';
 import { DEFAULT_WEIGHTS } from '../../../utils/northStrategy/scoring';
 import { sendNorthExpandExpirationCommand, sendNorthInitCommand } from '../../../hooks/useExtensionData';
+import { limitExpirationDates } from '../../../utils/expirationWindow';
 
 const EXPIRATIONS_KEY = 'tvc_expirations_list';
 const FULL_CHAIN_KEY = 'tvc_full_chain';
@@ -153,7 +154,7 @@ function NorthStrategyDialog({
       if (normalizedTicker && (data.ticker || '').toUpperCase() && (data.ticker || '').toUpperCase() !== normalizedTicker) {
         return false;
       }
-      setAvailableExpirations((data.expirations || []).map(e => e.date));
+      setAvailableExpirations(limitExpirationDates((data.expirations || []).map(e => e.date)));
       setExpirationsStatus('done');
       setExpirationsMessage('');
       return true;
@@ -300,7 +301,7 @@ function NorthStrategyDialog({
       if (normalizedTicker && (data.ticker || '').toUpperCase() && (data.ticker || '').toUpperCase() !== normalizedTicker) {
         return false;
       }
-      setAvailableExpirations((data.expirations || []).map(e => e.date));
+      setAvailableExpirations(limitExpirationDates((data.expirations || []).map(e => e.date)));
       setExpirationsStatus('done');
       setExpirationsMessage('');
       return true;
