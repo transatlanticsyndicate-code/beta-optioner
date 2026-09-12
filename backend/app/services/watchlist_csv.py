@@ -44,6 +44,9 @@ _COL_SYMBOL = 'symbol'
 _COL_PL = 'p/l open'
 _COL_QTY = 'pos qty'
 _COL_IV = 'impl vol'
+# Средняя цена входа по позиции у брокера = реальная цена входа (ASK/BID на момент
+# сделки). По ней сверяется цена входа в сделке калькулятора (решение заказчика 2026-09-12).
+_COL_AVG_PRICE = 'avg price'
 
 
 def parse_anchor_date_from_filename(filename: Optional[str]) -> Optional[str]:
@@ -184,7 +187,7 @@ def parse_watchlist_csv(content: str) -> Dict[str, Any]:
 
     Возвращает:
       positions — список позиций: {symbol, ticker, expiration, type, strike,
-                                   pl, quantity, iv}
+                                   pl, quantity, iv, avgPrice}
       unparsed  — строки, похожие на позицию, но не разобранные (для отчёта)
       hasHeader — найден ли заголовок таблицы (если нет — файл не тот)
       rowsTotal — сколько строк с данными просмотрено после заголовка
@@ -220,6 +223,7 @@ def parse_watchlist_csv(content: str) -> Dict[str, Any]:
         pl = parse_money(_cell(row, columns, _COL_PL))
         quantity = parse_quantity(_cell(row, columns, _COL_QTY))
         iv = parse_percent(_cell(row, columns, _COL_IV))
+        avg_price = parse_money(_cell(row, columns, _COL_AVG_PRICE))
 
         if parsed is None:
             unparsed.append({'symbol': symbol_raw, 'reason': 'символ не распознан'})
@@ -237,6 +241,8 @@ def parse_watchlist_csv(content: str) -> Dict[str, Any]:
             'quantity': quantity,
             # IV может отсутствовать — это не повод терять P/L по позиции.
             'iv': iv,
+            # Цены входа может не быть (старый формат выгрузки) — тогда её просто не сверяем.
+            'avgPrice': avg_price,
             **parsed,
         })
 

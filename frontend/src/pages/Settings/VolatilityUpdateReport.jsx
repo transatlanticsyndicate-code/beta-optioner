@@ -80,6 +80,11 @@ function VolatilityUpdateReport({ report }) {
                   <div key={item.symbol} className="pl-3">
                     {item.leg}: P&L {formatMoney(item.previousPL)} → <span className="text-foreground">{formatMoney(item.newPL)}</span>
                     {', '}IV {formatIv(item.previousIv)} → <span className="text-foreground">{formatIv(item.newIv)}</span>
+                    {item.newEntryPrice !== null && item.newEntryPrice !== undefined && (
+                      <>
+                        {', '}цена входа {formatMoney(item.previousEntryPrice)} → <span className="text-foreground">{formatMoney(item.newEntryPrice)}</span>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>

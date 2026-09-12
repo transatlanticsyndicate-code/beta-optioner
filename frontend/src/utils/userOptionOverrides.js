@@ -44,6 +44,36 @@ const FACT_FIELDS = [
  * @returns {number} сколько записей хранилища было изменено
  */
 export function clearFactOverrides(optionKeys) {
+  return clearOverrideFields(optionKeys, FACT_FIELDS);
+}
+
+// Поля цены входа — актуализация исправляет их по столбцу Avg Price выгрузки.
+const ENTRY_PRICE_FIELDS = [
+  'customAsk',
+  'isAskModified',
+  'customBid',
+  'isBidModified',
+  'customPremium',
+  'isPremiumModified',
+];
+
+/**
+ * Убрать локальные правки цены входа по ногам, где актуализация исправила её
+ * по Avg Price из выгрузки терминала.
+ *
+ * ЗАЧЕМ: как и с фактами — калькулятор накладывает локальную правку поверх базы,
+ * и старая (ошибочная) цена входа перекрыла бы только что исправленную.
+ * Снимаются только по перечисленным ногам: где цена совпала с брокером, ручные
+ * правки пользователя остаются.
+ *
+ * @param {string[]} optionKeys — ключи ног в формате utils/optionKey.js
+ * @returns {number} сколько записей хранилища было изменено
+ */
+export function clearEntryPriceOverrides(optionKeys) {
+  return clearOverrideFields(optionKeys, ENTRY_PRICE_FIELDS);
+}
+
+function clearOverrideFields(optionKeys, fields) {
   if (!Array.isArray(optionKeys) || optionKeys.length === 0) return 0;
 
   try {
@@ -58,10 +88,10 @@ export function clearFactOverrides(optionKeys) {
       const entry = overrides[key];
       if (!entry || typeof entry !== 'object') return;
 
-      const hadFact = FACT_FIELDS.some((field) => field in entry);
-      if (!hadFact) return;
+      const hadField = fields.some((field) => field in entry);
+      if (!hadField) return;
 
-      FACT_FIELDS.forEach((field) => { delete entry[field]; });
+      fields.forEach((field) => { delete entry[field]; });
       // Пустую запись убираем целиком, чтобы хранилище не распухало.
       if (Object.keys(entry).length === 0) delete overrides[key];
       touched += 1;
@@ -74,7 +104,7 @@ export function clearFactOverrides(optionKeys) {
   } catch (error) {
     // Битое хранилище не должно ронять отчёт об успешном импорте —
     // данные в базе уже обновлены, это лишь локальная гигиена.
-    console.error('❌ [UserOverrides] Не удалось очистить локальные значения фактов:', error);
+    console.error('❌ [UserOverrides] Не удалось очистить локальные правки:', error);
     return 0;
   }
 }

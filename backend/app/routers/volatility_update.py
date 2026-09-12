@@ -47,7 +47,7 @@ async def apply_volatility_update(
     """
     Прочитать CSV-выгрузку и записать значения в активные сделки калькулятора.
 
-    P/L Open → Fact P&L, Impl Vol → Fact IV. Нога обновляется только при совпадении
+    P/L Open → Fact P&L, Impl Vol → Fact IV, Avg Price → сверка цены входа. Нога обновляется только при совпадении
     количества контрактов с файлом. Возвращает отчёт о проделанной работе.
     """
     filename = file.filename or ''
@@ -117,6 +117,9 @@ async def apply_volatility_update(
     matched_keys = set()
     legs_updated = 0
     updated_option_keys: List[str] = []
+    # Ноги, где цена входа исправлена по Avg Price, — фронту по ним надо снять и
+    # локальные правки цены входа, иначе они перекроют исправленное значение.
+    entry_price_option_keys: List[str] = []
 
     for config in configurations:
         state = config.state if isinstance(config.state, dict) else None
@@ -137,6 +140,9 @@ async def apply_volatility_update(
             flag_modified(config, 'state')
             legs_updated += len(outcome['updated'])
             updated_option_keys.extend(item['optionKey'] for item in outcome['updated'])
+            entry_price_option_keys.extend(
+                item['optionKey'] for item in outcome['updated'] if item.get('newEntryPrice') is not None
+            )
 
         deals_report.append({
             'dealId': str(config.id),
@@ -180,4 +186,6 @@ async def apply_volatility_update(
         'deals': deals_report,
         'symbolsWithoutDeal': symbols_without_deal,
         'updatedOptionKeys': updated_option_keys,
+        'entryPricesUpdated': len(entry_price_option_keys),
+        'entryPriceUpdatedOptionKeys': entry_price_option_keys,
     }

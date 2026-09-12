@@ -3,7 +3,7 @@ import { Upload, FileText } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { applyVolatilityUpdate } from '../../utils/volatilityUpdateApi';
-import { clearFactOverrides } from '../../utils/userOptionOverrides';
+import { clearEntryPriceOverrides, clearFactOverrides } from '../../utils/userOptionOverrides';
 import VolatilityUpdateReport from './VolatilityUpdateReport';
 
 const FILE_INPUT_ID = 'volatility-update-file-input';
@@ -35,6 +35,7 @@ function SettingsVolatilityUpdate() {
       // открытии сделки — по обновлённым ногам их надо снять, иначе пользователь
       // увидит старые значения и решит, что импорт не сработал.
       clearFactOverrides(result.updatedOptionKeys || []);
+      clearEntryPriceOverrides(result.entryPriceUpdatedOptionKeys || []);
       setReport(result);
       setStatus('done');
     } catch (error) {
@@ -62,7 +63,8 @@ function SettingsVolatilityUpdate() {
           <CardDescription>
             Приложите CSV-выгрузку текущих позиций из терминала. Система найдёт
             соответствующие ноги в активных сделках Калькулятора и запишет: колонку
-            «P/L Open» — в поле Fact P&L, колонку «Impl Vol» — в поле Fact IV.
+            «P/L Open» — в поле Fact P&L, колонку «Impl Vol» — в поле Fact IV. Цена входа сверяется с колонкой
+            «Avg Price» и при расхождении исправляется в сделке.
             <br /><br />
             Нога обновляется только если количество контрактов в сделке совпадает с
             количеством в файле: в выгрузке указана суммарная позиция по счёту, и при

@@ -14,7 +14,11 @@
   - уже заполненные Fact P&L / Fact IV перезаписываются: данные терминала считаем
     более свежими, в этом и смысл актуализации;
   - ноги, которых нет в файле, не трогаем — их перечисляем в отчёте;
-  - значения IV записываются как есть, без фильтрации.
+  - значения IV записываются как есть, без фильтрации;
+  - цена входа сверяется со столбцом Avg Price (средняя цена входа у брокера) и при
+    расхождении больше полцента исправляется в сделке (решение заказчика 2026-09-12:
+    иначе убыток брокера мог превышать премию, «уплаченную» в калькуляторе, и Fact P&L
+    не воспроизводился — ICE колл 165: брокер −$539 при премии в сделке $377).
 
 Про цену якоря: в файле нет цены базового актива, поэтому actualPLPrice и
 actualPLPriceSource обнуляются. Оставить старую цену рядом со свежим фактом было
@@ -23,6 +27,10 @@ actualPLPriceSource обнуляются. Оставить старую цену
 `opt.actualPLPrice || currentPrice` в OptionsTableV3.jsx).
 """
 from typing import Any, Dict, List, Optional
+
+# Допуск сверки цены входа: терминал показывает Avg Price с точностью до цента,
+# а в сделке цена может лежать точнее — расхождение меньше полцента не ошибка ввода.
+ENTRY_PRICE_TOLERANCE = 0.005
 
 
 def build_position_index(positions: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
@@ -162,6 +170,8 @@ def apply_positions_to_deal(
             # пришло из выгрузки терминала и является ручной корректировкой.
             option['ivUpdatedFromExtension'] = False
 
+        entry_change = _sync_entry_price(option, position.get('avgPrice'))
+
         result['updated'].append({
             'leg': _leg_label(option),
             'symbol': position['symbol'],
@@ -170,10 +180,57 @@ def apply_positions_to_deal(
             'newPL': position['pl'],
             'previousIv': previous_iv,
             'newIv': position.get('iv'),
+            'previousEntryPrice': entry_change['previous'] if entry_change else None,
+            'newEntryPrice': entry_change['new'] if entry_change else None,
             'optionKey': make_frontend_option_key(ticker, option),
         })
 
     return result
+
+
+def _to_float(value: Any) -> Optional[float]:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _sync_entry_price(option: Dict[str, Any], avg_price: Any) -> Optional[Dict[str, float]]:
+    """
+    Сверить цену входа ноги с Avg Price из файла и при расхождении исправить.
+
+    Цена входа в калькуляторе берётся так же, как на фронте (getEntryPrice /
+    getFactAnchorEntryPrice): при ручной премии — customPremium; иначе для покупки
+    ASK (customAsk, если правился), для продажи BID (customBid). Исправление пишется
+    в то же ручное поле, из которого калькулятор эту цену и читает.
+
+    :return: {previous, new} если цена изменена, иначе None
+    """
+    new_price = _to_float(avg_price)
+    if new_price is None or new_price <= 0:
+        return None
+
+    is_buy = str(option.get('action') or 'Buy').strip().lower() == 'buy'
+    if option.get('isPremiumModified'):
+        field, flag = 'customPremium', 'isPremiumModified'
+        current = _to_float(option.get('customPremium'))
+    elif is_buy:
+        field, flag = 'customAsk', 'isAskModified'
+        current = _to_float(option.get('customAsk')) if option.get('isAskModified') else None
+        if current is None:
+            current = _to_float(option.get('ask')) or _to_float(option.get('premium'))
+    else:
+        field, flag = 'customBid', 'isBidModified'
+        current = _to_float(option.get('customBid')) if option.get('isBidModified') else None
+        if current is None:
+            current = _to_float(option.get('bid')) or _to_float(option.get('premium'))
+
+    if current is not None and abs(current - new_price) <= ENTRY_PRICE_TOLERANCE:
+        return None
+
+    option[field] = new_price
+    option[flag] = True
+    return {'previous': current, 'new': new_price}
 
 
 def _abs_int(value: Any) -> Optional[int]:

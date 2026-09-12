@@ -228,3 +228,76 @@ def test_frontend_option_key_matches_javascript_format():
     assert make_frontend_option_key('aa', {'strike': 65, 'type': 'call', 'date': '2026-10-16'}) == 'AA|65-CALL-2026-10-16'
     assert make_frontend_option_key('AA', {'strike': 65.0, 'type': 'CALL', 'date': '2026-10-16'}) == 'AA|65-CALL-2026-10-16'
     assert make_frontend_option_key('CCI', {'strike': 67.5, 'type': 'PUT', 'date': '2026-10-16'}) == 'CCI|67.5-PUT-2026-10-16'
+
+
+# ===== Сверка цены входа с Avg Price (решение заказчика 2026-09-12) =====
+
+def positions_with_avg(avg_price):
+    return build_position_index([{**POSITIONS[0], 'avgPrice': avg_price}])
+
+
+def test_parse_real_file_reads_avg_price():
+    parsed = parse_watchlist_csv(read_fixture())
+    aa_call = next(p for p in parsed['positions'] if p['symbol'] == '.AA261016C65')
+    assert aa_call['avgPrice'] == 1.54
+
+
+def test_entry_price_corrected_when_differs_from_avg_price():
+    # ICE колл 165: в сделке $0.29, у брокера средняя цена входа выше.
+    state = make_state(ask=0.40, customAsk=0.29, isAskModified=True)
+    result = apply_positions_to_deal(state, 'AA', positions_with_avg(0.70), '2026-09-12')
+
+    option = state['options'][0]
+    assert option['customAsk'] == 0.70
+    assert option['isAskModified'] is True
+    assert result['updated'][0]['previousEntryPrice'] == 0.29
+    assert result['updated'][0]['newEntryPrice'] == 0.70
+
+
+def test_entry_price_from_plain_ask_is_corrected_into_custom_ask():
+    state = make_state(ask=1.10)
+    apply_positions_to_deal(state, 'AA', positions_with_avg(1.54), '2026-08-09')
+
+    assert state['options'][0]['customAsk'] == 1.54
+    assert state['options'][0]['isAskModified'] is True
+    assert state['options'][0]['ask'] == 1.10  # рыночный ASK на момент входа не трогаем
+
+
+def test_entry_price_within_half_cent_is_not_changed():
+    state = make_state(ask=1.5412)
+    result = apply_positions_to_deal(state, 'AA', positions_with_avg(1.54), '2026-08-09')
+
+    assert 'customAsk' not in state['options'][0]
+    assert result['updated'][0]['newEntryPrice'] is None
+
+
+def test_sell_leg_entry_price_goes_to_bid():
+    state = make_state(action='Sell', quantity=-4, bid=0.90)
+    apply_positions_to_deal(state, 'AA', positions_with_avg(1.20), '2026-08-09')
+
+    assert state['options'][0]['customBid'] == 1.20
+    assert state['options'][0]['isBidModified'] is True
+    assert 'customAsk' not in state['options'][0]
+
+
+def test_manual_premium_leg_is_corrected_in_premium():
+    state = make_state(isPremiumModified=True, customPremium=0.29)
+    apply_positions_to_deal(state, 'AA', positions_with_avg(0.70), '2026-08-09')
+
+    assert state['options'][0]['customPremium'] == 0.70
+    assert 'customAsk' not in state['options'][0]
+
+
+def test_missing_avg_price_leaves_entry_price_untouched():
+    state = make_state(ask=1.10)
+    result = apply_positions_to_deal(state, 'AA', positions_with_avg(None), '2026-08-09')
+
+    assert 'customAsk' not in state['options'][0]
+    assert result['updated'][0]['newEntryPrice'] is None
+
+
+def test_entry_price_not_touched_when_quantity_differs():
+    state = make_state(quantity=2, ask=1.10)
+    apply_positions_to_deal(state, 'AA', positions_with_avg(1.54), '2026-08-09')
+
+    assert 'customAsk' not in state['options'][0]
