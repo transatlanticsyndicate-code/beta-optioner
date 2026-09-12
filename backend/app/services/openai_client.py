@@ -137,8 +137,10 @@ class OpenAIClient:
     def _is_reasoning_model(self):
         """gpt-5+ и o-серия — рассуждающие модели с иным контрактом вызова."""
         m = (self.model or "").lower()
+        # gpt-6 (gpt-6-astra, переход по просьбе заказчика 2026-09-13) — тоже рассуждающая:
+        # без неё сюда ушли бы temperature и max_tokens=1500, и ответ обрезался бы на «мыслях».
         return (m.startswith("o1") or m.startswith("o3") or m.startswith("o4")
-                or m.startswith("gpt-5"))
+                or m.startswith("gpt-5") or m.startswith("gpt-6"))
 
     def select_combinations(self, user_prompt, constraints, chain, with_asset=True,
                             call_only=False):
