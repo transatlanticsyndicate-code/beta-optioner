@@ -234,7 +234,17 @@ export function applyFactPLAnchor({
   // для самой разницы дат; ниже в calculateDaysRemainingUTC передаём oldestEntry как есть.
   const anchorDateObj = new Date(option.actualPLDate + 'T00:00:00Z');
   const oldestEntryForDiff = oldestEntry || new Date();
-  const anchorDaysPassed = Math.round((anchorDateObj - oldestEntryForDiff) / (1000 * 60 * 60 * 24));
+  // ЗАЧЕМ отдельная база для зафиксированной позиции (фикс 2026-09-12, ESAB/NRG/ALGM):
+  // у неё «прошедшие дни» всего калькулятора (ползунок «сегодня», calculateDaysRemaining*)
+  // считаются от ДАТЫ ФИКСАЦИИ сделки — это зашито в initialDaysToExpiration, — а не от
+  // даты входа. Когда сделка зафиксирована позже входа (вход 29.08, фиксация 31.08),
+  // счёт от даты входа сдвигал якорь на эти дни вперёд: факт из выгрузки терминала
+  // считался «ещё не наступившим» и в колонке P&L оставалась голая теория.
+  const lockedInitialDays = Number(option.initialDaysToExpiration);
+  const anchorBaseMs = option.isLockedPosition && option.date && Number.isFinite(lockedInitialDays)
+    ? new Date(String(option.date).split('T')[0] + 'T00:00:00Z').getTime() - lockedInitialDays * 86400000
+    : oldestEntryForDiff.getTime();
+  const anchorDaysPassed = Math.round((anchorDateObj.getTime() - anchorBaseMs) / (1000 * 60 * 60 * 24));
 
   // Якорь применяется только если целевая точка не раньше даты якоря — до даты
   // ввода Fact P&L показываем обычный теоретический расчёт.
