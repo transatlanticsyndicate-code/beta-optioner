@@ -357,7 +357,18 @@ export function applyFactPLAnchor({
   const intrinsicAtTarget = computeTheoreticalPrice(targetPrice, 0, anchorVolatility);
   const theoAtTargetOriginal = computeTheoreticalPrice(targetPrice, targetDaysForPricing, anchorVolatility);
   const fallbackPrice = intrinsicAtTarget + anchor.k2 * Math.max(0, theoAtTargetOriginal - intrinsicAtTarget);
-  const pl = priceToPL(fallbackPrice, ep, sign, numeratorQty, mult);
+
+  // ПРЕВЫШЕНИЕ ФАКТА НАД ДОСТИЖИМЫМ (решение заказчика 2026-09-12): P&L показываем «как у
+  // брокера», даже если убыток больше вложенного (ICE колл 165: брокер −$539 при премии $377 —
+  // комиссии и прочие списания брокера). Разница между фактом и тем, что модель физически
+  // может дать в точке якоря, держится ПОСТОЯННОЙ суммой: деньги уже списаны и не вернутся,
+  // но и расти со временем эта часть не должна. В точке якоря результат == введённый факт.
+  const intrinsicAtAnchor = computeTheoreticalPrice(anchorPrice, 0, anchorVolatility);
+  const theoAtAnchorOriginalEx = Math.max(0, anchor.theoAnchorPriceOriginal - intrinsicAtAnchor);
+  const fallbackPriceAtAnchor = intrinsicAtAnchor + anchor.k2 * theoAtAnchorOriginalEx;
+  const brokerExcess = option.actualPL * ratio - priceToPL(fallbackPriceAtAnchor, ep, sign, numeratorQty, mult);
+
+  const pl = priceToPL(fallbackPrice, ep, sign, numeratorQty, mult) + brokerExcess;
 
   return { pl, residual, applied: true, reason: anchor.reason, anchorDaysPassed, plAtAnchor, calibratedVolatility: null, mode: 'fallback' };
 }

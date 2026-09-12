@@ -250,7 +250,7 @@ describe('applyFactPLAnchor (калибровка волатильности) �
     expect(result.mode).toBe('none');
   });
 
-  it('5) нога с недостижимым фактом (CCL PUT 26: премия $177, факт −$247) → режим фолбэка, результат не хуже −$177', () => {
+  it('5) нога с недостижимым фактом (CCL PUT 26: премия $177, факт −$247) → режим фолбэка, в точке якоря ровно факт брокера, дальше не хуже факта', () => {
     const option = cclOption();
     const legCost = CCL_ENTRY_PRICE * CCL_LEG.quantity * CCL_MULT; // 177
     const computeTheoreticalPrice = makeComputeTheoreticalPrice(CCL_LEG);
@@ -267,7 +267,8 @@ describe('applyFactPLAnchor (калибровка волатильности) �
       currentQuantity: CCL_LEG.quantity,
     };
 
-    // В точке якоря — тоже фолбэк (корня нет), но по построению не хуже −premium.
+    // В точке якоря — фолбэк (корня нет); показываем цифру брокера как есть (решение
+    // заказчика 2026-09-12): превышение над премией — списания брокера, их не прячем.
     const atAnchor = applyFactPLAnchor({
       ...commonArgs,
       theoreticalPL: 0,
@@ -278,9 +279,11 @@ describe('applyFactPLAnchor (калибровка волатильности) �
     expect(atAnchor.mode).toBe('fallback');
     expect(atAnchor.applied).toBe(true);
     expect(atAnchor.reason).not.toBeNull();
-    expect(atAnchor.pl).toBeGreaterThanOrEqual(-legCost - 0.01);
+    expect(atAnchor.pl).toBeCloseTo(option.actualPL, 2);
+    expect(atAnchor.pl).toBeLessThan(-legCost);
 
-    // Позже, ближе к экспирации — тот же предел держится.
+    // Позже, ближе к экспирации — превышение над премией постоянное и не растёт:
+    // убыток не хуже факта брокера.
     const laterDaysPassed = CCL_ANCHOR_DAYS_PASSED + 100;
     const laterDaysRemaining = calculateDaysRemainingUTC(option, laterDaysPassed, 30, OLDEST_ENTRY);
     const later = applyFactPLAnchor({
@@ -291,7 +294,7 @@ describe('applyFactPLAnchor (калибровка волатильности) �
       targetPrice: 20, // глубоко ITM для PUT — стресс-сценарий
     });
     expect(later.mode).toBe('fallback');
-    expect(later.pl).toBeGreaterThanOrEqual(-legCost - 0.01);
+    expect(later.pl).toBeGreaterThanOrEqual(option.actualPL - 0.01);
   });
 
   it('калиброванная волатильность близка к введённой Fact IV (ICE: Fact IV 31.6% → аудит ожидает σ* ≈ 29.4%)', () => {
