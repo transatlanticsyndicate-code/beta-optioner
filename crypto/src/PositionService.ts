@@ -134,7 +134,12 @@ export class PositionService {
      * @param order Тип сортировки
      * @param rankings Текущие рейтинги (опционально)
      */
-    static sortAssets(assets: Asset[], order: SortOrder, rankings: Record<string, number> = {}): Asset[] {
+    static sortAssets(
+        assets: Asset[],
+        order: SortOrder,
+        rankings: Record<string, number> = {},
+        typeNames: Record<string, string> = {}
+    ): Asset[] {
         const sorted = [...assets];
 
         switch (order) {
@@ -154,6 +159,19 @@ export class PositionService {
                     const rB = rankings[b.name] ?? -Infinity;
                     return rB - rA;
                 });
+            case 'typeAsc':
+            case 'typeDesc': {
+                // ЗАЧЕМ: позиции без типа всегда внизу — иначе при сортировке они перемешиваются с типизированными
+                const dir = order === 'typeAsc' ? 1 : -1;
+                return sorted.sort((a, b) => {
+                    const nameA = a.typeId ? (typeNames[a.typeId] || '') : '';
+                    const nameB = b.typeId ? (typeNames[b.typeId] || '') : '';
+                    if (!nameA && !nameB) return 0;
+                    if (!nameA) return 1;
+                    if (!nameB) return -1;
+                    return nameA.localeCompare(nameB) * dir;
+                });
+            }
             case 'ordersAsc':
                 return sorted.sort((a, b) => (Number(a.orders || 0) - Number(b.orders || 0)));
             case 'ordersDesc':

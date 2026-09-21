@@ -67,12 +67,18 @@
                         <option value="6000">6000</option>
                         <option value="12000">12000</option>
                     </select>
+                    <select id="new-asset-type" class="type-select">
+                        <option value="">Тип позиции</option>
+                    </select>
                     <button id="add-asset-btn">+ Добавить</button>
                     <div class="form-divider"></div>
                     <span class="filter-label">Фильтры</span>
                     <input type="text" id="search-asset-input" placeholder="По тикеру" class="search-input" />
                     <select id="filter-asset-scenario" class="scenario-filter-select">
                         <option value="">По сценарию</option>
+                    </select>
+                    <select id="filter-asset-type" class="type-filter-select">
+                        <option value="">По типу</option>
                     </select>
                     <button id="clear-search-btn" title="Очистить фильтры">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
@@ -101,8 +107,13 @@
                     <div id="scenarios-editor">
                         <!-- Редактор сценариев будет вставлен здесь -->
                     </div>
+                    <h3 style="margin-top: 16px;">Типы позиций</h3>
+                    <div id="position-types-editor">
+                        <!-- Редактор типов позиций будет вставлен здесь -->
+                    </div>
                     <div class="settings-footer" style="flex-wrap: wrap; gap: 8px;">
                         <button id="add-scenario-btn">+ Добавить сценарий</button>
+                        <button id="add-position-type-btn">+ Добавить тип</button>
 
                         <div style="flex-basis: 100%; height: 1px; background: var(--border-color); margin: 8px 0;">
                         </div>
@@ -151,6 +162,12 @@
                                         </div>
                                     </div>
                                 </th>
+                                <th style="text-align: left; cursor: pointer;" id="type-header-sort">
+                                    <div style="display: flex; align-items: center; gap: 4px;">
+                                        Тип позиции
+                                        <span id="type-sort-indicator" style="font-size: 0.8em; opacity: 0.7;"></span>
+                                    </div>
+                                </th>
                                 <th style="text-align: center; cursor: pointer;" id="orders-header-sort">
                                     <div style="display: flex; align-items: center; justify-content: center; gap: 4px;">
                                         Ордера
@@ -185,7 +202,7 @@
                                     </div>
                                 </th>
 
-                                <th width="40"></th>
+                                <th width="70"></th>
                             </tr>
                         </thead>
 

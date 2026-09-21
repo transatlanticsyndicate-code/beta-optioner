@@ -1,5 +1,5 @@
-import { State, Asset } from './types';
-import { DEFAULT_CONFIG, DEFAULT_DEPOSIT, DEFAULT_SCENARIO_PERCENTS } from './config';
+import { State, Asset, PositionType } from './types';
+import { DEFAULT_CONFIG, DEFAULT_DEPOSIT, DEFAULT_POSITION_TYPES, DEFAULT_SCENARIO_PERCENTS } from './config';
 import { INITIAL_ASSETS, INITIAL_FINANCIAL_CATEGORIES, INITIAL_FINANCIAL_TYPES } from './initialAssets';
 
 export class CryptoActions {
@@ -69,17 +69,83 @@ export class CryptoActions {
                 return { assets: state.assets.filter(a => a.id !== (payload as string)) };
 
             case 'ADD_ASSET': {
-                const p = payload as { name: string, scenario: number };
+                const p = payload as { name: string, scenario: number, typeId?: string };
                 const newAsset: Asset = {
                     id: Date.now().toString(),
                     name: p.name,
                     scenario: p.scenario,
+                    typeId: p.typeId || undefined,
                     steps: [false, false, false, false],
                     isActive: false,
                     isVerified: false,
                     orders: true
                 };
                 return { assets: [newAsset, ...state.assets] };
+            }
+
+            // Сохранение строки после редактирования: тикер, сценарий и тип разом
+            case 'UPDATE_ASSET': {
+                const p = payload as { id: string, name: string, scenario: number, typeId?: string };
+                const name = (p.name || '').trim().toUpperCase();
+
+                if (!name) {
+                    alert('Тикер не может быть пустым!');
+                    return null;
+                }
+                if (state.assets.some(a => a.id !== p.id && a.name === name)) {
+                    alert(`Тикер ${name} уже есть в списке!`);
+                    return null;
+                }
+                if (isNaN(p.scenario) || !state.config.scenarios[p.scenario]) {
+                    alert('Выберите сценарий!');
+                    return null;
+                }
+                // Тип мог быть удалён в настройках, пока строка была открыта на правку
+                const typeId = p.typeId && state.positionTypes.some(t => t.id === p.typeId) ? p.typeId : undefined;
+
+                const assets = state.assets.map(a =>
+                    a.id === p.id ? { ...a, name, scenario: p.scenario, typeId } : a
+                );
+                return { assets };
+            }
+
+            case 'ADD_POSITION_TYPE': {
+                const name = (payload as string || '').trim();
+                if (!name) {
+                    alert('Название типа не может быть пустым!');
+                    return null;
+                }
+                if (state.positionTypes.some(t => t.name.trim().toLowerCase() === name.toLowerCase())) {
+                    alert(`Тип «${name}» уже есть в списке!`);
+                    return null;
+                }
+                const newType: PositionType = { id: `pt-${Date.now().toString(36)}`, name };
+                return { positionTypes: [...state.positionTypes, newType] };
+            }
+
+            case 'UPDATE_POSITION_TYPE': {
+                const p = payload as { id: string, name: string };
+                const name = (p.name || '').trim();
+                if (!name) {
+                    alert('Название типа не может быть пустым!');
+                    return null;
+                }
+                if (state.positionTypes.some(t => t.id !== p.id && t.name.trim().toLowerCase() === name.toLowerCase())) {
+                    alert(`Тип «${name}» уже есть в списке!`);
+                    return null;
+                }
+                return { positionTypes: state.positionTypes.map(t => t.id === p.id ? { ...t, name } : t) };
+            }
+
+            case 'DELETE_POSITION_TYPE': {
+                const id = payload as string;
+                // ЗАЧЕМ: защита от дурака — удаление используемого типа обнулило бы тип у позиций молча
+                const usedBy = state.assets.filter(a => a.typeId === id).length;
+                if (usedBy > 0) {
+                    alert(`Тип используется в ${usedBy} позициях. Сначала смените тип у этих позиций.`);
+                    return null;
+                }
+                return { positionTypes: state.positionTypes.filter(t => t.id !== id) };
             }
 
             case 'ADD_SCENARIO': {
@@ -142,6 +208,7 @@ export class CryptoActions {
                 return {
                     deposit: DEFAULT_DEPOSIT,
                     assets: JSON.parse(JSON.stringify(INITIAL_ASSETS)),
+                    positionTypes: JSON.parse(JSON.stringify(DEFAULT_POSITION_TYPES)),
                     config: JSON.parse(JSON.stringify(DEFAULT_CONFIG)),
                     rankings: {},
                     lastRankingsUpdate: 0,

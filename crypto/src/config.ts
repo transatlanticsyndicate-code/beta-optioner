@@ -1,4 +1,4 @@
-import { Config } from './types';
+import { Config, PositionType } from './types';
 
 export const DEFAULT_CONFIG: Config = {
     scenarios: {
@@ -10,6 +10,16 @@ export const DEFAULT_CONFIG: Config = {
 };
 
 export const DEFAULT_DEPOSIT = 1670536;
+
+/** Стартовый список типов позиций; пользователь правит его в настройках */
+export const DEFAULT_POSITION_TYPES: PositionType[] = [
+    { id: 'pt-coins', name: 'Монеты' },
+    { id: 'pt-stocks', name: 'Акции' },
+    { id: 'pt-commodities', name: 'Сырье' },
+    { id: 'pt-indices', name: 'Индексы' },
+    { id: 'pt-bonds', name: 'Облигации' },
+    { id: 'pt-etf', name: 'ETF' }
+];
 
 export const DEFAULT_SCENARIO_PERCENTS = [25, 50, 75, 100];
 

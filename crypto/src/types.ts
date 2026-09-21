@@ -11,10 +11,18 @@ export interface Asset {
     id: string;
     name: string;
     scenario: number;
+    // ЗАЧЕМ: тип позиции необязателен — у позиций, заведённых до появления этого поля, его нет
+    typeId?: string;
     steps: boolean[]; // [Step 1, Step 2, Step 3, Step 4]
     isActive: boolean;
     isVerified: boolean;
     orders: boolean;
+}
+
+/** Тип позиции (монеты, акции, сырьё и т.д.) — список редактируется в настройках */
+export interface PositionType {
+    id: string;
+    name: string;
 }
 
 
@@ -29,7 +37,7 @@ export interface GlobalStats {
     lastUpdated: Date;
 }
 
-export type SortOrder = 'asc' | 'desc' | 'newest' | 'rankAsc' | 'rankDesc' | 'ordersAsc' | 'ordersDesc';
+export type SortOrder = 'asc' | 'desc' | 'newest' | 'rankAsc' | 'rankDesc' | 'ordersAsc' | 'ordersDesc' | 'typeAsc' | 'typeDesc';
 
 // Financial Types
 export type FinancialEntryType = 'income' | 'expense';
@@ -92,6 +100,7 @@ export interface FinancialState {
 export interface State {
     deposit: number;
     assets: Asset[];
+    positionTypes: PositionType[];
     config: Config;
     theme?: 'light' | 'dark';
     rankings: Record<string, number>;

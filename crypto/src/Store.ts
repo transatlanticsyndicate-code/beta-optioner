@@ -1,6 +1,6 @@
-import { Asset, Config, FinancialEntry, State } from './types';
+import { Asset, Config, FinancialEntry, PositionType, State } from './types';
 import { WeeklyStatsService } from './WeeklyStatsService';
-import { DEFAULT_CONFIG, DEFAULT_DEPOSIT } from './config';
+import { DEFAULT_CONFIG, DEFAULT_DEPOSIT, DEFAULT_POSITION_TYPES } from './config';
 import { INITIAL_ASSETS, INITIAL_FINANCIAL_CATEGORIES, INITIAL_FINANCIAL_TYPES } from './initialAssets';
 import { loadState, saveState } from './lib/api';
 
@@ -12,6 +12,7 @@ export class Store {
     private state: State = {
         deposit: DEFAULT_DEPOSIT,
         assets: INITIAL_ASSETS,
+        positionTypes: JSON.parse(JSON.stringify(DEFAULT_POSITION_TYPES)),
         config: JSON.parse(JSON.stringify(DEFAULT_CONFIG)),
         rankings: {},
         lastRankingsUpdate: 0,
@@ -69,6 +70,18 @@ export class Store {
         return this.state;
     }
 
+    /**
+     * Возвращает список типов позиций из сохранённых данных.
+     * ЗАЧЕМ: документы, созданные до появления типов, этого поля не содержат —
+     * подставляем список по умолчанию, чтобы интерфейс не остался без типов.
+     */
+    private static normalizePositionTypes(raw: unknown): PositionType[] {
+        if (!Array.isArray(raw)) return JSON.parse(JSON.stringify(DEFAULT_POSITION_TYPES));
+        const cleaned = raw.filter((t): t is PositionType =>
+            !!t && typeof t === 'object' && typeof (t as PositionType).id === 'string' && typeof (t as PositionType).name === 'string');
+        return cleaned.length > 0 ? cleaned : JSON.parse(JSON.stringify(DEFAULT_POSITION_TYPES));
+    }
+
     private validateState(data: unknown): data is State {
         if (!data || typeof data !== 'object') return false;
         const state = data as State;
@@ -100,6 +113,7 @@ export class Store {
                     // We only use local state as a temporary cache while offline or before login 
                     this.state = {
                         ...parsed,
+                        positionTypes: Store.normalizePositionTypes(parsed.positionTypes),
                         financial: {
                             transactions: (parsed.financial?.transactions || []).map((t: Partial<FinancialEntry> & { amount?: number }) => ({
                                 id: t.id || Math.random().toString(36).substr(2, 9),
@@ -171,6 +185,7 @@ export class Store {
                     // Normalize/Migrate state
                     this.state = {
                         ...content,
+                        positionTypes: Store.normalizePositionTypes(content.positionTypes),
                         financial: {
                             transactions: (content.financial?.transactions || []).map((t: Partial<FinancialEntry> & { amount?: number }) => ({
                                 id: t.id || Math.random().toString(36).substr(2, 9),

@@ -2,6 +2,7 @@ import { State } from './types';
 import { StatsRenderer } from './StatsRenderer';
 import { TableRenderer } from './TableRenderer';
 import { ScenarioRenderer } from './ScenarioRenderer';
+import { PositionTypeRenderer } from './PositionTypeRenderer';
 
 import { FinancialRenderer } from './FinancialRenderer';
 import { WeeklyStatsRenderer } from './WeeklyStatsRenderer';
@@ -18,6 +19,7 @@ export class UI {
     private statsRenderer: StatsRenderer;
     private tableRenderer: TableRenderer;
     private scenarioRenderer: ScenarioRenderer;
+    private positionTypeRenderer: PositionTypeRenderer;
 
     private financialRenderer: FinancialRenderer;
     private weeklyStatsRenderer: WeeklyStatsRenderer;
@@ -34,6 +36,7 @@ export class UI {
         this.statsRenderer = new StatsRenderer(state, onAction);
         this.tableRenderer = new TableRenderer(state, onAction);
         this.scenarioRenderer = new ScenarioRenderer(state, onAction);
+        this.positionTypeRenderer = new PositionTypeRenderer(state, onAction);
 
         this.financialRenderer = new FinancialRenderer(state, onAction);
         this.weeklyStatsRenderer = new WeeklyStatsRenderer(state, onAction);
@@ -47,6 +50,7 @@ export class UI {
         this.statsRenderer.updateState(newState);
         this.tableRenderer.updateState(newState);
         this.scenarioRenderer.updateState(newState);
+        this.positionTypeRenderer.updateState(newState);
 
         this.financialRenderer.updateState(newState);
         this.weeklyStatsRenderer.updateState(newState);
@@ -88,10 +92,12 @@ export class UI {
         this.statsRenderer.render();
         // this.tableRenderer.render(); // Handled by updateState / dedicated calls. Avoiding double render.
         this.scenarioRenderer.render();
+        this.positionTypeRenderer.render();
 
         this.financialRenderer.render();
         this.weeklyStatsRenderer.render();
         this.updateScenarioDropdowns();
+        this.updateTypeDropdowns();
         this.renderLogo();
     }
 
@@ -141,6 +147,7 @@ export class UI {
         const nameInput = document.getElementById('new-asset-name') as HTMLInputElement;
         const addBtn = document.getElementById('add-asset-btn') as HTMLButtonElement;
         const scenarioSelect = document.getElementById('new-asset-scenario') as HTMLSelectElement;
+        const typeSelect = document.getElementById('new-asset-type') as HTMLSelectElement;
 
         const updateAddBtnState = () => {
             if (addBtn && nameInput && scenarioSelect) {
@@ -175,10 +182,12 @@ export class UI {
                     return;
                 }
 
-                this.onAction('ADD_ASSET', { name: ticker, scenario: scenarioId });
+                // Тип позиции необязателен — пустое значение означает «без типа»
+                this.onAction('ADD_ASSET', { name: ticker, scenario: scenarioId, typeId: typeSelect?.value || undefined });
 
                 nameInput.value = '';
                 scenarioSelect.value = "";
+                if (typeSelect) typeSelect.value = "";
                 updateAddBtnState();
             });
         }
@@ -203,6 +212,11 @@ export class UI {
                 filterScenarioSelect.value = '';
                 this.tableRenderer.setFilterScenario(null);
             }
+            const filterTypeSelectEl = document.getElementById('filter-asset-type') as HTMLSelectElement;
+            if (filterTypeSelectEl) {
+                filterTypeSelectEl.value = '';
+                this.tableRenderer.setFilterType(null);
+            }
             if (searchInput) searchInput.focus();
         });
 
@@ -212,6 +226,15 @@ export class UI {
             filterScenarioSelect.addEventListener('change', () => {
                 const val = filterScenarioSelect.value;
                 this.tableRenderer.setFilterScenario(val === '' ? null : parseInt(val));
+            });
+        }
+
+        // --- Filter Position Type ---
+        const filterTypeSelect = document.getElementById('filter-asset-type') as HTMLSelectElement;
+        if (filterTypeSelect) {
+            filterTypeSelect.addEventListener('change', () => {
+                const val = filterTypeSelect.value;
+                this.tableRenderer.setFilterType(val === '' ? null : val);
             });
         }
 
@@ -247,6 +270,17 @@ export class UI {
                 return;
             }
             this.onAction('ADD_SCENARIO', key);
+        });
+
+        document.getElementById('add-position-type-btn')?.addEventListener('click', () => {
+            const name = prompt('Введите название типа позиции:');
+            if (name === null) return;
+            const trimmed = name.trim();
+            if (!trimmed) {
+                alert('Название типа не может быть пустым!');
+                return;
+            }
+            this.onAction('ADD_POSITION_TYPE', trimmed);
         });
 
         document.getElementById('export-data-btn')?.addEventListener('click', () => {
@@ -397,6 +431,44 @@ export class UI {
             reader.readAsText(file);
         };
         input.click();
+    }
+
+    /**
+     * Наполняет списки типов в форме добавления и в фильтре.
+     * Рядом с названием показывается число позиций этого типа.
+     */
+    private updateTypeDropdowns() {
+        const escape = (value: string) => value
+            .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+        const counts: Record<string, number> = {};
+        let noTypeCount = 0;
+        this.state.assets.forEach(a => {
+            if (a.typeId) counts[a.typeId] = (counts[a.typeId] || 0) + 1;
+            else noTypeCount++;
+        });
+
+        const optionsFor = (currentValue: string) => this.state.positionTypes.map(t => {
+            const selected = currentValue === t.id ? 'selected' : '';
+            return `<option value="${escape(t.id)}" ${selected}>${escape(t.name)} (${counts[t.id] || 0})</option>`;
+        }).join('');
+
+        // 1. Форма добавления
+        const addSelect = document.getElementById('new-asset-type') as HTMLSelectElement;
+        if (addSelect) {
+            const currentValue = addSelect.value;
+            addSelect.innerHTML = `<option value="" ${currentValue === '' ? 'selected' : ''}>Тип позиции</option>` + optionsFor(currentValue);
+        }
+
+        // 2. Фильтр
+        const filterSelect = document.getElementById('filter-asset-type') as HTMLSelectElement;
+        if (filterSelect) {
+            const currentValue = filterSelect.value;
+            const noTypeOption = `<option value="__none__" ${currentValue === '__none__' ? 'selected' : ''}>Без типа (${noTypeCount})</option>`;
+            filterSelect.innerHTML = `<option value="" ${currentValue === '' ? 'selected' : ''}>По типу</option>`
+                + optionsFor(currentValue) + noTypeOption;
+        }
     }
 
     private updateScenarioDropdowns() {

@@ -1066,6 +1066,28 @@ button#fin-add-entry-btn:disabled {
     width: 130px;
 }
 
+.type-select {
+    width: 140px;
+}
+
+.type-filter-select {
+    width: 140px;
+}
+
+/* Строка в режиме правки: поля вместо текста */
+tr.row-editing .asset-edit-name,
+tr.row-editing .asset-edit-scenario,
+tr.row-editing .asset-edit-type {
+    width: 100%;
+    max-width: 150px;
+    padding: 2px 4px;
+    font-size: 0.9rem;
+}
+
+tr.row-editing {
+    background: var(--highlight-bg);
+}
+
 .date-input {
     width: 150px;
 }
