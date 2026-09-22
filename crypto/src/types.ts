@@ -33,6 +33,8 @@ export interface GlobalStats {
     percentUsed: number;
     activePositionsCount: number;
     scenarioCounts: Record<number, number>;
+    // Ключ — id типа позиции; пустая строка означает «Без типа»
+    typeCounts: Record<string, number>;
     totalAssetsCount: number;
     lastUpdated: Date;
 }

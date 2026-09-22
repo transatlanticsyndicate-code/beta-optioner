@@ -229,7 +229,7 @@ export class WeeklyStatsRenderer {
         // Render Dynamic Deposit
         const deposit = FinancialService.calculateDeposit(this.state.financial);
         const depDisplay = document.getElementById('weekly-deposit-display');
-        if (depDisplay) depDisplay.innerHTML = `$${deposit.toLocaleString()}`;
+        if (depDisplay) depDisplay.innerHTML = `$${Math.round(deposit).toLocaleString('ru-RU').replace(',', ' ')}`;
 
         // Render Sum in Positions (Last Entry)
         // usage of getLatestEntry ensures we show the latest status regardless of date filter

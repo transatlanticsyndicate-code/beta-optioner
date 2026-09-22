@@ -129,6 +129,11 @@ export class TableRenderer {
             else this.setSortOrder('ordersDesc');
         });
 
+        // ЗАЧЕМ: заголовок «Тип позиции» сортирует по клику, а иконка подсказки
+        // лежит внутри него — без этого наведение с кликом меняло бы сортировку
+        const typeInfoIcon = document.querySelector('#type-header-sort .info-icon-wrapper');
+        if (typeInfoIcon) typeInfoIcon.addEventListener('click', (e) => e.stopPropagation());
+
         attachHeaderListener('type-header-sort', () => {
             if (this.sortOrder === 'typeAsc') this.setSortOrder('typeDesc');
             else if (this.sortOrder === 'typeDesc') this.setSortOrder('newest');

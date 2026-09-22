@@ -117,12 +117,24 @@ export class PositionService {
             scenarioCounts[s]++;
         });
 
+        const typeCounts: Record<string, number> = {};
+        state.positionTypes.forEach(t => { typeCounts[t.id] = 0; });
+
+        activeAssets.forEach(asset => {
+            // ЗАЧЕМ: тип может отсутствовать или ссылаться на уже удалённый тип —
+            // такие позиции собираем в общую строку «Без типа» (ключ '')
+            const key = asset.typeId && typeCounts[asset.typeId] !== undefined ? asset.typeId : '';
+            if (typeCounts[key] === undefined) typeCounts[key] = 0;
+            typeCounts[key]++;
+        });
+
         return {
             totalRemaining: totalRemaining.toNumber(),
             totalAdd: totalAdd.toNumber(),
             percentUsed: percentUsed.toNumber(),
             activePositionsCount: strictlyActiveAssets.length,
             scenarioCounts,
+            typeCounts,
             totalAssetsCount: state.assets.length,
             lastUpdated: new Date()
         };

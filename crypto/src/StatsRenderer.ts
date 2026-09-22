@@ -103,8 +103,40 @@ export class StatsRenderer {
             `;
         }
 
+        // Render Position Type Stats in Tooltip
+        const typeStatsContent = document.getElementById('type-tooltip-content');
+        if (typeStatsContent) {
+            const rows = this.state.positionTypes.map(t => ({
+                label: t.name,
+                count: stats.typeCounts[t.id] || 0
+            }));
+
+            // Позиции без типа показываем последней строкой и только если они есть
+            const noTypeCount = stats.typeCounts[''] || 0;
+            if (noTypeCount > 0) rows.push({ label: 'Без типа', count: noTypeCount });
+
+            typeStatsContent.innerHTML = `
+                <table class="scenario-tooltip-table">
+                    ${rows.map(r => `
+                        <tr>
+                            <td class="scenario-tooltip-label">${this.escapeHtml(r.label)}:</td>
+                            <td class="scenario-tooltip-value">${r.count}</td>
+                        </tr>
+                    `).join('')}
+                </table>
+            `;
+        }
+
         const lastUpdated = document.getElementById('last-updated');
         if (lastUpdated) lastUpdated.innerText = `Обновлено: ${stats.lastUpdated.toLocaleString()}`;
+    }
+
+    // Названия типов вводит пользователь — экранируем перед вставкой в разметку
+    private escapeHtml(value: string): string {
+        return (value || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
     }
 
     private getUsageColor(pct: number) {
