@@ -1,13 +1,13 @@
 # CLAUDE.md — beta.optioner.online
 
 ## Project
-Options trading platform. React frontend, FastAPI (Python) backend, PostgreSQL database.
+Options trading platform. React frontend, FastAPI (Python) backend, SQLite database.
 Live at: beta.optioner.online
 
 ## Stack
 - **Frontend:** React (react-scripts), JavaScript/JSX
 - **Backend:** FastAPI, Python 3.x, SQLAlchemy, uvicorn (port 8002)
-- **DB:** PostgreSQL (prod), SQLite (local dev)
+- **DB:** SQLite — `backend/beta_options_analyzer.db` (prod), `backend/dev_options_analyzer.db` (local dev). PostgreSQL НЕ используется.
 - **ML:** ONNX model in `MODEL/`
 
 ## SDD Config
@@ -18,7 +18,7 @@ test_cmd: cd frontend && CI=false npm test -- --watchAll=false; cd ../backend &&
 
 ## Deploy Notes
 - Build runs **locally** on Mac, artifacts uploaded via rsync over SSH
-- SSH host alias: `gelimo` (root@185.135.137.110, key `~/.ssh/id_gelimo`)
+- SSH: `root@89.117.52.143` (прямой IP, ключ `~/.ssh/id_rsa`). Алиас `gelimo` — ДРУГОЙ сервер, не использовать.
 - Remote path: `/var/www/beta`
 - PM2 app name: `optioner-backend-beta`
 - Frontend: built locally (`npm run build`) → rsync to server → served by nginx
